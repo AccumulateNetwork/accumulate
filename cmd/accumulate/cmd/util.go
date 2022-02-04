@@ -108,7 +108,7 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 		return nil, err
 	}
 
-	account, err := protocol.NewChain(typ.Type)
+	account, err := protocol.NewAccount(typ.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -810,7 +810,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		var out string
 		for _, cp := range scc.Chains {
-			c, err := protocol.UnmarshalChain(cp.Data)
+			c, err := protocol.UnmarshalAccount(cp.Data)
 			if err != nil {
 				return "", err
 			}

@@ -88,7 +88,7 @@ func (r *Account) GetState() (state.Chain, error) {
 		return nil, err
 	}
 
-	state, err := protocol.UnmarshalChain(data)
+	state, err := protocol.UnmarshalAccount(data)
 	if err != nil {
 		return nil, err
 	}

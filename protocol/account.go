@@ -11,7 +11,7 @@ type Account interface {
 	Header() *AccountHeader
 }
 
-func NewChain(typ AccountType) (Account, error) {
+func NewAccount(typ AccountType) (Account, error) {
 	switch typ {
 	case AccountTypeAnchor:
 		return new(Anchor), nil
@@ -42,14 +42,14 @@ func NewChain(typ AccountType) (Account, error) {
 	}
 }
 
-func UnmarshalChain(data []byte) (Account, error) {
+func UnmarshalAccount(data []byte) (Account, error) {
 	var typ AccountType
 	err := typ.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
 	}
 
-	chain, err := NewChain(typ)
+	chain, err := NewAccount(typ)
 	if err != nil {
 		return nil, err
 	}

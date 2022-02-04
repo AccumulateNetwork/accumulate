@@ -23,7 +23,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) (pr
 		// TODO Check merkle tree
 
 		// Unmarshal the record
-		record, err := protocol.UnmarshalChain(obj.Record)
+		record, err := protocol.UnmarshalAccount(obj.Record)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal record: %v", err)
 		}
