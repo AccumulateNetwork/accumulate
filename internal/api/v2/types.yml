@@ -99,6 +99,7 @@ KeyPage:
     - name: Index
       type: uvarint
       optional: true
+      keep-empty: true
     - name: Threshold
       type: uvarint
       optional: true
