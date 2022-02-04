@@ -17,7 +17,7 @@ import (
 // state for the database That must be handled by the caller, but see the
 // notes on InitDB for future improvements.
 type DB struct {
-	state   int32
+	DBOpen  atomicBool
 	entries map[storage.Key][]byte
 	mutex   sync.Mutex
 	logger  storage.Logger
@@ -34,7 +34,7 @@ var _ storage.KeyValueStore = (*DB)(nil)
 // Ready
 // Returns true if the database is open and ready to accept reads/writes
 func (m *DB) Ready() bool {
-	return atomic.LoadInt32(&m.state) != 0
+	return m.DBOpen.Load()
 }
 
 // EndBatch
@@ -90,7 +90,7 @@ func (m *DB) Export() map[storage.Key][]byte {
 func (m *DB) Copy() *DB {
 	db := new(DB)
 	db.entries = m.Export()
-	atomic.StoreInt32(&m.state, 1)
+	db.DBOpen.Store(true)
 	return db
 }
 
@@ -104,7 +104,7 @@ func (m *DB) Close() error {
 		return nil
 	}
 
-	atomic.StoreInt32(&m.state, 0) // When close is done, mark the database as such
+	m.DBOpen.Store(false) // When close is done, mark the database as such
 
 	for k := range m.entries {
 		delete(m.entries, k)
@@ -132,7 +132,7 @@ func (m *DB) InitDB(_ string, logger storage.Logger) error {
 			delete(m.entries, k)
 		}
 	}
-	atomic.StoreInt32(&m.state, 1)
+	m.DBOpen.Store(true)
 	return nil
 }
 
@@ -216,4 +216,21 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 		m.entries[storage.Key(e.Key)] = e.Value
 	}
 	return nil
+}
+
+type atomicBool int32
+
+func (a *atomicBool) Store(x bool) {
+	var v = 0
+	if x {
+		v = 1
+	}
+	atomic.StoreInt32((*int32)(a), int32(v))
+}
+
+func (a *atomicBool) Load() (v bool) {
+	if atomic.LoadInt32((*int32)(a)) != 0 {
+		v = true
+	}
+	return v
 }
