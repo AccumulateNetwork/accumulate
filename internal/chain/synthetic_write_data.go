@@ -63,7 +63,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		}
 
 		lite := protocol.NewLiteDataAccount()
-		lite.ChainUrl = types.String(u.String())
+		lite.Url = u.String()
 		//we store the tail of the lite data account id in the state. The first part
 		//of the lite data account can be obtained from the LiteDataAddress. When
 		//we want to reference the chain, we have all the info we need at the cost

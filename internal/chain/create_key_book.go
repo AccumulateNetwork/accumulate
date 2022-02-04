@@ -65,7 +65,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	st.Submit(st.OriginUrl, scc)
 
 	book := protocol.NewKeyBook()
-	book.ChainUrl = types.String(sgUrl.String())
+	book.Url = sgUrl.String()
 
 	for _, spec := range entries {
 		u, err := spec.ParseUrl()
@@ -75,7 +75,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		book.Pages = append(book.Pages, u.String())
-		spec.KeyBook = types.String(sgUrl.String())
+		spec.KeyBook = sgUrl.String()
 		err = scc.Update(spec)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal state: %v", err)

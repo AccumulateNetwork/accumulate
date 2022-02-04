@@ -261,7 +261,7 @@ func responseDirFromProto(src *protocol.DirectoryQueryResult, pagination QueryPa
 
 	dst.OtherItems = make([]interface{}, len(src.ExpandedEntries))
 	for i, entry := range src.ExpandedEntries {
-		chain, err := protocol.UnmarshalChain(entry.Entry)
+		chain, err := protocol.UnmarshalAccount(entry.Entry)
 		if err != nil {
 			return nil, err
 		}
