@@ -434,7 +434,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	pending := new(state.PendingTransaction)
 	pending.Type = types.AccountTypePendingTransaction
-	pending.ChainUrl = txState.ChainUrl
+	pending.Url = txState.Url
 	pending.TransactionState = &txState.TxState
 
 	status, err := tx.GetStatus()

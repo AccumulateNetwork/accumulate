@@ -10,6 +10,45 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
+// AccountTypeUnknown represents an unknown account type.
+const AccountTypeUnknown AccountType = 0
+
+// AccountTypeAnchor is one or more Merkle DAG anchors.
+const AccountTypeAnchor AccountType = 1
+
+// AccountTypeIdentity is an Identity account, aka an ADI.
+const AccountTypeIdentity AccountType = 2
+
+// AccountTypeTokenIssuer is a Token Issuer account.
+const AccountTypeTokenIssuer AccountType = 3
+
+// AccountTypeTokenAccount is an ADI Token Account.
+const AccountTypeTokenAccount AccountType = 4
+
+// AccountTypeLiteTokenAccount is a Lite Token Account.
+const AccountTypeLiteTokenAccount AccountType = 5
+
+// AccountTypeTransaction is a completed transaction.
+const AccountTypeTransaction AccountType = 7
+
+// AccountTypePendingTransaction is a pending transaction.
+const AccountTypePendingTransaction AccountType = 8
+
+// AccountTypeKeyPage is a Key Page account.
+const AccountTypeKeyPage AccountType = 9
+
+// AccountTypeKeyBook is a Key Book account.
+const AccountTypeKeyBook AccountType = 10
+
+// AccountTypeDataAccount is an ADI Data Account.
+const AccountTypeDataAccount AccountType = 11
+
+// AccountTypeLiteDataAccount is a Lite Data Account.
+const AccountTypeLiteDataAccount AccountType = 12
+
+// AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
+const AccountTypeInternalLedger AccountType = 14
+
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
 
@@ -138,6 +177,119 @@ const TransactionTypeInternalTransactionsSigned TransactionType = 98
 
 // TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
 const TransactionTypeInternalTransactionsSent TransactionType = 99
+
+// ID returns the ID of the Account Type
+func (v AccountType) ID() uint64 { return uint64(v) }
+
+// String returns the name of the Account Type
+func (v AccountType) String() string {
+	switch v {
+	case AccountTypeUnknown:
+		return "unknown"
+	case AccountTypeAnchor:
+		return "anchor"
+	case AccountTypeIdentity:
+		return "identity"
+	case AccountTypeTokenIssuer:
+		return "tokenIssuer"
+	case AccountTypeTokenAccount:
+		return "tokenAccount"
+	case AccountTypeLiteTokenAccount:
+		return "liteTokenAccount"
+	case AccountTypeTransaction:
+		return "transaction"
+	case AccountTypePendingTransaction:
+		return "pendingTransaction"
+	case AccountTypeKeyPage:
+		return "keyPage"
+	case AccountTypeKeyBook:
+		return "keyBook"
+	case AccountTypeDataAccount:
+		return "dataAccount"
+	case AccountTypeLiteDataAccount:
+		return "liteDataAccount"
+	case AccountTypeInternalLedger:
+		return "internalLedger"
+	default:
+		return fmt.Sprintf("AccountType:%d", v)
+	}
+}
+
+// AccountTypeByName returns the named Account Type.
+func AccountTypeByName(name string) (AccountType, bool) {
+	switch name {
+	case "unknown":
+		return AccountTypeUnknown, true
+	case "anchor":
+		return AccountTypeAnchor, true
+	case "identity":
+		return AccountTypeIdentity, true
+	case "tokenIssuer":
+		return AccountTypeTokenIssuer, true
+	case "tokenAccount":
+		return AccountTypeTokenAccount, true
+	case "liteTokenAccount":
+		return AccountTypeLiteTokenAccount, true
+	case "transaction":
+		return AccountTypeTransaction, true
+	case "pendingTransaction":
+		return AccountTypePendingTransaction, true
+	case "keyPage":
+		return AccountTypeKeyPage, true
+	case "keyBook":
+		return AccountTypeKeyBook, true
+	case "dataAccount":
+		return AccountTypeDataAccount, true
+	case "liteDataAccount":
+		return AccountTypeLiteDataAccount, true
+	case "internalLedger":
+		return AccountTypeInternalLedger, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Account Type to JSON as a string.
+func (v AccountType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Account Type from JSON as a string.
+func (v *AccountType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = AccountTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Account Type %q", s)
+	}
+	return nil
+}
+
+// BinarySize returns the number of bytes required to binary marshal the Account Type.
+func (v AccountType) BinarySize() int {
+	return encoding.UvarintBinarySize(v.ID())
+}
+
+// MarshalBinary marshals the Account Type to bytes as a unsigned varint.
+func (v AccountType) MarshalBinary() ([]byte, error) {
+	return encoding.UvarintMarshalBinary(v.ID()), nil
+}
+
+// UnmarshalBinary unmarshals the Account Type from bytes as a unsigned varint.
+func (v *AccountType) UnmarshalBinary(data []byte) error {
+	u, err := encoding.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	*v = AccountType(u)
+	return nil
+}
 
 // ID returns the ID of the Chain Type
 func (v ChainType) ID() uint64 { return uint64(v) }

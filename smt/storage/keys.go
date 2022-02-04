@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 const (
@@ -89,47 +88,13 @@ func (k Key) Append(key ...interface{}) Key {
 }
 
 func convert(key interface{}) (bytes []byte, printVal bool) {
-	switch key := key.(type) {
-	case nil:
-		return []byte{}, false
-	case []byte:
-		return key, false
-	case [32]byte:
-		return key[:], false
-	case types.Bytes:
-		return key, false
-	case types.Bytes32:
-		return key[:], false
-	case string:
-		return []byte(key), true
-	case types.String:
-		return []byte(key), true
-	case interface{ Bytes() []byte }:
-		return key.Bytes(), false
-	case interface{ AccountID() []byte }:
-		return key.AccountID(), true
-	case uint:
-		return common.Uint64Bytes(uint64(key)), true
-	case uint8:
-		return common.Uint64Bytes(uint64(key)), true
-	case uint16:
-		return common.Uint64Bytes(uint64(key)), true
-	case uint32:
-		return common.Uint64Bytes(uint64(key)), true
-	case uint64:
-		return common.Uint64Bytes(key), true
-	case int:
-		return common.Int64Bytes(int64(key)), true
-	case int8:
-		return common.Int64Bytes(int64(key)), true
-	case int16:
-		return common.Int64Bytes(int64(key)), true
-	case int32:
-		return common.Int64Bytes(int64(key)), true
-	case int64:
-		return common.Int64Bytes(key), true
+	bytes = encoding.AsBytes(key)
+
+	switch key.(type) {
+	case nil, []byte, [32]byte, *[32]byte, encoding.Byter:
+		return bytes, false
 	default:
-		panic(fmt.Errorf("cannot use %T as a key", key))
+		return bytes, true
 	}
 }
 

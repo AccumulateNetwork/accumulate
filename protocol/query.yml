@@ -24,7 +24,7 @@ DirectoryQueryResult:
     - name: ExpandedEntries
       type: slice
       slice:
-        type: state.Object
+        type: Object
         pointer: true
         marshal-as: reference
       optional: true
