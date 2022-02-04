@@ -32,7 +32,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 	// Do basic validation and add everything to the state manager
 	urls := make([]*url.URL, len(body.Chains))
 	for i, cc := range body.Chains {
-		record, err := protocol.UnmarshalChain(cc.Data)
+		record, err := protocol.UnmarshalAccount(cc.Data)
 		if err != nil {
 			return nil, fmt.Errorf("invalid chain payload: %v", err)
 		}
@@ -119,7 +119,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		// Make sure the key book actually exists
 		if record.Header().KeyBook != "" {
 			book := new(protocol.KeyBook)
-			url, err := url.Parse(*record.Header().KeyBook.AsString())
+			url, err := url.Parse(record.Header().KeyBook)
 			if err != nil {
 				return nil, fmt.Errorf("invalid keybook url %s", url.String())
 			}

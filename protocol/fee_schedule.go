@@ -2,9 +2,6 @@ package protocol
 
 import (
 	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // Fee is the unit cost of a transaction.
@@ -71,7 +68,7 @@ const (
 	FeeSignPending Fee = 10
 )
 
-func ComputeFee(tx *transactions.Envelope) (Fee, error) {
+func ComputeFee(tx *Envelope) (Fee, error) {
 	// Do not charge fees for the DN or BVNs
 	if IsDnUrl(tx.Transaction.Origin) {
 		return 0, nil
@@ -81,19 +78,19 @@ func ComputeFee(tx *transactions.Envelope) (Fee, error) {
 	}
 
 	txType := tx.Transaction.Type()
-	if txType == types.TxTypeUnknown {
+	if txType == TransactionTypeUnknown {
 		return 0, fmt.Errorf("cannot compute fee with no data defined for transaction")
 	}
-	switch types.TransactionType(txType) {
-	case types.TxTypeCreateIdentity:
+	switch TransactionType(txType) {
+	case TransactionTypeCreateIdentity:
 		return FeeCreateIdentity, nil
-	case types.TxTypeCreateTokenAccount:
+	case TransactionTypeCreateTokenAccount:
 		return FeeCreateTokenAccount, nil
-	case types.TxTypeSendTokens:
+	case TransactionTypeSendTokens:
 		return FeeSendTokens, nil
-	case types.TxTypeCreateDataAccount:
+	case TransactionTypeCreateDataAccount:
 		return FeeCreateDataAccount, nil
-	case types.TxTypeWriteData:
+	case TransactionTypeWriteData:
 		size := len(tx.Transaction.Body)
 		if size > WriteDataMax {
 			return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
@@ -102,25 +99,25 @@ func ComputeFee(tx *transactions.Envelope) (Fee, error) {
 			return 0, fmt.Errorf("insufficient data provided for %v needed to compute cost", txType)
 		}
 		return FeeWriteData * Fee(size/256+1), nil
-	case types.TxTypeWriteDataTo:
+	case TransactionTypeWriteDataTo:
 		return FeeWriteDataTo, nil
-	case types.TxTypeAcmeFaucet:
+	case TransactionTypeAcmeFaucet:
 		return FeeAcmeFaucet, nil
-	case types.TxTypeCreateToken:
+	case TransactionTypeCreateToken:
 		return FeeCreateToken, nil
-	case types.TxTypeIssueTokens:
+	case TransactionTypeIssueTokens:
 		return FeeIssueTokens, nil
-	case types.TxTypeBurnTokens:
+	case TransactionTypeBurnTokens:
 		return FeeBurnTokens, nil
-	case types.TxTypeCreateKeyPage:
+	case TransactionTypeCreateKeyPage:
 		return FeeCreateKeyPage, nil
-	case types.TxTypeCreateKeyBook:
+	case TransactionTypeCreateKeyBook:
 		return FeeCreateKeyBook, nil
-	case types.TxTypeAddCredits:
+	case TransactionTypeAddCredits:
 		return FeeAddCredits, nil
-	case types.TxTypeUpdateKeyPage:
+	case TransactionTypeUpdateKeyPage:
 		return FeeUpdateKeyPage, nil
-	case types.TxTypeSignPending:
+	case TransactionTypeSignPending:
 		return FeeSignPending, nil
 	default:
 		//by default assume if type isn't specified, there is no charge for tx

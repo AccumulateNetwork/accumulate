@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/batch"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // DB
@@ -17,7 +17,7 @@ import (
 // state for the database That must be handled by the caller, but see the
 // notes on InitDB for future improvements.
 type DB struct {
-	DBOpen  types.AtomicBool
+	DBOpen  atomicBool
 	entries map[storage.Key][]byte
 	mutex   sync.Mutex
 	logger  storage.Logger
@@ -171,8 +171,8 @@ func (db *DB) Begin() storage.KeyValueTxn {
 type jsonDB []jsonEntry
 
 type jsonEntry struct {
-	Key   types.Bytes32
-	Value types.Bytes
+	Key   [32]byte
+	Value []byte
 }
 
 func (m *DB) MarshalJSON() ([]byte, error) {
@@ -195,7 +195,7 @@ func (m *DB) MarshalJSON() ([]byte, error) {
 	jdb := make(jsonDB, 0, size)
 	for _, key := range keys {
 		entry := m.entries[key]
-		jdb = append(jdb, jsonEntry{types.Bytes32(key), entry})
+		jdb = append(jdb, jsonEntry{key, entry})
 	}
 	return json.Marshal(jdb)
 }
@@ -216,4 +216,21 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 		m.entries[storage.Key(e.Key)] = e.Value
 	}
 	return nil
+}
+
+type atomicBool int32
+
+func (a *atomicBool) Store(x bool) {
+	var v = 0
+	if x {
+		v = 1
+	}
+	atomic.StoreInt32((*int32)(a), int32(v))
+}
+
+func (a *atomicBool) Load() (v bool) {
+	if atomic.LoadInt32((*int32)(a)) != 0 {
+		v = true
+	}
+	return v
 }

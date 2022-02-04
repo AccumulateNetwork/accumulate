@@ -1,21 +1,19 @@
-package state
+package protocol
 
 import (
 	"testing"
-
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func TestStateHeader(t *testing.T) {
 
-	header := ChainHeader{ChainUrl: "acme/chain/path", Type: types.AccountTypeLiteTokenAccount}
+	header := AccountHeader{Url: "acme/chain/path", Type: AccountTypeLiteTokenAccount}
 
 	data, err := header.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	header2 := ChainHeader{}
+	header2 := AccountHeader{}
 
 	err = header2.UnmarshalBinary(data)
 	if err != nil {
