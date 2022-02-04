@@ -103,7 +103,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	return gtx, nil
 }
 
-func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactions.Envelope, error) {
+func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Envelope, error) {
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 	//set destination url address
 	destAddress := AcmeLiteAddressStdPriv(privateKey)
@@ -138,11 +138,11 @@ func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactio
 
 	gtx.Signatures = append(gtx.Signatures, ed)
 
-	return types.String(destAddress.String()), privateKey, gtx, nil
+	return destAddress.String(), privateKey, gtx, nil
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
-	url := types.String(AcmeLiteAddressTmPriv(key).String())
+	url := AcmeLiteAddressTmPriv(key).String()
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -212,17 +212,17 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.ChainUrl = types.String(pageUrl.String())
+	mss.Url = pageUrl.String()
 	mss.Keys = append(mss.Keys, ss)
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
-	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
+	book.Url = bookUrl.String() // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
 	adi := protocol.NewADI()
-	adi.ChainUrl = types.String(identityUrl.String())
-	adi.KeyBook = types.String(bookUrl.String())
+	adi.Url = identityUrl.String()
+	adi.KeyBook = bookUrl.String()
 
 	return WriteStates(db, adi, book, mss)
 }
@@ -250,15 +250,15 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	var chain state.Chain
 	if lite {
 		account := new(protocol.LiteTokenAccount)
-		account.ChainUrl = types.String(u.String())
+		account.Url = u.String()
 		account.TokenUrl = tokenUrl
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	} else {
 		account := protocol.NewTokenAccount()
-		account.ChainUrl = types.String(u.String())
+		account.Url = u.String()
 		account.TokenUrl = tokenUrl
-		account.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+		account.KeyBook = u.Identity().JoinPath("book0").String()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -273,8 +273,8 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	}
 
 	issuer := new(protocol.TokenIssuer)
-	issuer.ChainUrl = types.String(u.String())
-	issuer.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+	issuer.Url = u.String()
+	issuer.KeyBook = u.Identity().JoinPath("book0").String()
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 
@@ -288,7 +288,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	}
 
 	mss := protocol.NewKeyPage()
-	mss.ChainUrl = types.String(u.String())
+	mss.Url = u.String()
 	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
@@ -307,7 +307,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	}
 
 	group := protocol.NewKeyBook()
-	group.ChainUrl = types.String(groupUrl.String())
+	group.Url = groupUrl.String()
 	group.Pages = pageUrls
 	states := []state.Chain{group}
 
@@ -329,7 +329,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
-		spec.KeyBook = types.String(groupUrl.String())
+		spec.KeyBook = groupUrl.String()
 		states = append(states, spec)
 	}
 
@@ -357,8 +357,8 @@ func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
 	return AcmeLiteAddress(key[32:])
 }
 
-func NewWalletEntry() *transactions.WalletEntry {
-	wallet := new(transactions.WalletEntry)
+func NewWalletEntry() *WalletEntry {
+	wallet := new(WalletEntry)
 
 	wallet.Nonce = 1 // Put the private key for the origin
 	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
