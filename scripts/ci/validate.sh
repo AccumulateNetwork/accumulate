@@ -326,8 +326,9 @@ section "Query data entry with hash by URL"
 ENTRY=$(accumulate -j get keytest/data#data/0 | jq -re .data.entryHash)
 RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data)
 ENTRY2=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entryHash)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry with hash ${ENTRY} is not 'bar'"
-[ "$ENTRY" == "$ENTRY2" ] && success || die "Entry hash mismatch ${ENTRY} ${ENTRY2}"
+[ "$RESULT" == $(echo -n bar | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'bar'"
+[ "$ENTRY" == "$ENTRY2" ] || die "Entry hash mismatch ${ENTRY} ${ENTRY2}"
+success
 
 section "Query data entry range by URL"
 RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
