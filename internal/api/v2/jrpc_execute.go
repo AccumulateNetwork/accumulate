@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -66,23 +65,22 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	faucet := protocol.Faucet.Signer()
 	tx := new(transactions.Envelope)
 	tx.Transaction = new(transactions.Transaction)
 	tx.Transaction.Origin = protocol.FaucetUrl
-	tx.Transaction.Nonce = protocol.FaucetWallet.Nonce
+	tx.Transaction.Nonce = faucet.Nonce()
 	tx.Transaction.KeyPageHeight = 1
 	tx.Transaction.Body, err = req.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
 
-	ed := new(transactions.ED25519Sig)
-	tx.Signatures = append(tx.Signatures, ed)
-	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.GetTxHash())
+	ed, err := faucet.Sign(tx.GetTxHash())
 	if err != nil {
 		return accumulateError(err)
 	}
+	tx.Signatures = append(tx.Signatures, ed)
 
 	txrq := new(TxRequest)
 	txrq.Origin = tx.Transaction.Origin
