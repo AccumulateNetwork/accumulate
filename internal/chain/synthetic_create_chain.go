@@ -119,7 +119,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		// Make sure the key book actually exists
 		if record.Header().KeyBook != "" {
 			book := new(protocol.KeyBook)
-			url, err := url.Parse(*record.Header().KeyBook.AsString())
+			url, err := url.Parse(record.Header().KeyBook)
 			if err != nil {
 				return nil, fmt.Errorf("invalid keybook url %s", url.String())
 			}

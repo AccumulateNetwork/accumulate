@@ -114,7 +114,7 @@ func (r *Account) GetStateAs(state state.Chain) error {
 // PutState stores the record state and adds the record to the BPT (as a hash).
 func (r *Account) PutState(accountState state.Chain) error {
 	// Does the record state have a URL?
-	if accountState.Header().ChainUrl == "" {
+	if accountState.Header().Url == "" {
 		return errors.New("invalid URL: empty")
 	}
 

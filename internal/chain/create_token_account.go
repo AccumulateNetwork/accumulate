@@ -36,7 +36,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 	}
 
 	account := protocol.NewTokenAccount()
-	account.ChainUrl = types.String(accountUrl.String())
+	account.Url = accountUrl.String()
 	account.TokenUrl = tokenUrl.String()
 	account.Scratch = body.Scratch
 	if body.KeyBookUrl == "" {
@@ -53,7 +53,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 			return nil, fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 
-		account.KeyBook = types.String(keyBookUrl.String())
+		account.KeyBook = keyBookUrl.String()
 	}
 
 	st.Create(account)

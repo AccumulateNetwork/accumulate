@@ -48,7 +48,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()
-	page.ChainUrl = types.String(msUrl.String())
+	page.Url = msUrl.String()
 	page.Threshold = 1 // Require one signature from the Key Page
 
 	if group != nil {
@@ -60,7 +60,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		group.Pages = append(group.Pages, msUrl.String())
-		page.KeyBook = types.String(groupUrl.String())
+		page.KeyBook = groupUrl.String()
 
 		err = scc.Update(group)
 		if err != nil {

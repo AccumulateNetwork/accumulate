@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/batch"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // DB
@@ -17,7 +17,7 @@ import (
 // state for the database That must be handled by the caller, but see the
 // notes on InitDB for future improvements.
 type DB struct {
-	DBOpen  types.AtomicBool
+	state   int32
 	entries map[storage.Key][]byte
 	mutex   sync.Mutex
 	logger  storage.Logger
@@ -34,7 +34,7 @@ var _ storage.KeyValueStore = (*DB)(nil)
 // Ready
 // Returns true if the database is open and ready to accept reads/writes
 func (m *DB) Ready() bool {
-	return m.DBOpen.Load()
+	return atomic.LoadInt32(&m.state) != 0
 }
 
 // EndBatch
@@ -90,7 +90,7 @@ func (m *DB) Export() map[storage.Key][]byte {
 func (m *DB) Copy() *DB {
 	db := new(DB)
 	db.entries = m.Export()
-	db.DBOpen.Store(true)
+	atomic.StoreInt32(&m.state, 1)
 	return db
 }
 
@@ -104,7 +104,7 @@ func (m *DB) Close() error {
 		return nil
 	}
 
-	m.DBOpen.Store(false) // When close is done, mark the database as such
+	atomic.StoreInt32(&m.state, 0) // When close is done, mark the database as such
 
 	for k := range m.entries {
 		delete(m.entries, k)
@@ -132,7 +132,7 @@ func (m *DB) InitDB(_ string, logger storage.Logger) error {
 			delete(m.entries, k)
 		}
 	}
-	m.DBOpen.Store(true)
+	atomic.StoreInt32(&m.state, 1)
 	return nil
 }
 
@@ -171,8 +171,8 @@ func (db *DB) Begin() storage.KeyValueTxn {
 type jsonDB []jsonEntry
 
 type jsonEntry struct {
-	Key   types.Bytes32
-	Value types.Bytes
+	Key   [32]byte
+	Value []byte
 }
 
 func (m *DB) MarshalJSON() ([]byte, error) {
@@ -195,7 +195,7 @@ func (m *DB) MarshalJSON() ([]byte, error) {
 	jdb := make(jsonDB, 0, size)
 	for _, key := range keys {
 		entry := m.entries[key]
-		jdb = append(jdb, jsonEntry{types.Bytes32(key), entry})
+		jdb = append(jdb, jsonEntry{key, entry})
 	}
 	return json.Marshal(jdb)
 }
