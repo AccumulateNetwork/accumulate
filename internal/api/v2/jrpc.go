@@ -49,6 +49,10 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	return m, nil
 }
 
+func (m *JrpcMethods) Querier_TESTONLY() Querier {
+	return m.querier
+}
+
 func (m *JrpcMethods) logDebug(msg string, keyVals ...interface{}) {
 	if m.logger != nil {
 		m.logger.Debug(msg, keyVals...)
