@@ -61,9 +61,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	var priority = -1
 	if page.KeyBook != "" {
 		book = new(protocol.KeyBook)
-		bookUrl, err = url.Parse(*page.KeyBook.AsString())
+		bookUrl, err = url.Parse(page.KeyBook)
 		if err != nil {
-			return nil, fmt.Errorf("invalid key book url : %s", *page.KeyBook.AsString())
+			return nil, fmt.Errorf("invalid key book url : %s", page.KeyBook)
 		}
 		err = st.LoadUrlAs(bookUrl, book)
 		if err != nil {

@@ -212,7 +212,7 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 		if origin.Header().KeyBook == "" {
 			return nil, nil, false, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
-		u, err := url.Parse(*origin.Header().KeyBook.AsString())
+		u, err := url.Parse(origin.Header().KeyBook)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("invalid keybook url %s", u.String())
 		}
@@ -381,7 +381,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 	}
 
 	if !page.DebitCredits(uint64(fee)) {
-		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.ChainUrl, page.CreditBalance.String(), fee)
+		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.Url, page.CreditBalance.String(), fee)
 	}
 
 	err = st.UpdateSignator(page)
@@ -427,7 +427,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 	}
 
 	if !account.DebitCredits(uint64(fee)) {
-		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.ChainUrl, account.CreditBalance.String(), fee)
+		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.Url, account.CreditBalance.String(), fee)
 	}
 
 	return st.UpdateSignator(account)

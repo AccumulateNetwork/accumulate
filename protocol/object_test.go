@@ -1,9 +1,7 @@
-package state
+package protocol
 
 import (
 	"testing"
-
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func TestStateObject(t *testing.T) {
@@ -11,9 +9,9 @@ func TestStateObject(t *testing.T) {
 
 	so := Object{}
 
-	adi := types.String("myadi")
-	chain := new(ChainHeader)
-	chain.SetHeader(adi, types.AccountTypeLiteTokenAccount)
+	chain := new(AccountHeader)
+	chain.Url = "myadi"
+	chain.Type = AccountTypeLiteTokenAccount
 	so.Entry, err = chain.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)

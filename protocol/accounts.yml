@@ -1,5 +1,21 @@
 # Accounts - names should be nouns
 
+AccountHeader:
+  fields:
+  - name: Type
+    type: AccountType
+    marshal-as: value
+  - name: Url
+    type: string
+  - name: KeyBook
+    type: string
+  - name: ManagerKeyBook
+    type: string
+  - name: url
+    type: url.URL
+    pointer: true
+    marshal-as: none
+
 LiteTokenAccount:
   kind: chain
   fields:
