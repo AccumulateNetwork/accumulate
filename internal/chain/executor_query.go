@@ -248,7 +248,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					}
 
 					res := &protocol.ResponseDataEntry{}
-					copy(res.EntryHash[:], []byte(queryParam))
+					copy(res.EntryHash[:], entry.Hash())
 					res.Entry = *entry
 					return []byte("data-entry"), res, nil
 				} else {
