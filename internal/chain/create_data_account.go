@@ -32,7 +32,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) (
 
 	//create the data account
 	account := protocol.NewDataAccount()
-	account.ChainUrl = types.String(dataAccountUrl.String())
+	account.Url = dataAccountUrl.String()
 	account.Scratch = body.Scratch
 
 	//if we have a manger book URL, then we need make sure it is valid url syntax
@@ -41,7 +41,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) (
 		if err != nil {
 			return nil, fmt.Errorf("manager key book specified, but url is invalid: %v", err)
 		}
-		account.ManagerKeyBook = types.String(u.String())
+		account.ManagerKeyBook = u.String()
 	}
 
 	//setup key book associated with account
@@ -58,7 +58,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) (
 		if err != nil {
 			return nil, fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
-		account.KeyBook = types.String(keyBookUrl.String())
+		account.KeyBook = keyBookUrl.String()
 	}
 
 	st.Create(account)
