@@ -66,7 +66,7 @@ type GeneralQuery struct {
 
 type KeyPage struct {
 	Height    uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
-	Index     uint64 `json:"index,omitempty" form:"index" query:"index"`
+	Index     uint64 `json:"index" form:"index" query:"index"`
 	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold"`
 }
 
