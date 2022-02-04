@@ -13,7 +13,7 @@ func (s *Suite) TestGenesis() {
 	s.Run("ACME", func() {
 		acme := new(protocol.TokenIssuer)
 		s.dut.GetRecordAs(protocol.AcmeUrl().String(), acme)
-		s.Assert().Equal(protocol.AcmeUrl().String(), string(acme.ChainUrl))
+		s.Assert().Equal(protocol.AcmeUrl().String(), string(acme.Url))
 		s.Assert().Equal(protocol.ACME, string(acme.Symbol))
 	})
 }
