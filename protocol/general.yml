@@ -1,5 +1,16 @@
 # General data types
 
+Object:
+  fields:
+  - name: Entry
+    type: bytes
+  - name: Height
+    type: uvarint
+  - name: Roots
+    type: slice
+    slice:
+      type: bytes
+
 ObjectMetadata:
   fields:
     - name: Type

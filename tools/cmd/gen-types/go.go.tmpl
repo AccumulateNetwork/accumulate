@@ -13,6 +13,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	{{- if not (isPkg "protocol")}}
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	{{- end}}
 	{{- if not (isPkg "types/state")}}
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 	{{- end}}
@@ -23,7 +26,7 @@ import (
 
 {{range .Types}}
 type {{.Name}} struct {
-	{{if .IsChain}}{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}
+	{{if .IsChain}}{{if not (isPkg "protocol")}}protocol.{{end}}AccountHeader
 	{{- end}}
 	{{- range .Embeddings}}
 	{{.Name}}
@@ -38,20 +41,20 @@ type {{.Name}} struct {
 {{- if and .IsChain .MakeConstructor}}
 func New{{.Name}}() *{{.Name}} {
 	v := new({{.Name}})
-	v.Type = types.AccountType{{.ChainType}}
+	v.Type = {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
 	return v
 }
 {{- end}}
 {{end}}
 
 {{range .Types}}{{if or .IsTransaction .IsTxResult}}
-func (*{{.Name}}) GetType() types.TransactionType { return types.TxType{{.TransactionType}} }
+func (*{{.Name}}) GetType() {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType { return {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}} }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}
 func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 	{{- if .IsChain}}
-	if !v.ChainHeader.Equal(&u.ChainHeader) {
+	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
 	}
 	{{end}}
@@ -71,14 +74,14 @@ func (v *{{.Name}}) BinarySize() int {
 	var n int
 
 	{{if or .IsTransaction .IsTxResult}}
-	n += encoding.UvarintBinarySize(types.TxType{{.TransactionType}}.ID())
+	n += encoding.UvarintBinarySize({{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}}.ID())
 	{{end}}
 
 	{{if .IsChain}}
 	// Enforce sanity
-	v.Type = types.AccountType{{.ChainType}}
+	v.Type = {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
 
-	n += v.ChainHeader.GetHeaderSize()
+	n += v.AccountHeader.GetHeaderSize()
 	{{end}}
 
 	{{- range .Embeddings}}
@@ -100,14 +103,14 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	{{if or .IsTransaction .IsTxResult}}
-	buffer.Write(encoding.UvarintMarshalBinary(types.TxType{{.TransactionType}}.ID()))
+	buffer.Write(encoding.UvarintMarshalBinary({{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}}.ID()))
 	{{end}}
 
 	{{if .IsChain}}
 	// Enforce sanity
-	v.Type = types.AccountType{{.ChainType}}
+	v.Type = {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
 
-	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+	if b, err := v.AccountHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
 	} else {
 		buffer.Write(b)
@@ -135,18 +138,18 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 {{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 	{{- if or .IsTransaction .IsTxResult}}
-	typ := types.TxType{{.TransactionType}}
+	typ := {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}}
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 	{{end}}
 
 	{{- if .IsChain}}
-	typ := types.AccountType{{.ChainType}}
-	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+	typ := {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
+	if err := v.AccountHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
 		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
@@ -182,9 +185,9 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 
 {{define "jsonType"}}struct {
 	{{- if .IsChain}}
-	{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}{{end}}
+	{{if not (isPkg "protocol")}}protocol.{{end}}AccountHeader{{end}}
 	{{- if .IsTxResult}}
-	Type {{if isPkg "types"}}TransactionType{{else}}types.TransactionType{{end}} `json:"type"`{{end}}
+	Type {{if isPkg "types"}}TransactionType{{else}}{{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{end}} `json:"type"`{{end}}
 	{{- range .Embeddings}}
 	{{- range .Fields}}
 	{{- template "jsonField" .}}
@@ -224,7 +227,7 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 	u := {{template "jsonType" .}}{}
 
 	{{- if .IsChain}}
-	u.ChainHeader = v.ChainHeader
+	u.AccountHeader = v.AccountHeader
 	{{- end}}
 
 	{{- if .IsTxResult}}
@@ -250,7 +253,7 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	u := {{template "jsonType" .}}{}
 
 	{{- if .IsChain}}
-	u.ChainHeader = v.ChainHeader
+	u.AccountHeader = v.AccountHeader
 	{{- end}}
 
 	{{- if .IsTxResult}}
@@ -272,7 +275,7 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	}
 
 	{{- if .IsChain}}
-	v.ChainHeader = u.ChainHeader
+	v.AccountHeader = u.AccountHeader
 	{{- end}}
 
 	{{- range .Embeddings}}

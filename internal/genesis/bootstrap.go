@@ -48,18 +48,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 
 		adi := protocol.NewADI()
-		adi.ChainUrl = types.String(uAdi.String())
-		adi.KeyBook = types.String(uBook.String())
+		adi.Url = uAdi.String()
+		adi.KeyBook = uBook.String()
 		records = append(records, adi)
 
 		book := protocol.NewKeyBook()
-		book.ChainUrl = types.String(uBook.String())
+		book.Url = uBook.String()
 		book.Pages = []string{uPage.String()}
 		records = append(records, book)
 
 		page := protocol.NewKeyPage()
-		page.ChainUrl = types.String(uPage.String())
-		page.KeyBook = types.String(uBook.String())
+		page.Url = uPage.String()
+		page.KeyBook = uBook.String()
 		page.Threshold = 1
 		records = append(records, page)
 
@@ -72,15 +72,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ledger
 		ledger := protocol.NewInternalLedger()
-		ledger.ChainUrl = types.String(uAdi.JoinPath(protocol.Ledger).String())
-		ledger.KeyBook = types.String(uBook.String())
+		ledger.Url = uAdi.JoinPath(protocol.Ledger).String()
+		ledger.KeyBook = uBook.String()
 		ledger.Synthetic.Nonce = 1
 		records = append(records, ledger)
 
 		// Create the anchor pool
 		anchors := protocol.NewAnchor()
-		anchors.ChainUrl = types.String(uAdi.JoinPath(protocol.AnchorPool).String())
-		anchors.KeyBook = types.String(uBook.String())
+		anchors.Url = uAdi.JoinPath(protocol.AnchorPool).String()
+		anchors.KeyBook = uBook.String()
 		records = append(records, anchors)
 
 		// Create records and directory entries
@@ -91,8 +91,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		acme := new(protocol.TokenIssuer)
 		acme.Type = types.AccountTypeTokenIssuer
-		acme.KeyBook = types.String(uBook.String())
-		acme.ChainUrl = types.String(protocol.AcmeUrl().String())
+		acme.KeyBook = uBook.String()
+		acme.Url = protocol.AcmeUrl().String()
 		acme.Precision = 8
 		acme.Symbol = "ACME"
 		records = append(records, acme)
@@ -109,7 +109,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			}
 
 			lite := protocol.NewLiteTokenAccount()
-			lite.ChainUrl = types.String(protocol.FaucetWallet.Addr)
+			lite.Url = protocol.FaucetUrl.String()
 			lite.TokenUrl = protocol.AcmeUrl().String()
 			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
 			records = append(records, lite)
