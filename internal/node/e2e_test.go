@@ -77,9 +77,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 	d.T().Helper()
 
-	q := apiv2.NewQueryDirect(d.api.Network.ID, apiv2.Options{
-		TxMaxWaitTime: 10 * time.Second,
-	})
+	q := d.api.Querier_TESTONLY()
 
 	for len(txids) > 0 {
 		var synth [][]byte
