@@ -1,13 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var tokenCmd = &cobra.Command{
@@ -80,12 +80,8 @@ func PrintTokenCreate() {
 }
 
 func GetToken(url string) (string, error) {
-	res, err := GetUrl(url)
-	if err != nil {
-		return "", err
-	}
-
-	return PrintChainQueryResponseV2(res)
+	_, res, err := queryAccount(url, protocol.NewTokenIssuer())
+	return PrintAccountQueryResponse(res, err)
 }
 
 func CreateToken(origin string, args []string) (string, error) {
@@ -113,13 +109,10 @@ func CreateToken(origin string, args []string) (string, error) {
 			return "", fmt.Errorf("invalid properties url, %v", err)
 		}
 		properties = u.String()
-		res, err := GetUrl(properties)
+		//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
+		_, _, err = queryAccount(properties, protocol.NewDataAccount())
 		if err != nil {
 			return "", fmt.Errorf("cannot query properties url, %v", err)
-		}
-		//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
-		if res.Type != types.AccountTypeDataAccount.String() {
-			return "", fmt.Errorf("properties url is not a valid properties data account")
 		}
 	}
 
@@ -139,12 +132,13 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 
-	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, si, privKey)
+	req, err := prepareToExecute(&params, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	return ActionResponseFrom(res).Print()
+	res, err := Client.ExecuteCreateToken(context.Background(), req)
+	return printExecuteResponse(res, err)
 }
 
 func IssueTokenToRecipient(origin string, args []string) (string, error) {
@@ -176,12 +170,13 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Recipient = recipient.String()
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, si, privKey)
+	req, err := prepareToExecute(&params, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	return ActionResponseFrom(res).Print()
+	res, err := Client.ExecuteIssueTokens(context.Background(), req)
+	return printExecuteResponse(res, err)
 }
 
 func BurnTokens(origin string, args []string) (string, error) {
@@ -213,10 +208,11 @@ func BurnTokens(origin string, args []string) (string, error) {
 	params := protocol.BurnTokens{}
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("burn-tokens", &params, nil, originUrl, si, privKey)
+	req, err := prepareToExecute(&params, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	return ActionResponseFrom(res).Print()
+	res, err := Client.ExecuteBurnTokens(context.Background(), req)
+	return printExecuteResponse(res, err)
 }

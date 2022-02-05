@@ -1,179 +1,29 @@
 package cmd
 
 import (
-	"context"
-	"encoding"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
-	"strconv"
-	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
-	params := api2.UrlQuery{
-		Url: url,
-	}
-	res := new(api2.ChainQueryResponse)
-	res.Data = rec
-	if err := Client.RequestAPIv2(context.Background(), "query", &params, res); err != nil {
-		return nil, err
-	}
-	return res.MainChain, nil
-}
-
-func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
-	params := api2.ChainIdQuery{
-		ChainId: chainId,
-	}
-	res := new(api2.ChainQueryResponse)
-	res.Data = rec
-	if err := Client.RequestAPIv2(context.Background(), "query-chain", &params, res); err != nil {
-		return nil, err
-	}
-	return res.MainChain, nil
-}
-
-func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Header, []byte, error) {
-	var privKey []byte
-	var err error
-
-	ct := 0
-	if len(args) == 0 {
-		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
-	}
-
-	hdr := transactions.Header{}
-	hdr.Origin = origin
-	hdr.KeyPageHeight = 1
-	hdr.KeyPageIndex = 0
-
-	if IsLiteAccount(origin.String()) {
-		privKey, err = LookupByLabel(origin.String())
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
-		}
-		return args, &hdr, privKey, nil
-	}
-
-	privKey, err = resolvePrivateKey(args[0])
+func formatApiError(err error) error {
+	ret, err := PrintJsonRpcError(err)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	ct++
-
-	if len(args) > 1 {
-		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
-			ct++
-			hdr.KeyPageIndex = uint64(v)
-		}
+		return err
 	}
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
-	}
-
-	ms, err := getRecord(keyInfo.KeyPage, nil)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
-	}
-
-	hdr.KeyPageIndex = keyInfo.Index
-	hdr.KeyPageHeight = ms.Height
-
-	return args[ct:], &hdr, privKey, nil
-}
-
-func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
-	var typ struct {
-		Type types.AccountType
-	}
-	err := json.Unmarshal(data, &typ)
-	if err != nil {
-		return nil, err
-	}
-
-	account, err := protocol.NewAccount(typ.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(data, account)
-	if err != nil {
-		return nil, err
-	}
-
-	return account, nil
-}
-
-func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-	env := new(transactions.Envelope)
-	env.TxHash = txHash
-	env.Transaction = new(transactions.Transaction)
-	env.Transaction.Body = binaryPayload
-
-	hdr.Nonce = nonce
-	env.Transaction.TransactionHeader = *hdr
-
-	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, env.GetTxHash())
-	if err != nil {
-		return nil, err
-	}
-	return ed, nil
-}
-
-func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	params := &api2.TxRequest{}
-	params.TxHash = txHash
-
-	if TxPretend {
-		params.CheckOnly = true
-	}
-
-	// TODO The payload field can be set equal to the struct, without marshalling first
-	params.Payload = json.RawMessage(jsonPayload)
-	params.Signer.Nonce = nonce
-	params.Origin = origin
-	params.KeyPage.Height = si.KeyPageHeight
-	params.KeyPage.Index = si.KeyPageIndex
-
-	params.Signature = ed.GetSignature()
-	//The public key needs to be used to verify the signature, however,
-	//to pass verification, the validator will hash the key and check the
-	//sig spec group to make sure this key belongs to the identity.
-	params.Signer.PublicKey = ed.GetPublicKey()
-
-	return params, err
-}
-
-func IsLiteAccount(url string) bool {
-	u, err := url2.Parse(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-	key, _, _ := protocol.ParseLiteTokenAddress(u)
-	return key != nil
+	return fmt.Errorf("%v", ret)
 }
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
@@ -199,73 +49,24 @@ type QueryResponse struct {
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty"`
 }
 
-func GetUrl(url string) (*QueryResponse, error) {
-	var res QueryResponse
-
-	u, err := url2.Parse(url)
-	params := api2.UrlQuery{}
-	params.Url = u.String()
-
-	err = queryAs("query", &params, &res)
-	if err != nil {
-		return nil, err
-	}
-
-	return &res, nil
+func (q *QueryResponse) FromAccountResponse(r *api.ChainQueryResponse) *QueryResponse {
+	q.Type = r.Type
+	q.MainChain = r.MainChain
+	q.Data = r.Data
+	q.ChainId = r.ChainId
+	return q
 }
 
-func queryAs(method string, input, output interface{}) error {
-	err := Client.RequestAPIv2(context.Background(), method, input, output)
+func printExecuteResponse(res *api2.TxResponse, err error) (string, error) {
 	if err == nil {
-		return nil
+		return ActionResponseFrom(res).Print()
 	}
 
 	ret, err := PrintJsonRpcError(err)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	return fmt.Errorf("%v", ret)
-}
-
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
-	if payload == nil && txHash != nil {
-		payload = new(protocol.SignPending)
-	}
-
-	dataBinary, err := payload.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	var data []byte
-	if action == "execute" {
-		data, err = json.Marshal(hex.EncodeToString(dataBinary))
-	} else {
-		data, err = json.Marshal(payload)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, si, privKey, nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err = json.Marshal(params)
-	if err != nil {
-		return nil, err
-	}
-
-	var res api2.TxResponse
-	if err := Client.RequestAPIv2(context.Background(), action, json.RawMessage(data), &res); err != nil {
-		_, err := PrintJsonRpcError(err)
-		return nil, err
-	}
-
-	return &res, nil
+	return "", fmt.Errorf("%v", ret)
 }
 
 type ActionResponse struct {
@@ -300,26 +101,18 @@ func ActionResponseFromLiteData(r *api2.TxResponse, accountUrl string, accountId
 }
 
 func (a *ActionLiteDataResponse) Print() (string, error) {
-	var out string
 	if WantJsonOutput {
-		ok := a.Code == "0" || a.Code == ""
-		if ok {
-			a.Code = "ok"
-		}
-		b, err := json.Marshal(a)
-		if err != nil {
-			return "", err
-		}
-		out = string(b)
-	} else {
-		s, err := a.ActionDataResponse.Print()
-		if err != nil {
-			return "", err
-		}
-		out = fmt.Sprintf("\n\tAccount Url\t\t:%s\n", a.AccountUrl[:])
-		out += fmt.Sprintf("\n\tAccount Id\t\t:%x\n", a.AccountId[:])
-		out += s[1:]
+		return PrintJson(a)
 	}
+
+	s, err := a.ActionDataResponse.Print()
+	if err != nil {
+		return "", err
+	}
+
+	out := fmt.Sprintf("\n\tAccount Url\t\t:%s\n", a.AccountUrl[:])
+	out += fmt.Sprintf("\n\tAccount Id\t\t:%x\n", a.AccountId[:])
+	out += s[1:]
 	return out, nil
 }
 
@@ -331,25 +124,16 @@ func ActionResponseFromData(r *api2.TxResponse, entryHash []byte) *ActionDataRes
 }
 
 func (a *ActionDataResponse) Print() (string, error) {
-	var out string
 	if WantJsonOutput {
-		ok := a.Code == "0" || a.Code == ""
-		if ok {
-			a.Code = "ok"
-		}
-		b, err := json.Marshal(a)
-		if err != nil {
-			return "", err
-		}
-		out = string(b)
-	} else {
-		s, err := a.ActionResponse.Print()
-		if err != nil {
-			return "", err
-		}
-		out = fmt.Sprintf("\n\tEntry Hash\t\t:%x\n%s", a.EntryHash[:], s[1:])
+		return PrintJson(a)
 	}
-	return out, nil
+
+	s, err := a.ActionResponse.Print()
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("\n\tEntry Hash\t\t:%x\n%s", a.EntryHash[:], s[1:]), nil
 }
 
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
@@ -363,36 +147,29 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 }
 
 func (a *ActionResponse) Print() (string, error) {
+	if WantJsonOutput {
+		return PrintJson(a)
+	}
+
 	ok := a.Code == "0" || a.Code == ""
 
 	var out string
-	if WantJsonOutput {
-		if ok {
-			a.Code = "ok"
-		}
-		b, err := json.Marshal(a)
-		if err != nil {
-			return "", err
-		}
-		out = string(b)
+	out += fmt.Sprintf("\n\tTransaction Hash\t:\t%x\n", a.TransactionHash)
+	out += fmt.Sprintf("\tEnvelope Hash\t\t:\t%x\n", a.EnvelopeHash)
+	out += fmt.Sprintf("\tSimple Hash\t\t:\t%x\n", a.SimpleHash)
+	if !ok {
+		out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
 	} else {
-		out += fmt.Sprintf("\n\tTransaction Hash\t:\t%x\n", a.TransactionHash)
-		out += fmt.Sprintf("\tEnvelope Hash\t\t:\t%x\n", a.EnvelopeHash)
-		out += fmt.Sprintf("\tSimple Hash\t\t:\t%x\n", a.SimpleHash)
-		if !ok {
-			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
-		} else {
-			out += fmt.Sprintf("\tError code\t\t:\tok\n")
-		}
-		if a.Error != "" {
-			out += fmt.Sprintf("\tError\t\t\t:\t%s\n", a.Error)
-		}
-		if a.Log != "" {
-			out += fmt.Sprintf("\tLog\t\t\t:\t%s\n", a.Log)
-		}
-		if a.Codespace != "" {
-			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
-		}
+		out += fmt.Sprintf("\tError code\t\t:\tok\n")
+	}
+	if a.Error != "" {
+		out += fmt.Sprintf("\tError\t\t\t:\t%s\n", a.Error)
+	}
+	if a.Log != "" {
+		out += fmt.Sprintf("\tLog\t\t\t:\t%s\n", a.Log)
+	}
+	if a.Codespace != "" {
+		out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
 	}
 
 	if ok {
@@ -453,74 +230,11 @@ var (
 	}
 )
 
-func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
-	//query the token
-	qr, err := GetUrl(tokenUrl)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieving token url, %v", err)
-	}
-	t := protocol.TokenIssuer{}
-	err = Remarshal(qr.Data, &t)
-	if err != nil {
-		return nil, err
-	}
-
-	amt, _ := big.NewFloat(0).SetPrec(128).SetString(amount)
-	if amt == nil {
-		return nil, fmt.Errorf("invalid amount %s", amount)
-	}
-	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision)))
-	amt.Mul(amt, oneToken)
-	iAmt, _ := amt.Int(big.NewInt(0))
-	return iAmt, nil
-}
-
-func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
-	var err error
-	var tokenUrl *url2.URL
-	if IsLiteAccount(u.String()) {
-		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
-		if err != nil {
-			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)
-		}
-	} else {
-		res, err := GetUrl(u.String())
-		if err != nil {
-			return nil, err
-		}
-		if res.Type != types.AccountTypeTokenAccount.String() {
-			return nil, fmt.Errorf("expecting token account but received %s", res.Type)
-		}
-		ta := protocol.TokenAccount{}
-		err = Remarshal(res.Data, &ta)
-		if err != nil {
-			return nil, fmt.Errorf("error remarshaling token account, %v", err)
-		}
-		tokenUrl, err = url2.Parse(ta.TokenUrl)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if tokenUrl == nil {
-		return nil, fmt.Errorf("invalid token url was obtained from %s", u.String())
-	}
-	return tokenUrl, nil
-}
-
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
-	//query the token
-	tokenData, err := GetUrl(tokenUrl)
+	t := new(protocol.TokenIssuer)
+	_, _, err := queryAccount(tokenUrl, t)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
-	}
-	t := protocol.TokenIssuer{}
-	dataBytes, err := json.Marshal(tokenData.Data)
-	if err != nil {
-		return "", err
-	}
-	err = json.Unmarshal(dataBytes, &t)
-	if err != nil {
-		return "", err
 	}
 
 	bf := big.Float{}
@@ -550,10 +264,23 @@ func PrintJson(v interface{}) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(data), nil
+	return string(data) + "\n", nil
 }
 
-func PrintChainQueryResponseV2(res *QueryResponse) (string, error) {
+func PrintAccountQueryResponse(res *api2.ChainQueryResponse, err error) (string, error) {
+	if err != nil {
+		ret, err := PrintJsonRpcError(err)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%v", ret)
+	}
+
+	qr := new(QueryResponse).FromAccountResponse(res)
+	return PrintQueryResponse(qr)
+}
+
+func PrintQueryResponse(res *QueryResponse) (string, error) {
 	if WantJsonOutput || res.Type == "dataEntry" {
 		return PrintJson(res)
 	}
@@ -585,7 +312,15 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	return out, nil
 }
 
-func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
+func PrintMultiResponse(res *api2.MultiResponse, err error) (string, error) {
+	if err != nil {
+		ret, err := PrintJsonRpcError(err)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%v", ret)
+	}
+
 	if WantJsonOutput || res.Type == "dataSet" {
 		return PrintJson(res)
 	}
@@ -604,7 +339,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 
 		for _, s := range res.OtherItems {
 			qr := new(api2.ChainQueryResponse)
-			header := new(state.ChainHeader)
+			header := new(protocol.AccountHeader)
 			qr.Data = header
 			err := Remarshal(s, qr)
 			if err != nil {
@@ -755,12 +490,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += "\n"
 		return out, nil
 	default:
-		data, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		out := fmt.Sprintf("Unknown account type %s:\n\t%s\n", res.Type, data)
-		return out, nil
+		return PrintJson(res.Data)
 	}
 }
 
@@ -845,49 +575,6 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		return out, nil
 
 	default:
-		data, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
-		return out, nil
+		return PrintJson(res.Data)
 	}
-}
-
-func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
-	kb, err := GetByChainId(chainId)
-	header := state.ChainHeader{}
-	err = Remarshal(kb.Data, &header)
-	if err != nil {
-		return nil, err
-	}
-	return &header, nil
-}
-
-func resolveKeyBookUrl(chainId []byte) (string, error) {
-	kb, err := GetByChainId(chainId)
-	book := protocol.KeyBook{}
-	err = Remarshal(kb.Data, &book)
-	if err != nil {
-		return "", err
-	}
-	return book.GetChainUrl(), nil
-}
-
-func resolveKeyPageUrl(chainId []byte) (string, error) {
-	res, err := GetByChainId(chainId)
-	if err != nil {
-		return "", err
-	}
-	kp := protocol.KeyPage{}
-	err = Remarshal(res.Data, &kp)
-	if err != nil {
-		return "", err
-	}
-	return kp.GetChainUrl(), nil
-}
-
-func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }

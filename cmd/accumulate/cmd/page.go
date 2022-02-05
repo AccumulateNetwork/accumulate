@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var pageCmd = &cobra.Command{
@@ -17,7 +17,7 @@ var pageCmd = &cobra.Command{
 		var err error
 		if len(args) == 2 {
 			if args[0] == "get" {
-				out, err = GetAndPrintKeyPage(args[1])
+				out, err = GetKeyPage(args[1])
 			} else {
 				fmt.Println("Usage:")
 				PrintKeyPageGet()
@@ -73,31 +73,9 @@ func PrintPage() {
 	PrintKeyUpdate()
 }
 
-func GetAndPrintKeyPage(url string) (string, error) {
-	res, _, err := GetKeyPage(url)
-	if err != nil {
-		return "", fmt.Errorf("error retrieving key page for %s, %v", url, err)
-	}
-
-	return PrintChainQueryResponseV2(res)
-}
-
-func GetKeyPage(url string) (*QueryResponse, *protocol.KeyPage, error) {
-	res, err := GetUrl(url)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if res.Type != types.AccountTypeKeyPage.String() {
-		return nil, nil, fmt.Errorf("expecting key page but received %v", res.Type)
-	}
-
-	kp := protocol.KeyPage{}
-	err = Remarshal(res.Data, &kp)
-	if err != nil {
-		return nil, nil, err
-	}
-	return res, &kp, nil
+func GetKeyPage(url string) (string, error) {
+	_, res, err := queryAccount(url, protocol.NewKeyPage())
+	return PrintAccountQueryResponse(res, err)
 }
 
 // CreateKeyPage create a new key page
@@ -143,12 +121,13 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	res, err := dispatchTxRequest("create-key-page", &ckp, nil, pageUrl, si, privKey)
+	req, err := prepareToExecute(&ckp, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	return ActionResponseFrom(res).Print()
+	res, err := Client.ExecuteCreateKeyPage(context.Background(), req)
+	return printExecuteResponse(res, err)
 
 }
 
@@ -203,10 +182,11 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	ukp.Key = oldKey[:]
 	ukp.NewKey = newKey[:]
 
-	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, si, privKey)
+	req, err := prepareToExecute(&ukp, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	return ActionResponseFrom(res).Print()
+	res, err := Client.ExecuteUpdateKeyPage(context.Background(), req)
+	return printExecuteResponse(res, err)
 }

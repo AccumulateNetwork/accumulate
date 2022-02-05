@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // bookCmd are the commands associated with managing key books
@@ -20,7 +20,7 @@ var bookCmd = &cobra.Command{
 			switch args[0] {
 			case "get":
 				if len(args) > 0 {
-					out, err = GetAndPrintKeyBook(args[1])
+					out, err = GetKeyBook(args[1])
 				} else {
 					PrintKeyBookGet()
 				}
@@ -60,31 +60,9 @@ func PrintKeyBook() {
 	PrintKeyBookCreate()
 }
 
-func GetAndPrintKeyBook(url string) (string, error) {
-	res, _, err := GetKeyBook(url)
-	if err != nil {
-		return "", fmt.Errorf("error retrieving key book for %s", url)
-	}
-
-	return PrintChainQueryResponseV2(res)
-}
-
-func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
-	res, err := GetUrl(url)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if res.Type != types.AccountTypeKeyBook.String() {
-		return nil, nil, fmt.Errorf("expecting key book but received %v", res.Type)
-	}
-
-	kb := protocol.KeyBook{}
-	err = Remarshal(res.Data, &kb)
-	if err != nil {
-		return nil, nil, err
-	}
-	return res, &kb, nil
+func GetKeyBook(url string) (string, error) {
+	_, res, err := queryAccount(url, protocol.NewKeyBook())
+	return PrintAccountQueryResponse(res, err)
 }
 
 // CreateKeyBook create a new key page
@@ -120,9 +98,11 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		keyBook.Pages = append(keyBook.Pages, u2.String())
 	}
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, bookUrl, si, privKey)
+	req, err := prepareToExecute(&keyBook, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.ExecuteCreateKeyBook(context.Background(), req)
+	return printExecuteResponse(res, err)
 }

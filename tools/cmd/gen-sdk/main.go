@@ -13,6 +13,8 @@ import (
 var flags struct {
 	Package string
 	Out     string
+	Include []string
+	Exclude []string
 }
 
 func run(_ *cobra.Command, args []string) {
@@ -35,18 +37,40 @@ func readFile(file string) typegen.API {
 	err = dec.Decode(&api)
 	check(err)
 
+	if flags.Include != nil {
+		included := typegen.API{}
+		for _, name := range flags.Include {
+			typ, ok := api[name]
+			if !ok {
+				fatalf("%q is not a type", name)
+			}
+			included[name] = typ
+		}
+		api = included
+	}
+
+	for _, name := range flags.Exclude {
+		_, ok := api[name]
+		if !ok {
+			fatalf("%q is not a type", name)
+		}
+		delete(api, name)
+	}
+
 	return api
 }
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gensdk [file]",
+		Use:  "gen-sdk [file]",
 		Args: cobra.ExactArgs(1),
 		Run:  run,
 	}
 
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "sdk_gen.go", "Output file")
+	cmd.Flags().StringSliceVarP(&flags.Include, "include", "i", nil, "Include only specific types")
+	cmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "x", nil, "Exclude specific types")
 
 	_ = cmd.Execute()
 }

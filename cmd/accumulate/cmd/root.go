@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
@@ -22,6 +24,8 @@ var (
 	TxPretend      = false
 	TxProve        = false
 )
+
+type ClientExecuteMethod func(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error)
 
 var currentUser = func() *user.User {
 	usr, err := user.Current()
@@ -58,6 +62,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	//add the commands
 	cmd.AddCommand(accountCmd)
 	cmd.AddCommand(adiCmd)
+	cmd.AddCommand(apiCmd)
 	cmd.AddCommand(bookCmd)
 	cmd.AddCommand(creditsCmd)
 	cmd.AddCommand(dataCmd)

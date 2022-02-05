@@ -123,6 +123,7 @@ func PrintTX() {
 	PrintTXHistoryGet()
 	PrintTXPendingGet()
 }
+
 func GetPendingTx(origin string, args []string) (string, error) {
 	u, err := url.Parse(origin)
 	if err != nil {
@@ -132,7 +133,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	//<record>#pending/<index> - fetch an envelope by index/height
 	//<record>#pending/<start>:<end> - fetch a range of envelope by index/height
 	//build the fragments:
-	params := api2.UrlQuery{}
+	params := api2.GeneralQuery{}
 
 	var out string
 	var perr error
@@ -142,11 +143,8 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		u.Fragment = "pending"
 		params.Url = u.String()
 		res := api2.MultiResponse{}
-		err = queryAs("query", &params, &res)
-		if err != nil {
-			return "", err
-		}
-		out, perr = PrintMultiResponse(&res)
+		_, err = Client.Query(context.Background(), &params, res)
+		out, perr = PrintMultiResponse(&res, err)
 	case 1:
 		if len(args[0]) == 64 {
 			//this looks like a transaction hash, now check it
@@ -164,7 +162,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		}
 		params.Url = u.String()
 		res := api2.TransactionQueryResponse{}
-		err = queryAs("query", &params, &res)
+		_, err = Client.Query(context.Background(), &params, &res)
 		if err != nil {
 			return "", err
 		}
@@ -182,40 +180,13 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
 		params.Url = u.String()
 		res := api2.MultiResponse{}
-		err = queryAs("query", &params, &res)
-		if err != nil {
-			return "", err
-		}
-		out, perr = PrintMultiResponse(&res)
+		_, err = Client.Query(context.Background(), &params, &res)
+		out, perr = PrintMultiResponse(&res, err)
 	default:
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
 	return out, perr
-}
-func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
-	var res api2.TransactionQueryResponse
-	var err error
-
-	params := new(api2.TxnQuery)
-	params.Txid = hash
-	params.Prove = TxProve
-
-	if wait > 0 {
-		params.Wait = wait
-	}
-
-	data, err := json.Marshal(params)
-	jsondata := json.RawMessage(data)
-	if err != nil {
-		return nil, err
-	}
-
-	err = Client.RequestAPIv2(context.Background(), "query-tx", jsondata, &res)
-	if err != nil {
-		return nil, err
-	}
-	return &res, nil
 }
 
 func GetTX(hash string) (string, error) {
@@ -287,7 +258,6 @@ func GetTX(hash string) (string, error) {
 }
 
 func GetTXHistory(accountUrl string, s string, e string) (string, error) {
-	var res api2.MultiResponse
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return "", err
@@ -307,16 +277,8 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
 
-	data, err := json.Marshal(params)
-	if err != nil {
-		return "", err
-	}
-
-	if err := Client.RequestAPIv2(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return PrintMultiResponse(&res)
+	res, err := Client.QueryTxHistory(context.Background(), params)
+	return PrintMultiResponse(res, err)
 }
 
 func CreateTX(sender string, args []string) (string, error) {
@@ -352,11 +314,13 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	send.AddRecipient(u2, amt)
 
-	res, err := dispatchTxRequest("send-tokens", send, nil, u, si, pk)
+	req, err := prepareToExecute(send, true, nil, si, pk)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.ExecuteSendTokens(context.Background(), req)
+	return printExecuteResponse(res, err)
 }
 
 func ExecuteTX(sender string, args []string) (string, error) {
@@ -389,11 +353,13 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", txn, nil, u, si, pk)
+	req, err := prepareToExecute(txn, false, nil, si, pk)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.Execute(context.Background(), req)
+	return printExecuteResponse(res, err)
 }
 
 func SignTX(sender string, args []string) (string, error) {
@@ -417,9 +383,11 @@ func SignTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to parse transaction hash: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", nil, txHash, u, si, pk)
+	req, err := prepareToExecute(new(protocol.SignPending), false, txHash, si, pk)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.Execute(context.Background(), req)
+	return printExecuteResponse(res, err)
 }

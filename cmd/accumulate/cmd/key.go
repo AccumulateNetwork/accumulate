@@ -3,20 +3,14 @@ package cmd
 import (
 	"bytes"
 	"crypto/ed25519"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
-	tmjson "github.com/tendermint/tendermint/libs/json"
-	"github.com/tendermint/tendermint/privval"
-	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
@@ -129,104 +123,7 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
-func resolvePrivateKey(s string) ([]byte, error) {
-	pub, priv, err := parseKey(s)
-	if err != nil {
-		return nil, err
-	}
-
-	if priv != nil {
-		return priv, nil
-	}
-
-	return LookupByPubKey(pub)
-}
-
-func resolvePublicKey(s string) ([]byte, error) {
-	pub, _, err := parseKey(s)
-	if err != nil {
-		return nil, err
-	}
-
-	return pub, nil
-}
-
-func parseKey(s string) (pubKey, privKey []byte, err error) {
-	pubKey, err = pubKeyFromString(s)
-	if err == nil {
-		return pubKey, nil, nil
-	}
-
-	privKey, err = LookupByLabel(s)
-	if err == nil {
-		// Assume ED25519
-		return privKey[32:], privKey, nil
-	}
-
-	b, err := ioutil.ReadFile(s)
-	if err != nil {
-		return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
-	}
-
-	var pvkey privval.FilePVKey
-	if tmjson.Unmarshal(b, &pvkey) == nil {
-		return pvkey.PubKey.Bytes(), pvkey.PrivKey.Bytes(), nil
-	}
-
-	return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
-}
-
-func pubKeyFromString(s string) ([]byte, error) {
-	var pubKey types.Bytes32
-	if len(s) != 64 {
-		return nil, fmt.Errorf("invalid public key or wallet key name")
-	}
-	i, err := hex.Decode(pubKey[:], []byte(s))
-
-	if err != nil {
-		return nil, err
-	}
-
-	if i != 32 {
-		return nil, fmt.Errorf("invalid public key")
-	}
-
-	return pubKey[:], nil
-}
-
-func LookupByLabel(label string) ([]byte, error) {
-	label, _ = LabelForLiteTokenAccount(label)
-
-	pubKey, err := Db.Get(BucketLabel, []byte(label))
-	if err != nil {
-		return nil, fmt.Errorf("valid key not found for %s", label)
-	}
-	return LookupByPubKey(pubKey)
-}
-
-// LabelForLiteTokenAccount returns the identity of the token account if label
-// is a valid token account URL. Otherwise, LabelForLiteTokenAccount returns the
-// original value.
-func LabelForLiteTokenAccount(label string) (string, bool) {
-	u, err := url.Parse(label)
-	if err != nil {
-		return label, false
-	}
-
-	key, _, err := protocol.ParseLiteTokenAddress(u)
-	if key == nil || err != nil {
-		return label, false
-	}
-
-	return u.Hostname(), true
-}
-
-func LookupByPubKey(pubKey []byte) ([]byte, error) {
-	return Db.Get(BucketKeys, pubKey)
-}
-
 func GenerateKey(label string) (string, error) {
-	var out string
 	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
 		return "", fmt.Errorf("key name cannot be a number")
 	}
@@ -273,15 +170,10 @@ func GenerateKey(label string) (string, error) {
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
-		dump, err := json.Marshal(&a)
-		if err != nil {
-			return "", err
-		}
-		out += fmt.Sprintf("%s\n", string(dump))
-	} else {
-		out += fmt.Sprintf("%s :\t%x", label, pubKey)
+		return PrintJson(&a)
 	}
-	return out, nil
+
+	return fmt.Sprintf("%s :\t%x", label, pubKey), nil
 }
 
 func ListKeyPublic() (out string, err error) {
@@ -295,25 +187,6 @@ func ListKeyPublic() (out string, err error) {
 		out += fmt.Sprintf("%x\t%s\n", v.Value, v.Key)
 	}
 	return out, nil
-}
-
-func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
-	b, err := Db.GetBucket(BucketLabel)
-	if err != nil {
-		return lab, err
-	}
-
-	for _, v := range b.KeyValueList {
-		if bytes.Equal(v.Value, pubKey) {
-			lab = string(v.Key)
-			break
-		}
-	}
-
-	if lab == "" {
-		err = fmt.Errorf("key name not found for %x", pubKey)
-	}
-	return lab, err
 }
 
 // ImportKey will import the private key and assign it to the label
@@ -374,14 +247,10 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = types.Bytes(pk[32:])
-		dump, err := json.Marshal(&a)
-		if err != nil {
-			return "", err
-		}
-		out = fmt.Sprintf("%s\n", string(dump))
-	} else {
-		out = fmt.Sprintf("\tname\t\t:%s\n\tpublic key\t:%x\n", label, pk[32:])
+		return PrintJson(&a)
 	}
+
+	out = fmt.Sprintf("\tname\t\t:%s\n\tpublic key\t:%x\n", label, pk[32:])
 	return out, nil
 }
 
@@ -407,67 +276,10 @@ func ExportKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PrivateKey = pk[:32]
 		a.PublicKey = pk[32:]
-		dump, err := json.Marshal(&a)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s\n", string(dump)), nil
-	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:]), nil
-	}
-}
-
-func GeneratePrivateKey() (privKey []byte, err error) {
-	seed, err := lookupSeed()
-
-	if err != nil {
-		//if private key seed doesn't exist, just create a key
-		_, privKey, err = ed25519.GenerateKey(nil)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		//if we do have a seed, then create a new key
-		masterKey, _ := bip32.NewMasterKey(seed)
-
-		ct, err := getKeyCountAndIncrement()
-		if err != nil {
-			return nil, err
-		}
-
-		newKey, err := masterKey.NewChildKey(ct)
-		if err != nil {
-			return nil, err
-		}
-		privKey = ed25519.NewKeyFromSeed(newKey.Key)
-	}
-	return
-}
-
-func getKeyCountAndIncrement() (count uint32, err error) {
-
-	ct, err := Db.Get(BucketMnemonic, []byte("count"))
-	if ct != nil {
-		count = binary.LittleEndian.Uint32(ct)
+		return PrintJson(&a)
 	}
 
-	ct = make([]byte, 8)
-	binary.LittleEndian.PutUint32(ct, count+1)
-	err = Db.Put(BucketMnemonic, []byte("count"), ct)
-	if err != nil {
-		return 0, err
-	}
-
-	return count, nil
-}
-
-func lookupSeed() (seed []byte, err error) {
-	seed, err = Db.Get(BucketMnemonic, []byte("seed"))
-	if err != nil {
-		return nil, fmt.Errorf("mnemonic seed doesn't exist")
-	}
-
-	return seed, nil
+	return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:]), nil
 }
 
 func ImportMnemonic(mnemonic []string) (string, error) {
@@ -549,14 +361,10 @@ func ExportSeed() (string, error) {
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Seed = seed
-		dump, err := json.Marshal(&a)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s\n", string(dump)), nil
-	} else {
-		return fmt.Sprintf(" seed: %x\n", seed), nil
+		return PrintJson(&a)
 	}
+
+	return fmt.Sprintf(" seed: %x\n", seed), nil
 }
 
 func ExportMnemonic() (string, error) {
@@ -567,12 +375,7 @@ func ExportMnemonic() (string, error) {
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Mnemonic = types.String(phrase)
-		dump, err := json.Marshal(&a)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("%s\n", string(dump)), nil
-	} else {
-		return fmt.Sprintf("mnemonic phrase: %s\n", string(phrase)), nil
+		return PrintJson(&a)
 	}
+	return fmt.Sprintf("mnemonic phrase: %s\n", string(phrase)), nil
 }

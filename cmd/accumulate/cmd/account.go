@@ -158,7 +158,7 @@ var accountRestoreCmd = &cobra.Command{
 }
 
 func GetAccount(url string) (string, error) {
-	res, err := GetUrl(url)
+	_, res, err := queryAccount(url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -168,7 +168,7 @@ func GetAccount(url string) (string, error) {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}
 
-	return PrintChainQueryResponseV2(res)
+	return PrintAccountQueryResponse(res, nil)
 }
 
 func QrAccount(s string) (string, error) {
@@ -235,9 +235,8 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	req := new(api.GeneralQuery)
 	req.Url = tok.String()
 	resp := new(api.ChainQueryResponse)
-	token := protocol.TokenIssuer{}
-	resp.Data = &token
-	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+	resp.Data = new(protocol.TokenAccount)
+	_, err = Client.Query(context.Background(), req, resp)
 	if err != nil || resp.Type != types.AccountTypeTokenIssuer.String() {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
@@ -248,11 +247,13 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.KeyBookUrl = keybook
 	tac.Scratch = flagAccount.Scratch
 
-	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
+	req2, err := prepareToExecute(&tac, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.ExecuteCreateTokenAccount(context.Background(), req2)
+	return printExecuteResponse(res, err)
 }
 
 func GenerateAccount() (string, error) {

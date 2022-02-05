@@ -50,14 +50,40 @@ function wait-for-tx {
 
 # cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
 function cli-tx {
-    JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -re .transactionHash
+    if [ "$1" == "--no-exit" ]; then
+        local NO_EXIT=$1
+        shift
+    fi
+
+    local RESP=`accumulate -j "$@"` || return 1
+
+    local CODE=$(echo $RESP | jq -re '.code // 0') || return 1
+    if [ -z "$NO_EXIT" ]; then
+        [ "$CODE" -ne 0 ] && die "TX failed:" $(echo $RESP | jq -r .error)
+    else
+        [ "$CODE" -ne 0 ] && return 1
+    fi
+
+    echo "$RESP" | jq -re .transactionHash
 }
 
 # cli-tx-env <args...> - Execute a CLI command and extract the envelope hash from the result
 function cli-tx-env {
-    JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -re .envelopeHash
+    if [ "$1" == "--no-exit" ]; then
+        local NO_EXIT=$1
+        shift
+    fi
+
+    local RESP=`accumulate -j "$@"` || return 1
+
+    local CODE=$(echo $RESP | jq -re '.code // 0') || return 1
+    if [ -z "$NO_EXIT" ]; then
+        [ "$CODE" -ne 0 ] && die "TX failed:" $(echo $RESP | jq -r .error)
+    else
+        [ "$CODE" -ne 0 ] && return 1
+    fi
+
+    echo "$RESP" | jq -re .envelopeHash
 }
 
 # api-v2 <payload> - Send a JSON-RPC message to the API
@@ -73,7 +99,7 @@ function api-tx {
 
 # die <message> - Print an error message and exit
 function die {
-    echo -e '\033[1;31m'"$@"'\033[0m'
+    echo -e '\033[1;31m'"$@"'\033[0m' >&2
     exit 1
 }
 
@@ -223,7 +249,7 @@ wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-cli-tx-env tx sign keytest/tokens keytest-1-2 $TXID && die "Signed the transaction after it was delivered" || success
+cli-tx-env --no-exit tx sign keytest/tokens keytest-1-2 $TXID && die "Signed the transaction after it was delivered" || success
 
 # section "Bug AC-551"
 # api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null

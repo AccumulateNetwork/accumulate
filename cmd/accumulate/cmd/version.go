@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/spf13/cobra"
 )
@@ -18,16 +17,10 @@ var versionCmd = &cobra.Command{
 }
 
 func GetVersion() (string, error) {
-	var res interface{}
-
-	if err := Client.RequestAPIv2(context.Background(), "version", nil, &res); err != nil {
+	res, err := Client.Version(context.Background())
+	if err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	str, err := json.Marshal(res)
-	if err != nil {
-		return "", err
-	}
-
-	return string(str), nil
+	return PrintJson(res.Data)
 }

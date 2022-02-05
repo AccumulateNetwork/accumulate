@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -10,7 +9,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -94,34 +92,13 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	params.Count = uint64(ct)
 	params.Expand = true
 
-	data, err := json.Marshal(&params)
-	if err != nil {
-		return "", err
-	}
-
-	var res api2.MultiResponse
-	if err := Client.RequestAPIv2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
-		ret, err := PrintJsonRpcError(err)
-		if err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("%v", ret)
-	}
-
-	return PrintMultiResponse(&res)
+	res, err := Client.QueryDirectory(context.Background(), &params)
+	return PrintMultiResponse(res, err)
 }
 
 func GetADI(url string) (string, error) {
-	res, err := GetUrl(url)
-	if err != nil {
-		return "", err
-	}
-
-	if res.Type != types.AccountTypeIdentity.String() {
-		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
-	}
-
-	return PrintChainQueryResponseV2(res)
+	_, res, err := queryAccount(url, protocol.NewADI())
+	return PrintAccountQueryResponse(res, err)
 }
 
 func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
@@ -183,13 +160,13 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	idc.KeyBookName = book
 	idc.KeyPageName = page
 
-	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
+	req, err := prepareToExecute(&idc, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	ar := ActionResponseFrom(res)
-	out, err := ar.Print()
+	res, err := Client.ExecuteCreateAdi(context.Background(), req)
+	out, err := printExecuteResponse(res, err)
 	if err != nil {
 		return "", err
 	}

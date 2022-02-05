@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -119,19 +118,8 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	var res QueryResponse
-
-	data, err := json.Marshal(&params)
-	if err != nil {
-		return "", err
-	}
-
-	err = Client.RequestAPIv2(context.Background(), "query-data", json.RawMessage(data), &res)
-	if err != nil {
-		return "", err
-	}
-
-	return PrintChainQueryResponseV2(&res)
+	res, err := Client.QueryData(context.Background(), &params)
+	return PrintAccountQueryResponse(res, err)
 }
 
 func GetDataEntrySet(accountUrl string, args []string) (string, error) {
@@ -165,18 +153,8 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	var res api.MultiResponse
-	data, err := json.Marshal(&params)
-	if err != nil {
-		return "", err
-	}
-
-	err = Client.RequestAPIv2(context.Background(), "query-data-set", json.RawMessage(data), &res)
-	if err != nil {
-		return "", err
-	}
-
-	return PrintMultiResponse(&res)
+	res, err := Client.QueryDataSet(context.Background(), &params)
+	return PrintMultiResponse(res, err)
 }
 
 func CreateLiteDataAccount(origin string, args []string) (string, error) {
@@ -198,7 +176,6 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url or 'lite' keyword")
 	}
 
-	var res *api.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
 	wdt.Entry = *prepareData(args, true)
@@ -210,7 +187,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	}
 	wdt.Recipient = addr.String()
 
-	lite, err := GetUrl(wdt.Recipient)
+	lite, _, _ := queryAccount(wdt.Recipient, nil)
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
@@ -223,9 +200,14 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
 	}
 
-	res, err = dispatchTxRequest("write-data-to", &wdt, nil, u, si, privKey)
+	req, err := prepareToExecute(&wdt, true, nil, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	res, err := Client.ExecuteWriteDataTo(context.Background(), req)
+	if err != nil {
+		return "", formatApiError(err)
 	}
 
 	return ActionResponseFromLiteData(res, addr.String(), accountId, entryHash).Print()
@@ -246,7 +228,6 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url or 'lite' keyword")
 	}
 
-	var res *api.TxResponse
 	accountUrl, err := url.Parse(args[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid account url %s", args[0])
@@ -269,11 +250,13 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.KeyBookUrl = keybook
 	cda.Scratch = flagAccount.Scratch
 
-	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, si, privKey)
+	req, err := prepareToExecute(&cda, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.ExecuteCreateDataAccount(context.Background(), req)
+	return printExecuteResponse(res, err)
 }
 
 func WriteData(accountUrl string, args []string) (string, error) {
@@ -294,9 +277,14 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteData{}
 	wd.Entry = *prepareData(args, false)
 
-	res, err := dispatchTxRequest("write-data", &wd, nil, u, si, privKey)
+	req, err := prepareToExecute(&wd, true, nil, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	res, err := Client.ExecuteWriteData(context.Background(), req)
+	if err != nil {
+		return "", formatApiError(err)
 	}
 
 	if WantJsonOutput {
@@ -363,15 +351,20 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Entry = *prepareData(args[1:], false)
 
-	res, err := dispatchTxRequest("write-data-to", &wd, nil, u, si, privKey)
+	req, err := prepareToExecute(&wd, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
+	res, err := Client.ExecuteWriteDataTo(context.Background(), req)
+	if err != nil {
+		return "", formatApiError(err)
+	}
+
 	lda := protocol.LiteDataAccount{}
-	q, err := GetUrl(wd.Recipient)
-	if err == nil {
-		Remarshal(q.Data, &lda)
+	_, _, err = queryAccount(wd.Recipient, &lda)
+	if err != nil {
+		return "", formatApiError(err)
 	}
 
 	lde := protocol.LiteDataEntry{}

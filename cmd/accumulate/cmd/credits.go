@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -61,9 +62,11 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Recipient = u2.String()
 	credits.Amount = uint64(amt * protocol.CreditPrecision)
 
-	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
+	req, err := prepareToExecute(&credits, true, nil, si, privKey)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
+
+	res, err := Client.ExecuteAddCredits(context.Background(), req)
+	return printExecuteResponse(res, err)
 }

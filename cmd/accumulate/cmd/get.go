@@ -3,14 +3,12 @@ package cmd
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // getCmd represents the get command
@@ -27,15 +25,7 @@ var getCmd = &cobra.Command{
 					chainId := types.Bytes32{}
 					err = chainId.FromString(args[1])
 					if err == nil {
-						var q *api2.ChainQueryResponse
-						q, err = GetByChainId(chainId[:])
-						if err == nil {
-							var data []byte
-							data, err = json.Marshal(q)
-							if err == nil {
-								out = string(data)
-							}
-						}
+						out, err = GetByChainId(chainId[:])
 					}
 				} else {
 					fmt.Println("Usage:")
@@ -64,91 +54,43 @@ var getCmd = &cobra.Command{
 	},
 }
 
-var GetDirect bool
-
-func init() {
-	getCmd.Flags().BoolVar(&GetDirect, "direct", false, "Use debug-query-direct instead of query")
-}
-
 func PrintGet() {
 	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
 	//fmt.Println("  accumulate get [chain id] 		Get data by Accumulate chain id")
 	//fmt.Println("  accumulate get [transaction id] 		Get data by Accumulate transaction id")
 }
 
-func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
-	var res api2.ChainQueryResponse
-
+func GetByChainId(chainId []byte) (string, error) {
 	params := api2.ChainIdQuery{}
 	params.ChainId = chainId
 
-	data, err := json.Marshal(&params)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := Client.RequestAPIv2(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
-		log.Fatal(err)
-	}
-
-	return &res, nil
+	res, err := Client.QueryChain(context.Background(), &params)
+	return PrintAccountQueryResponse(res, err)
 }
 
 func Get(url string) (string, error) {
-	params := api2.UrlQuery{}
+	params := api2.GeneralQuery{}
 	params.Url = url
 
-	method := "query"
-	if GetDirect {
-		method = "debug-query-direct"
-	}
-
-	var res json.RawMessage
-	err := queryAs(method, &params, &res)
+	res, err := Client.Query(context.Background(), &params, nil)
 	if err != nil {
-		return "", err
+		return "", formatApiError(err)
 	}
 
 	if WantJsonOutput {
-		return string(res), nil
+		return PrintJson(res)
 	}
 
-	// Is it an account?
-	if json.Unmarshal(res, new(struct{ Type types.AccountType })) == nil {
-		qr := new(QueryResponse)
-		if json.Unmarshal(res, qr) != nil {
-			return string(res), nil
-		}
-		return PrintChainQueryResponseV2(qr)
+	switch res := res.(type) {
+	case *api.ChainQueryResponse:
+		return PrintAccountQueryResponse(res, nil)
+	case *api.TransactionQueryResponse:
+		return PrintTransactionQueryResponseV2(res)
+	case *api.MultiResponse:
+		return PrintMultiResponse(res, nil)
+	default:
+		return PrintJson(res)
 	}
-
-	// Is it a transaction?
-	if json.Unmarshal(res, new(struct{ Type types.TransactionType })) == nil {
-		qr := new(api2.TransactionQueryResponse)
-		if json.Unmarshal(res, qr) != nil {
-			return string(res), nil
-		}
-		return PrintTransactionQueryResponseV2(qr)
-	}
-
-	return string(res), nil
-}
-
-func getKey(url string, key []byte) (*query.ResponseKeyPageIndex, error) {
-	params := new(api2.KeyPageIndexQuery)
-	params.Url = url
-	params.Key = key
-
-	res := new(query.ResponseKeyPageIndex)
-	qres := new(api2.ChainQueryResponse)
-	qres.Data = res
-
-	err := queryAs("query-key-index", &params, &qres)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
 }
 
 func GetKey(url, key string) (string, error) {
@@ -163,12 +105,7 @@ func GetKey(url, key string) (string, error) {
 	}
 
 	if WantJsonOutput {
-		str, err := json.Marshal(res)
-		if err != nil {
-			return "", err
-		}
-
-		return string(str), nil
+		return PrintJson(res)
 	}
 
 	var out string
