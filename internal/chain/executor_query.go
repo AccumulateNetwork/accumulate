@@ -248,7 +248,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					}
 
 					res := &protocol.ResponseDataEntry{}
-					copy(res.EntryHash[:], []byte(queryParam))
+					copy(res.EntryHash[:], entry.Hash())
 					res.Entry = *entry
 					return []byte("data-entry"), res, nil
 				} else {
@@ -434,7 +434,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	pending := new(state.PendingTransaction)
 	pending.Type = types.AccountTypePendingTransaction
-	pending.ChainUrl = txState.ChainUrl
+	pending.Url = txState.Url
 	pending.TransactionState = &txState.TxState
 
 	status, err := tx.GetStatus()

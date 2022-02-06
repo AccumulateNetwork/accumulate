@@ -40,8 +40,8 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	}
 
 	token := protocol.NewTokenIssuer()
-	token.ChainUrl = types.String(tokenUrl.String())
-	token.KeyBook = types.String(body.KeyBookUrl)
+	token.Url = tokenUrl.String()
+	token.KeyBook = body.KeyBookUrl
 	token.Precision = body.Precision
 	token.Supply = body.InitialSupply
 	token.HasSupplyLimit = body.HasSupplyLimit
@@ -50,7 +50,7 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 		token.Properties = body.Properties
 	}
 	if body.Manager != "" {
-		token.ManagerKeyBook = types.String(body.Manager)
+		token.ManagerKeyBook = body.Manager
 	}
 
 	st.Create(token)

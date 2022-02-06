@@ -1,4 +1,4 @@
-package state_test
+package protocol_test
 
 import (
 	"bytes"
@@ -10,9 +10,8 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	. "gitlab.com/accumulatenetwork/accumulate/types/state"
+	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func TestTransactionState(t *testing.T) {
@@ -22,8 +21,8 @@ func TestTransactionState(t *testing.T) {
 	we := acctesting.NewWalletEntry()
 	u, err := url.Parse(we.Addr)
 	require.NoError(t, err)
-	trans := new(transactions.Envelope)
-	trans.Transaction = new(transactions.Transaction)
+	trans := new(Envelope)
+	trans.Transaction = new(Transaction)
 	trans.Transaction.Origin = u
 
 	trans.Transaction.Body, err = nts1.MarshalBinary()
@@ -31,7 +30,7 @@ func TestTransactionState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eSig := new(transactions.ED25519Sig)
+	eSig := new(ED25519Sig)
 	transHash := trans.GetTxHash()
 
 	if err := eSig.Sign(we.Nonce, we.PrivateKey, transHash); err != nil {
@@ -40,14 +39,15 @@ func TestTransactionState(t *testing.T) {
 
 	trans.Signatures = append(trans.Signatures, eSig)
 
-	txPendingState := NewPendingTransaction(trans)
-	txPendingState.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.AccountTypePendingTransaction)
+	txPendingState := state.NewPendingTransaction(trans)
+	txPendingState.Url = "RedWagon/myAccount"
+	txPendingState.Type = AccountTypePendingTransaction
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
 		t.Fatalf("error marshaling pending tx state %v", err)
 	}
 
-	txPendingState2 := PendingTransaction{}
+	txPendingState2 := PendingTransactionState{}
 
 	err = txPendingState2.UnmarshalBinary(data)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestTransactionState(t *testing.T) {
 		t.Fatalf("sig info doesn't match")
 	}
 
-	txState, txPendingState := NewTransaction(txPendingState)
+	txState, txPendingState := state.NewTransaction(txPendingState)
 
 	if txPendingState.TransactionState.Transaction != nil {
 		t.Fatal("expected NO transaction in pending state")
@@ -84,7 +84,7 @@ func TestTransactionState(t *testing.T) {
 		t.Fatalf("error marshaling pending tx state %v", err)
 	}
 
-	txPendingState2 = PendingTransaction{}
+	txPendingState2 = PendingTransactionState{}
 	err = txPendingState2.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatalf("error unmarshaling pending transaction, %v", err)
@@ -95,7 +95,7 @@ func TestTransactionState(t *testing.T) {
 		t.Fatalf("error marshaling txState %v", err)
 	}
 
-	txState2 := Transaction{}
+	txState2 := TransactionState{}
 	err = txState2.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatalf("error unmarshaling transaction state")

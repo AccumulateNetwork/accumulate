@@ -9,7 +9,7 @@ import (
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = chain.Header().Type.Name()
+	res.Type = chain.Header().Type.String()
 	res.MainChain = new(MerkleState)
 	res.MainChain.Height = obj.Height
 	res.MainChain.Roots = obj.Roots

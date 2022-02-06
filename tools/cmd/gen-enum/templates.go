@@ -46,6 +46,11 @@ func convert(types map[string]typegen.Type, pkgName string) *Types {
 			tval.TypeValue = *val
 		}
 		sort.Slice(ttyp.Values, func(i, j int) bool {
+			v1, ok1 := ttyp.Values[i].Value.(int)
+			v2, ok2 := ttyp.Values[j].Value.(int)
+			if ok1 && ok2 {
+				return v1 < v2
+			}
 			return strings.Compare(fmt.Sprint(ttyp.Values[i].Value), fmt.Sprint(ttyp.Values[j].Value)) < 0
 		})
 	}

@@ -315,10 +315,10 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		result, err := app.Chain.CheckTx(env)
 		if err != nil {
 			sentry.CaptureException(err)
-			app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
+			app.logger.Info("Check failed", "type", env.Transaction.Type().String(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
 			return abci.ResponseCheckTx{
 				Code: uint32(err.Code),
-				Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
+				Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().String(), err),
 			}
 		}
 
@@ -371,7 +371,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		result, err := app.Chain.DeliverTx(env)
 		if err != nil {
 			sentry.CaptureException(err)
-			app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
+			app.logger.Info("Deliver failed", "type", env.Transaction.Type().String(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
 			// Whether or not the transaction succeeds does not matter to Tendermint
 			continue
 		}
