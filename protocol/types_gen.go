@@ -342,6 +342,10 @@ type UpdateKeyPage struct {
 	Threshold uint64           `json:"threshold,omitempty" form:"threshold" query:"threshold"`
 }
 
+type UpdateManager struct {
+	ManagerKeyBook string `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
+}
+
 type WriteData struct {
 	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
@@ -476,6 +480,8 @@ func (*SyntheticMirror) GetType() types.TransactionType { return types.TxTypeSyn
 func (*SyntheticWriteData) GetType() types.TransactionType { return types.TxTypeSyntheticWriteData }
 
 func (*UpdateKeyPage) GetType() types.TransactionType { return types.TxTypeUpdateKeyPage }
+
+func (*UpdateManager) GetType() types.TransactionType { return types.TxTypeUpdateManager }
 
 func (*WriteData) GetType() types.TransactionType { return types.TxTypeWriteData }
 
@@ -1437,6 +1443,14 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	return true
 }
 
+func (v *UpdateManager) Equal(u *UpdateManager) bool {
+	if !(v.ManagerKeyBook == u.ManagerKeyBook) {
+		return false
+	}
+
+	return true
+}
+
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !(v.Entry.Equal(&u.Entry)) {
 		return false
@@ -2273,6 +2287,16 @@ func (v *UpdateKeyPage) BinarySize() int {
 	n += encoding.StringBinarySize(v.Owner)
 
 	n += encoding.UvarintBinarySize(v.Threshold)
+
+	return n
+}
+
+func (v *UpdateManager) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeUpdateManager.ID())
+
+	n += encoding.StringBinarySize(v.ManagerKeyBook)
 
 	return n
 }
@@ -3245,6 +3269,16 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Owner))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *UpdateManager) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeUpdateManager.ID()))
+
+	buffer.Write(encoding.StringMarshalBinary(v.ManagerKeyBook))
 
 	return buffer.Bytes(), nil
 }
@@ -4949,6 +4983,25 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 		v.Threshold = x
 	}
 	data = data[encoding.UvarintBinarySize(v.Threshold):]
+
+	return nil
+}
+
+func (v *UpdateManager) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeUpdateManager
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ManagerKeyBook: %w", err)
+	} else {
+		v.ManagerKeyBook = x
+	}
+	data = data[encoding.StringBinarySize(v.ManagerKeyBook):]
 
 	return nil
 }

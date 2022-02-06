@@ -109,6 +109,10 @@ const (
 	// TxTypeSignPending is used to sign a pending transaction.
 	// Deprecated: use protocol.TransactionTypeSignPending
 	TxTypeSignPending TransactionType = 0x30
+
+	// TxTypeSignPending is used to sign a pending transaction.
+	// Deprecated: use protocol.TransactionTypeSignPending
+	TxTypeUpdateManager TransactionType = 0x40
 )
 
 // Synthetic transactions
@@ -214,6 +218,8 @@ func (t TransactionType) String() string {
 		return "updateKeyPage"
 	case TxTypeSignPending:
 		return "signPending"
+	case TxTypeUpdateManager:
+		return "updateManager"
 
 	case TxTypeSyntheticCreateChain:
 		return "syntheticCreateChain"

@@ -323,3 +323,9 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
+
+UpdateManager:
+  kind: tx
+  fields:
+    - name: ManagerKeyBook
+      type: string
