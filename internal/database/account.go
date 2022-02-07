@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // Account manages a record.
@@ -88,7 +88,7 @@ func (r *Account) GetState() (state.Chain, error) {
 		return nil, err
 	}
 
-	state, err := protocol.UnmarshalChain(data)
+	state, err := protocol.UnmarshalAccount(data)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (r *Account) GetStateAs(state state.Chain) error {
 // PutState stores the record state and adds the record to the BPT (as a hash).
 func (r *Account) PutState(accountState state.Chain) error {
 	// Does the record state have a URL?
-	if accountState.Header().ChainUrl == "" {
+	if accountState.Header().Url == "" {
 		return errors.New("invalid URL: empty")
 	}
 

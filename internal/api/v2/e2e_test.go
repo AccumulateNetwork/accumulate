@@ -8,16 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	. "github.com/AccumulateNetwork/accumulate/protocol"
-	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	query2 "gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -62,12 +62,12 @@ func TestValidate(t *testing.T) {
 			xr := new(api.TxResponse)
 			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
 			require.Zero(t, xr.Code, xr.Message)
-			txWait(t, japi, xr.Txid)
+			txWait(t, japi, xr.TransactionHash)
 		}
 
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
-		assert.Equal(t, int64(count*10*AcmePrecision), account.Balance.Int64())
+		assert.Equal(t, int64(count*100*AcmePrecision), account.Balance.Int64())
 	})
 
 	t.Run("Lite Account Credits", func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestValidate(t *testing.T) {
 
 		adi := new(protocol.ADI)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
-		assert.Equal(t, adiName, string(adi.ChainUrl))
+		assert.Equal(t, adiName, string(adi.Url))
 
 		dir := new(api.MultiResponse)
 		callApi(t, japi, "query-directory", struct {
@@ -142,7 +142,7 @@ func TestValidate(t *testing.T) {
 			Url   string
 			Count int
 		}{liteUrl.String(), 10}, r)
-		require.Len(t, r.Items, 6)
+		require.Equal(t, 7, len(r.Items), "Expected 7 transactions for %s", liteUrl)
 	})
 
 	dataAccountUrl := adiName + "/dataAccount"
@@ -156,7 +156,7 @@ func TestValidate(t *testing.T) {
 		})
 		dataAccount := NewDataAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
-		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
+		assert.Equal(t, dataAccountUrl, string(dataAccount.Url))
 	})
 
 	keyPageUrl := adiName + "/page1"
@@ -176,7 +176,7 @@ func TestValidate(t *testing.T) {
 		})
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
+		assert.Equal(t, keyPageUrl, string(keyPage.Url))
 	})
 
 	keyBookUrl := adiName + "/book1"
@@ -194,7 +194,7 @@ func TestValidate(t *testing.T) {
 		})
 		keyBook := NewKeyBook()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
-		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
+		assert.Equal(t, keyBookUrl, string(keyBook.Url))
 	})
 
 	t.Run("Key page credits 2", func(t *testing.T) {
@@ -244,7 +244,7 @@ func TestValidate(t *testing.T) {
 		})
 		tokenAccount := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
-		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
+		assert.Equal(t, tokenAccountUrl, string(tokenAccount.Url))
 	})
 
 	t.Run("Query Key Index", func(t *testing.T) {

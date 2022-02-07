@@ -3,7 +3,7 @@ package protocol
 import (
 	"crypto/sha256"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // ComputeLiteDataAccountId will compute the chain id from the first entry in the chain which defines
@@ -23,7 +23,7 @@ func ComputeLiteDataAccountId(firstEntry *DataEntry) []byte {
 }
 
 func (c *LiteDataAccount) AccountId() ([]byte, error) {
-	u, err := url.Parse(*c.Header().ChainUrl.AsString())
+	u, err := url.Parse(c.Header().Url)
 	if err != nil {
 		return nil, err
 	}

@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type SyntheticWriteData struct{}
@@ -21,14 +21,8 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 	}
 
 	var account state.Chain
-
-	sw := protocol.SegWitDataEntry{}
-	//we provide the transaction id of the original transaction
-	copy(sw.Cause[:], body.Cause[:])
-
+	result := new(protocol.WriteDataResult)
 	if st.Origin != nil {
-		//reference this chain in the segwit entry.
-		sw.EntryUrl = st.Origin.Header().GetChainUrl()
 
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteDataAccount:
@@ -44,8 +38,11 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			if err != nil {
 				return nil, err
 			}
-			copy(sw.EntryHash[:], entryHash)
+
 			account = origin
+			result.EntryHash = *(*[32]byte)(entryHash)
+			result.AccountID = liteDataAccountId
+			result.AccountUrl = tx.Transaction.Origin
 		default:
 			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
 				types.AccountTypeLiteDataAccount, origin.Header().Type)
@@ -59,15 +56,14 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		if err != nil {
 			return nil, err
 		}
-		originUrl := tx.Transaction.Origin.String()
 
 		//the computed data account chain id must match the origin url.
-		if u.String() != originUrl {
+		if !tx.Transaction.Origin.Equal(u) {
 			return nil, fmt.Errorf("first entry doesnt match chain id")
 		}
 
 		lite := protocol.NewLiteDataAccount()
-		lite.ChainUrl = types.String(originUrl)
+		lite.Url = u.String()
 		//we store the tail of the lite data account id in the state. The first part
 		//of the lite data account can be obtained from the LiteDataAddress. When
 		//we want to reference the chain, we have all the info we need at the cost
@@ -80,11 +76,23 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		if err != nil {
 			return nil, err
 		}
-		copy(sw.EntryHash[:], entryHash)
-		sw.EntryUrl = originUrl
 
 		account = lite
+		result.EntryHash = *(*[32]byte)(entryHash)
+		result.AccountID = liteDataAccountId
+		result.AccountUrl = u
 	}
+
+	sw := protocol.SegWitDataEntry{}
+
+	//reference this chain in the segwit entry.
+	sw.EntryUrl = result.AccountUrl.String()
+
+	//we provide the transaction id of the original transaction
+	sw.Cause = body.Cause
+
+	//and the entry hash
+	sw.EntryHash = result.EntryHash
 
 	// now replace the transaction payload with a segregated witness to the data.
 	// This technique is used to segregate the payload from the stored transaction
@@ -105,7 +113,5 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 
 	st.UpdateData(account, sw.EntryHash[:], &body.Entry)
 
-	return &protocol.WriteDataResult{
-		EntryHash: sw.EntryHash,
-	}, nil
+	return result, nil
 }

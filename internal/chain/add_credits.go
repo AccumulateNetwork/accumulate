@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type AddCredits struct{}
@@ -86,9 +86,15 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	copy(sdc.Cause[:], tx.Transaction.Hash())
+	copy(sdc.Cause[:], tx.GetTxHash())
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
+
+	//Create synthetic burn token
+	burnAcme := new(protocol.SyntheticBurnTokens)
+	copy(sdc.Cause[:], tx.GetTxHash())
+	burnAcme.Amount = amount.Int
+	st.Submit(tokenUrl, burnAcme)
 
 	return nil, nil
 }

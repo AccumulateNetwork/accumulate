@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type WriteDataTo struct{}
@@ -30,12 +30,10 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)
+	writeThis.Cause = *(*[32]byte)(tx.GetTxHash())
 	writeThis.Entry = body.Entry
-	copy(writeThis.Cause[:], tx.Transaction.Hash())
 
 	st.Submit(recipient, writeThis)
 
-	res := new(protocol.WriteDataResult)
-	copy(res.EntryHash[:], body.Entry.Hash())
-	return res, nil
+	return nil, nil
 }

@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type CreateKeyPage struct{}
@@ -44,11 +44,11 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.Transaction.Hash()).AsBytes32()
+	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()
-	page.ChainUrl = types.String(msUrl.String())
+	page.Url = msUrl.String()
 	page.Threshold = 1 // Require one signature from the Key Page
 
 	if group != nil {
@@ -60,7 +60,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		group.Pages = append(group.Pages, msUrl.String())
-		page.KeyBook = types.String(groupUrl.String())
+		page.KeyBook = groupUrl.String()
 
 		err = scc.Update(group)
 		if err != nil {

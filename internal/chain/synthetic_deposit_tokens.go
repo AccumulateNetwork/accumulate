@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticDepositTokens struct{}
@@ -47,7 +47,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 	} else {
 		// Address is lite and the account doesn't exist, so create one
 		lite := protocol.NewLiteTokenAccount()
-		lite.ChainUrl = types.String(tx.Transaction.Origin.String())
+		lite.Url = tx.Transaction.Origin.String()
 		lite.TokenUrl = tokenUrl.String()
 		account = lite
 	}

@@ -6,16 +6,16 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulate/internal/chain"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type DB = *database.Batch
@@ -26,6 +26,14 @@ const TokenMx = protocol.AcmePrecision
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
+}
+
+func MustParseUrl(s string) *url.URL {
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }
 
 func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
@@ -51,7 +59,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	ed := new(transactions.ED25519Sig)
 	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.Transaction.Hash())
+	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +68,81 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	return tx, nil
 }
 
+func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	from := AcmeLiteAddressStdPriv(sponsor)
+
+	u, err := url.Parse(destAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %v", err)
+	}
+
+	send := protocol.SendTokens{}
+	send.AddRecipient(u, big.NewInt(int64(amount)))
+
+	txData, err := send.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal token tx: %v", err)
+	}
+
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Body = txData
+	gtx.Transaction.Origin = from
+
+	ed := new(transactions.ED25519Sig)
+	gtx.Transaction.Nonce = 1
+	ed.PublicKey = sponsor[32:]
+	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign TX: %v", err)
+	}
+
+	gtx.Signatures = append(gtx.Signatures, ed)
+
+	return gtx, nil
+}
+
+func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Envelope, error) {
+	_, privateKey, _ := ed25519.GenerateKey(nil)
+	//set destination url address
+	destAddress := AcmeLiteAddressStdPriv(privateKey)
+
+	//create a fake synthetic deposit for faucet.
+	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Cause = sha256.Sum256([]byte("fake txid"))
+	deposit.Token = protocol.ACME
+	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
+	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
+	// amtToDeposit := int64(50000)                             //deposit 50k tokens
+	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
+	// deposit.TokenUrl = tokenUrl
+
+	depData, err := deposit.MarshalBinary()
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to marshal deposit: %v", err)
+	}
+
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Body = depData
+	gtx.Transaction.Origin = destAddress
+
+	ed := new(transactions.ED25519Sig)
+	gtx.Transaction.Nonce = 1
+	ed.PublicKey = privateKey[32:]
+	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
+	}
+
+	gtx.Signatures = append(gtx.Signatures, ed)
+
+	return destAddress.String(), privateKey, gtx, nil
+}
+
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
-	url := types.String(AcmeLiteAddressTmPriv(key).String())
+	url := AcmeLiteAddressTmPriv(key).String()
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -106,7 +187,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 			return err
 		}
 
-		err = chain.AddEntry(txid[:])
+		err = chain.AddEntry(txid[:], true)
 		if err != nil {
 			return err
 		}
@@ -131,17 +212,17 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.ChainUrl = types.String(pageUrl.String())
+	mss.Url = pageUrl.String()
 	mss.Keys = append(mss.Keys, ss)
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
-	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
+	book.Url = bookUrl.String() // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
 	adi := protocol.NewADI()
-	adi.ChainUrl = types.String(identityUrl.String())
-	adi.KeyBook = types.String(bookUrl.String())
+	adi.Url = identityUrl.String()
+	adi.KeyBook = bookUrl.String()
 
 	return WriteStates(db, adi, book, mss)
 }
@@ -169,15 +250,15 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	var chain state.Chain
 	if lite {
 		account := new(protocol.LiteTokenAccount)
-		account.ChainUrl = types.String(u.String())
+		account.Url = u.String()
 		account.TokenUrl = tokenUrl
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	} else {
 		account := protocol.NewTokenAccount()
-		account.ChainUrl = types.String(u.String())
+		account.Url = u.String()
 		account.TokenUrl = tokenUrl
-		account.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+		account.KeyBook = u.Identity().JoinPath("book0").String()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -192,8 +273,8 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	}
 
 	issuer := new(protocol.TokenIssuer)
-	issuer.ChainUrl = types.String(u.String())
-	issuer.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+	issuer.Url = u.String()
+	issuer.KeyBook = u.Identity().JoinPath("book0").String()
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 
@@ -207,7 +288,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	}
 
 	mss := protocol.NewKeyPage()
-	mss.ChainUrl = types.String(u.String())
+	mss.Url = u.String()
 	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
@@ -226,7 +307,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	}
 
 	group := protocol.NewKeyBook()
-	group.ChainUrl = types.String(groupUrl.String())
+	group.Url = groupUrl.String()
 	group.Pages = pageUrls
 	states := []state.Chain{group}
 
@@ -248,7 +329,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
-		spec.KeyBook = types.String(groupUrl.String())
+		spec.KeyBook = groupUrl.String()
 		states = append(states, spec)
 	}
 
@@ -276,8 +357,8 @@ func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
 	return AcmeLiteAddress(key[32:])
 }
 
-func NewWalletEntry() *transactions.WalletEntry {
-	wallet := new(transactions.WalletEntry)
+func NewWalletEntry() *WalletEntry {
+	wallet := new(WalletEntry)
 
 	wallet.Nonce = 1 // Put the private key for the origin
 	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)

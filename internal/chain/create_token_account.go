@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type CreateTokenAccount struct{}
@@ -36,7 +36,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 	}
 
 	account := protocol.NewTokenAccount()
-	account.ChainUrl = types.String(accountUrl.String())
+	account.Url = accountUrl.String()
 	account.TokenUrl = tokenUrl.String()
 	account.Scratch = body.Scratch
 	if body.KeyBookUrl == "" {
@@ -53,7 +53,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 			return nil, fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 
-		account.KeyBook = types.String(keyBookUrl.String())
+		account.KeyBook = keyBookUrl.String()
 	}
 
 	st.Create(account)

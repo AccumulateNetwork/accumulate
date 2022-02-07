@@ -3,31 +3,55 @@ package protocol
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-var FaucetWallet transactions.WalletEntry
 var FaucetUrl *url.URL
+var Faucet faucet
+
+var faucetSeed = sha256.Sum256([]byte("faucet"))
+var faucetKey = ed25519.NewKeyFromSeed(faucetSeed[:])
 
 // TODO Set the balance to 0 and/or use a bogus URL for the faucet. Otherwise, a
 // bad actor could generate the faucet private key using the same method we do,
 // then sign arbitrary transactions using the faucet.
 
 func init() {
-	FaucetWallet.Nonce = 1
-
-	seed := sha256.Sum256([]byte("faucet"))
-	privKey := ed25519.NewKeyFromSeed(seed[:])
-	pubKey := privKey.Public().(ed25519.PublicKey)
-
 	var err error
-	FaucetUrl, err = LiteTokenAddress(pubKey, AcmeUrl().String())
+	FaucetUrl, err = LiteTokenAddress(Faucet.PublicKey(), AcmeUrl().String())
 	if err != nil {
 		panic(err)
 	}
+}
 
-	FaucetWallet.PrivateKey = privKey
-	FaucetWallet.Addr = FaucetUrl.String()
+type faucet struct{}
+
+func (faucet) Url() *url.URL {
+	return FaucetUrl
+}
+
+func (faucet) PublicKey() []byte {
+	return faucetKey[32:]
+}
+
+func (faucet) Signer() faucetSigner {
+	return faucetSigner(time.Now().UnixNano())
+}
+
+type faucetSigner uint64
+
+func (s faucetSigner) Nonce() uint64 {
+	return uint64(s)
+}
+
+func (s faucetSigner) PublicKey() []byte {
+	return faucetKey[32:]
+}
+
+func (s faucetSigner) Sign(message []byte) (*ED25519Sig, error) {
+	sig := new(ED25519Sig)
+	err := sig.Sign(uint64(s), faucetKey, message)
+	return sig, err
 }

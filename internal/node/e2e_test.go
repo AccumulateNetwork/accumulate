@@ -6,27 +6,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api"
-	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func TestEndToEnd(t *testing.T) {
-	t.Skip("TODO Update to API v2")
 	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
@@ -39,34 +33,37 @@ func TestEndToEnd(t *testing.T) {
 		daemon := daemons[subnets[1]][0]
 		client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
-		return &e2eDUT{s, daemon.DB_TESTONLY(), daemon.Query_TESTONLY(), client}
+		return &e2eDUT{s, daemon.DB_TESTONLY(), daemon.Jrpc_TESTONLY(), client}
 	}))
 }
 
 type e2eDUT struct {
 	*e2e.Suite
 	db     *database.Database
-	query  *api.Query
+	api    *apiv2.JrpcMethods
 	client *local.Local
 }
 
-func (d *e2eDUT) getObj(url string) *state.Object {
-	r, err := d.query.QueryByUrl(url)
+func (d *e2eDUT) queryAccount(url string) *apiv2.ChainQueryResponse {
+	data, err := json.Marshal(&apiv2.UrlQuery{Url: url})
 	d.Require().NoError(err)
-	d.Require().Zero(r.Response.Code, "Query failed: %v", r.Response.Info)
-
-	obj := new(state.Object)
-	d.Require().Equal([]byte("chain"), r.Response.Key)
-	d.Require().NoError(obj.UnmarshalBinary(r.Response.Value))
-	return obj
+	r := d.api.Query(context.Background(), data)
+	if err, ok := r.(error); ok {
+		d.Require().NoError(err)
+	}
+	d.Require().IsType((*apiv2.ChainQueryResponse)(nil), r)
+	return r.(*apiv2.ChainQueryResponse)
 }
 
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
-	d.Require().NoError(d.getObj(url).As(target))
+	r := d.queryAccount(url)
+	data, err := json.Marshal(r.Data)
+	d.Require().NoError(err)
+	d.Require().NoError(json.Unmarshal(data, target))
 }
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
-	return d.getObj(url).Height
+	return d.queryAccount(url).MainChain.Height
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
@@ -80,9 +77,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 	d.T().Helper()
 
-	q := apiv2.NewQueryDirect(d.client, apiv2.QuerierOptions{
-		TxMaxWaitTime: 10 * time.Second,
-	})
+	q := d.api.Querier_TESTONLY()
 
 	for len(txids) > 0 {
 		var synth [][]byte
@@ -129,8 +124,24 @@ func TestSubscribeAfterClose(t *testing.T) {
 	// not straight forward
 }
 
+func rpcCall(t *testing.T, method func(context.Context, json.RawMessage) interface{}, input, output interface{}) {
+	data, err := json.Marshal(input)
+	require.NoError(t, err)
+	res := method(context.Background(), data)
+	if err, ok := res.(error); ok {
+		require.NoError(t, err)
+	}
+
+	if output == nil {
+		return
+	}
+
+	data, err = json.Marshal(res)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, output))
+}
+
 func TestFaucetMultiNetwork(t *testing.T) {
-	t.Skip("TODO Update to API v2")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
@@ -138,54 +149,31 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 3, 1, 0)
 	acctesting.RunTestNet(t, subnets, daemons)
 	daemon := daemons[protocol.Directory][0]
+	jrpc := daemon.Jrpc_TESTONLY()
 
 	rpcAddrs := make([]string, 0, 3)
 	for _, netName := range subnets[1:] {
 		rpcAddrs = append(rpcAddrs, daemons[netName][0].Config.RPC.ListenAddress)
 	}
 
-	relay, err := relay.NewWith(nil, rpcAddrs...)
-	require.NoError(t, err)
-	if daemon.Config.Accumulate.API.EnableSubscribeTX {
-		require.NoError(t, relay.Start())
-		t.Cleanup(func() { require.NoError(t, relay.Stop()) })
-	}
-	query := api.NewQuery(relay)
-
 	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
 	require.NoError(t, err)
 	require.NotEqual(t, lite.Routing()%3, protocol.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
 
-	req := new(apitypes.APIRequestURL)
-	req.Wait = true
-	req.URL = types.String(lite.String())
-
-	params, err := json.Marshal(&req)
-	require.NoError(t, err)
-
-	jsonapi, err := api.New(&daemon.Config.Accumulate.API, query)
-	require.NoError(t, err)
-	res := jsonapi.Faucet(context.Background(), params)
-	switch r := res.(type) {
-	case jsonrpc2.Error:
-		require.NoError(t, r)
-	case *apitypes.APIDataResponse:
-		require.NoError(t, acctesting.WaitForTxV1(query, r))
-	default:
-		require.IsType(t, (*apitypes.APIDataResponse)(nil), r)
+	txResp := new(apiv2.TxResponse)
+	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite.String()}, txResp)
+	txqResp := new(apiv2.TransactionQueryResponse)
+	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
+	for _, txid := range txqResp.SyntheticTxids {
+		rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}, nil)
 	}
 
 	// Wait for synthetic TX to settle
 	time.Sleep(time.Second)
 
-	obj := new(state.Object)
-	chain := new(state.ChainHeader)
 	account := new(protocol.LiteTokenAccount)
-	qres, err := query.QueryByUrl(lite.String())
-	require.NoError(t, err)
-	require.Zero(t, qres.Response.Code, "Failed, log=%q, info=%q", qres.Response.Log, qres.Response.Info)
-	require.NoError(t, obj.UnmarshalBinary(qres.Response.Value))
-	require.NoError(t, obj.As(chain))
-	require.Equal(t, types.AccountTypeLiteTokenAccount, chain.Type)
-	require.NoError(t, obj.As(account))
+	qResp := new(apiv2.ChainQueryResponse)
+	qResp.Data = account
+	rpcCall(t, jrpc.Query, &apiv2.UrlQuery{Url: lite.String()}, qResp)
+	require.NotZero(t, account.Balance)
 }

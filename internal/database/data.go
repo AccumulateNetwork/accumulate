@@ -3,7 +3,7 @@ package database
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Data manages a data chain.
@@ -28,7 +28,7 @@ func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
 	d.batch.store.Put(d.record.Data(hash), data)
 
 	// Add entry to the chain
-	err = d.chain.AddEntry(hash)
+	err = d.chain.AddEntry(hash, false)
 	if err != nil {
 		return err
 	}

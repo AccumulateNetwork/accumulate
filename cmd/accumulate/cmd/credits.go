@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/spf13/cobra"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // creditsCmd represents the faucet command
@@ -52,7 +52,7 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	amt, err := strconv.ParseInt(args[1], 10, 64)
+	amt, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
@@ -61,7 +61,7 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Recipient = u2.String()
 	credits.Amount = uint64(amt * protocol.CreditPrecision)
 
-	res, err := dispatchTxRequest("add-credits", &credits, u, si, privKey)
+	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}

@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 func TestStateDBConsistency(t *testing.T) {
@@ -37,13 +37,18 @@ func TestStateDBConsistency(t *testing.T) {
 
 	n.testLiteTx(10)
 
+	for _, nodes := range nodes {
+		for _, node := range nodes {
+			node.client.Shutdown()
+		}
+	}
+
 	ledger := n.network.NodeUrl(protocol.Ledger)
 	ledger1 := protocol.NewInternalLedger()
 	batch := n.db.Begin()
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
 	rootHash := batch.RootHash()
 	batch.Discard()
-	n.client.Shutdown()
 
 	// Reopen the database
 	db := database.New(stores[daemons[subnets[1]][0]], nil)

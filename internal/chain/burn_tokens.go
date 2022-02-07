@@ -3,9 +3,9 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type BurnTokens struct{}
@@ -35,7 +35,7 @@ func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 
 	burn := new(protocol.SyntheticBurnTokens)
-	copy(burn.Cause[:], tx.Transaction.Hash())
+	copy(burn.Cause[:], tx.GetTxHash())
 	burn.Amount = body.Amount
 	st.Submit(tokenUrl, burn)
 

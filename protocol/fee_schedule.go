@@ -2,9 +2,6 @@ package protocol
 
 import (
 	"fmt"
-
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 )
 
 // Fee is the unit cost of a transaction.
@@ -66,23 +63,34 @@ const (
 
 	//FeeWriteScratchData $0.0001 / 256 bytes
 	FeeWriteScratchData Fee = 1
+
+	// FeeSignPending $0.001
+	FeeSignPending Fee = 10
 )
 
-func ComputeFee(tx *transactions.Envelope) (int, error) {
+func ComputeFee(tx *Envelope) (Fee, error) {
+	// Do not charge fees for the DN or BVNs
+	if IsDnUrl(tx.Transaction.Origin) {
+		return 0, nil
+	}
+	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
+		return 0, nil
+	}
+
 	txType := tx.Transaction.Type()
-	if txType == types.TxTypeUnknown {
+	if txType == TransactionTypeUnknown {
 		return 0, fmt.Errorf("cannot compute fee with no data defined for transaction")
 	}
-	switch types.TransactionType(txType) {
-	case types.TxTypeCreateIdentity:
-		return FeeCreateIdentity.AsInt(), nil
-	case types.TxTypeCreateTokenAccount:
-		return FeeCreateTokenAccount.AsInt(), nil
-	case types.TxTypeSendTokens:
-		return FeeSendTokens.AsInt(), nil
-	case types.TxTypeCreateDataAccount:
-		return FeeCreateDataAccount.AsInt(), nil
-	case types.TxTypeWriteData:
+	switch TransactionType(txType) {
+	case TransactionTypeCreateIdentity:
+		return FeeCreateIdentity, nil
+	case TransactionTypeCreateTokenAccount:
+		return FeeCreateTokenAccount, nil
+	case TransactionTypeSendTokens:
+		return FeeSendTokens, nil
+	case TransactionTypeCreateDataAccount:
+		return FeeCreateDataAccount, nil
+	case TransactionTypeWriteData:
 		size := len(tx.Transaction.Body)
 		if size > WriteDataMax {
 			return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
@@ -90,25 +98,27 @@ func ComputeFee(tx *transactions.Envelope) (int, error) {
 		if size <= 0 {
 			return 0, fmt.Errorf("insufficient data provided for %v needed to compute cost", txType)
 		}
-		return FeeWriteData.AsInt() * (size/256 + 1), nil
-	case types.TxTypeWriteDataTo:
-		return FeeWriteDataTo.AsInt(), nil
-	case types.TxTypeAcmeFaucet:
-		return FeeAcmeFaucet.AsInt(), nil
-	case types.TxTypeCreateToken:
-		return FeeCreateToken.AsInt(), nil
-	case types.TxTypeIssueTokens:
-		return FeeIssueTokens.AsInt(), nil
-	case types.TxTypeBurnTokens:
-		return FeeBurnTokens.AsInt(), nil
-	case types.TxTypeCreateKeyPage:
-		return FeeCreateKeyPage.AsInt(), nil
-	case types.TxTypeCreateKeyBook:
-		return FeeCreateKeyBook.AsInt(), nil
-	case types.TxTypeAddCredits:
-		return FeeAddCredits.AsInt(), nil
-	case types.TxTypeUpdateKeyPage:
-		return FeeUpdateKeyPage.AsInt(), nil
+		return FeeWriteData * Fee(size/256+1), nil
+	case TransactionTypeWriteDataTo:
+		return FeeWriteDataTo, nil
+	case TransactionTypeAcmeFaucet:
+		return FeeAcmeFaucet, nil
+	case TransactionTypeCreateToken:
+		return FeeCreateToken, nil
+	case TransactionTypeIssueTokens:
+		return FeeIssueTokens, nil
+	case TransactionTypeBurnTokens:
+		return FeeBurnTokens, nil
+	case TransactionTypeCreateKeyPage:
+		return FeeCreateKeyPage, nil
+	case TransactionTypeCreateKeyBook:
+		return FeeCreateKeyBook, nil
+	case TransactionTypeAddCredits:
+		return FeeAddCredits, nil
+	case TransactionTypeUpdateKeyPage:
+		return FeeUpdateKeyPage, nil
+	case TransactionTypeSignPending:
+		return FeeSignPending, nil
 	default:
 		//by default assume if type isn't specified, there is no charge for tx
 		return 0, nil

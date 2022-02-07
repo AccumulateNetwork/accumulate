@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type UpdateKeyPage struct{}
@@ -56,14 +57,15 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	}
 
 	var book *protocol.KeyBook
+	var bookUrl *url.URL
 	var priority = -1
 	if page.KeyBook != "" {
 		book = new(protocol.KeyBook)
-		u, err := url.Parse(*page.KeyBook.AsString())
+		bookUrl, err = url.Parse(page.KeyBook)
 		if err != nil {
-			return nil, fmt.Errorf("invalid key book url : %s", *page.KeyBook.AsString())
+			return nil, fmt.Errorf("invalid key book url : %s", page.KeyBook)
 		}
-		err = st.LoadUrlAs(u, book)
+		err = st.LoadUrlAs(bookUrl, book)
 		if err != nil {
 			return nil, fmt.Errorf("invalid key book: %v", err)
 		}
@@ -112,6 +114,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			key.Owner = body.Owner
 		}
 		page.Keys = append(page.Keys, key)
+
+		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+			st.AddValidator(ed25519.PubKey(body.NewKey))
+		}
 
 	case protocol.KeyPageOperationUpdate:
 		// check that the Key to update is on the key Page, and the new Key

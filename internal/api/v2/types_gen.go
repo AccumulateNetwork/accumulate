@@ -9,11 +9,12 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type ChainIdQuery struct {
@@ -48,6 +49,10 @@ type DataEntrySetQuery struct {
 	QueryOptions
 }
 
+type DescriptionResponse struct {
+	Subnet config.Network `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+}
+
 type DirectoryQuery struct {
 	UrlQuery
 	QueryPagination
@@ -61,7 +66,7 @@ type GeneralQuery struct {
 
 type KeyPage struct {
 	Height    uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
-	Index     uint64 `json:"index,omitempty" form:"index" query:"index"`
+	Index     uint64 `json:"index" form:"index" query:"index"`
 	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold"`
 }
 
@@ -121,16 +126,16 @@ type TokenSend struct {
 }
 
 type TransactionQueryResponse struct {
-	Type           string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MainChain      *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
-	Data           interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Origin         string                      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	KeyPage        *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Txid           []byte                      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
-	Status         *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
-	Receipts       []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Type            string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain       *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Data            interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Origin          string                      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	KeyPage         *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TransactionHash []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	Signatures      []*transactions.ED25519Sig  `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Status          *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	SyntheticTxids  [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+	Receipts        []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -139,21 +144,24 @@ type TxHistoryQuery struct {
 }
 
 type TxRequest struct {
-	CheckOnly bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
-	Origin    *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	CheckOnly  bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	IsEnvelope bool        `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
+	Origin     *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	Signer     Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature  []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 }
 
 type TxResponse struct {
-	Txid      []byte      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Hash      [32]byte    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	Code      uint64      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Message   string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
-	Delivered bool        `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	Result    interface{} `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	TransactionHash []byte      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	EnvelopeHash    []byte      `json:"envelopeHash,omitempty" form:"envelopeHash" query:"envelopeHash" validate:"required"`
+	SimpleHash      []byte      `json:"simpleHash,omitempty" form:"simpleHash" query:"simpleHash" validate:"required"`
+	Code            uint64      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message         string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Delivered       bool        `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Result          interface{} `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 }
 
 type TxnQuery struct {
@@ -164,6 +172,12 @@ type TxnQuery struct {
 
 type UrlQuery struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+}
+
+type VersionResponse struct {
+	Version        string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit         string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
 }
 
 func (v *DataEntry) Equal(u *DataEntry) bool {
@@ -405,12 +419,68 @@ func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
+func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
+func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
 func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		UrlQuery
+		Url string  `json:"url,omitempty"`
 		Key *string `json:"key,omitempty"`
 	}{}
-	u.UrlQuery = v.UrlQuery
+	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
 	return json.Marshal(&u)
 }
@@ -472,6 +542,20 @@ func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *QueryOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Expand = v.Expand
+	u.ExpandChains = v.Expand
+	u.Height = v.Height
+	u.Prove = v.Prove
+	return json.Marshal(&u)
+}
+
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
@@ -496,18 +580,19 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           string                      `json:"type,omitempty"`
-		MainChain      *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState    *MerkleState                `json:"merkleState,omitempty"`
-		Data           interface{}                 `json:"data,omitempty"`
-		Origin         string                      `json:"origin,omitempty"`
-		Sponsor        string                      `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
-		Txid           *string                     `json:"txid,omitempty"`
-		Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
-		Status         *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
-		Receipts       []*query.TxReceipt          `json:"receipts,omitempty"`
+		Type            string                      `json:"type,omitempty"`
+		MainChain       *MerkleState                `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
+		Data            interface{}                 `json:"data,omitempty"`
+		Origin          string                      `json:"origin,omitempty"`
+		Sponsor         string                      `json:"sponsor,omitempty"`
+		KeyPage         *KeyPage                    `json:"keyPage,omitempty"`
+		TransactionHash *string                     `json:"transactionHash,omitempty"`
+		Txid            *string                     `json:"txid,omitempty"`
+		Signatures      []*transactions.ED25519Sig  `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
+		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -516,7 +601,8 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
-	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Signatures = v.Signatures
 	u.Status = v.Status
 	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
@@ -524,37 +610,59 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *TxHistoryQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url   string `json:"url,omitempty"`
+		Start uint64 `json:"start,omitempty"`
+		Count uint64 `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	return json.Marshal(&u)
+}
+
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		CheckOnly bool        `json:"checkOnly,omitempty"`
-		Origin    *url.URL    `json:"origin,omitempty"`
-		Sponsor   *url.URL    `json:"sponsor,omitempty"`
-		Signer    Signer      `json:"signer,omitempty"`
-		Signature *string     `json:"signature,omitempty"`
-		KeyPage   KeyPage     `json:"keyPage,omitempty"`
-		Payload   interface{} `json:"payload,omitempty"`
+		CheckOnly  bool        `json:"checkOnly,omitempty"`
+		IsEnvelope bool        `json:"isEnvelope,omitempty"`
+		Origin     *url.URL    `json:"origin,omitempty"`
+		Sponsor    *url.URL    `json:"sponsor,omitempty"`
+		Signer     Signer      `json:"signer,omitempty"`
+		Signature  *string     `json:"signature,omitempty"`
+		KeyPage    KeyPage     `json:"keyPage,omitempty"`
+		TxHash     *string     `json:"txHash,omitempty"`
+		Payload    interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
+	u.IsEnvelope = v.IsEnvelope
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
+	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
 	return json.Marshal(&u)
 }
 
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txid      *string     `json:"txid,omitempty"`
-		Hash      string      `json:"hash,omitempty"`
-		Code      uint64      `json:"code,omitempty"`
-		Message   string      `json:"message,omitempty"`
-		Delivered bool        `json:"delivered,omitempty"`
-		Result    interface{} `json:"result,omitempty"`
+		TransactionHash *string     `json:"transactionHash,omitempty"`
+		Txid            *string     `json:"txid,omitempty"`
+		EnvelopeHash    *string     `json:"envelopeHash,omitempty"`
+		SimpleHash      *string     `json:"simpleHash,omitempty"`
+		Hash            *string     `json:"hash,omitempty"`
+		Code            uint64      `json:"code,omitempty"`
+		Message         string      `json:"message,omitempty"`
+		Delivered       bool        `json:"delivered,omitempty"`
+		Result          interface{} `json:"result,omitempty"`
 	}{}
-	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.EnvelopeHash = encoding.BytesToJSON(v.EnvelopeHash)
+	u.SimpleHash = encoding.BytesToJSON(v.SimpleHash)
+	u.Hash = encoding.BytesToJSON(v.SimpleHash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
@@ -564,11 +672,17 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 
 func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		QueryOptions
-		Txid *string     `json:"txid,omitempty"`
-		Wait interface{} `json:"wait,omitempty"`
+		Expand       bool        `json:"expand,omitempty"`
+		ExpandChains bool        `json:"expandChains,omitempty"`
+		Height       uint64      `json:"height,omitempty"`
+		Prove        bool        `json:"prove,omitempty"`
+		Txid         *string     `json:"txid,omitempty"`
+		Wait         interface{} `json:"wait,omitempty"`
 	}{}
-	u.QueryOptions = v.QueryOptions
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	return json.Marshal(&u)
@@ -607,8 +721,7 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Type = u.Type
-	var zeroMainChain *MerkleState
-	if u.MainChain != zeroMainChain {
+	if u.MainChain != nil {
 		v.MainChain = u.MainChain
 	} else {
 		v.MainChain = u.MerkleState
@@ -690,17 +803,110 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
 func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		UrlQuery
+		Url string  `json:"url,omitempty"`
 		Key *string `json:"key,omitempty"`
 	}{}
-	u.UrlQuery = v.UrlQuery
+	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.UrlQuery = u.UrlQuery
+	v.UrlQuery.Url = u.Url
 	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
 	} else {
@@ -724,8 +930,7 @@ func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	var zeroHeight uint64
-	if u.Height != zeroHeight {
+	if u.Height != 0 {
 		v.Height = u.Height
 	} else {
 		v.Height = u.Count
@@ -812,6 +1017,30 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *QueryOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Expand = v.Expand
+	u.ExpandChains = v.Expand
+	u.Height = v.Height
+	u.Prove = v.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Expand != false {
+		v.Expand = u.Expand
+	} else {
+		v.Expand = u.ExpandChains
+	}
+	v.Height = u.Height
+	v.Prove = u.Prove
+	return nil
+}
+
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
@@ -859,18 +1088,19 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           string                      `json:"type,omitempty"`
-		MainChain      *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState    *MerkleState                `json:"merkleState,omitempty"`
-		Data           interface{}                 `json:"data,omitempty"`
-		Origin         string                      `json:"origin,omitempty"`
-		Sponsor        string                      `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
-		Txid           *string                     `json:"txid,omitempty"`
-		Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
-		Status         *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
-		Receipts       []*query.TxReceipt          `json:"receipts,omitempty"`
+		Type            string                      `json:"type,omitempty"`
+		MainChain       *MerkleState                `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
+		Data            interface{}                 `json:"data,omitempty"`
+		Origin          string                      `json:"origin,omitempty"`
+		Sponsor         string                      `json:"sponsor,omitempty"`
+		KeyPage         *KeyPage                    `json:"keyPage,omitempty"`
+		TransactionHash *string                     `json:"transactionHash,omitempty"`
+		Txid            *string                     `json:"txid,omitempty"`
+		Signatures      []*transactions.ED25519Sig  `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
+		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -879,7 +1109,8 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
-	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Signatures = v.Signatures
 	u.Status = v.Status
 	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
@@ -888,25 +1119,31 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Type = u.Type
-	var zeroMainChain *MerkleState
-	if u.MainChain != zeroMainChain {
+	if u.MainChain != nil {
 		v.MainChain = u.MainChain
 	} else {
 		v.MainChain = u.MerkleState
 	}
 	v.Data = encoding.AnyFromJSON(u.Data)
 
-	var zeroOrigin string
-	if u.Origin != zeroOrigin {
+	if u.Origin != "" {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
 	}
 	v.KeyPage = u.KeyPage
-	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-		return fmt.Errorf("error decoding Txid: %w", err)
+	if u.TransactionHash != nil {
+		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
+			return fmt.Errorf("error decoding TransactionHash: %w", err)
+		} else {
+			v.TransactionHash = x
+		}
 	} else {
-		v.Txid = x
+		if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+			return fmt.Errorf("error decoding TransactionHash: %w", err)
+		} else {
+			v.TransactionHash = x
+		}
 	}
 	v.Signatures = u.Signatures
 	v.Status = u.Status
@@ -919,29 +1156,51 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *TxHistoryQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url   string `json:"url,omitempty"`
+		Start uint64 `json:"start,omitempty"`
+		Count uint64 `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	return nil
+}
+
 func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		CheckOnly bool        `json:"checkOnly,omitempty"`
-		Origin    *url.URL    `json:"origin,omitempty"`
-		Sponsor   *url.URL    `json:"sponsor,omitempty"`
-		Signer    Signer      `json:"signer,omitempty"`
-		Signature *string     `json:"signature,omitempty"`
-		KeyPage   KeyPage     `json:"keyPage,omitempty"`
-		Payload   interface{} `json:"payload,omitempty"`
+		CheckOnly  bool        `json:"checkOnly,omitempty"`
+		IsEnvelope bool        `json:"isEnvelope,omitempty"`
+		Origin     *url.URL    `json:"origin,omitempty"`
+		Sponsor    *url.URL    `json:"sponsor,omitempty"`
+		Signer     Signer      `json:"signer,omitempty"`
+		Signature  *string     `json:"signature,omitempty"`
+		KeyPage    KeyPage     `json:"keyPage,omitempty"`
+		TxHash     *string     `json:"txHash,omitempty"`
+		Payload    interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
+	u.IsEnvelope = v.IsEnvelope
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
+	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.CheckOnly = u.CheckOnly
-	var zeroOrigin *url.URL
-	if u.Origin != zeroOrigin {
+	v.IsEnvelope = u.IsEnvelope
+	if u.Origin != nil {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
@@ -953,6 +1212,11 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.KeyPage = u.KeyPage
+	if x, err := encoding.BytesFromJSON(u.TxHash); err != nil {
+		return fmt.Errorf("error decoding TxHash: %w", err)
+	} else {
+		v.TxHash = x
+	}
 	v.Payload = encoding.AnyFromJSON(u.Payload)
 
 	return nil
@@ -960,15 +1224,21 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 
 func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txid      *string     `json:"txid,omitempty"`
-		Hash      string      `json:"hash,omitempty"`
-		Code      uint64      `json:"code,omitempty"`
-		Message   string      `json:"message,omitempty"`
-		Delivered bool        `json:"delivered,omitempty"`
-		Result    interface{} `json:"result,omitempty"`
+		TransactionHash *string     `json:"transactionHash,omitempty"`
+		Txid            *string     `json:"txid,omitempty"`
+		EnvelopeHash    *string     `json:"envelopeHash,omitempty"`
+		SimpleHash      *string     `json:"simpleHash,omitempty"`
+		Hash            *string     `json:"hash,omitempty"`
+		Code            uint64      `json:"code,omitempty"`
+		Message         string      `json:"message,omitempty"`
+		Delivered       bool        `json:"delivered,omitempty"`
+		Result          interface{} `json:"result,omitempty"`
 	}{}
-	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.EnvelopeHash = encoding.BytesToJSON(v.EnvelopeHash)
+	u.SimpleHash = encoding.BytesToJSON(v.SimpleHash)
+	u.Hash = encoding.BytesToJSON(v.SimpleHash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
@@ -976,15 +1246,36 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-		return fmt.Errorf("error decoding Txid: %w", err)
+	if u.TransactionHash != nil {
+		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
+			return fmt.Errorf("error decoding TransactionHash: %w", err)
+		} else {
+			v.TransactionHash = x
+		}
 	} else {
-		v.Txid = x
+		if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+			return fmt.Errorf("error decoding TransactionHash: %w", err)
+		} else {
+			v.TransactionHash = x
+		}
 	}
-	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
-		return fmt.Errorf("error decoding Hash: %w", err)
+	if x, err := encoding.BytesFromJSON(u.EnvelopeHash); err != nil {
+		return fmt.Errorf("error decoding EnvelopeHash: %w", err)
 	} else {
-		v.Hash = x
+		v.EnvelopeHash = x
+	}
+	if u.SimpleHash != nil {
+		if x, err := encoding.BytesFromJSON(u.SimpleHash); err != nil {
+			return fmt.Errorf("error decoding SimpleHash: %w", err)
+		} else {
+			v.SimpleHash = x
+		}
+	} else {
+		if x, err := encoding.BytesFromJSON(u.Hash); err != nil {
+			return fmt.Errorf("error decoding SimpleHash: %w", err)
+		} else {
+			v.SimpleHash = x
+		}
 	}
 	v.Code = u.Code
 	v.Message = u.Message
@@ -996,17 +1287,29 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 
 func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		QueryOptions
-		Txid *string     `json:"txid,omitempty"`
-		Wait interface{} `json:"wait,omitempty"`
+		Expand       bool        `json:"expand,omitempty"`
+		ExpandChains bool        `json:"expandChains,omitempty"`
+		Height       uint64      `json:"height,omitempty"`
+		Prove        bool        `json:"prove,omitempty"`
+		Txid         *string     `json:"txid,omitempty"`
+		Wait         interface{} `json:"wait,omitempty"`
 	}{}
-	u.QueryOptions = v.QueryOptions
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.QueryOptions = u.QueryOptions
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)
 	} else {

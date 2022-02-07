@@ -8,13 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type governor struct {
@@ -213,9 +213,6 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	batch := g.DB.Begin()
 	defer batch.Discard()
 
-	// Reset dispatcher
-	g.dispatcher.Reset(context.Background())
-
 	// Mirror the subnet's ADI
 	if msg.mirrorAdi {
 		g.sendMirror(batch)
@@ -228,11 +225,13 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	g.signTransactions(batch, msg.ledger)
 	g.sendTransactions(batch, msg.ledger)
 
-	// Dispatch transactions
-	err := g.dispatcher.Send(context.Background())
-	if err != nil {
-		g.logger.Error("Failed to dispatch transactions", "error", err)
-	}
+	// Dispatch transactions asynchronously
+	errs := g.dispatcher.Send(context.Background())
+	go func() {
+		for err := range errs {
+			g.logger.Error("Failed to dispatch transactions", "error", err)
+		}
+	}()
 }
 
 func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.InternalLedger) {
@@ -317,9 +316,13 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Send it
 		typ := env.Transaction.Type()
 		if typ != types.TxTypeSyntheticAnchor {
-			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.Transaction.Hash()), "type", typ)
+			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
-		g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
+		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
+		if err != nil {
+			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id), "error", err)
+			continue
+		}
 		body.Transactions = append(body.Transactions, id)
 	}
 
@@ -455,7 +458,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	ed := new(transactions.ED25519Sig)
 	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
-	err = ed.Sign(env.Transaction.Nonce, g.Key, env.Transaction.Hash())
+	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return
@@ -469,6 +472,6 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Send it
-	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.Transaction.Hash()), "type", body.GetType())
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()), "type", body.GetType())
 	g.dispatcher.BroadcastTxAsyncLocal(context.TODO(), data)
 }

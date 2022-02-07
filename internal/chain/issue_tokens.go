@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type IssueTokens struct{}
@@ -36,7 +36,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	issuer.Supply.Sub(&issuer.Supply, &body.Amount)
 
 	deposit := new(protocol.SyntheticDepositTokens)
-	copy(deposit.Cause[:], tx.Transaction.Hash())
+	copy(deposit.Cause[:], tx.GetTxHash())
 	deposit.Token = issuer.Header().GetChainUrl()
 	deposit.Amount = body.Amount
 	st.Submit(accountUrl, deposit)

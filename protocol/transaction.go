@@ -6,64 +6,64 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
+func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 	switch typ {
-	case types.TxTypeCreateIdentity:
+	case TransactionTypeCreateIdentity:
 		return new(CreateIdentity), nil
-	case types.TxTypeCreateTokenAccount:
+	case TransactionTypeCreateTokenAccount:
 		return new(CreateTokenAccount), nil
-	case types.TxTypeSendTokens:
+	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
-	case types.TxTypeCreateDataAccount:
+	case TransactionTypeCreateDataAccount:
 		return new(CreateDataAccount), nil
-	case types.TxTypeWriteData:
+	case TransactionTypeWriteData:
 		return new(WriteData), nil
-	case types.TxTypeWriteDataTo:
+	case TransactionTypeWriteDataTo:
 		return new(WriteDataTo), nil
-	case types.TxTypeAcmeFaucet:
+	case TransactionTypeAcmeFaucet:
 		return new(AcmeFaucet), nil
-	case types.TxTypeCreateToken:
+	case TransactionTypeCreateToken:
 		return new(CreateToken), nil
-	case types.TxTypeIssueTokens:
+	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
-	case types.TxTypeBurnTokens:
+	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
-	case types.TxTypeCreateKeyPage:
+	case TransactionTypeCreateKeyPage:
 		return new(CreateKeyPage), nil
-	case types.TxTypeCreateKeyBook:
+	case TransactionTypeCreateKeyBook:
 		return new(CreateKeyBook), nil
-	case types.TxTypeAddCredits:
+	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
-	case types.TxTypeUpdateKeyPage:
+	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
+	case TransactionTypeSignPending:
+		return new(SignPending), nil
 
-	case types.TxTypeSyntheticCreateChain:
+	case TransactionTypeSyntheticCreateChain:
 		return new(SyntheticCreateChain), nil
-	case types.TxTypeSyntheticWriteData:
+	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
-	case types.TxTypeSyntheticDepositTokens:
+	case TransactionTypeSyntheticDepositTokens:
 		return new(SyntheticDepositTokens), nil
-	case types.TxTypeSyntheticAnchor:
+	case TransactionTypeSyntheticAnchor:
 		return new(SyntheticAnchor), nil
-	case types.TxTypeSyntheticDepositCredits:
+	case TransactionTypeSyntheticDepositCredits:
 		return new(SyntheticDepositCredits), nil
-	case types.TxTypeSyntheticBurnTokens:
+	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
-	case types.TxTypeSyntheticMirror:
+	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
-	case types.TxTypeSegWitDataEntry:
+	case TransactionTypeSegWitDataEntry:
 		return new(SegWitDataEntry), nil
 
-	case types.TxTypeInternalGenesis:
+	case TransactionTypeInternalGenesis:
 		return new(InternalGenesis), nil
-	case types.TxTypeInternalTransactionsSigned:
+	case TransactionTypeInternalTransactionsSigned:
 		return new(InternalTransactionsSigned), nil
-	case types.TxTypeInternalTransactionsSent:
+	case TransactionTypeInternalTransactionsSent:
 		return new(InternalTransactionsSent), nil
 
 	default:
@@ -72,7 +72,7 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 }
 
 func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
-	var typ types.TransactionType
+	var typ TransactionType
 	err := typ.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
 }
 
 func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
-	var typ struct{ Type types.TransactionType }
+	var typ struct{ Type TransactionType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
 type TransactionPayload interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
-	GetType() types.TxType
+	GetType() TransactionType
 	BinarySize() int
 }
 
@@ -130,7 +130,7 @@ func (tx *SyntheticDepositCredits) GetCause() [32]byte { return tx.Cause }
 func (tx *SyntheticBurnTokens) GetCause() [32]byte     { return tx.Cause }
 func (tx *SegWitDataEntry) GetCause() [32]byte         { return tx.Cause }
 
-func (tx *SyntheticCreateChain) Create(chains ...state.Chain) error {
+func (tx *SyntheticCreateChain) Create(chains ...Account) error {
 	for _, chain := range chains {
 		b, err := chain.MarshalBinary()
 		if err != nil {
@@ -142,7 +142,7 @@ func (tx *SyntheticCreateChain) Create(chains ...state.Chain) error {
 	return nil
 }
 
-func (tx *SyntheticCreateChain) Update(chains ...state.Chain) error {
+func (tx *SyntheticCreateChain) Update(chains ...Account) error {
 	for _, chain := range chains {
 		b, err := chain.MarshalBinary()
 		if err != nil {

@@ -2,23 +2,28 @@ package testing
 
 import (
 	"fmt"
+	"io"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	cfg "github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
 
-const DefaultLogLevels = "error;accumulate=info"
+const LogConsole = false
+
+const DefaultLogLevels = config.DefaultLogLevels //+ ";accumulate=debug"
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(net, node, netId)       //
@@ -79,8 +84,20 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 		}
 	}
 
-	initLogger := logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
-	logWriter := logging.TestLogWriter(t)
+	var initLogger log.Logger
+	var logWriter func(format string) (io.Writer, error)
+	if LogConsole {
+		logWriter = logging.NewConsoleWriter
+		w, err := logging.NewConsoleWriter("plain")
+		require.NoError(t, err)
+		level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
+		require.NoError(t, err)
+		initLogger, err = logging.NewTendermintLogger(zerolog.New(writer), level, false)
+		require.NoError(t, err)
+	} else {
+		logWriter = logging.TestLogWriter(t)
+		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
+	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
 	for _, netName := range subnets {

@@ -7,10 +7,18 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type MultiResponse struct {
+	Type  string   `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Items []string `json:"items,omitempty" form:"items" query:"items" validate:"required"`
+	Start uint64   `json:"start" form:"start" query:"start" validate:"required"`
+	Count uint64   `json:"count" form:"count" query:"count" validate:"required"`
+	Total uint64   `json:"total" form:"total" query:"total" validate:"required"`
+}
 
 type RequestKeyPageIndex struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
@@ -44,6 +52,10 @@ type ResponseKeyPageIndex struct {
 	KeyBook string `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
 	KeyPage string `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	Index   uint64 `json:"index" form:"index" query:"index" validate:"required"`
+}
+
+type ResponsePending struct {
+	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
 type ResponseTxHistory struct {
@@ -188,6 +200,20 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	return true
 }
 
+func (v *ResponsePending) Equal(u *ResponsePending) bool {
+	if !(len(v.Transactions) == len(u.Transactions)) {
+		return false
+	}
+
+	for i := range v.Transactions {
+		if v.Transactions[i] != u.Transactions[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 	if !(v.Start == u.Start) {
 		return false
@@ -234,6 +260,27 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 	}
 
 	return true
+}
+
+func (v *MultiResponse) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Type)
+
+	n += encoding.UvarintBinarySize(uint64(len(v.Items)))
+
+	for _, v := range v.Items {
+		n += encoding.StringBinarySize(v)
+
+	}
+
+	n += encoding.UvarintBinarySize(v.Start)
+
+	n += encoding.UvarintBinarySize(v.Count)
+
+	n += encoding.UvarintBinarySize(v.Total)
+
+	return n
 }
 
 func (v *RequestKeyPageIndex) BinarySize() int {
@@ -324,6 +371,14 @@ func (v *ResponseKeyPageIndex) BinarySize() int {
 	return n
 }
 
+func (v *ResponsePending) BinarySize() int {
+	var n int
+
+	n += encoding.ChainSetBinarySize(v.Transactions)
+
+	return n
+}
+
 func (v *ResponseTxHistory) BinarySize() int {
 	var n int
 
@@ -355,6 +410,27 @@ func (v *TxReceipt) BinarySize() int {
 	n += v.Receipt.BinarySize()
 
 	return n
+}
+
+func (v *MultiResponse) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Type))
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Items))))
+	for i, v := range v.Items {
+		_ = i
+		buffer.Write(encoding.StringMarshalBinary(v))
+
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Start))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Count))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
+
+	return buffer.Bytes(), nil
 }
 
 func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -449,6 +525,14 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *ResponsePending) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Transactions))
+
+	return buffer.Bytes(), nil
+}
+
 func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -492,6 +576,57 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+func (v *MultiResponse) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Type: %w", err)
+	} else {
+		v.Type = x
+	}
+	data = data[encoding.StringBinarySize(v.Type):]
+
+	var lenItems uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Items: %w", err)
+	} else {
+		lenItems = x
+	}
+	data = data[encoding.UvarintBinarySize(lenItems):]
+
+	v.Items = make([]string, lenItems)
+	for i := range v.Items {
+		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Items[%d]: %w", i, err)
+		} else {
+			v.Items[i] = x
+		}
+		data = data[encoding.StringBinarySize(v.Items[i]):]
+
+	}
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Start: %w", err)
+	} else {
+		v.Start = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Start):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Count: %w", err)
+	} else {
+		v.Count = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Count):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Total: %w", err)
+	} else {
+		v.Total = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Total):]
+
+	return nil
 }
 
 func (v *RequestKeyPageIndex) UnmarshalBinary(data []byte) error {
@@ -696,6 +831,17 @@ func (v *ResponseKeyPageIndex) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *ResponsePending) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Transactions):]
+
+	return nil
+}
+
 func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
 	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Start: %w", err)
@@ -829,6 +975,14 @@ func (v *ResponseChainRange) MarshalJSON() ([]byte, error) {
 	for i, x := range v.Entries {
 		u.Entries[i] = encoding.BytesToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *ResponsePending) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
 	return json.Marshal(&u)
 }
 
@@ -966,6 +1120,22 @@ func (v *ResponseChainRange) UnmarshalJSON(data []byte) error {
 		} else {
 			v.Entries[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *ResponsePending) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainSetFromJSON(u.Transactions); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
 	}
 	return nil
 }

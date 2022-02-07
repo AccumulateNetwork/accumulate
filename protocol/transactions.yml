@@ -1,5 +1,88 @@
 # Transactions - names should be verbs
-# Transactions - names should be verbs
+
+Envelope:
+  fields:
+    - name: Signatures
+      type: slice
+      slice:
+        # type: Signature
+        # marshal-as: value
+        # unmarshal-with: UnmarshalSignature
+        type: ED25519Sig
+        marshal-as: reference
+        pointer: true
+    - name: TxHash
+      type: bytes
+    - name: Transaction
+      type: Transaction
+      marshal-as: reference
+      pointer: true
+    - name: hash
+      type: bytes
+      marshal-as: none
+
+TransactionHeader:
+  fields:
+    - name: Origin
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: KeyPageHeight
+      type: uvarint
+    - name: KeyPageIndex
+      type: uvarint
+    - name: Nonce
+      type: uvarint
+
+Transaction:
+  embeddings:
+    - TransactionHeader
+  fields:
+    - name: Body
+      type: bytes
+    - name: hash
+      type: bytes
+      marshal-as: none
+
+TxState:
+  fields:
+    - name: SigInfo
+      type: TransactionHeader
+      marshal-as: reference
+      pointer: true
+    - name: Transaction
+      type: bytes
+    - name: TransactionHash
+      type: chain
+      marshal-as: none
+
+TransactionState:
+  kind: chain
+  chain-type: Transaction
+  omit-new-func: true
+  embeddings:
+    - TxState
+
+PendingTransactionState:
+  kind: chain
+  chain-type: PendingTransaction
+  omit-new-func: true
+  fields:
+    - name: Signature
+      type: slice
+      slice:
+        # type: Signature
+        # marshal-as: value
+        # unmarshal-with: UnmarshalSignature
+        type: ED25519Sig
+        marshal-as: reference
+        pointer: true
+    - name: TransactionState
+      type: TxState
+      marshal-as: reference
+      pointer: true
+    - name: Status
+      type: rawJson
 
 ##### User #####
 
@@ -185,6 +268,10 @@ UpdateKeyPage:
       type: uvarint
       optional: true
 
+SignPending:
+  kind: tx
+  fields: []
+
 ##### Synthetic #####
 
 SyntheticCreateChain:
@@ -284,6 +371,12 @@ WriteDataResult:
   fields:
     - name: EntryHash
       type: chain
+    - name: AccountUrl
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: AccountID
+      type: bytes
 
 ##### Data Types #####
 

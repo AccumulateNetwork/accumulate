@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/smt/managed"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Chain manages a Merkle tree (chain).
@@ -95,13 +95,13 @@ func (c *Chain) Pending() []managed.Hash {
 }
 
 // AddEntry adds an entry to the chain
-func (c *Chain) AddEntry(entry []byte) error {
+func (c *Chain) AddEntry(entry []byte, unique bool) error {
 	if !c.writable {
 		return fmt.Errorf("chain opened as read-only")
 	}
 
 	// TODO MerkleManager.AddHash really should return an error
-	c.merkle.AddHash(entry)
+	c.merkle.AddHash(entry, unique)
 	return nil
 }
 

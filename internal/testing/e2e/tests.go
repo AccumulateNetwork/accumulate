@@ -4,16 +4,16 @@ import (
 	"math/big"
 	"testing"
 
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (s *Suite) TestGenesis() {
 	s.Run("ACME", func() {
 		acme := new(protocol.TokenIssuer)
 		s.dut.GetRecordAs(protocol.AcmeUrl().String(), acme)
-		s.Assert().Equal(protocol.AcmeUrl().String(), string(acme.ChainUrl))
+		s.Assert().Equal(protocol.AcmeUrl().String(), string(acme.Url))
 		s.Assert().Equal(protocol.ACME, string(acme.Symbol))
 	})
 }
@@ -27,7 +27,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sender)
 	s.Require().NoError(err)
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.Transaction.Hash())
+	s.dut.WaitForTxns(tx.GetTxHash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
@@ -36,7 +36,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	var nonce uint64 = 1
 	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl.String(), Amount: 1e8})
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.Transaction.Hash())
+	s.dut.WaitForTxns(tx.GetTxHash())
 
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
@@ -66,7 +66,7 @@ func (s *Suite) TestCreateLiteAccount() {
 		nonce++
 		tx := s.newTx(senderUrl, sender, nonce, exch)
 		s.dut.SubmitTxn(tx)
-		txids = append(txids, tx.Transaction.Hash())
+		txids = append(txids, tx.GetTxHash())
 	}
 
 	s.dut.WaitForTxns(txids...)

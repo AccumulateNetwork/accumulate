@@ -2,23 +2,29 @@ package api
 
 import (
 	"context"
+	"encoding"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/tendermint/tendermint/rpc/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 type queryDirect struct {
-	QuerierOptions
-	client ABCIQueryClient
+	Options
+	Subnet string
+}
+
+type queryRequest interface {
+	encoding.BinaryMarshaler
+	Type() types.QueryType
 }
 
 func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []byte, error) {
@@ -35,7 +41,7 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	res, err := q.client.ABCIQueryWithOptions(context.Background(), "/abci_query", b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
+	res, err := q.Router.Query(context.Background(), q.Subnet, b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}
@@ -114,6 +120,7 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 		}
 
 		res := new(MultiResponse)
+		res.Type = "txHistory"
 		res.Items = make([]interface{}, len(txh.Transactions))
 		res.Start = uint64(txh.Start)
 		res.Count = uint64(txh.End - txh.Start)
@@ -192,6 +199,21 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 		qr.Data = res
 		return qr, nil
 
+	case "pending":
+		res := new(query.ResponsePending)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(MultiResponse)
+		qr.Type = "pending"
+		qr.Items = make([]interface{}, len(res.Transactions))
+		for i, txid := range res.Transactions {
+			qr.Items[i] = hex.EncodeToString(txid[:])
+		}
+		return qr, nil
+
 	default:
 		return nil, fmt.Errorf("unknown response type %q", k)
 	}
@@ -239,7 +261,7 @@ func responseDirFromProto(src *protocol.DirectoryQueryResult, pagination QueryPa
 
 	dst.OtherItems = make([]interface{}, len(src.ExpandedEntries))
 	for i, entry := range src.ExpandedEntries {
-		chain, err := protocol.UnmarshalChain(entry.Entry)
+		chain, err := protocol.UnmarshalAccount(entry.Entry)
 		if err != nil {
 			return nil, err
 		}
@@ -463,10 +485,8 @@ func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagin
 		de := DataEntryQueryResponse{}
 		de.EntryHash = entry.EntryHash
 		de.Entry.Data = entry.Entry.Data
-		for _, eh := range entry.Entry.ExtIds {
-			de.Entry.ExtIds = append(de.Entry.ExtIds, eh)
-		}
-		respDataSet.Items = append(respDataSet.Items, de)
+		de.Entry.ExtIds = entry.Entry.ExtIds
+		respDataSet.Items = append(respDataSet.Items, &de)
 	}
 	return respDataSet, nil
 }

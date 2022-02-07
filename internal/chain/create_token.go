@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type CreateToken struct{}
@@ -40,8 +40,8 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	}
 
 	token := protocol.NewTokenIssuer()
-	token.ChainUrl = types.String(tokenUrl.String())
-	token.KeyBook = types.String(body.KeyBookUrl)
+	token.Url = tokenUrl.String()
+	token.KeyBook = body.KeyBookUrl
 	token.Precision = body.Precision
 	token.Supply = body.InitialSupply
 	token.HasSupplyLimit = body.HasSupplyLimit

@@ -8,11 +8,11 @@ import (
 	reflect "reflect"
 	time "time"
 
-	abci "github.com/AccumulateNetwork/accumulate/internal/abci"
-	protocol "github.com/AccumulateNetwork/accumulate/protocol"
-	query "github.com/AccumulateNetwork/accumulate/types/api/query"
-	transactions "github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	gomock "github.com/golang/mock/gomock"
+	abci "gitlab.com/accumulatenetwork/accumulate/internal/abci"
+	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
+	query "gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	transactions "gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // MockChain is a mock of Chain interface.
@@ -99,9 +99,11 @@ func (mr *MockChainMockRecorder) DeliverTx(arg0 interface{}) *gomock.Call {
 }
 
 // EndBlock mocks base method.
-func (m *MockChain) EndBlock(arg0 abci.EndBlockRequest) {
+func (m *MockChain) EndBlock(arg0 abci.EndBlockRequest) abci.EndBlockResponse {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "EndBlock", arg0)
+	ret := m.ctrl.Call(m, "EndBlock", arg0)
+	ret0, _ := ret[0].(abci.EndBlockResponse)
+	return ret0
 }
 
 // EndBlock indicates an expected call of EndBlock.

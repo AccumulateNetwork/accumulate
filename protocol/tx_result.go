@@ -4,16 +4,14 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
-
-	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-func NewTransactionResult(typ types.TransactionType) (TransactionResult, error) {
+func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 	switch typ {
-	case types.TxTypeWriteData:
+	case TransactionTypeWriteData:
 		return new(WriteDataResult), nil
 
-	case types.TxTypeUnknown:
+	case TransactionTypeUnknown:
 		return new(EmptyResult), nil
 	}
 
@@ -27,7 +25,7 @@ func NewTransactionResult(typ types.TransactionType) (TransactionResult, error) 
 }
 
 func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
-	var typ types.TransactionType
+	var typ TransactionType
 	err := typ.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
@@ -47,7 +45,7 @@ func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
 }
 
 func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
-	var typ struct{ Type types.TransactionType }
+	var typ struct{ Type TransactionType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
@@ -67,7 +65,7 @@ func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
 }
 
 type TransactionResult interface {
-	GetType() types.TxType
+	GetType() TransactionType
 	BinarySize() int
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
@@ -75,26 +73,26 @@ type TransactionResult interface {
 
 type EmptyResult struct{}
 
-func (r *EmptyResult) GetType() types.TxType {
-	return types.TxTypeUnknown
+func (r *EmptyResult) GetType() TransactionType {
+	return TransactionTypeUnknown
 }
 
 func (r *EmptyResult) BinarySize() int {
-	return types.TxTypeUnknown.BinarySize()
+	return TransactionTypeUnknown.BinarySize()
 }
 
 func (r *EmptyResult) MarshalBinary() (data []byte, err error) {
-	return types.TxTypeUnknown.MarshalBinary()
+	return TransactionTypeUnknown.MarshalBinary()
 }
 
 func (r *EmptyResult) UnmarshalBinary(data []byte) error {
-	var typ types.TransactionType
+	var typ TransactionType
 	err := typ.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
-	if typ != types.TxTypeUnknown {
-		return fmt.Errorf("want %v, got %v", types.TxTypeUnknown, typ)
+	if typ != TransactionTypeUnknown {
+		return fmt.Errorf("want %v, got %v", TransactionTypeUnknown, typ)
 	}
 	return nil
 }

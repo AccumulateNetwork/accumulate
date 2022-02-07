@@ -1,19 +1,22 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/client"
-	"github.com/AccumulateNetwork/accumulate/cmd/accumulate/db"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
 var (
-	Client         = client.NewAPIClient()
+	Client         *client.Client
+	ClientTimeout  time.Duration
+	ClientDebug    bool
 	Db             db.DB
 	WantJsonOutput = false
 	TxPretend      = false
@@ -39,15 +42,15 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	cmd.SetOut(os.Stdout)
 
-	defaultServer := os.Getenv("ACC_API")
-	if defaultServer == "" {
-		defaultServer = "https://testnet.accumulatenetwork.io/v2"
+	serverAddr := os.Getenv("ACC_API")
+	if serverAddr == "" {
+		serverAddr = "https://testnet.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
-	flags.StringVarP(&Client.Server, "server", "s", defaultServer, "Accumulated server")
-	flags.DurationVarP(&Client.Timeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
-	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
+	flags.StringVarP(&serverAddr, "server", "s", serverAddr, "Accumulated server")
+	flags.DurationVarP(&ClientTimeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
+	flags.BoolVarP(&ClientDebug, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
 	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
@@ -68,17 +71,27 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
 
-	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		switch Client.Server {
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		switch serverAddr {
 		case "local":
-			Client.Server = "http://127.0.1.1:26660/v2"
+			serverAddr = "http://127.0.1.1:26660/v2"
 		case "localhost":
-			Client.Server = "http://127.0.0.1:26660/v2"
+			serverAddr = "http://127.0.0.1:26660/v2"
 		case "devnet":
-			Client.Server = "https://devnet.accumulatenetwork.io/v2"
+			serverAddr = "https://devnet.accumulatenetwork.io/v2"
 		case "testnet":
-			Client.Server = "https://testnet.accumulatenetwork.io/v2"
+			serverAddr = "https://testnet.accumulatenetwork.io/v2"
 		}
+
+		var err error
+		Client, err = client.New(serverAddr)
+		if err != nil {
+			return fmt.Errorf("failed to create client: %v", err)
+		}
+		Client.Timeout = ClientTimeout
+		Client.DebugRequest = ClientDebug
+
+		return nil
 	}
 
 	cmd.PersistentPostRun = func(*cobra.Command, []string) {

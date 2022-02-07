@@ -3,13 +3,13 @@ package api
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = chain.Header().Type.Name()
+	res.Type = chain.Header().Type.String()
 	res.MainChain = new(MerkleState)
 	res.MainChain.Height = obj.Height
 	res.MainChain.Roots = obj.Roots
@@ -33,7 +33,7 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 	res := new(TransactionQueryResponse)
 	res.Type = payload.GetType().String()
 	res.Data = payload
-	res.Txid = txid[:]
+	res.TransactionHash = txid[:]
 	res.MainChain = ms
 	res.KeyPage = new(KeyPage)
 	res.KeyPage.Height = tx.SigInfo.KeyPageHeight

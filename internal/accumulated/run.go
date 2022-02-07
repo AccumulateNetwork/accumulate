@@ -10,38 +10,34 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate"
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	apiv1 "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/chain"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
-	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 
 type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done  chan struct{}
-	db    *database.Database
-	node  *node.Node
-	relay *relay.Relay
-	query *apiv1.Query
-	api   *http.Server
-	pv    *privval.FilePV
-	jrpc  *api.JrpcMethods
+	done chan struct{}
+	db   *database.Database
+	node *node.Node
+	api  *http.Server
+	pv   *privval.FilePV
+	jrpc *api.JrpcMethods
 
 	// knobs for tests
 	// IsTest   bool
@@ -83,7 +79,6 @@ func (d *Daemon) Key() crypto.PrivKey {
 	return d.pv.Key.PrivKey
 }
 
-func (d *Daemon) Query_TESTONLY() *apiv1.Query    { return d.query }
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) Jrpc_TESTONLY() *api.JrpcMethods { return d.jrpc }
@@ -142,19 +137,16 @@ func (d *Daemon) Start() (err error) {
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
 
-	bvnAddrs := d.Config.Accumulate.Network.BvnAddressesWithPortOffset(networks.TmRpcPortOffset)
-	d.relay, err = relay.NewWith(clientProxy, bvnAddrs...)
-	if err != nil {
-		return fmt.Errorf("failed to create RPC relay: %v", err)
-	}
-	d.query = apiv1.NewQuery(d.relay)
-
-	execOpts := chain.ExecutorOptions{
+	router := routing.RPC{
+		Network: &d.Config.Accumulate.Network,
 		Local:   clientProxy,
+	}
+	execOpts := chain.ExecutorOptions{
 		DB:      d.db,
 		Logger:  d.Logger,
 		Key:     d.Key().Bytes(),
 		Network: d.Config.Accumulate.Network,
+		Router:  &router,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {
@@ -206,64 +198,25 @@ func (d *Daemon) Start() (err error) {
 	}
 	clientProxy.Set(lclient)
 
-	if d.Config.Accumulate.API.EnableSubscribeTX {
-		err = d.relay.Start()
-		if err != nil {
-			return fmt.Errorf("failed to start RPC relay: %v", err)
-		}
+	if d.Config.Accumulate.API.DebugJSONRPC {
+		jsonrpc2.DebugMethodFunc = true
 	}
-
-	// Configure JSON-RPC
-	var jrpcOpts api.JrpcOptions
-	jrpcOpts.Config = &d.Config.Accumulate.API
-	jrpcOpts.QueueDuration = time.Second / 4
-	jrpcOpts.QueueDepth = 100
-	jrpcOpts.QueryV1 = d.query
-	jrpcOpts.Local = lclient
-	jrpcOpts.Logger = d.Logger
-
-	// Build the list of remote addresses and query clients
-	jrpcOpts.Remote = d.Config.Accumulate.Network.BvnAddressesWithPortOffset(0)
-	clients := make([]api.ABCIQueryClient, len(jrpcOpts.Remote))
-	for i, addr := range jrpcOpts.Remote {
-		switch {
-		case d.Config.Accumulate.Network.BvnNames[i] == d.Config.Accumulate.Network.ID:
-			jrpcOpts.Remote[i] = "local"
-			clients[i] = lclient
-
-		default:
-			jrpcOpts.Remote[i], err = config.OffsetPort(addr, networks.AccRouterJsonPortOffset)
-			if err != nil {
-				return fmt.Errorf("invalid BVN address: %v", err)
-			}
-			jrpcOpts.Remote[i] += "/v2"
-
-			addr, err = config.OffsetPort(addr, networks.TmRpcPortOffset)
-			if err != nil {
-				return fmt.Errorf("invalid BVN address: %v", err)
-			}
-
-			clients[i], err = rpchttp.New(addr)
-			if err != nil {
-				return fmt.Errorf("failed to create RPC client: %v", err)
-			}
-		}
-	}
-
-	// Create the querier for JSON-RPC
-	jrpcOpts.Query = api.NewQueryDispatch(clients, api.QuerierOptions{
-		TxMaxWaitTime: d.Config.Accumulate.API.TxMaxWaitTime,
-	})
 
 	// Create the JSON-RPC handler
-	d.jrpc, err = api.NewJrpc(jrpcOpts)
+	d.jrpc, err = api.NewJrpc(api.Options{
+		Logger:           d.Logger,
+		Network:          &d.Config.Accumulate.Network,
+		Router:           &router,
+		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
+		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
 
 	// Enable debug methods
 	if d.Config.Accumulate.API.EnableDebugMethods {
-		d.jrpc.EnableDebug(lclient)
+		d.jrpc.EnableDebug()
 	}
 
 	// Run JSON-RPC server
@@ -294,13 +247,6 @@ func (d *Daemon) Start() (err error) {
 
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 		defer cancel()
-
-		if d.node.Config.Accumulate.API.EnableSubscribeTX {
-			err := d.relay.Stop()
-			if err != nil {
-				d.Logger.Error("Error stopping relay", "module", "relay", "error", err)
-			}
-		}
 
 		err := d.api.Shutdown(ctx)
 		if err != nil {

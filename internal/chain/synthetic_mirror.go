@@ -3,9 +3,9 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticMirror struct{}
@@ -23,7 +23,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) (pr
 		// TODO Check merkle tree
 
 		// Unmarshal the record
-		record, err := protocol.UnmarshalChain(obj.Record)
+		record, err := protocol.UnmarshalAccount(obj.Record)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal record: %v", err)
 		}
@@ -31,11 +31,11 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) (pr
 		// Ensure the URL is valid
 		_, err = record.Header().ParseUrl()
 		if err != nil {
-			return nil, fmt.Errorf("invalid chain URL: %v", record.Header().ChainUrl)
+			return nil, fmt.Errorf("invalid chain URL: %v", record.Header().Url)
 		}
 
 		// TODO Save the merkle state somewhere?
-		st.logger.Debug("Mirroring", "url", record.Header().ChainUrl)
+		st.logger.Debug("Mirroring", "url", record.Header().Url)
 		st.Update(record)
 	}
 

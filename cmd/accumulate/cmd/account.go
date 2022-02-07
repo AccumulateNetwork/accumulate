@@ -2,127 +2,159 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
+
+func init() {
+	accountCmd.AddCommand(
+		accountGetCmd,
+		accountCreateCmd,
+		accountQrCmd,
+		accountGenerateCmd,
+		accountListCmd,
+		accountRestoreCmd)
+
+	accountCreateCmd.AddCommand(
+		accountCreateTokenCmd,
+		accountCreateDataCmd)
+
+	accountCreateDataCmd.AddCommand(
+		accountCreateDataLiteCmd)
+
+	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch token account")
+	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch data account")
+	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
+}
+
+var flagAccount = struct {
+	Lite    bool
+	Scratch bool
+}{}
 
 var accountCmd = &cobra.Command{
 	Use:   "account",
 	Short: "Create and get token accounts",
+}
+
+var accountGetCmd = &cobra.Command{
+	Use:   "get [url]",
+	Short: "Get an account by URL",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GetAccount(args[0])
+		printOutput(cmd, out, err)
+	},
+}
+
+var accountCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create an account",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
+		//this will be removed in future release and replaced with usage: PrintAccountCreate()
+		out, err := CreateAccount(cmd, args[0], args[1:])
+		printOutput(cmd, out, err)
+	},
+}
+
+var accountCreateTokenCmd = &cobra.Command{
+	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook (optional)]",
+	Short: "Create an ADI token account",
+	Args:  cobra.MinimumNArgs(4),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := CreateAccount(cmd, args[0], args[1:])
+		printOutput(cmd, out, err)
+	},
+}
+
+var accountCreateDataCmd = &cobra.Command{
+	Use:   "data",
+	Short: "Create a data account",
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
-		if len(args) > 0 {
-			switch arg := args[0]; arg {
-			case "get":
-				if len(args) > 1 {
-					out, err = GetAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountGet()
-				}
-			case "create":
-				if len(args) > 4 {
-					switch args[1] {
-					case "token":
-						out, err = CreateAccount(args[2], args[3:])
-					case "data":
-						if args[2] != "lite" {
-							//if we don't want a lite data account create a adi data account
-							out, err = CreateDataAccount(args[2], args[3:])
-						} else {
-							//we want a lite data account
-							if len(args) > 5 {
-								out, err = CreateLiteDataAccount(args[3], args[4:])
-							} else {
-								PrintDataLiteAccountCreate()
-							}
-						}
-					default:
-						fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
-						//this will be removed in future release and replaced with usage: PrintAccountCreate()
-						out, err = CreateAccount(args[1], args[2:])
-					}
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountCreate()
-				}
-			case "qr":
-				if len(args) > 1 {
-					out, err = QrAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountQr()
-				}
-			case "generate":
-				out, err = GenerateAccount()
-			case "list":
-				out, err = ListAccounts()
-			case "restore":
-				out, err = RestoreAccounts()
-			default:
-				fmt.Println("Usage:")
-				PrintAccount()
+		if flagAccount.Lite {
+			if len(args) < 2 {
+				PrintDataLiteAccountCreate()
+				return
 			}
+			out, err = CreateLiteDataAccount(args[0], args[1:])
 		} else {
-			fmt.Println("Usage:")
-			PrintAccount()
+			if len(args) < 3 {
+				PrintDataAccountCreate()
+				PrintDataLiteAccountCreate()
+				return
+			}
+			out, err = CreateDataAccount(args[0], args[1:])
 		}
 		printOutput(cmd, out, err)
 	},
 }
 
-func PrintAccountGet() {
-	fmt.Println("  accumulate account get [url]			Get lite token account by URL")
+var accountCreateDataLiteCmd = &cobra.Command{
+	Use:   "lite",
+	Short: "Create a lite data account",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("Deprecation Warning!\nTo create a lite data account, use `accumulate account create data --lite ...`\n\n")
+		if len(args) < 2 {
+			PrintDataLiteAccountCreate()
+			return
+		}
+		out, err := CreateLiteDataAccount(args[0], args[1:])
+		printOutput(cmd, out, err)
+	},
 }
 
-func PrintAccountQr() {
-	fmt.Println("  accumulate account qr [url]			Display QR code for lite account URL")
+var accountQrCmd = &cobra.Command{
+	Use:   "qr [url]",
+	Short: "Display QR code for lite account URL",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := QrAccount(args[0])
+		printOutput(cmd, out, err)
+	},
 }
 
-func PrintAccountGenerate() {
-	fmt.Println("  accumulate account generate			Generate random lite token account")
+var accountGenerateCmd = &cobra.Command{
+	Use:   "generate",
+	Short: "Generate random lite token account",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		out, err := GenerateAccount()
+		printOutput(cmd, out, err)
+	},
 }
 
-func PrintAccountList() {
-	fmt.Println("  accumulate account list			Display all lite token accounts")
+var accountListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Display all lite token accounts",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		out, err := ListAccounts()
+		printOutput(cmd, out, err)
+	},
 }
 
-func PrintAccountRestore() {
-	fmt.Println("  accumulate account restore			Restore old lite token accounts")
-}
-
-func PrintAccountCreate() {
-	PrintDataAccountCreate()
-	PrintDataLiteAccountCreate()
-}
-
-func PrintAccountImport() {
-	fmt.Println("  accumulate account import [private-key]	Import lite token account from private key hex")
-}
-
-func PrintAccountExport() {
-	fmt.Println("  accumulate account export [url]		Export private key hex of lite token account")
-}
-
-func PrintAccount() {
-	PrintAccountGet()
-	PrintAccountQr()
-	PrintAccountGenerate()
-	PrintAccountList()
-	PrintAccountRestore()
-	PrintAccountCreate()
-	PrintAccountImport()
-	PrintAccountExport()
+var accountRestoreCmd = &cobra.Command{
+	Use:   "restore",
+	Short: "Restore old lite token accounts",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		out, err := RestoreAccounts()
+		printOutput(cmd, out, err)
+	},
 }
 
 func GetAccount(url string) (string, error) {
@@ -162,21 +194,24 @@ func QrAccount(s string) (string, error) {
 }
 
 //CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
-func CreateAccount(origin string, args []string) (string, error) {
+func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, error) {
 	u, err := url2.Parse(origin)
 	if err != nil {
-		PrintAccountCreate()
+		_ = cmd.Usage()
 		return "", err
 	}
 
 	args, si, privKey, err := prepareSigner(u, args)
-	if len(args) < 3 {
+	if err != nil {
 		return "", err
+	}
+	if len(args) < 2 {
+		return "", fmt.Errorf("not enough arguments")
 	}
 
 	accountUrl, err := url2.Parse(args[0])
 	if err != nil {
-		PrintAccountCreate()
+		_ = cmd.Usage()
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
 	if u.Authority != accountUrl.Authority {
@@ -197,14 +232,13 @@ func CreateAccount(origin string, args []string) (string, error) {
 	}
 
 	//make sure this is a valid token account
-	tokenJson, err := Get(tok.String())
-	if err != nil {
-		return "", err
-	}
+	req := new(api.GeneralQuery)
+	req.Url = tok.String()
+	resp := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
-	err = json.Unmarshal([]byte(tokenJson), &token)
-	if err != nil {
-		PrintAccountCreate()
+	resp.Data = &token
+	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+	if err != nil || resp.Type != types.AccountTypeTokenIssuer.String() {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
@@ -212,8 +246,9 @@ func CreateAccount(origin string, args []string) (string, error) {
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
+	tac.Scratch = flagAccount.Scratch
 
-	res, err := dispatchTxRequest("create-token-account", &tac, u, si, privKey)
+	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}

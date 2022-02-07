@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/spf13/cobra"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // faucetCmd represents the faucet command
@@ -46,7 +46,7 @@ func Faucet(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := Client.Request(context.Background(), "faucet", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "faucet", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 

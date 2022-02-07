@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
@@ -40,7 +40,7 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
-	_, err = tc.execute(t, "adi directory acc://RedWagon")
+	_, err = tc.execute(t, "adi directory acc://RedWagon 0 10")
 	require.NoError(t, err)
 
 }
@@ -113,7 +113,7 @@ func testCase2_6(t *testing.T, tc *testCmd) {
 	t.Log(r)
 
 	//if this doesn't fail, then adi is created
-	r, err = tc.execute(t, "adi directory acc://Redstone")
+	r, err = tc.execute(t, "adi directory acc://Redstone 0 10")
 	t.Log(r)
 	require.NoError(t, err)
 }

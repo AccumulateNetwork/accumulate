@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/spf13/cobra"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // bookCmd are the commands associated with managing key books
@@ -120,7 +120,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		keyBook.Pages = append(keyBook.Pages, u2.String())
 	}
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, bookUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, bookUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}

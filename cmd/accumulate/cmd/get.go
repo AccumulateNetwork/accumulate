@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"log"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/spf13/cobra"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // getCmd represents the get command
@@ -87,7 +87,7 @@ func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
 		return nil, err
 	}
 
-	if err := Client.Request(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
 		log.Fatal(err)
 	}
 

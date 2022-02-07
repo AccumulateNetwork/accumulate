@@ -10,21 +10,22 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate"
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
+	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	"github.com/tendermint/tendermint/version"
+	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -46,7 +47,7 @@ type AccumulatorOptions struct {
 	DB      *database.Database
 	Logger  log.Logger
 	Network config.Network
-	Address crypto.Address
+	Address crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -231,11 +232,6 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
-	//register a list of the validators.
-	for _, v := range req.Validators {
-		app.updateValidator(v)
-	}
-
 	return abci.ResponseInitChain{AppHash: batch.RootHash()}
 }
 
@@ -315,14 +311,14 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	// Check all of the transactions
 	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
 	for _, env := range envelopes {
-		txid := logging.AsHex(env.Transaction.Hash())
+		txid := logging.AsHex(env.GetTxHash())
 		result, err := app.Chain.CheckTx(env)
 		if err != nil {
 			sentry.CaptureException(err)
-			app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
+			app.logger.Info("Check failed", "type", env.Transaction.Type().String(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
 			return abci.ResponseCheckTx{
 				Code: uint32(err.Code),
-				Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
+				Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().String(), err),
 			}
 		}
 
@@ -371,11 +367,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	// Deliver all of the transactions
 	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
 	for _, env := range envelopes {
-		txid := logging.AsHex(env.Transaction.Hash())
+		txid := logging.AsHex(env.GetTxHash())
 		result, err := app.Chain.DeliverTx(env)
 		if err != nil {
 			sentry.CaptureException(err)
-			app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
+			app.logger.Info("Deliver failed", "type", env.Transaction.Type().String(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
 			// Whether or not the transaction succeeds does not matter to Tendermint
 			continue
 		}
@@ -402,26 +398,20 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
 	defer app.recover(nil, true)
 
-	// Select our leader who will initiate consensus on dbvc chain.
-	//resp.ConsensusParamUpdates
-	//for _, ev := range req.ByzantineValidators {
-	//	if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-	//		addr := string(ev.Validator.Address)
-	//		if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-	//			app.updateValidator(types.ValidatorUpdate{
-	//				PubKey: pubKey,
-	//				Power:  ev.Validator.Power - 1,
-	//			})
-	//			app.logger.Info("Decreased val power by 1 because of the equivocation",
-	//				"val", addr)
-	//		} else {
-	//			app.logger.Error("Wanted to punish val, but can't find it",
-	//				"val", addr)
-	//		}
-	//	}
-	//}
+	r := app.Chain.EndBlock(EndBlockRequest{})
+	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.NewValidators))
+	for i, key := range r.NewValidators {
+		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{
+				Sum: &protocrypto.PublicKey_Ed25519{
+					Ed25519: key,
+				},
+			},
+			Power: 1,
+		}
+	}
 
-	return abci.ResponseEndBlock{} //ValidatorUpdates: app.ValUpdates}
+	return resp
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
@@ -481,46 +471,4 @@ func (app *Accumulator) LoadSnapshotChunk(
 func (app *Accumulator) ApplySnapshotChunk(
 	req abci.RequestApplySnapshotChunk) abci.ResponseApplySnapshotChunk {
 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
-}
-
-//updateValidator add, update, or remove a validator
-func (app *Accumulator) updateValidator(v abci.ValidatorUpdate) {
-	// pubkey, _ := encoding.PubKeyFromProto(v.PubKey)
-	// app.logger.Info("Val Pub Key", "address", pubkey.Address())
-	/*
-	   	if err != nil {
-	   		panic(fmt.Errorf("can't decode public key: %w", err))
-	   	}
-	   	//key := []byte("val:" + string(pubkey.Bytes()))
-	   	if v.Power == 0 {
-	   		// remove validator
-	   		_, found := app.tmvalidators[string(pubkey.Address())]// app.app.state.db.Has(key)
-	   		if !found {
-	   			pubStr := base64.StdEncoding.EncodeToString(pubkey.Bytes())
-	   			return abcitypes.ResponseDeliverTx{
-	   				Code: code.CodeTypeUnauthorized,
-	   				Log:  fmt.Sprintf("Cannot remove non-existent validator %s", pubStr)}
-	   		}
-	   //		if !hasKey
-	   		//if err = app.app.state.db.Delete(key); err != nil {
-	   		//	panic(err)
-	   		//}
-	   		delete(app.tmvalidators, string(pubkey.Address()))
-	   	} else {
-	   		// add or update validator
-	   		//value := bytes.NewBuffer(make([]byte, 0))
-	   		//if err := types.WriteMessage(&v, value); err != nil {
-	   		//	return types.ResponseDeliverTx{
-	   		//		Code: code.CodeTypeEncodingError,
-	   		//		Log:  fmt.Sprintf("Error encoding validator: %v", err)}
-	   		//}
-	   		//if err = app.app.state.db.Set(key, value.Bytes()); err != nil {
-	   		//	panic(err)
-	   		//}
-	   		app.tmvalidators[string(pubkey.Address())] = pubkey
-	   	}
-	*/
-
-	// we only update the changes array if we successfully updated the tree
-	//app.ValUpdates = append(app.ValUpdates, v)
 }

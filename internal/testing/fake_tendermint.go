@@ -9,38 +9,35 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"
-	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
-	tmquery "github.com/tendermint/tendermint/libs/pubsub/query"
+	"github.com/tendermint/tendermint/libs/log"
 	rpc "github.com/tendermint/tendermint/rpc/client"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	acctypes "gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
-const debugTX = false
+const debugTX = true
 
 // FakeTendermint is a test harness that facilitates testing the ABCI
 // application without creating an actual Tendermint node.
 type FakeTendermint struct {
-	*types.EventBus
-
-	CreateEmptyBlocks bool
-
 	appWg      *sync.WaitGroup
 	app        abci.Application
 	db         *database.Database
 	network    *config.Network
 	nextHeight func() int64
 	address    crypto.Address
+	logger     log.Logger
 	onError    func(err error)
 
 	stop    chan struct{}
@@ -66,17 +63,15 @@ type txStatus struct {
 	Done          bool
 }
 
-var _ relay.Client = (*FakeTendermint)(nil)
-
-func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
 	c.network = network
 	c.nextHeight = nextHeight
 	c.address = address
+	c.logger = logger
 	c.onError = onError
-	c.EventBus = types.NewEventBus()
 	c.stop = make(chan struct{})
 	c.txCh = make(chan *txStatus)
 	c.stopped = new(sync.WaitGroup)
@@ -109,24 +104,9 @@ func (c *FakeTendermint) App() abci.Application {
 	return c.app
 }
 
-// WaitForAll until all pending transactions are done
-func (c *FakeTendermint) WaitForAll() {
-	if debugTX {
-		fmt.Printf("Waiting for transactions\n")
-	}
-	c.txMu.RLock()
-	defer c.txMu.RUnlock()
-	for c.txActive > 0 || len(c.txPend) > 0 {
-		c.txCond.Wait()
-	}
-	if debugTX {
-		fmt.Printf("Done waiting\n")
-	}
-}
-
 func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
 	if debugTX {
-		fmt.Printf("Waiting for transaction %X\n", txid)
+		c.logger.Info("Waiting for transaction", "tx", logging.AsHex(txid))
 	}
 	c.txMu.RLock()
 	st := c.txStatus[txid]
@@ -136,7 +116,7 @@ func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
 	}
 	c.txMu.RUnlock()
 	if debugTX {
-		fmt.Printf("Done waiting for %X\n", txid)
+		c.logger.Info("Done waiting for transaction", "tx", logging.AsHex(txid))
 	}
 
 	if !waitSynth {
@@ -201,18 +181,15 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	if err != nil {
 		c.onError(err)
 		if debugTX {
-			fmt.Printf("Rejecting invalid transaction: %v\n", err)
+			c.logger.Error("Rejecting invalid transaction", "error", err)
 		}
 		return nil
 	}
 
 	txids := make([][32]byte, len(envelopes))
+	c.logTxns("Submitting", envelopes...)
 	for i, env := range envelopes {
-		if debugTX {
-			txt := env.Transaction.Type()
-			fmt.Printf("Submitting type=%v tx=%X env=%X\n", txt, env.GetTxHash(), env.EnvHash())
-		}
-		copy(txids[i][:], env.Transaction.Hash())
+		copy(txids[i][:], env.GetTxHash())
 	}
 
 	c.txMu.Lock()
@@ -310,7 +287,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 	defer c.stopped.Done()
 
 	var queue []*txStatus
-	var hadTxnLastTime bool
 	tick := time.NewTicker(interval)
 
 	defer func() {
@@ -341,9 +317,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			continue
 
 		case <-tick.C:
-			if len(queue) == 0 && !c.CreateEmptyBlocks && !hadTxnLastTime {
-				continue
-			}
 			if c.app == nil {
 				continue
 			}
@@ -365,7 +338,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		height := c.nextHeight()
 		if debugTX {
-			fmt.Printf("Beginning block %d with %d transactions queued\n", height, len(queue))
+			c.logger.Info("Beginning block", "height", height, "queue", len(queue))
 		}
 
 		begin := abci.RequestBeginBlock{}
@@ -373,18 +346,20 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		begin.Header.ProposerAddress = c.address
 		c.app.BeginBlock(begin)
 
+		if debugTX {
+			c.logger.Info("Processing queue", "height", height, "queue", len(queue))
+		}
+
 		// Process the queue
 		for _, sub := range queue {
+			c.logTxns("Processing", sub.Envelopes...)
+
 			// TODO Index
 			sub.Height = begin.Header.Height
 
 			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
 			sub.CheckResult = &cr
-			if debugTX {
-				for _, env := range sub.Envelopes {
-					fmt.Printf("Checked type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
-				}
-			}
+			c.logTxns("Checked", sub.Envelopes...)
 			if cr.Code != 0 {
 				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
 				continue
@@ -392,23 +367,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
 			sub.DeliverResult = &dr
-			if debugTX {
-				for _, env := range sub.Envelopes {
-					fmt.Printf("Delivered type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
-				}
-			}
+			c.logTxns("Delivered", sub.Envelopes...)
 			if dr.Code != 0 {
 				c.onError(fmt.Errorf("DeliverTx failed: %v\n", dr.Log))
-			}
-
-			err := c.PublishEventTx(types.EventDataTx{TxResult: abci.TxResult{
-				Height: sub.Height,
-				Index:  sub.Index,
-				Tx:     sub.Tx,
-				Result: dr,
-			}})
-			if err != nil {
-				c.onError(err)
 			}
 		}
 
@@ -417,11 +378,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		for _, sub := range queue {
 			sub.Done = true
-			if debugTX {
-				for _, env := range sub.Envelopes {
-					fmt.Printf("Committed type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
-				}
-			}
+			c.logTxns("Committed", sub.Envelopes...)
 		}
 
 		// Ensure Wait waits for synthetic transactions
@@ -434,14 +391,11 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		c.txCond.Broadcast()
 		c.txMu.RUnlock()
 
-		// Remember if this block had transactions
-		hadTxnLastTime = len(queue) > 0
-
 		// Clear the queue (reuse the memory)
 		queue = queue[:0]
 
 		if debugTX {
-			fmt.Printf("Completed block %d with %d transactions pending\n", height, c.txActive+len(c.txPend))
+			c.logger.Info("Completed block", "height", height, "tx-pending", c.txActive+len(c.txPend))
 		}
 	}
 }
@@ -464,11 +418,6 @@ func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctyp
 		Tx:       st.Tx,
 		TxResult: *st.DeliverResult,
 	}, nil
-}
-
-func (c *FakeTendermint) ABCIInfo(context.Context) (*ctypes.ResultABCIInfo, error) {
-	r := c.App().Info(abci.RequestInfo{})
-	return &ctypes.ResultABCIInfo{Response: r}, nil
 }
 
 func (c *FakeTendermint) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*ctypes.ResultABCIQuery, error) {
@@ -510,110 +459,15 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}, nil
 }
 
-func (c *FakeTendermint) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
-	return nil, errors.New("not supported")
-}
-
-// Stolen from Tendermint
-func (c *FakeTendermint) Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan ctypes.ResultEvent, err error) {
-	q, err := tmquery.New(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse query: %w", err)
+func (c *FakeTendermint) logTxns(msg string, env ...*transactions.Envelope) {
+	if !debugTX {
+		return
 	}
 
-	outCap := 1
-	if len(outCapacity) > 0 {
-		outCap = outCapacity[0]
-	}
-
-	var sub types.Subscription
-	if outCap > 0 {
-		sub, err = c.EventBus.Subscribe(ctx, subscriber, q, outCap)
-	} else {
-		sub, err = c.EventBus.SubscribeUnbuffered(ctx, subscriber, q)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe: %w", err)
-	}
-	if sub == nil {
-		return nil, fmt.Errorf("node is shut down")
-	}
-
-	outc := make(chan ctypes.ResultEvent, outCap)
-	go c.eventsRoutine(sub, subscriber, q, outc)
-
-	return outc, nil
-}
-
-func (c *FakeTendermint) eventsRoutine(
-	sub types.Subscription,
-	subscriber string,
-	q tmpubsub.Query,
-	outc chan<- ctypes.ResultEvent) {
-	for {
-		select {
-		case msg := <-sub.Out():
-			result := ctypes.ResultEvent{
-				SubscriptionID: msg.SubscriptionID(),
-				Query:          q.String(),
-				Data:           msg.Data(),
-				Events:         msg.Events(),
-			}
-
-			if cap(outc) == 0 {
-				outc <- result
-			} else {
-				select {
-				case outc <- result:
-				default:
-					c.Logger.Error("wanted to publish ResultEvent, but out channel is full", "result", result, "query", result.Query)
-				}
-			}
-		case <-sub.Canceled():
-			if sub.Err() == tmpubsub.ErrUnsubscribed {
-				return
-			}
-
-			c.Logger.Error("subscription was canceled, resubscribing...", "err", sub.Err(), "query", q.String())
-			sub = c.resubscribe(subscriber, q)
-			if sub == nil { // client was stopped
-				return
-			}
-		case <-c.Quit():
-			return
+	for _, env := range env {
+		txt := env.Transaction.Type()
+		if !txt.IsInternal() && txt != acctypes.TxTypeSyntheticAnchor {
+			c.logger.Debug(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
 		}
 	}
-}
-
-// Try to resubscribe with exponential backoff.
-func (c *FakeTendermint) resubscribe(subscriber string, q tmpubsub.Query) types.Subscription {
-	attempts := 0
-	for {
-		if !c.IsRunning() {
-			return nil
-		}
-
-		sub, err := c.EventBus.Subscribe(context.Background(), subscriber, q)
-		if err == nil {
-			return sub
-		}
-
-		attempts++
-		time.Sleep((10 << uint(attempts)) * time.Millisecond) // 10ms -> 20ms -> 40ms
-	}
-}
-
-func (c *FakeTendermint) Unsubscribe(ctx context.Context, subscriber, query string) error {
-	args := tmpubsub.UnsubscribeArgs{Subscriber: subscriber}
-	var err error
-	args.Query, err = tmquery.New(query)
-	if err != nil {
-		// if this isn't a valid query it might be an ID, so
-		// we'll try that. It'll turn into an error when we
-		// try to unsubscribe. Eventually, perhaps, we'll want
-		// to change the interface to only allow
-		// unsubscription by ID, but that's a larger change.
-		args.ID = query
-	}
-	return c.EventBus.Unsubscribe(ctx, args)
 }

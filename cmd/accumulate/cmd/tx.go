@@ -6,16 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strconv"
 	"time"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -33,6 +32,12 @@ var txCmd = &cobra.Command{
 				} else {
 					fmt.Println("Usage:")
 					PrintTXGet()
+				}
+			case "pending":
+				if len(args) == 1 {
+					out, err = GetPendingTx(args[1], []string{})
+				} else {
+					out, err = GetPendingTx(args[1], args[2:])
 				}
 			case "history":
 				if len(args) > 3 {
@@ -54,6 +59,13 @@ var txCmd = &cobra.Command{
 				} else {
 					fmt.Println("Usage:")
 					PrintTXExecute()
+				}
+			case "sign":
+				if len(args) > 2 {
+					out, err = SignTX(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintTxSign()
 				}
 			default:
 				fmt.Println("Usage:")
@@ -81,12 +93,22 @@ func PrintTXGet() {
 	fmt.Println("  accumulate tx get [txid]			Get token transaction by txid")
 }
 
+func PrintTXPendingGet() {
+	fmt.Println("  accumulate tx pending [txid]			Get token transaction by txid")
+	fmt.Println("  accumulate tx pending [height]			Get token transaction by block height")
+	fmt.Println("  accumulate tx pending [starting transaction number]	[ending transaction number]		Get token transaction by beginning and ending height")
+}
+
 func PrintTXCreate() {
 	fmt.Println("  accumulate tx create [from] [to] [amount]	Create new token tx")
 }
 
 func PrintTXExecute() {
 	fmt.Println("  accumulate tx execute [from] [payload]	Execute an arbitrary transaction")
+}
+
+func PrintTxSign() {
+	fmt.Println("  accumulate tx sign [origin] [signing key name] [key index (optional)] [key height (optional)] [txid]	Sign a pending transaction")
 }
 
 func PrintTXHistoryGet() {
@@ -97,9 +119,80 @@ func PrintTX() {
 	PrintTXGet()
 	PrintTXCreate()
 	PrintTXExecute()
+	PrintTxSign()
 	PrintTXHistoryGet()
+	PrintTXPendingGet()
 }
+func GetPendingTx(origin string, args []string) (string, error) {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+	//<record>#pending/<hash> - fetch an envelope by hash
+	//<record>#pending/<index> - fetch an envelope by index/height
+	//<record>#pending/<start>:<end> - fetch a range of envelope by index/height
+	//build the fragments:
+	params := api2.UrlQuery{}
 
+	var out string
+	var perr error
+	switch len(args) {
+	case 0:
+		//query with no parameters
+		u.Fragment = "pending"
+		params.Url = u.String()
+		res := api2.MultiResponse{}
+		err = queryAs("query", &params, &res)
+		if err != nil {
+			return "", err
+		}
+		out, perr = PrintMultiResponse(&res)
+	case 1:
+		if len(args[0]) == 64 {
+			//this looks like a transaction hash, now check it
+			txid, err := hex.DecodeString(args[0])
+			if err != nil {
+				return "", fmt.Errorf("cannot decode transaction id")
+			}
+			u.Fragment = fmt.Sprintf("pending/%x", txid)
+		} else {
+			height, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				return "", fmt.Errorf("expecting height, but could not convert argument, %v", err)
+			}
+			u.Fragment = fmt.Sprintf("pending/%d", height)
+		}
+		params.Url = u.String()
+		res := api2.TransactionQueryResponse{}
+		err = queryAs("query", &params, &res)
+		if err != nil {
+			return "", err
+		}
+		out, perr = PrintTransactionQueryResponseV2(&res)
+	case 2:
+		//pagination
+		start, err := strconv.Atoi(args[0])
+		if err != nil {
+			return "", fmt.Errorf("error converting start index %v", err)
+		}
+		count, err := strconv.Atoi(args[1])
+		if err != nil {
+			return "", fmt.Errorf("error converting count %v", err)
+		}
+		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
+		params.Url = u.String()
+		res := api2.MultiResponse{}
+		err = queryAs("query", &params, &res)
+		if err != nil {
+			return "", err
+		}
+		out, perr = PrintMultiResponse(&res)
+	default:
+		return "", fmt.Errorf("invalid number of arguments")
+	}
+
+	return out, perr
+}
 func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
 	var res api2.TransactionQueryResponse
 	var err error
@@ -118,7 +211,7 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 		return nil, err
 	}
 
-	err = Client.Request(context.Background(), "query-tx", jsondata, &res)
+	err = Client.RequestAPIv2(context.Background(), "query-tx", jsondata, &res)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +312,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
@@ -239,22 +332,27 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
+	tokenUrl, err := GetTokenUrlFromAccount(u)
+	if err != nil {
+		return "", fmt.Errorf("invalid token url was obtained from %s, %v", u.String(), err)
+	}
+
 	u2, err := url.Parse(args[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid receiver url %s, %v", args[0], err)
 	}
 
 	amount := args[1]
-	amt, err := strconv.ParseFloat(amount, 64)
+	send := new(protocol.SendTokens)
+
+	amt, err := amountToBigInt(tokenUrl.String(), amount)
 	if err != nil {
-		return "", fmt.Errorf("invalid amount %q: %v", amount, err)
+		return "", err
 	}
 
-	// TODO Fetch the precision instead of hard-coding it
-	send := new(protocol.SendTokens)
-	send.AddRecipient(u2, big.NewInt(int64(amt*protocol.AcmePrecision)))
+	send.AddRecipient(u2, amt)
 
-	res, err := dispatchTxRequest("send-tokens", send, u, si, pk)
+	res, err := dispatchTxRequest("send-tokens", send, nil, u, si, pk)
 	if err != nil {
 		return "", err
 	}
@@ -291,7 +389,35 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", txn, u, si, pk)
+	res, err := dispatchTxRequest("execute", txn, nil, u, si, pk)
+	if err != nil {
+		return "", err
+	}
+	return ActionResponseFrom(res).Print()
+}
+
+func SignTX(sender string, args []string) (string, error) {
+	//sender string, receiver string, amount string
+	u, err := url.Parse(sender)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, pk, err := prepareSigner(u, args)
+	if err != nil {
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
+	}
+	if len(args) != 1 {
+		PrintTxSign()
+		return "", nil
+	}
+
+	txHash, err := hex.DecodeString(args[0])
+	if err != nil {
+		return "", fmt.Errorf("unable to parse transaction hash: %v", err)
+	}
+
+	res, err := dispatchTxRequest("execute", nil, txHash, u, si, pk)
 	if err != nil {
 		return "", err
 	}

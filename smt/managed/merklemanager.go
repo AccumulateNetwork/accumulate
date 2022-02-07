@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type MerkleManager struct {
@@ -19,15 +19,17 @@ type MerkleManager struct {
 	MarkMask  int64               // The binary mask to detect Mark boundaries
 }
 
-// AddHash
-// Add a Hash to the Chain controlled by the ChainManager
-func (m *MerkleManager) AddHash(hash Hash) {
+// AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
+// true, the hash will not be added if it is already in the chain.
+func (m *MerkleManager) AddHash(hash Hash, unique bool) {
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed
 	_, err := m.GetElementIndex(hash)        // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
 		m.Manager.Put(m.key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
 	} else if err != nil {
 		panic(err) // TODO Panics are bad, but I don't want to change the signature now
+	} else if unique {
+		return // Don't add duplicates
 	}
 
 	m.Manager.Put(m.key.Append("Element", m.MS.Count), hash)
@@ -322,10 +324,10 @@ func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash
 
 // AddHashString
 // Often instead of a hash, we have a hex string, but that's okay too.
-func (m *MerkleManager) AddHashString(hash string) {
+func (m *MerkleManager) AddHashString(hash string, unique bool) {
 	if h, err := hex.DecodeString(hash); err != nil { //                             Convert to a binary slice
 		panic(fmt.Sprintf("failed to decode a hash %s with error %v", hash, err)) // If this fails, panic; no recovery
 	} else {
-		m.AddHash(h) // Add the hash
+		m.AddHash(h, unique) // Add the hash
 	}
 }

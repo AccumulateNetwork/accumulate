@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type BlockStateIndex struct {
@@ -18,6 +18,10 @@ type BlockStateIndex struct {
 type BlockStateSynthTxnEntry struct {
 	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	ChainEntry  uint64 `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
+}
+
+type PendingTransactionsIndex struct {
+	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
 type TransactionChainEntry struct {
@@ -57,6 +61,20 @@ func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 
 	if !(v.ChainEntry == u.ChainEntry) {
 		return false
+	}
+
+	return true
+}
+
+func (v *PendingTransactionsIndex) Equal(u *PendingTransactionsIndex) bool {
+	if !(len(v.Transactions) == len(u.Transactions)) {
+		return false
+	}
+
+	for i := range v.Transactions {
+		if v.Transactions[i] != u.Transactions[i] {
+			return false
+		}
 	}
 
 	return true
@@ -133,6 +151,14 @@ func (v *BlockStateSynthTxnEntry) BinarySize() int {
 	return n
 }
 
+func (v *PendingTransactionsIndex) BinarySize() int {
+	var n int
+
+	n += encoding.ChainSetBinarySize(v.Transactions)
+
+	return n
+}
+
 func (v *TransactionChainEntry) BinarySize() int {
 	var n int
 
@@ -189,6 +215,14 @@ func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.Transaction))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.ChainEntry))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Transactions))
 
 	return buffer.Bytes(), nil
 }
@@ -272,6 +306,17 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
 		v.ChainEntry = x
 	}
 	data = data[encoding.UvarintBinarySize(v.ChainEntry):]
+
+	return nil
+}
+
+func (v *PendingTransactionsIndex) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Transactions):]
 
 	return nil
 }
@@ -362,6 +407,14 @@ func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *PendingTransactionsIndex) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	return json.Marshal(&u)
+}
+
 func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Transaction *string `json:"transaction,omitempty"`
@@ -378,5 +431,21 @@ func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 		v.Transaction = x
 	}
 	v.ChainEntry = u.ChainEntry
+	return nil
+}
+
+func (v *PendingTransactionsIndex) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainSetFromJSON(u.Transactions); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
+	}
 	return nil
 }

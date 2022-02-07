@@ -6,35 +6,33 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type queryDispatch struct {
-	QuerierOptions
-	clients []ABCIQueryClient
+	Options
 }
 
-func (q *queryDispatch) direct(i uint64) *queryDirect {
-	i = i % uint64(len(q.clients))
-	return &queryDirect{q.QuerierOptions, q.clients[i]}
+func (q *queryDispatch) direct(s string) *queryDirect {
+	return &queryDirect{q.Options, s}
 }
 
-func (q *queryDispatch) routing(s string) (uint64, error) {
+func (q *queryDispatch) routing(s string) (string, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidUrl, err)
 	}
 
-	return u.Routing(), nil
+	return q.Router.Route(u)
 }
 
 func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) (interface{}, error) {
-	resCh := make(chan interface{}) // Result channel
-	errCh := make(chan error)       // Error channel
-	doneCh := make(chan struct{})   // Completion channel
-	wg := new(sync.WaitGroup)       // Wait for completion
-	wg.Add(len(q.clients))          //
+	resCh := make(chan interface{})  // Result channel
+	errCh := make(chan error)        // Error channel
+	doneCh := make(chan struct{})    // Completion channel
+	wg := new(sync.WaitGroup)        // Wait for completion
+	wg.Add(len(q.Network.Addresses)) //
 
 	// Mark complete on return
 	defer close(doneCh)
@@ -52,12 +50,12 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) 
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, c := range q.clients {
-		go func(c ABCIQueryClient) {
+	for subnet := range q.Network.Addresses {
+		go func(subnet string) {
 			// Mark complete on return
 			defer wg.Done()
 
-			res, err := query(&queryDirect{q.QuerierOptions, c})
+			res, err := query(q.direct(subnet))
 			switch {
 			case err == nil:
 				select {
@@ -74,7 +72,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) 
 					// A result or error has already been sent
 				}
 			}
-		}(c)
+		}(subnet)
 	}
 
 	// Wait for an error or a result

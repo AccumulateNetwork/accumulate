@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func b2i(b Hash) int64 {
@@ -41,7 +41,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		err = mm.SetKey(storage.MakeKey("try"))
 		require.NoError(t, err, "should be able to set a key")
 		for i := int64(0); i < NumTests; i++ {
-			mm.AddHash(rh.NextList())
+			mm.AddHash(rh.NextList(), false)
 		}
 		for begin := int64(-1); begin < NumTests+1; begin++ {
 			for end := begin - 1; end < NumTests+2; end++ {

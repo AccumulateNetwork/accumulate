@@ -3,10 +3,10 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type CreateKeyBook struct{}
@@ -61,11 +61,11 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.Transaction.Hash()).AsBytes32()
+	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	book := protocol.NewKeyBook()
-	book.ChainUrl = types.String(sgUrl.String())
+	book.Url = sgUrl.String()
 
 	for _, spec := range entries {
 		u, err := spec.ParseUrl()
@@ -75,7 +75,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		book.Pages = append(book.Pages, u.String())
-		spec.KeyBook = types.String(sgUrl.String())
+		spec.KeyBook = sgUrl.String()
 		err = scc.Update(spec)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal state: %v", err)

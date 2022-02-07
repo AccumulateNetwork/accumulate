@@ -4,20 +4,22 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 25)
+		m.methods = make(jsonrpc2.MethodMap, 27)
 	}
 
+	m.methods["describe"] = m.Describe
 	m.methods["execute"] = m.Execute
 	m.methods["add-credits"] = m.ExecuteAddCredits
 	m.methods["burn-tokens"] = m.ExecuteBurnTokens
 	m.methods["create-adi"] = m.ExecuteCreateAdi
 	m.methods["create-data-account"] = m.ExecuteCreateDataAccount
+	m.methods["create-identity"] = m.ExecuteCreateIdentity
 	m.methods["create-key-book"] = m.ExecuteCreateKeyBook
 	m.methods["create-key-page"] = m.ExecuteCreateKeyPage
 	m.methods["create-token"] = m.ExecuteCreateToken
@@ -86,6 +88,10 @@ func (m *JrpcMethods) ExecuteCreateDataAccount(ctx context.Context, params json.
 	return m.executeWith(ctx, params, new(protocol.CreateDataAccount))
 }
 
+func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.CreateIdentity))
+}
+
 func (m *JrpcMethods) ExecuteCreateKeyBook(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.CreateKeyBook))
 }
@@ -129,7 +135,7 @@ func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryUrl(req.Url, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryUrl(req.Url, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) interface{} {
@@ -139,7 +145,7 @@ func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) inte
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryChain(req.ChainId))
+	return jrpcFormatResponse(m.querier.QueryChain(req.ChainId))
 }
 
 func (m *JrpcMethods) QueryData(_ context.Context, params json.RawMessage) interface{} {
@@ -149,7 +155,7 @@ func (m *JrpcMethods) QueryData(_ context.Context, params json.RawMessage) inter
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryData(req.Url, req.EntryHash))
+	return jrpcFormatResponse(m.querier.QueryData(req.Url, req.EntryHash))
 }
 
 func (m *JrpcMethods) QueryDataSet(_ context.Context, params json.RawMessage) interface{} {
@@ -159,7 +165,7 @@ func (m *JrpcMethods) QueryDataSet(_ context.Context, params json.RawMessage) in
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryDataSet(req.Url, req.QueryPagination, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryDataSet(req.Url, req.QueryPagination, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) interface{} {
@@ -169,7 +175,7 @@ func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryDirectory(req.Url, req.QueryPagination, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryDirectory(req.Url, req.QueryPagination, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessage) interface{} {
@@ -179,7 +185,7 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryKeyPageIndex(req.Url, req.Key))
+	return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
 }
 
 func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interface{} {
@@ -189,7 +195,7 @@ func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interfa
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryTx(req.Txid, req.Wait, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryTx(req.Txid, req.Wait, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) interface{} {
@@ -199,5 +205,5 @@ func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryTxHistory(req.Url, req.QueryPagination))
+	return jrpcFormatResponse(m.querier.QueryTxHistory(req.Url, req.QueryPagination))
 }

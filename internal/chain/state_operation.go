@@ -4,14 +4,14 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/indexing"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type stateOperation interface {
@@ -100,8 +100,8 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	}
 
 	header := op.record.Header()
-	if header.ChainUrl == "" {
-		header.ChainUrl = types.String(op.url.String())
+	if header.Url == "" {
+		header.Url = op.url.String()
 	}
 
 	record := st.batch.Account(op.url)
@@ -128,7 +128,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 	rec := m.batch.Account(u)
 	old, err := rec.GetState()
 	if err != nil {
-		return fmt.Errorf("failed to load state for %q", record.Header().ChainUrl)
+		return fmt.Errorf("failed to load state for %q", record.Header().Url)
 	}
 
 	// Check that the nonce is the only thing that changed
@@ -321,7 +321,8 @@ func (m *stateCache) SignTransaction(txid []byte, signature *transactions.ED2551
 }
 
 func (op *signTransaction) Execute(st *stateCache) ([]state.Chain, error) {
-	return nil, st.batch.Transaction(op.txid).AddSignatures(op.signature)
+	_, err := st.batch.Transaction(op.txid).AddSignatures(op.signature)
+	return nil, err
 }
 
 type addSyntheticTxns struct {

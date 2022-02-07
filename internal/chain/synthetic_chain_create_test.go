@@ -3,14 +3,13 @@ package chain_test
 import (
 	"testing"
 
-	. "github.com/AccumulateNetwork/accumulate/internal/chain"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
@@ -26,9 +25,9 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, err)
 
 	account := protocol.NewTokenAccount()
-	account.ChainUrl = "foo/bar/baz"
+	account.Url = "foo/bar/baz"
 	account.TokenUrl = protocol.ACME
-	account.KeyBook = types.String(book.String())
+	account.KeyBook = book.String()
 	body := new(protocol.SyntheticCreateChain)
 	body.Cause[0] = 1
 	require.NoError(t, body.Create(account))
