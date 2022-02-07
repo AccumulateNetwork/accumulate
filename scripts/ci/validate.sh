@@ -335,4 +335,6 @@ RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "create keypage with manager"
-wait-for cli-tx tx execute keytest/book keytest-0-0 '{"url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
+wait-for cli-tx tx execute keytest/book keytest-0-0 '{"type": "createKeyPage","url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
+RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
+[ "$RESULT" == "keytest/book" ] && success || die "chain manager not set"
