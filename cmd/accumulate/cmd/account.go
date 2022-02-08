@@ -272,7 +272,8 @@ func ListAccounts() (string, error) {
 		if err != nil {
 			continue
 		}
-		if lt.String() == string(v.Key) {
+		l, _ := LabelForLiteTokenAccount(lt.String())
+		if l == string(v.Key) {
 			out += fmt.Sprintf("%s\n", v.Key)
 		}
 	}
