@@ -282,16 +282,17 @@ func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelo
 		return fmt.Errorf("invalid signature(s)")
 	}
 
-	// Check the envelope
-	_, err := batch.Transaction(env.EnvHash()).GetState()
-	switch {
-	case err == nil:
-		return fmt.Errorf("duplicate envelope")
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return fmt.Errorf("error while checking envelope state: %v", err)
-	}
+	// // TODO Do we need this check? It appears to be causing issues.
+	// // Check the envelope
+	// _, err := batch.Transaction(env.EnvHash()).GetState()
+	// switch {
+	// case err == nil:
+	// 	return fmt.Errorf("duplicate envelope")
+	// case errors.Is(err, storage.ErrNotFound):
+	// 	// OK
+	// default:
+	// 	return fmt.Errorf("error while checking envelope state: %v", err)
+	// }
 
 	// Check the transaction
 	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
