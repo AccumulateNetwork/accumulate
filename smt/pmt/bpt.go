@@ -21,13 +21,13 @@ const debug = false
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	Root      *Node            // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
-	DirtyMap  map[uint64]*Node // Map of dirty nodes.
-	MaxHeight int              // Highest height of any node in the BPT
-	MaxNodeID uint64           // Maximum node id assigned to any node
-	power     int              // Power
-	mask      int              // Mask used to detect Byte Block boundaries
-	manager   *Manager         // Pointer to the manager for access to the database
+	Root      *Node              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	DirtyMap  map[uint64]*Node   // Map of dirty nodes.
+	MaxHeight int                // Highest height of any node in the BPT
+	MaxNodeID uint64             // Maximum node id assigned to any node
+	power     int                // Power
+	mask      int                // Mask used to detect Byte Block boundaries
+	manager   *Manager           // Pointer to the manager for access to the database
 }
 
 // Equal
@@ -93,11 +93,11 @@ func (b *BPT) NewNode(parent *Node) (node *Node) {
 
 // NewValue
 // Allocate a new Value struct and do some bookkeeping for the user
-func (b *BPT) NewValue(key, hash [32]byte) (value *Value) {
-	value = new(Value) //              Allocate the value
-	value.Key = key    //              Set the key
-	value.Hash = hash  //              Set the ChainID (which is a hash)
-	return value       //              That's all that we have to do
+func (b *BPT) NewValue(parent *Node, key, hash [32]byte) (value *Value) {
+	value = new(Value)    //              Allocate the value
+	value.Key = key       //              Set the key
+	value.Hash = hash     //              Set the ChainID (which is a hash)
+	return value          //              That's all that we have to do
 }
 
 // IsDirty
@@ -144,8 +144,6 @@ func (b *BPT) GetDirtyList() (list []*Node) {
 	return list //                                Return sorted list
 }
 
-var dcnt = 0
-
 // insertAtNode
 // A recursive routine that pushes collisions towards the leaves of the
 // binary patricia tree until the keys don't match any more.  Note that
@@ -160,14 +158,10 @@ var dcnt = 0
 // hash -- The current value of the key, as tracked by the BPT
 func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 
-	if BIdx == 0 && bit == 1 {
-		//fmt.Printf("key %x\n", key)
-		dcnt = 0
-	}
 	step := func() { //  In order to reduce redundant code, we step with a
 		bit <<= 1     // local function.         Inlining might provide some
 		if bit == 0 { //                         performance.  What we are doing is shifting the
-			bit = 1 //                           bit test up on each level of the merkle tree.  If the bit
+			bit = 1 //                           bit test up on each level of the Merkle tree.  If the bit
 			BIdx++  //                           shifts out of a BIdx, we increment the BIdx and start over
 		}
 	}
@@ -175,10 +169,10 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 	Insert := func(e *Entry) { //                                    Again, to avoid redundant code, Left and Right
 		switch { //                                                  processing is done once here.
 		case *e == nil: //                                           Sort if the Left/Right is nil.
-			v := b.NewValue(key, hash) //                            If it is, we can put the value here
-			*e = v                     //                            so just do so.
-			b.Dirty(node)              //                            And changing the value of a node makes it dirty
-			return                     //                            we are done.
+			v := b.NewValue(node, key, hash) //                      If it is, we can put the value here
+			*e = v                           //
+			b.Dirty(node)                    //                      And changing the value of a node makes it dirty
+			return                           //                      we are done.
 		case (*e).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
 			step()                                             //    If it is a node, then try and insert it on that node
 			b.insertAtNode(BIdx, bit, (*e).(*Node), key, hash) //    Recurse up the tree
@@ -213,6 +207,7 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 	} else { //                     and
 		Insert(&node.Right) //      1 goes Right
 	}
+
 }
 
 // Insert
@@ -300,7 +295,7 @@ func NewBPT() *BPT {
 
 // MarshalByteBlock
 // Given the node leading into a byte block, marshal all the nodes within the
-// block.  A borderNode is a node that completes a byte boundry.  So consider
+// block.  A borderNode is a node that completes a byte boundary.  So consider
 // a theoretical key 03e706b93d2e515c6eff056ee481eb92f9e790277db91eb748b3cc5b46dfe8ca
 // The first byte is 03, second is a7, third is 06 etc.
 //

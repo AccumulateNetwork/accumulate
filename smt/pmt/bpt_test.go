@@ -18,7 +18,7 @@ const defaultNodeCnt = 1000
 // Load up and return a BPT with NodeCnt number of entries with random
 // values.
 //
-// Note that the same seed value yeilds the same BPT tree.
+// Note that the same seed value yields the same BPT tree.
 func LoadBptCnt(seed int64, NodeCnt int64) *BPT {
 	rnd := rand.New(rand.NewSource(seed)) //                            Using our own instance of rand makes us concurrency safe
 	bpt := NewBPT()                       //                            Allocate a new bpt
