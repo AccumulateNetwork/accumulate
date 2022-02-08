@@ -273,7 +273,7 @@ func ListAccounts() (string, error) {
 		}
 		l, _ := LabelForLiteTokenAccount(lt.String())
 		if l == string(v.Key) {
-			out += fmt.Sprintf("acc://%s\n", v.Key)
+			out += fmt.Sprintf("%s\n", lt)
 		}
 	}
 	//TODO: this probably should also list out adi accounts as well
