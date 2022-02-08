@@ -11,9 +11,9 @@ func TestBPT_receipt(t *testing.T) {
 	// Build a BPT
 	bpt := NewBPT()
 
-	for i:=0;i<numberEntries; i++{
+	for i := 0; i < numberEntries; i++ {
 		chainID := sha256.Sum256([]byte(fmt.Sprint(i)))
-		value := sha256.Sum256([]byte(fmt.Sprint(i,"v")))
-		bpt.Insert(chainID,value)
+		value := sha256.Sum256([]byte(fmt.Sprint(i, "v")))
+		bpt.Insert(chainID, value)
 	}
 }

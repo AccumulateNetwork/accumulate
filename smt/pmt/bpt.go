@@ -21,13 +21,13 @@ const debug = false
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	Root      *Node              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
-	DirtyMap  map[uint64]*Node   // Map of dirty nodes.
-	MaxHeight int                // Highest height of any node in the BPT
-	MaxNodeID uint64             // Maximum node id assigned to any node
-	power     int                // Power
-	mask      int                // Mask used to detect Byte Block boundaries
-	manager   *Manager           // Pointer to the manager for access to the database
+	Root      *Node            // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	DirtyMap  map[uint64]*Node // Map of dirty nodes.
+	MaxHeight int              // Highest height of any node in the BPT
+	MaxNodeID uint64           // Maximum node id assigned to any node
+	power     int              // Power
+	mask      int              // Mask used to detect Byte Block boundaries
+	manager   *Manager         // Pointer to the manager for access to the database
 }
 
 // Equal
@@ -94,10 +94,10 @@ func (b *BPT) NewNode(parent *Node) (node *Node) {
 // NewValue
 // Allocate a new Value struct and do some bookkeeping for the user
 func (b *BPT) NewValue(parent *Node, key, hash [32]byte) (value *Value) {
-	value = new(Value)    //              Allocate the value
-	value.Key = key       //              Set the key
-	value.Hash = hash     //              Set the ChainID (which is a hash)
-	return value          //              That's all that we have to do
+	value = new(Value) //              Allocate the value
+	value.Key = key    //              Set the key
+	value.Hash = hash  //              Set the ChainID (which is a hash)
+	return value       //              That's all that we have to do
 }
 
 // IsDirty
