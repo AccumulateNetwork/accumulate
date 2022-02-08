@@ -35,7 +35,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (pro
 	case *protocol.LiteTokenAccount, *protocol.ADI:
 		// OK
 	default:
-		return nil, fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
+		return nil, fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.GetType())
 	}
 
 	var pageUrl, bookUrl *url.URL

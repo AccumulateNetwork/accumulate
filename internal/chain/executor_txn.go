@@ -227,7 +227,7 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 	default:
 		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
+		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.GetType())
 	}
 
 	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee)

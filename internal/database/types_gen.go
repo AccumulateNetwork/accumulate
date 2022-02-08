@@ -5,43 +5,44 @@ package database
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type txSignatures struct {
+	fieldsSet  []bool
 	Signatures []*transactions.ED25519Sig `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 }
 
 type txSyntheticTxns struct {
-	Txids [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
+	fieldsSet []bool
+	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 }
 
 func (v *txSignatures) Equal(u *txSignatures) bool {
-	if !(len(v.Signatures) == len(u.Signatures)) {
+	if len(v.Signatures) != len(u.Signatures) {
 		return false
 	}
-
 	for i := range v.Signatures {
-		v, u := v.Signatures[i], u.Signatures[i]
-		if !(v.Equal(u)) {
+		if !((v.Signatures[i]).Equal(u.Signatures[i])) {
 			return false
 		}
-
 	}
 
 	return true
 }
 
 func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
-	if !(len(v.Txids) == len(u.Txids)) {
+	if len(v.Txids) != len(u.Txids) {
 		return false
 	}
-
 	for i := range v.Txids {
-		if v.Txids[i] != u.Txids[i] {
+		if !(v.Txids[i] == u.Txids[i]) {
 			return false
 		}
 	}
@@ -49,92 +50,128 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 	return true
 }
 
-func (v *txSignatures) BinarySize() int {
-	var n int
-
-	n += encoding.UvarintBinarySize(uint64(len(v.Signatures)))
-
-	for _, v := range v.Signatures {
-		n += v.BinarySize()
-
-	}
-
-	return n
-}
-
-func (v *txSyntheticTxns) BinarySize() int {
-	var n int
-
-	n += encoding.ChainSetBinarySize(v.Txids)
-
-	return n
+var fieldNames_txSignatures = []string{
+	1: "Signatures",
 }
 
 func (v *txSignatures) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Signatures))))
-	for i, v := range v.Signatures {
-		_ = i
-		if b, err := v.MarshalBinary(); err != nil {
-			return nil, fmt.Errorf("error encoding Signatures[%d]: %w", i, err)
-		} else {
-			buffer.Write(b)
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(1, v)
 		}
-
 	}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_txSignatures)
+	return buffer.Bytes(), err
+}
+
+func (v *txSignatures) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_txSyntheticTxns = []string{
+	1: "Txids",
 }
 
 func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.ChainSetMarshalBinary(v.Txids))
+	if !(len(v.Txids) == 0) {
+		for _, v := range v.Txids {
+			writer.WriteHash(1, &v)
+		}
+	}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
+	return buffer.Bytes(), err
+}
+
+func (v *txSyntheticTxns) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Txids is missing")
+	} else if len(v.Txids) == 0 {
+		errs = append(errs, "field Txids is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 func (v *txSignatures) UnmarshalBinary(data []byte) error {
-	var lenSignatures uint64
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Signatures: %w", err)
-	} else {
-		lenSignatures = x
-	}
-	data = data[encoding.UvarintBinarySize(lenSignatures):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	v.Signatures = make([]*transactions.ED25519Sig, lenSignatures)
-	for i := range v.Signatures {
-		var x *transactions.ED25519Sig
-		x = new(transactions.ED25519Sig)
-		if err := x.UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding Signatures[%d]: %w", i, err)
+func (v *txSignatures) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(transactions.ED25519Sig); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.Signatures = append(v.Signatures, x)
+		} else {
+			break
 		}
-		data = data[x.BinarySize():]
-
-		v.Signatures[i] = x
 	}
 
-	return nil
+	seen, err := reader.Reset(fieldNames_txSignatures)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Txids: %w", err)
-	} else {
-		v.Txids = x
-	}
-	data = data[encoding.ChainSetBinarySize(v.Txids):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	return nil
+func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadHash(1); ok {
+			v.Txids = append(v.Txids, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_txSyntheticTxns)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Txids []string `json:"txids,omitempty"`
 	}{}
-	u.Txids = encoding.ChainSetToJSON(v.Txids)
+	u.Txids = make([]string, len(v.Txids))
+	for i, x := range v.Txids {
+		u.Txids[i] = encoding.ChainToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -142,14 +179,20 @@ func (v *txSyntheticTxns) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Txids []string `json:"txids,omitempty"`
 	}{}
-	u.Txids = encoding.ChainSetToJSON(v.Txids)
+	u.Txids = make([]string, len(v.Txids))
+	for i, x := range v.Txids {
+		u.Txids[i] = encoding.ChainToJSON(x)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.ChainSetFromJSON(u.Txids); err != nil {
-		return fmt.Errorf("error decoding Txids: %w", err)
-	} else {
-		v.Txids = x
+	v.Txids = make([][32]byte, len(u.Txids))
+	for i, x := range u.Txids {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Txids: %w", err)
+		} else {
+			v.Txids[i] = x
+		}
 	}
 	return nil
 }

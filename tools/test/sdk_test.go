@@ -1,11 +1,14 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,17 +60,16 @@ func TestSDK(t *testing.T) {
 							require.NoError(t, err)
 
 							// Compare the result to the TC
-							require.Equal(t, []byte(tc.JSON), json)
+							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
 						})
 
 						t.Run("Marshal Body", func(t *testing.T) {
-							t.Skip("TODO Enable once Type is included when marshalling a transaction")
-
 							// Unmarshal the body from the TC
 							body, err := protocol.UnmarshalTransactionJSON(tc.Inner)
 							require.NoError(t, err)
 
 							// TEST Binary marshal the body
+							flattenRawJson(t, reflect.ValueOf(body))
 							bin, err := body.MarshalBinary()
 							require.NoError(t, err)
 
@@ -93,7 +95,7 @@ func TestSDK(t *testing.T) {
 							require.NoError(t, err)
 
 							// Compare the result to the TC
-							require.Equal(t, []byte(tc.Inner), json)
+							require.Equal(t, tokenize(t, tc.Inner), tokenize(t, json))
 						})
 					})
 				}
@@ -129,11 +131,55 @@ func TestSDK(t *testing.T) {
 							require.NoError(t, err)
 
 							// Compare the result to the TC
-							require.Equal(t, []byte(tc.JSON), json)
+							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
 						})
 					})
 				}
 			})
 		}
 	})
+}
+
+func tokenize(t *testing.T, in []byte) []json.Token {
+	var tokens []json.Token
+	dec := json.NewDecoder(bytes.NewReader(in))
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return tokens
+		}
+		require.NoError(t, err)
+		tokens = append(tokens, tok)
+	}
+}
+
+func flattenRawJson(t *testing.T, v reflect.Value) {
+	raw, ok := v.Interface().(json.RawMessage)
+	if ok {
+		if len(raw) == 0 {
+			return
+		}
+		var u interface{}
+		require.NoError(t, json.Unmarshal(raw, &u))
+		raw, err := json.Marshal(u)
+		require.NoError(t, err)
+		v.Set(reflect.ValueOf(raw))
+		return
+	}
+
+	for v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return
+	}
+
+	typ := v.Type()
+	for i, nf := 0, v.NumField(); i < nf; i++ {
+		if !typ.Field(i).IsExported() {
+			continue
+		}
+		flattenRawJson(t, v.Field(i))
+	}
 }

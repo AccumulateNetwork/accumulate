@@ -271,7 +271,6 @@ func TestCreateLiteDataAccount(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := n.GetLiteDataAccount(liteDataAddress.String())
-		require.Equal(t, protocol.AccountTypeLiteDataAccount, r.Type)
 		require.Equal(t, liteDataAddress.String(), r.Url)
 		require.Equal(t, append(partialChainId, r.Tail...), chainId)
 	})
@@ -298,7 +297,6 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
 		require.Equal(t, "acc://FooBar/oof", r.Url)
 
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
@@ -331,7 +329,6 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		u := n.ParseUrl("acc://FooBar/foo/book1")
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
 		require.Equal(t, "acc://FooBar/oof", r.Url)
 		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook)
 		require.Equal(t, u.String(), r.KeyBook)
@@ -357,7 +354,6 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
 		require.Equal(t, "acc://FooBar/oof", r.Url)
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
@@ -424,7 +420,6 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, protocol.AccountTypeTokenAccount, r.Type)
 		require.Equal(t, "acc://FooBar/Baz", r.Url)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 
@@ -461,7 +456,6 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		u := n.ParseUrl("foo/book1")
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, protocol.AccountTypeTokenAccount, r.Type)
 		require.Equal(t, "acc://FooBar/Baz", r.Url)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 		require.Equal(t, u.String(), r.KeyBook)
@@ -890,7 +884,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	account := batch.Account(accountUrl)
 	state, err := account.GetState()
 	require.NoError(t, err)
-	fmt.Println("Dump", accountUrl, state.Header().Type)
+	fmt.Println("Dump", accountUrl, state.GetType())
 	meta, err := account.GetObject()
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}

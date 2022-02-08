@@ -3,14 +3,14 @@
 Envelope:
   fields:
     - name: Signatures
-      type: slice
-      slice:
-        # type: Signature
-        # marshal-as: value
-        # unmarshal-with: UnmarshalSignature
-        type: ED25519Sig
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      # type: Signature
+      # marshal-as: value
+      # zero-value: nil
+      # unmarshal-with: UnmarshalSignature
+      type: ED25519Sig
+      marshal-as: reference
+      pointer: true
     - name: TxHash
       type: bytes
     - name: Transaction
@@ -24,8 +24,7 @@ Envelope:
 TransactionHeader:
   fields:
     - name: Origin
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
     - name: KeyPageHeight
       type: uvarint
@@ -61,22 +60,25 @@ TransactionState:
   chain-type: Transaction
   omit-new-func: true
   embeddings:
+    - AccountHeader
     - TxState
 
 PendingTransactionState:
   kind: chain
   chain-type: PendingTransaction
   omit-new-func: true
+  embeddings:
+  - AccountHeader
   fields:
     - name: Signature
-      type: slice
-      slice:
-        # type: Signature
-        # marshal-as: value
-        # unmarshal-with: UnmarshalSignature
-        type: ED25519Sig
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      # type: Signature
+      # marshal-as: value
+      # zero-value: nil
+      # unmarshal-with: UnmarshalSignature
+      type: ED25519Sig
+      marshal-as: reference
+      pointer: true
     - name: TransactionState
       type: TxState
       marshal-as: reference
@@ -90,8 +92,7 @@ CreateIdentity:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: PublicKey
       type: bytes
     - name: KeyBookName
@@ -108,14 +109,11 @@ CreateTokenAccount:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: KeyBookUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
       optional: true
     - name: Scratch
       type: bool
@@ -134,25 +132,21 @@ SendTokens:
       type: rawJson
       optional: true
     - name: To
-      type: slice
-      slice:
-        type: TokenRecipient
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
 
 CreateDataAccount:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: KeyBookUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
       optional: true
     - name: ManagerKeyBookUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
       optional: true
     - name: Scratch
       type: bool
@@ -169,8 +163,7 @@ WriteDataTo:
   kind: tx
   fields:
     - name: Recipient
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Entry
       type: DataEntry
       marshal-as: reference
@@ -179,26 +172,22 @@ AcmeFaucet:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
 
 CreateToken:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: KeyBookUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
       optional: true
     - name: Symbol
       type: string
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string
-      is-url: true
+      type: string # TODO change to url
       optional: true
     - name: InitialSupply
       type: bigint
@@ -214,8 +203,7 @@ IssueTokens:
   kind: tx
   fields:
     - name: Recipient
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Amount
       type: bigint
 
@@ -229,14 +217,12 @@ CreateKeyPage:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Keys
-      type: slice
-      slice:
-        type: KeySpecParams
-        pointer: true
-        marshal-as: reference
+      repeatable: true
+      type: KeySpecParams
+      pointer: true
+      marshal-as: reference
     - name: Manager
       type: string
       optional: true
@@ -245,22 +231,19 @@ CreateKeyBook:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Pages
-      type: slice
-      slice:
-        type: string
-        is-url: true
+      repeatable: true
+      type: string # TODO change to url
     - name: Manager
-      type: string
+      type: string # TODO change to url
       optional: true
 
 AddCredits:
   kind: tx
   fields:
     - name: Recipient
-      type: string
+      type: string # TODO change to url
     - name: Amount
       type: uvarint
 
@@ -270,6 +253,7 @@ UpdateKeyPage:
     - name: Operation
       type: KeyPageOperation
       marshal-as: value
+      zero-value: 0
     - name: Key
       type: bytes
       optional: true
@@ -295,10 +279,9 @@ SyntheticCreateChain:
     - name: Cause
       type: chain
     - name: Chains
-      type: slice
-      slice:
-        type: ChainParams
-        marshal-as: reference
+      repeatable: true
+      type: ChainParams
+      marshal-as: reference
 
 
 SyntheticWriteData:
@@ -316,8 +299,7 @@ SyntheticDepositTokens:
     - name: Cause
       type: chain
     - name: Token
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Amount
       type: bigint
 
@@ -325,8 +307,7 @@ SyntheticAnchor:
   kind: tx
   fields:
     - name: Source
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Major
       type: bool
     - name: RootAnchor
@@ -363,10 +344,9 @@ SyntheticMirror:
   kind: tx
   fields:
     - name: Objects
-      type: slice
-      slice:
-        type: AnchoredRecord
-        marshal-as: reference
+      repeatable: true
+      type: AnchoredRecord
+      marshal-as: reference
 
 SegWitDataEntry:
   kind: tx
@@ -374,12 +354,16 @@ SegWitDataEntry:
     - name: Cause
       type: chain
     - name: EntryUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: EntryHash
       type: chain
 
 ##### Result Types #####
+
+EmptyResult:
+  kind: tx-result
+  tx-type: Unknown
+  fields: []
 
 WriteDataResult:
   kind: tx-result
@@ -387,8 +371,7 @@ WriteDataResult:
     - name: EntryHash
       type: chain
     - name: AccountUrl
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
     - name: AccountID
       type: bytes
@@ -398,8 +381,7 @@ WriteDataResult:
 TokenRecipient:
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Amount
       type: bigint
 

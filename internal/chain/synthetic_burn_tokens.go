@@ -24,7 +24,7 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.Envelope)
 	case *protocol.TokenIssuer:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, origin.GetType())
 	}
 
 	account.Supply.Add(&account.Supply, &body.Amount)

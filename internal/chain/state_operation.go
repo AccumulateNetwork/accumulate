@@ -31,7 +31,7 @@ func (m *stateCache) Create(record ...state.Chain) {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
 	for _, r := range record {
-		if r.Header().Type.IsTransaction() {
+		if r.GetType().IsTransaction() {
 			panic("Called StateManager.Create with a transaction record!")
 		}
 
@@ -131,7 +131,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 	}
 
 	// Check that the nonce is the only thing that changed
-	switch record.Header().Type {
+	switch record.GetType() {
 	case protocol.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.Nonce = new.Nonce
@@ -151,7 +151,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 		}
 
 	default:
-		return fmt.Errorf("account type %d is not a signator", old.Header().Type)
+		return fmt.Errorf("account type %d is not a signator", old.GetType())
 	}
 
 	m.chains[u.AccountID32()] = record
@@ -188,7 +188,7 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 
 	var stateRec state.Chain
 
-	if record.Header().Type == protocol.AccountTypeLiteDataAccount {
+	if record.GetType() == protocol.AccountTypeLiteDataAccount {
 		stateRec = record
 	}
 

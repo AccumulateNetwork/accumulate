@@ -7,20 +7,19 @@ Object:
   - name: Height
     type: uvarint
   - name: Roots
-    type: slice
-    slice:
-      type: bytes
+    repeatable: true
+    type: bytes
 
 ObjectMetadata:
   fields:
     - name: Type
       type: ObjectType
       marshal-as: value
+      zero-value: 0
     - name: Chains
-      type: slice
-      slice:
-        type: ChainMetadata
-        marshal-as: reference
+      repeatable: true
+      type: ChainMetadata
+      marshal-as: reference
 
 ChainMetadata:
   fields:
@@ -29,14 +28,14 @@ ChainMetadata:
     - name: Type
       type: ChainType
       marshal-as: value
+      zero-value: 0
 
 AnchorMetadata:
   embeddings:
     - ChainMetadata
   fields:
     - name: Account
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
     - name: Index
       type: uvarint
@@ -50,10 +49,9 @@ AnchorMetadata:
 DataEntry:
   fields:
     - name: ExtIds
-      type: slice
       optional: true
-      slice:
-        type: bytes
+      repeatable: true
+      type: bytes
     - name: Data
       type: bytes
       optional: true
@@ -79,6 +77,7 @@ TransactionStatus:
       type: TransactionResult
       optional: true
       marshal-as: value
+      zero-value: nil
       unmarshal-with: UnmarshalTransactionResult
 
 Receipt:
@@ -86,10 +85,9 @@ Receipt:
     - name: Start
       type: bytes
     - name: Entries
-      type: slice
-      slice:
-        type: ReceiptEntry
-        marshal-as: reference
+      repeatable: true
+      type: ReceiptEntry
+      marshal-as: reference
 
 ReceiptEntry:
   fields:

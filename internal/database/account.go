@@ -49,7 +49,7 @@ func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.O
 			continue
 		}
 
-		if meta.Chains[i] == chain {
+		if meta.Chains[i].Equal(&chain) {
 			continue
 		}
 

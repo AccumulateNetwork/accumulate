@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -91,21 +92,6 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	return m.execute(ctx, txrq, tx.Transaction.Body)
 }
 
-// executeQueue manages queues for batching and dispatch of execute requests.
-type executeQueue struct {
-	leader  chan struct{}
-	enqueue chan *executeRequest
-}
-
-// executeRequest captures the state of an execute requests.
-type executeRequest struct {
-	subnet    string
-	checkOnly bool
-	payload   []byte
-	result    interface{}
-	done      chan struct{}
-}
-
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
 	// Route the request
@@ -166,13 +152,13 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 
 	// Parse the results
 	var results []protocol.TransactionResult
-	for len(resp.Data) > 0 {
-		result, err := protocol.UnmarshalTransactionResult(resp.Data)
+	rd := bytes.NewReader(resp.Data)
+	for rd.Len() > 0 {
+		result, err := protocol.UnmarshalTransactionResultFrom(rd)
 		if err != nil {
 			m.logError("Failed to decode transaction results", "error", err)
 			break
 		}
-		resp.Data = resp.Data[result.BinarySize():]
 		if _, ok := result.(*protocol.EmptyResult); ok {
 			result = nil
 		}

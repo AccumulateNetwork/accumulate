@@ -1,18 +1,38 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
 	"fmt"
+
+	accenc "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type Account interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
+	GetType() AccountType
 	Header() *AccountHeader
 }
 
+// ParseUrl returns the parsed chain URL
+func (h *AccountHeader) ParseUrl() (*url.URL, error) {
+	if h.url != nil {
+		return h.url, nil
+	}
+
+	u, err := url.Parse(h.Url)
+	if err != nil {
+		return nil, err
+	}
+
+	h.url = u
+	return u, nil
+}
 func NewAccount(typ AccountType) (Account, error) {
+	new(Anchor).Header()
 	switch typ {
 	case AccountTypeAnchor:
 		return new(Anchor), nil
@@ -44,23 +64,27 @@ func NewAccount(typ AccountType) (Account, error) {
 }
 
 func UnmarshalAccount(data []byte) (Account, error) {
-	var typ AccountType
-	err := typ.UnmarshalBinary(data)
+	reader := accenc.NewReader(bytes.NewReader(data))
+	typ, ok := reader.ReadUint(1)
+	_, err := reader.Reset([]string{"Type"})
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("field Type: missing")
+	}
+
+	acnt, err := NewAccount(AccountType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	chain, err := NewAccount(typ)
+	err = acnt.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
 	}
 
-	err = chain.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return chain, nil
+	return acnt, nil
 }
 
 func UnmarshalAccountJSON(data []byte) (Account, error) {

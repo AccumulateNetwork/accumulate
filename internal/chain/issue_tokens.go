@@ -27,7 +27,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 
 	issuer, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
 	}
 
 	if issuer.Supply.Cmp(&body.Amount) < 0 && issuer.HasSupplyLimit {
@@ -37,7 +37,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 
 	deposit := new(protocol.SyntheticDepositTokens)
 	copy(deposit.Cause[:], tx.GetTxHash())
-	deposit.Token = issuer.Header().GetChainUrl()
+	deposit.Token = issuer.Header().Url
 	deposit.Amount = body.Amount
 	st.Submit(accountUrl, deposit)
 

@@ -41,7 +41,6 @@ func TestTransactionState(t *testing.T) {
 
 	txPendingState := state.NewPendingTransaction(trans)
 	txPendingState.Url = "RedWagon/myAccount"
-	txPendingState.Type = AccountTypePendingTransaction
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
 		t.Fatalf("error marshaling pending tx state %v", err)
@@ -106,10 +105,6 @@ func TestTransactionState(t *testing.T) {
 	}
 	if !bytes.Equal(txState2.Transaction, txState.Transaction) {
 		t.Fatalf("error unmarshalling transaction")
-	}
-
-	if txState.Type != txState2.Type {
-		t.Fatalf("error unmarshaling header")
 	}
 
 	if !txState2.SigInfo.Equal(txState.SigInfo) {

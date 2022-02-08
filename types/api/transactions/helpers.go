@@ -1,10 +1,9 @@
 package transactions
 
 import (
+	"bytes"
 	"encoding"
-	"errors"
 	"fmt"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -44,22 +43,15 @@ func NewWith(header *protocol.TransactionHeader, signer func(hash []byte) (*ED25
 
 func UnmarshalAll(data []byte) ([]*Envelope, error) {
 	var envelopes []*Envelope
-	var errs []string
-	for len(data) > 0 {
-		// Unmarshal the envelope
+	rd := bytes.NewReader(data)
+	for rd.Len() > 0 {
 		env := new(Envelope)
-		err := env.UnmarshalBinary(data)
+		err := env.UnmarshalBinaryFrom(rd)
 		if err != nil {
-			errs = append(errs, err.Error())
-			continue
+			return nil, err
 		}
 
 		envelopes = append(envelopes, env)
-		data = data[env.BinarySize():]
-	}
-
-	if len(errs) > 0 {
-		return nil, errors.New(strings.Join(errs, "; "))
 	}
 
 	return envelopes, nil

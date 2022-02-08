@@ -72,7 +72,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		}
 
 		// Check the identity
-		switch record.Header().Type {
+		switch record.GetType() {
 		case protocol.AccountTypeIdentity:
 			// An ADI must be its own identity
 			if !u.Identity().Equal(u) {
@@ -81,11 +81,11 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		default:
 			// Anything else must be a sub-path
 			if u.Identity().Equal(u) {
-				return nil, fmt.Errorf("account type %v cannot be its own identity", record.Header().Type)
+				return nil, fmt.Errorf("account type %v cannot be its own identity", record.GetType())
 			}
 
 			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return nil, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.Header().Type)
+				return nil, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.GetType())
 			}
 
 			// Make sure the ADI actually exists
@@ -99,7 +99,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		}
 
 		// Check the key book
-		switch record.Header().Type {
+		switch record.GetType() {
 		case protocol.AccountTypeKeyBook:
 			// A key book does not itself have a key book
 			if record.Header().KeyBook != "" {

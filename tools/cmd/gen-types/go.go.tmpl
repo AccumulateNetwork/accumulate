@@ -26,8 +26,7 @@ import (
 
 {{range .Types}}
 type {{.Name}} struct {
-	{{if .IsChain}}{{if not (isPkg "protocol")}}protocol.{{end}}AccountHeader
-	{{- end}}
+	{{if .IsBinary}}fieldsSet []bool{{end}}
 	{{- range .Embeddings}}
 	{{.Name}}
 	{{- end}}
@@ -39,25 +38,27 @@ type {{.Name}} struct {
 
 {{range .Types}}
 {{- if and .IsChain .MakeConstructor}}
+// Deprated: use new({{.Name}})
 func New{{.Name}}() *{{.Name}} {
-	v := new({{.Name}})
-	v.Type = {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
-	return v
+	return new({{.Name}})
 }
 {{- end}}
 {{end}}
 
 {{range .Types}}{{if or .IsTransaction .IsTxResult}}
-func (*{{.Name}}) GetType() {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType { return {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}} }
+func (*{{.Name}}) GetType() {{pkg "protocol"}}TransactionType { return {{pkg "protocol"}}TransactionType{{.TransactionType}} }
+{{else if .IsChain}}
+func (*{{.Name}}) GetType() {{pkg "protocol"}}AccountType { return {{pkg "protocol"}}AccountType{{.ChainType}} }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}
 func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
-	{{- if .IsChain}}
-	if !v.AccountHeader.Equal(&u.AccountHeader) {
+	{{- range .Embeddings}}
+	if !v.{{.Name}}.Equal(&u.{{.Name}}) {
 		return false
 	}
-	{{end}}
+	{{- end}}
+
 
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
@@ -70,107 +71,117 @@ func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsBinary}}
-func (v *{{.Name}}) BinarySize() int {
-	var n int
-
-	{{if or .IsTransaction .IsTxResult}}
-	n += encoding.UvarintBinarySize({{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}}.ID())
-	{{end}}
-
-	{{if .IsChain}}
-	// Enforce sanity
-	v.Type = {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
-
-	n += v.AccountHeader.GetHeaderSize()
-	{{end}}
+var fieldNames_{{.Name}} = []string{
+	{{- if or .IsTransaction .IsTxResult .IsChain}}
+	"Type",
+	{{- end}}
 
 	{{- range .Embeddings}}
-	n += v.{{.Name}}.BinarySize()
-	{{end}}
+	{{.Number}}: "{{.Name}}",
+	{{- end}}
 
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
-	{{binarySize . (print "v." .Name)}}
+	{{.Number}}: "{{.Name}}",
 	{{- end}}
 	{{- end}}
-
-	return n
 }
-{{end}}{{end}}
 
-{{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
 	{{if or .IsTransaction .IsTxResult}}
-	buffer.Write(encoding.UvarintMarshalBinary({{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}}.ID()))
-	{{end}}
-
-	{{if .IsChain}}
-	// Enforce sanity
-	v.Type = {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
-
-	if b, err := v.AccountHeader.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding header: %w", err)
-	} else {
-		buffer.Write(b)
-	}
+	writer.WriteUint(1, {{pkg "protocol"}}TransactionType{{.TransactionType}}.ID())
+	{{- else if .IsChain}}
+	writer.WriteUint(1, {{pkg "protocol"}}AccountType{{.ChainType}}.ID())
 	{{- end}}
 
 	{{- range .Embeddings}}
-	if b, err := v.{{.Name}}.MarshalBinary(); err != nil {
-		return nil, err
-	} else {
-		buffer.Write(b)
-	}
-	{{end}}
+	writer.WriteValue({{.Number}}, &v.{{.Name}})
+	{{- end}}
 
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
-	{{binaryMarshalValue . (print "v." .Name) .Name}}
+	{{- if .OmitEmpty}}
+	if !({{isZero . (print "v." .Name)}}) {
+		{{binaryMarshalValue . "writer" (print "v." .Name)}}
+	}
+	{{- else }}
+	{{binaryMarshalValue . "writer" (print "v." .Name)}}
+	{{- end}}
 	{{- end}}
 	{{- end}}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_{{.Name}})
+	return buffer.Bytes(), err
+}
+
+func (v *{{.Name}}) IsValid() error {
+	var errs []string
+
+	{{range .Embeddings}}
+	if err := v.{{.Name}}.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	{{- end}}
+
+	{{- range .Fields}}
+	{{- if and .IsMarshalled .IsRequired}}
+	if len(v.fieldsSet) > {{.Number}} && !v.fieldsSet[{{.Number}}] {
+		errs = append(errs, "field {{.Name}} is missing")
+	} else if {{isZero . (print "v." .Name)}} {
+		errs = append(errs, "field {{.Name}} is not set")
+	}
+	{{- end}}
+	{{- end}}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
-	{{- if or .IsTransaction .IsTxResult}}
-	typ := {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{.TransactionType}}
-	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, {{if not (isPkg "protocol")}}protocol.{{end}}TransactionType(v))
-	}
-	data = data[encoding.UvarintBinarySize(uint64(typ)):]
-	{{end}}
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	{{- if .IsChain}}
-	typ := {{if not (isPkg "protocol")}}protocol.{{end}}AccountType{{.ChainType}}
-	if err := v.AccountHeader.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding header: %w", err)
-	} else if v.Type != typ {
-		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
+func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	{{if or .IsTransaction .IsTxResult}}
+	if x, ok := reader.ReadUint(1); !ok {
+		return fmt.Errorf("field Type: missing")
+	} else if x != {{pkg "protocol"}}TransactionType{{.TransactionType}}.ID() {
+		return fmt.Errorf("field Type: want %v, got %v", {{pkg "protocol"}}TransactionType{{.TransactionType}}, {{pkg "protocol"}}TransactionType(x))
 	}
-	data = data[v.GetHeaderSize():]
+	{{- else if .IsChain}}
+	if x, ok := reader.ReadUint(1); !ok {
+		return fmt.Errorf("field Type: missing")
+	} else if x != {{pkg "protocol"}}AccountType{{.ChainType}}.ID() {
+		return fmt.Errorf("field Type: want %v, got %v", {{pkg "protocol"}}AccountType{{.ChainType}}, {{pkg "protocol"}}AccountType(x))
+	}
 	{{end}}
 
 	{{- range .Embeddings}}
-	if err := v.{{.Name}}.UnmarshalBinary(data); err != nil {
-		return err
-	}
-	data = data[v.{{.Name}}.BinarySize():]
+	reader.ReadValue({{.Number}}, v.{{.Name}}.UnmarshalBinary)
 	{{end}}
 
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
-	{{binaryUnmarshalValue . (print "v." .Name) .Name}}
+	{{binaryUnmarshalValue . "reader" (print "v." .Name)}}
 	{{- end}}
 	{{- end}}
 
-	return nil
+	seen, err := reader.Reset(fieldNames_{{.Name}})
+	v.fieldsSet = seen
+	return err
 }
 {{end}}{{end}}
 
@@ -184,10 +195,9 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 {{- end}}
 
 {{define "jsonType"}}struct {
-	{{- if .IsChain}}
-	{{if not (isPkg "protocol")}}protocol.{{end}}AccountHeader{{end}}
-	{{- if .IsTxResult}}
-	Type {{if isPkg "types"}}TransactionType{{else}}{{if not (isPkg "protocol")}}protocol.{{end}}TransactionType{{end}} `json:"type"`{{end}}
+	{{- if or .IsTxResult .IsTransaction}}
+	Type {{pkg "protocol"}}TransactionType `json:"type"`{{else if .IsChain}}
+	Type {{pkg "protocol"}}AccountType `json:"type"`{{end}}
 	{{- range .Embeddings}}
 	{{- range .Fields}}
 	{{- template "jsonField" .}}
@@ -226,11 +236,7 @@ if u.{{.Field.Name}} != {{jsonZeroValue .Field}} {
 func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 	u := {{template "jsonType" .}}{}
 
-	{{- if .IsChain}}
-	u.AccountHeader = v.AccountHeader
-	{{- end}}
-
-	{{- if .IsTxResult}}
+	{{- if or .IsTransaction .IsTxResult .IsChain}}
 	u.Type = v.GetType()
 	{{- end}}
 
@@ -252,11 +258,7 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	u := {{template "jsonType" .}}{}
 
-	{{- if .IsChain}}
-	u.AccountHeader = v.AccountHeader
-	{{- end}}
-
-	{{- if .IsTxResult}}
+	{{- if or .IsTransaction .IsTxResult .IsChain}}
 	u.Type = v.GetType()
 	{{- end}}
 
@@ -273,10 +275,6 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-
-	{{- if .IsChain}}
-	v.AccountHeader = u.AccountHeader
-	{{- end}}
 
 	{{- range .Embeddings}}
 	{{- $name := .Name}}

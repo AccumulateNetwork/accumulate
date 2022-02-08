@@ -603,20 +603,25 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 
 		for _, s := range res.OtherItems {
 			qr := new(api2.ChainQueryResponse)
-			header := new(state.ChainHeader)
-			qr.Data = header
+			var data json.RawMessage
+			qr.Data = &data
 			err := Remarshal(s, qr)
 			if err != nil {
 				return "", err
 			}
 
-			chainDesc := header.Type.String()
+			account, err := protocol.UnmarshalAccountJSON(data)
+			if err != nil {
+				return "", err
+			}
+
+			chainDesc := account.GetType().String()
 			if err == nil {
-				if v, ok := ApiToString[header.Type]; ok {
+				if v, ok := ApiToString[account.GetType()]; ok {
 					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", header.Url, chainDesc)
+			out += fmt.Sprintf("\t%v (%s)\n", account.Header().Url, chainDesc)
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
@@ -812,7 +817,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.Header().Type)
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
 		}
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
@@ -864,7 +869,7 @@ func resolveKeyBookUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return book.GetChainUrl(), nil
+	return book.Url, nil
 }
 
 func resolveKeyPageUrl(chainId []byte) (string, error) {
@@ -877,7 +882,7 @@ func resolveKeyPageUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return kp.GetChainUrl(), nil
+	return kp.Url, nil
 }
 
 func nonceFromTimeNow() uint64 {
