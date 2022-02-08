@@ -5,6 +5,10 @@ import (
 )
 
 //go:embed c.tmpl
-var cSrc string
+var cHeader string
+var _ = Templates.Register(cHeader, "c-header", nil)
 
-var C = Templates.Register(cSrc, "c", nil, "c-header")
+//only doing everything in C header for now, will optimize later
+////go:embed c.tmpl
+//var cSource string
+//var _ = Templates.Register(cHeader, "c-source", nil)
