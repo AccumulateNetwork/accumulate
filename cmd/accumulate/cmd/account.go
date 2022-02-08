@@ -260,7 +260,6 @@ func GenerateAccount() (string, error) {
 }
 
 func ListAccounts() (string, error) {
-
 	b, err := Db.GetBucket(BucketLabel)
 	if err != nil {
 		//no accounts so nothing to do...
@@ -274,7 +273,7 @@ func ListAccounts() (string, error) {
 		}
 		l, _ := LabelForLiteTokenAccount(lt.String())
 		if l == string(v.Key) {
-			out += fmt.Sprintf("%s\n", v.Key)
+			out += fmt.Sprintf("acc://%s\n", v.Key)
 		}
 	}
 	//TODO: this probably should also list out adi accounts as well
