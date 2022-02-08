@@ -47,7 +47,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 	} else {
 		// Address is lite and the account doesn't exist, so create one
 		lite := protocol.NewLiteTokenAccount()
-		lite.ChainUrl = types.String(tx.Transaction.Origin.String())
+		lite.Url = tx.Transaction.Origin.String()
 		lite.TokenUrl = tokenUrl.String()
 		account = lite
 	}

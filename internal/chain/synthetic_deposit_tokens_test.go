@@ -30,8 +30,8 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	//try to extract the state to see if we have a valid account
 	tas := new(protocol.LiteTokenAccount)
 	require.NoError(t, st.LoadUrlAs(st.OriginUrl, tas))
-	require.Equal(t, types.String(gtx.Transaction.Origin.String()), tas.ChainUrl, "invalid chain header")
-	require.Equalf(t, types.AccountTypeLiteTokenAccount, tas.Type, "chain state is not a lite token account, it is %s", tas.ChainHeader.Type.Name())
+	require.Equal(t, gtx.Transaction.Origin.String(), tas.Url, "invalid chain header")
+	require.Equalf(t, types.AccountTypeLiteTokenAccount, tas.Type, "chain state is not a lite account, it is %s", tas.AccountHeader.Type.String())
 	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
 
 }

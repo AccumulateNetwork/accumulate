@@ -1,50 +1,55 @@
 package protocol
 
 import (
+	"encoding"
 	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-func NewChain(typ types.AccountType) (state.Chain, error) {
+type Account interface {
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
+	Header() *AccountHeader
+}
+
+func NewAccount(typ AccountType) (Account, error) {
 	switch typ {
-	case types.AccountTypeAnchor:
+	case AccountTypeAnchor:
 		return new(Anchor), nil
-	case types.AccountTypeIdentity:
+	case AccountTypeIdentity:
 		return new(ADI), nil
-	case types.AccountTypeTokenIssuer:
+	case AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
-	case types.AccountTypeTokenAccount:
+	case AccountTypeTokenAccount:
 		return new(TokenAccount), nil
-	case types.AccountTypeLiteTokenAccount:
+	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
-	case types.AccountTypeTransaction:
-		return new(state.Transaction), nil
-	case types.AccountTypePendingTransaction:
-		return new(state.PendingTransaction), nil
-	case types.AccountTypeKeyPage:
+	case AccountTypeTransaction:
+		return new(TransactionState), nil
+	case AccountTypePendingTransaction:
+		return new(PendingTransactionState), nil
+	case AccountTypeKeyPage:
 		return new(KeyPage), nil
-	case types.AccountTypeKeyBook:
+	case AccountTypeKeyBook:
 		return new(KeyBook), nil
-	case types.AccountTypeDataAccount:
+	case AccountTypeDataAccount:
 		return new(DataAccount), nil
-	case types.AccountTypeLiteDataAccount:
+	case AccountTypeLiteDataAccount:
 		return new(LiteDataAccount), nil
-	case types.AccountTypeInternalLedger:
+	case AccountTypeInternalLedger:
 		return new(InternalLedger), nil
 	default:
 		return nil, fmt.Errorf("unknown account type %v", typ)
 	}
 }
 
-func UnmarshalChain(data []byte) (state.Chain, error) {
-	typ, err := state.ChainType(data)
+func UnmarshalAccount(data []byte) (Account, error) {
+	var typ AccountType
+	err := typ.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
 	}
 
-	chain, err := NewChain(typ)
+	chain, err := NewAccount(typ)
 	if err != nil {
 		return nil, err
 	}

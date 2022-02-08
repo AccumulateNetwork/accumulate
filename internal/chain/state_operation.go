@@ -100,8 +100,8 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	}
 
 	header := op.record.Header()
-	if header.ChainUrl == "" {
-		header.ChainUrl = types.String(op.url.String())
+	if header.Url == "" {
+		header.Url = op.url.String()
 	}
 
 	record := st.batch.Account(op.url)
@@ -128,7 +128,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 	rec := m.batch.Account(u)
 	old, err := rec.GetState()
 	if err != nil {
-		return fmt.Errorf("failed to load state for %q", record.Header().ChainUrl)
+		return fmt.Errorf("failed to load state for %q", record.Header().Url)
 	}
 
 	// Check that the nonce is the only thing that changed

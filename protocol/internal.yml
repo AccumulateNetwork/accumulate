@@ -79,6 +79,9 @@ TransactionSignature:
     - name: Transaction
       type: chain
     - name: Signature
-      type: transactions.ED25519Sig
-      pointer: true
+      # type: Signature
+      # marshal-as: value
+      # unmarshal-with: UnmarshalSignature
+      type: ED25519Sig
       marshal-as: reference
+      pointer: true

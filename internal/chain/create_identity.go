@@ -54,18 +54,18 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (pro
 	keySpec.PublicKey = body.PublicKey
 
 	page := protocol.NewKeyPage()
-	page.ChainUrl = types.String(pageUrl.String()) // TODO Allow override
+	page.Url = pageUrl.String() // TODO Allow override
 	page.Keys = append(page.Keys, keySpec)
-	page.KeyBook = types.String(bookUrl.String())
+	page.KeyBook = bookUrl.String()
 	page.Threshold = 1 // Require one signature from the Key Page
 
 	book := protocol.NewKeyBook()
-	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
+	book.Url = bookUrl.String() // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
 	identity := protocol.NewADI()
-	identity.ChainUrl = types.String(identityUrl.String())
-	identity.KeyBook = types.String(bookUrl.String())
+	identity.Url = identityUrl.String()
+	identity.KeyBook = bookUrl.String()
 
 	st.Create(identity, book, page)
 	return nil, nil
