@@ -38,8 +38,13 @@ func {{.Name}}ByName(name string) ({{.Name}}, bool) {
 	switch name {
 	{{- $typ := .Name}}
 	{{- range .Values}}
+	{{- $typ := (print $typ .Name)}}
 	case "{{lower .Name}}":
-		return {{$typ}}{{.Name}}, true
+		return {{$typ}}, true
+	{{- range .Aliases}}
+	case "{{.}}":
+		return {{$typ}}, true
+	{{- end}}
 	{{- end}}
 	default:
 		return 0, false
