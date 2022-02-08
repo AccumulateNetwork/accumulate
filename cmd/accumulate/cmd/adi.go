@@ -226,11 +226,13 @@ func ListADIs() (string, error) {
 		if err != nil {
 			out += fmt.Sprintf("%s\t:\t%x \n", v.Key, v.Value)
 		} else {
-			lab, err := FindLabelFromPubKey(v.Value)
+			labs, err := FindLabelFromPubKey(v.Value)
 			if err != nil {
 				out += fmt.Sprintf("%v\t:\t%x \n", u, v.Value)
 			} else {
-				out += fmt.Sprintf("%v\t:\t%s \n", u, lab)
+				for i := range labs {
+					out += fmt.Sprintf("%v\t:\t%x(%s) \n", u, v.Value, labs[i])
+				}
 			}
 		}
 	}

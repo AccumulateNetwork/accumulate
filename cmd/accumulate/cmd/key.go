@@ -247,6 +247,8 @@ func GenerateKey(label string) (string, error) {
 		label = ltu.String()
 	}
 
+	label, _ = LabelForLiteTokenAccount(label)
+
 	_, err = LookupByLabel(label)
 	if err == nil {
 		return "", fmt.Errorf("key already exists for key name %s", label)
@@ -260,14 +262,6 @@ func GenerateKey(label string) (string, error) {
 	err = Db.Put(BucketLabel, []byte(label), pubKey)
 	if err != nil {
 		return "", err
-	}
-
-	//this adds it twice...
-	if label, ok := LabelForLiteTokenAccount(label); ok {
-		err = Db.Put(BucketLabel, []byte(label), pubKey)
-		if err != nil {
-			return "", err
-		}
 	}
 
 	if WantJsonOutput {
