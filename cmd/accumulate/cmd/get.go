@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -114,7 +115,7 @@ func Get(url string) (string, error) {
 	}
 
 	// Is it an account?
-	if json.Unmarshal(res, new(struct{ Type types.AccountType })) == nil {
+	if json.Unmarshal(res, new(struct{ Type protocol.AccountType })) == nil {
 		qr := new(QueryResponse)
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil
