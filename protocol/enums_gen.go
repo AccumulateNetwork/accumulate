@@ -139,9 +139,6 @@ const TransactionTypeAddCredits TransactionType = 14
 // TransactionTypeUpdateKeyPage adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction.
 const TransactionTypeUpdateKeyPage TransactionType = 15
 
-// TransactionTypeUpdateKeyPage adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction.
-const TransactionTypeUpdateManager TransactionType = 40
-
 // TransactionTypeSignPending is used to sign a pending transaction.
 const TransactionTypeSignPending TransactionType = 48
 
@@ -168,6 +165,9 @@ const TransactionTypeSyntheticMirror TransactionType = 56
 
 // TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
 const TransactionTypeSegWitDataEntry TransactionType = 57
+
+// TransactionTypeUpdateManager updates manager for the existing chain.
+const TransactionTypeUpdateManager TransactionType = 64
 
 // TransactionTypeInternalGenesis initializes system chains.
 const TransactionTypeInternalGenesis TransactionType = 96
@@ -654,6 +654,8 @@ func (v TransactionType) String() string {
 		return "syntheticMirror"
 	case TransactionTypeSegWitDataEntry:
 		return "segWitDataEntry"
+	case TransactionTypeUpdateManager:
+		return "updateManager"
 	case TransactionTypeInternalGenesis:
 		return "internalGenesis"
 	case TransactionTypeInternalSendTransactions:
@@ -662,8 +664,6 @@ func (v TransactionType) String() string {
 		return "internalTransactionsSigned"
 	case TransactionTypeInternalTransactionsSent:
 		return "internalTransactionsSent"
-	case TransactionTypeUpdateManager:
-		return "updateManager"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -720,14 +720,16 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticMirror, true
 	case "segWitDataEntry":
 		return TransactionTypeSegWitDataEntry, true
+	case "updateManager":
+		return TransactionTypeUpdateManager, true
 	case "internalGenesis":
 		return TransactionTypeInternalGenesis, true
 	case "internalSendTransactions":
 		return TransactionTypeInternalSendTransactions, true
 	case "internalTransactionsSigned":
 		return TransactionTypeInternalTransactionsSigned, true
-	case "updateManager":
-		return TransactionTypeUpdateManager, true
+	case "internalTransactionsSent":
+		return TransactionTypeInternalTransactionsSent, true
 	default:
 		return 0, false
 	}

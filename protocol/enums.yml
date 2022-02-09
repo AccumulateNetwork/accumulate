@@ -136,6 +136,9 @@ TransactionType:
   InternalTransactionsSent:
     value: 0x63
     description: notifies the executor of synthetic transactions that have been sent
+  UpdateManager:
+    value: 0x40
+    description: updates manager for the existing chain
 
 AccountType:
   Unknown:
