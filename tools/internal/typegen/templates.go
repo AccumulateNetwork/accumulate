@@ -22,7 +22,7 @@ func NewTemplateLibrary(funcs template.FuncMap) *TemplateLibrary {
 	}
 }
 
-func (lib *TemplateLibrary) Register(src string, name string, funcs template.FuncMap, altNames ...string) *template.Template {
+func (lib *TemplateLibrary) Register(src, name string, funcs template.FuncMap, altNames ...string) *template.Template {
 	tmpl := template.New(name)
 	if lib.functions != nil {
 		tmpl = tmpl.Funcs(lib.functions)
