@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func init() {
@@ -163,8 +162,8 @@ func GetAccount(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.AccountTypeTokenAccount.String() && res.Type != types.AccountTypeLiteTokenAccount.String() &&
-		res.Type != types.AccountTypeDataAccount.String() && res.Type != types.AccountTypeLiteDataAccount.String() {
+	if res.Type != protocol.AccountTypeTokenAccount.String() && res.Type != protocol.AccountTypeLiteTokenAccount.String() &&
+		res.Type != protocol.AccountTypeDataAccount.String() && res.Type != protocol.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}
 
@@ -238,7 +237,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	token := protocol.TokenIssuer{}
 	resp.Data = &token
 	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
-	if err != nil || resp.Type != types.AccountTypeTokenIssuer.String() {
+	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 

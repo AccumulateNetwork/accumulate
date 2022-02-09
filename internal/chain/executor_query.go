@@ -433,7 +433,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	}
 
 	pending := new(state.PendingTransaction)
-	pending.Type = types.AccountTypePendingTransaction
+	pending.Type = protocol.AccountTypePendingTransaction
 	pending.Url = txState.Url
 	pending.TransactionState = &txState.TxState
 
@@ -819,7 +819,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err = obj.As(chainHeader); err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("inavid object error")}
 		}
-		if chainHeader.Type != types.AccountTypeKeyBook {
+		if chainHeader.Type != protocol.AccountTypeKeyBook {
 			u, err := url.Parse(string(chainHeader.KeyBook))
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
