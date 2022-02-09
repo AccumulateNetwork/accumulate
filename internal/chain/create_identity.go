@@ -64,8 +64,12 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (pro
 	book.Pages = append(book.Pages, pageUrl.String())
 
 	identity := protocol.NewADI()
+
 	identity.Url = identityUrl.String()
 	identity.KeyBook = bookUrl.String()
+	if body.Manager != "" {
+		identity.ManagerKeyBook = body.Manager
+	}
 
 	st.Create(identity, book, page)
 	return nil, nil
