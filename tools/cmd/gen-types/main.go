@@ -80,6 +80,9 @@ func readTypes(files []string) typegen.DataTypes {
 	if flags.Include != nil {
 		included := map[string]*typegen.DataType{}
 		for _, name := range flags.Include {
+			if name = strings.TrimSpace(name); name == "" {
+				continue
+			}
 			typ, ok := allTypes[name]
 			if !ok {
 				fatalf("%q is not a type", name)
@@ -90,6 +93,9 @@ func readTypes(files []string) typegen.DataTypes {
 	}
 
 	for _, name := range flags.Exclude {
+		if name = strings.TrimSpace(name); name == "" {
+			continue
+		}
 		_, ok := allTypes[name]
 		if !ok {
 			fatalf("%q is not a type", name)
