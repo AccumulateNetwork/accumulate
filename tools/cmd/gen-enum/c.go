@@ -4,11 +4,15 @@ import (
 	_ "embed"
 )
 
+//the c template will include source + header with a ACME_HEADER guard between source and header.
 //go:embed c.tmpl
 var cHeader string
-var _ = Templates.Register(cHeader, "c-header", nil)
+var _ = Templates.Register(cHeader, "c", nil, "c-header")
 
-//only doing everything in C header for now, will optimize later
-////go:embed c.tmpl
-//var cSource string
-//var _ = Templates.Register(cHeader, "c-source", nil)
+//enum_gen.c
+//#ifdef ACME_HEADER
+//#undef ACME_HEADER
+//#endif
+//#define ACME_HEADER
+//#include "enum_gen.h"
+//#undef ACME_HEADER

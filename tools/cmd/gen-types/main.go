@@ -4,15 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
+	"gopkg.in/yaml.v3"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"unicode"
-
-	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
-	"gopkg.in/yaml.v3"
 )
 
 var flags struct {
@@ -136,22 +134,6 @@ func getPackagePath() string {
 	return rel
 }
 
-func cleanupWhitespace(s string) string {
-	sa := strings.FieldsFunc(s, func(c rune) bool { return '\n' == c })
-	var cw bytes.Buffer
-	for _, s := range sa {
-		s = strings.TrimRightFunc(s, func(c rune) bool { return unicode.IsSpace(c) })
-		if len(s) > 0 {
-			if strings.HasPrefix(s, "///") {
-				cw.WriteByte('\n')
-			}
-			cw.WriteString(s)
-			cw.WriteByte('\n')
-		}
-	}
-	return cw.String()
-}
-
 func run(_ *cobra.Command, args []string) {
 	types := readTypes(args)
 	ttypes, err := convert(types, flags.Package, getPackagePath())
@@ -160,41 +142,4 @@ func run(_ *cobra.Command, args []string) {
 	w := new(bytes.Buffer)
 	check(Templates.Execute(w, flags.Language, ttypes))
 	check(typegen.WriteFile(flags.Language, flags.Out, w))
-	//switch flags.Language {
-	//case "go":
-	//	w := new(bytes.Buffer)
-	//	check(Go.Execute(w, ttypes))
-	//	check(typegen.GoFmt(flags.Out, w))
-	//case "c":
-	//	cw := new(bytes.Buffer)
-	//	check(CH.Execute(cw, ttypes))
-	//	cc := new(bytes.Buffer)
-	//	check(C.Execute(cc, ttypes))
-	//
-	//	ext := filepath.Ext(flags.Out)
-	//	basepath := flags.Out
-	//	if ext == ".h" || ext == ".c" {
-	//		basepath = strings.TrimSuffix(basepath, ext)
-	//	}
-	//	header := basepath + ".h"
-	//	source := basepath + ".c"
-	//
-	//	sh := cleanupWhitespace(cw.String())
-	//	sc := cleanupWhitespace(cc.String())
-	//
-	//	f, err := os.Create(header)
-	//	check(err)
-	//	f.WriteString(sh)
-	//	f.Close()
-	//
-	//	f, err = os.Create(source)
-	//	check(err)
-	//	fmt.Fprintf(f, "#include \"%s\"\n", header)
-	//	f.WriteString(sc)
-	//	f.Close()
-	//
-	//default:
-	//	fmt.Printf("Unsupported language %s", flags.Language)
-	//}
-
 }

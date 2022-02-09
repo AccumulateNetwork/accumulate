@@ -14,7 +14,6 @@ var flags struct {
 	Package  string
 	Language string
 	Out      string
-	IsState  bool
 }
 
 func main() {
@@ -70,18 +69,4 @@ func run(_ *cobra.Command, args []string) {
 	w := new(bytes.Buffer)
 	check(Templates.Execute(w, flags.Language, ttypes))
 	check(typegen.WriteFile(flags.Language, flags.Out, w))
-	/////from me
-	//switch flags.Language {
-	//case "go":
-	//	w := new(bytes.Buffer)
-	//	check(Go.Execute(w, ttypes))
-	//	check(typegen.GoFmt(flags.Out, w))
-	//case "c":
-	//	w := new(bytes.Buffer)
-	//	check(C.Execute(w, ttypes))
-	//	f, err := os.Create(flags.Out)
-	//	check(err)
-	//	f.WriteString(w.String())
-	//	f.Close()
-	//}
 }
