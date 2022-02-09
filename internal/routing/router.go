@@ -70,6 +70,40 @@ func routeModulo(network *config.Network, account *url.URL) (string, error) {
 	return network.BvnNames[i], nil
 }
 
+// routeBySubnet routes an account based on the routing number and BVN subnet name
+func routeBySubnet(network *config.Network, account *url.URL) (string, error) {
+	// Is it a DN URL?
+	if protocol.BelongsToDn(account) {
+		return protocol.Directory, nil
+	}
+
+	// Is it a BVN URL?
+	if bvn, ok := protocol.ParseBvnUrl(account); ok {
+		for _, id := range network.BvnNames {
+			if strings.EqualFold(bvn, id) {
+				return id, nil
+			}
+		}
+
+		return "", fmt.Errorf("unknown BVN %q", bvn)
+	}
+
+	// Create a fixed route which is
+	adiRoutingNr := account.Routing()
+	highestRoutingNr := uint64(0)
+	var selectedBvn string
+	for _, bvn := range network.BvnNames {
+		bvnUrl := protocol.BvnUrl(bvn)
+		// XOR every node url with the ADI URL, the node with the highest value wins.
+		mergedRoutingNr := bvnUrl.Routing() ^ adiRoutingNr
+		if mergedRoutingNr > highestRoutingNr {
+			selectedBvn = bvn
+			highestRoutingNr = mergedRoutingNr
+		}
+	}
+	return selectedBvn, nil
+}
+
 // submit calls the appropriate client method to submit a transaction.
 func submit(client Client, ctx context.Context, tx []byte, pretend, async bool) (*ResponseSubmit, error) {
 	if pretend {
@@ -116,7 +150,8 @@ var _ Router = (*RPC)(nil)
 
 // Route routes the account using modulo routing.
 func (r *RPC) Route(account *url.URL) (string, error) {
-	return routeModulo(r.Network, account)
+	//return routeModulo(r.Network, account)
+	return routeBySubnet(r.Network, account)
 }
 
 func (r *RPC) getClient(subnet string) (Client, error) {
