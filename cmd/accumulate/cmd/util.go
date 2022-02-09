@@ -459,7 +459,7 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving token url, %v", err)
 	}
-	t := protocol.TokenIssuer{}
+	t := protocol.CreateToken{}
 	err = Remarshal(qr.Data, &t)
 	if err != nil {
 		return nil, err
@@ -513,12 +513,8 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
-	t := protocol.TokenIssuer{}
-	dataBytes, err := json.Marshal(tokenData.Data)
-	if err != nil {
-		return "", err
-	}
-	err = json.Unmarshal(dataBytes, &t)
+	t := protocol.CreateToken{}
+	err = Remarshal(tokenData.Data, &t)
 	if err != nil {
 		return "", err
 	}
