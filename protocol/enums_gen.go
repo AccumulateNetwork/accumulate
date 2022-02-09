@@ -226,6 +226,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeIdentity, true
 	case "tokenIssuer":
 		return AccountTypeTokenIssuer, true
+	case "token":
+		return AccountTypeTokenIssuer, true
 	case "tokenAccount":
 		return AccountTypeTokenAccount, true
 	case "liteTokenAccount":

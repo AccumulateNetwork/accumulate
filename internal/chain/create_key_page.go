@@ -73,6 +73,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		ss.PublicKey = sig.PublicKey
 		page.Keys = append(page.Keys, ss)
 	}
+	if body.Manager != "" {
+		page.ManagerKeyBook = body.Manager
+	}
 
 	err = scc.Create(page)
 	if err != nil {

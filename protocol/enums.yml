@@ -150,6 +150,7 @@ AccountType:
   TokenIssuer:
     value: 3
     description: is a Token Issuer account
+    aliases: [token]
   TokenAccount:
     value: 4
     description: is an ADI Token Account
