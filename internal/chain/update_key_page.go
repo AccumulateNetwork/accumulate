@@ -26,7 +26,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeKeyPage, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	// We're changing the height of the key page, so reset all the nonces
