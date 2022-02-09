@@ -247,6 +247,8 @@ func GenerateKey(label string) (string, error) {
 		label = ltu.String()
 	}
 
+	label, _ = LabelForLiteTokenAccount(label)
+
 	_, err = LookupByLabel(label)
 	if err == nil {
 		return "", fmt.Errorf("key already exists for key name %s", label)
@@ -260,13 +262,6 @@ func GenerateKey(label string) (string, error) {
 	err = Db.Put(BucketLabel, []byte(label), pubKey)
 	if err != nil {
 		return "", err
-	}
-
-	if label, ok := LabelForLiteTokenAccount(label); ok {
-		err = Db.Put(BucketLabel, []byte(label), pubKey)
-		if err != nil {
-			return "", err
-		}
 	}
 
 	if WantJsonOutput {
@@ -333,12 +328,16 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 	}
 
 	if label == "" {
+
 		lt, err := protocol.LiteTokenAddress(pk[32:], protocol.AcmeUrl().String())
 		if err != nil {
 			return "", fmt.Errorf("no label specified and cannot import as lite account")
 		}
 		label = lt.String()
 	}
+
+	//here will change the label if it is a lite account specified, otherwise just use the label
+	label, _ = LabelForLiteTokenAccount(label)
 
 	_, err = LookupByLabel(label)
 	if err == nil {
