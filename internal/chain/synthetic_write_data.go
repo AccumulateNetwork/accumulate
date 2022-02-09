@@ -45,7 +45,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			result.AccountUrl = tx.Transaction.Origin
 		default:
 			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
-				types.AccountTypeLiteDataAccount, origin.Header().Type)
+				protocol.AccountTypeLiteDataAccount, origin.Header().Type)
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
 		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)

@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -272,7 +271,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := n.GetLiteDataAccount(liteDataAddress.String())
-		require.Equal(t, types.AccountTypeLiteDataAccount, r.Type)
+		require.Equal(t, protocol.AccountTypeLiteDataAccount, r.Type)
 		require.Equal(t, liteDataAddress.String(), r.Url)
 		require.Equal(t, append(partialChainId, r.Tail...), chainId)
 	})
@@ -299,7 +298,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, types.AccountTypeDataAccount, r.Type)
+		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
 		require.Equal(t, "acc://FooBar/oof", r.Url)
 
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
@@ -332,7 +331,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		u := n.ParseUrl("acc://FooBar/foo/book1")
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, types.AccountTypeDataAccount, r.Type)
+		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
 		require.Equal(t, "acc://FooBar/oof", r.Url)
 		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook)
 		require.Equal(t, u.String(), r.KeyBook)
@@ -358,7 +357,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, types.AccountTypeDataAccount, r.Type)
+		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
 		require.Equal(t, "acc://FooBar/oof", r.Url)
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
@@ -425,7 +424,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, types.AccountTypeTokenAccount, r.Type)
+		require.Equal(t, protocol.AccountTypeTokenAccount, r.Type)
 		require.Equal(t, "acc://FooBar/Baz", r.Url)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 
@@ -462,7 +461,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		u := n.ParseUrl("foo/book1")
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, types.AccountTypeTokenAccount, r.Type)
+		require.Equal(t, protocol.AccountTypeTokenAccount, r.Type)
 		require.Equal(t, "acc://FooBar/Baz", r.Url)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 		require.Equal(t, u.String(), r.KeyBook)

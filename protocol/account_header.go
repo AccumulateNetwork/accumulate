@@ -7,7 +7,7 @@ import (
 func (h *AccountHeader) Header() *AccountHeader { return h }
 
 // //SetHeader sets the data for a chain header
-// func (h *AccountHeader) SetHeader(chainUrl types.String, chainType types.AccountType) {
+// func (h *AccountHeader) SetHeader(chainUrl types.String, chainType protocol.AccountType) {
 // 	h.Url = chainUrl
 // 	h.Type = chainType
 // }

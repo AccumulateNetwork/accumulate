@@ -73,7 +73,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 
 		// Check the identity
 		switch record.Header().Type {
-		case types.AccountTypeIdentity:
+		case protocol.AccountTypeIdentity:
 			// An ADI must be its own identity
 			if !u.Identity().Equal(u) {
 				return nil, fmt.Errorf("ADI is not its own identity")
@@ -100,13 +100,13 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 
 		// Check the key book
 		switch record.Header().Type {
-		case types.AccountTypeKeyBook:
+		case protocol.AccountTypeKeyBook:
 			// A key book does not itself have a key book
 			if record.Header().KeyBook != "" {
 				return nil, errors.New("invalid key book: KeyBook is not empty")
 			}
 
-		case types.AccountTypeKeyPage:
+		case protocol.AccountTypeKeyPage:
 			// A key page can be unbound
 
 		default:
