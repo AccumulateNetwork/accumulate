@@ -100,6 +100,9 @@ CreateIdentity:
     - name: KeyPageName
       type: string
       optional: true
+    - name: Manager
+      type: string
+      optional: true
 
 CreateTokenAccount:
   kind: tx
@@ -116,6 +119,9 @@ CreateTokenAccount:
       optional: true
     - name: Scratch
       type: bool
+      optional: true
+    - name: Manager
+      type: string
       optional: true
 
 SendTokens:
@@ -200,6 +206,9 @@ CreateToken:
     - name: HasSupplyLimit
       type: bool
       optional: true
+    - name: Manager
+      type: string
+      optional: true
 
 IssueTokens:
   kind: tx
@@ -228,6 +237,9 @@ CreateKeyPage:
         type: KeySpecParams
         pointer: true
         marshal-as: reference
+    - name: Manager
+      type: string
+      optional: true
 
 CreateKeyBook:
   kind: tx
@@ -240,6 +252,9 @@ CreateKeyBook:
       slice:
         type: string
         is-url: true
+    - name: Manager
+      type: string
+      optional: true
 
 AddCredits:
   kind: tx

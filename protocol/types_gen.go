@@ -78,16 +78,19 @@ type CreateIdentity struct {
 	PublicKey   []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	KeyBookName string `json:"keyBookName,omitempty" form:"keyBookName" query:"keyBookName"`
 	KeyPageName string `json:"keyPageName,omitempty" form:"keyPageName" query:"keyPageName"`
+	Manager     string `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateKeyBook struct {
-	Url   string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Pages []string `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+	Url     string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Pages   []string `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+	Manager string   `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateKeyPage struct {
-	Url  string           `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Keys []*KeySpecParams `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
+	Url     string           `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Keys    []*KeySpecParams `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
+	Manager string           `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateToken struct {
@@ -98,6 +101,7 @@ type CreateToken struct {
 	Properties     string  `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
 	InitialSupply  big.Int `json:"initialSupply,omitempty" form:"initialSupply" query:"initialSupply"`
 	HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
+	Manager        string  `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateTokenAccount struct {
@@ -105,6 +109,7 @@ type CreateTokenAccount struct {
 	TokenUrl   string `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
 	Scratch    bool   `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	Manager    string `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type DataAccount struct {
@@ -693,6 +698,10 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 		return false
 	}
 
+	if !(v.Manager == u.Manager) {
+		return false
+	}
+
 	return true
 }
 
@@ -713,6 +722,10 @@ func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
 
 	}
 
+	if !(v.Manager == u.Manager) {
+		return false
+	}
+
 	return true
 }
 
@@ -731,6 +744,10 @@ func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
 			return false
 		}
 
+	}
+
+	if !(v.Manager == u.Manager) {
+		return false
 	}
 
 	return true
@@ -765,6 +782,10 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 		return false
 	}
 
+	if !(v.Manager == u.Manager) {
+		return false
+	}
+
 	return true
 }
 
@@ -782,6 +803,10 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	}
 
 	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
+	if !(v.Manager == u.Manager) {
 		return false
 	}
 
@@ -1811,6 +1836,8 @@ func (v *CreateIdentity) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.KeyPageName)
 
+	n += encoding.StringBinarySize(v.Manager)
+
 	return n
 }
 
@@ -1828,6 +1855,8 @@ func (v *CreateKeyBook) BinarySize() int {
 
 	}
 
+	n += encoding.StringBinarySize(v.Manager)
+
 	return n
 }
 
@@ -1844,6 +1873,8 @@ func (v *CreateKeyPage) BinarySize() int {
 		n += v.BinarySize()
 
 	}
+
+	n += encoding.StringBinarySize(v.Manager)
 
 	return n
 }
@@ -1867,6 +1898,8 @@ func (v *CreateToken) BinarySize() int {
 
 	n += encoding.BoolBinarySize(v.HasSupplyLimit)
 
+	n += encoding.StringBinarySize(v.Manager)
+
 	return n
 }
 
@@ -1882,6 +1915,8 @@ func (v *CreateTokenAccount) BinarySize() int {
 	n += encoding.StringBinarySize(v.KeyBookUrl)
 
 	n += encoding.BoolBinarySize(v.Scratch)
+
+	n += encoding.StringBinarySize(v.Manager)
 
 	return n
 }
@@ -2792,6 +2827,8 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.KeyPageName))
 
+	buffer.Write(encoding.StringMarshalBinary(v.Manager))
+
 	return buffer.Bytes(), nil
 }
 
@@ -2808,6 +2845,8 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 		buffer.Write(encoding.StringMarshalBinary(v))
 
 	}
+
+	buffer.Write(encoding.StringMarshalBinary(v.Manager))
 
 	return buffer.Bytes(), nil
 }
@@ -2829,6 +2868,8 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 		}
 
 	}
+
+	buffer.Write(encoding.StringMarshalBinary(v.Manager))
 
 	return buffer.Bytes(), nil
 }
@@ -2852,6 +2893,8 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.BoolMarshalBinary(v.HasSupplyLimit))
 
+	buffer.Write(encoding.StringMarshalBinary(v.Manager))
+
 	return buffer.Bytes(), nil
 }
 
@@ -2867,6 +2910,8 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
 
 	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Manager))
 
 	return buffer.Bytes(), nil
 }
@@ -4056,6 +4101,13 @@ func (v *CreateIdentity) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.KeyPageName):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Manager: %w", err)
+	} else {
+		v.Manager = x
+	}
+	data = data[encoding.StringBinarySize(v.Manager):]
+
 	return nil
 }
 
@@ -4093,6 +4145,13 @@ func (v *CreateKeyBook) UnmarshalBinary(data []byte) error {
 		data = data[encoding.StringBinarySize(v.Pages[i]):]
 
 	}
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Manager: %w", err)
+	} else {
+		v.Manager = x
+	}
+	data = data[encoding.StringBinarySize(v.Manager):]
 
 	return nil
 }
@@ -4132,6 +4191,13 @@ func (v *CreateKeyPage) UnmarshalBinary(data []byte) error {
 
 		v.Keys[i] = x
 	}
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Manager: %w", err)
+	} else {
+		v.Manager = x
+	}
+	data = data[encoding.StringBinarySize(v.Manager):]
 
 	return nil
 }
@@ -4194,6 +4260,13 @@ func (v *CreateToken) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BoolBinarySize(v.HasSupplyLimit):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Manager: %w", err)
+	} else {
+		v.Manager = x
+	}
+	data = data[encoding.StringBinarySize(v.Manager):]
+
 	return nil
 }
 
@@ -4233,6 +4306,13 @@ func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
 		v.Scratch = x
 	}
 	data = data[encoding.BoolBinarySize(v.Scratch):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Manager: %w", err)
+	} else {
+		v.Manager = x
+	}
+	data = data[encoding.StringBinarySize(v.Manager):]
 
 	return nil
 }
@@ -5779,11 +5859,13 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 		PublicKey   *string `json:"publicKey,omitempty"`
 		KeyBookName string  `json:"keyBookName,omitempty"`
 		KeyPageName string  `json:"keyPageName,omitempty"`
+		Manager     string  `json:"manager,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
 	u.KeyPageName = v.KeyPageName
+	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
 
@@ -5796,6 +5878,7 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 		Properties     string  `json:"properties,omitempty"`
 		InitialSupply  *string `json:"initialSupply,omitempty"`
 		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+		Manager        string  `json:"manager,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.KeyBookUrl = v.KeyBookUrl
@@ -5804,6 +5887,7 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u.Properties = v.Properties
 	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
 	u.HasSupplyLimit = v.HasSupplyLimit
+	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
 
@@ -6351,11 +6435,13 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 		PublicKey   *string `json:"publicKey,omitempty"`
 		KeyBookName string  `json:"keyBookName,omitempty"`
 		KeyPageName string  `json:"keyPageName,omitempty"`
+		Manager     string  `json:"manager,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
 	u.KeyPageName = v.KeyPageName
+	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -6367,6 +6453,7 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	}
 	v.KeyBookName = u.KeyBookName
 	v.KeyPageName = u.KeyPageName
+	v.Manager = u.Manager
 	return nil
 }
 
@@ -6379,6 +6466,7 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 		Properties     string  `json:"properties,omitempty"`
 		InitialSupply  *string `json:"initialSupply,omitempty"`
 		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+		Manager        string  `json:"manager,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.KeyBookUrl = v.KeyBookUrl
@@ -6387,6 +6475,7 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u.Properties = v.Properties
 	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
 	u.HasSupplyLimit = v.HasSupplyLimit
+	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -6401,6 +6490,7 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 		v.InitialSupply = *x
 	}
 	v.HasSupplyLimit = u.HasSupplyLimit
+	v.Manager = u.Manager
 	return nil
 }
 
