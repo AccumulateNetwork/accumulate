@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -114,7 +115,7 @@ func Get(url string) (string, error) {
 	}
 
 	// Is it an account?
-	if json.Unmarshal(res, new(struct{ Type types.AccountType })) == nil {
+	if json.Unmarshal(res, new(struct{ Type protocol.AccountType })) == nil {
 		qr := new(QueryResponse)
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil
