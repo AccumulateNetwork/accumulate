@@ -90,8 +90,8 @@ func (b *BoltDB) Delete(bucket []byte, key []byte) error {
 
 	return b.db.Update(func(tx *bolt.Tx) error {
 		buck := tx.Bucket(bucket)
-		if buck != nil {
-			return nil
+		if buck == nil {
+			return fmt.Errorf("bucket not defined")
 		}
 		return buck.Delete(key)
 	})
