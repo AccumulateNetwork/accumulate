@@ -12,8 +12,13 @@ import (
 	"sync/atomic"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
+
+var _ encoding.Byter = (*Bytes)(nil)
+var _ encoding.Byter = (*Bytes32)(nil)
+var _ encoding.Byter = (*String)(nil)
 
 // MarshalBinaryLedgerAdiChainPath adiChainPath == adi/chain/path
 //This function will generate a ledger needed for ed25519 signing or sha256 hashed to produce TXID
@@ -302,6 +307,10 @@ func (s *Bytes64) ToString() String {
 }
 
 type String string
+
+func (s *String) Bytes() []byte {
+	return []byte(*s)
+}
 
 func (s *String) MarshalBinary() ([]byte, error) {
 	b := Bytes(*s)

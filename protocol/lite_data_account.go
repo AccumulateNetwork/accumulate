@@ -23,7 +23,7 @@ func ComputeLiteDataAccountId(firstEntry *DataEntry) []byte {
 }
 
 func (c *LiteDataAccount) AccountId() ([]byte, error) {
-	u, err := url.Parse(*c.Header().ChainUrl.AsString())
+	u, err := url.Parse(c.Header().Url)
 	if err != nil {
 		return nil, err
 	}

@@ -1,17 +1,15 @@
 package protocol
 
-import (
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-)
-
 type WrappedTxPayload struct {
 	TransactionPayload
 }
 
 func (w *WrappedTxPayload) UnmarshalBinary(data []byte) error {
-	v, _ := common.BytesUint64(data)
-	typ := types.TransactionType(v)
+	var typ TransactionType
+	err := typ.UnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
 
 	pl, err := NewTransaction(typ)
 	if err != nil {

@@ -22,11 +22,17 @@ func NewBucket() *Bucket {
 }
 
 //Put will store the key / value in the bucket
-func (b *Bucket) Put(key []byte, value []byte) {
+func (b *Bucket) Put(k []byte, v []byte) {
 	if b.ref == nil {
 		b.ref = make(map[[32]byte]int)
 	}
+	key := make([]byte, len(k))
+	copy(key, k)
+	value := make([]byte, len(v))
+	copy(value, v)
+
 	b.ref[sha256.Sum256(key)] = len(b.KeyValueList)
+
 	b.KeyValueList = append(b.KeyValueList, KeyValue{key, value})
 }
 

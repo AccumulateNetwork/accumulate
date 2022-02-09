@@ -105,7 +105,7 @@ func TestValidate(t *testing.T) {
 
 		adi := new(protocol.ADI)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
-		assert.Equal(t, adiName, string(adi.ChainUrl))
+		assert.Equal(t, adiName, string(adi.Url))
 
 		dir := new(api.MultiResponse)
 		callApi(t, japi, "query-directory", struct {
@@ -156,7 +156,7 @@ func TestValidate(t *testing.T) {
 		})
 		dataAccount := NewDataAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
-		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
+		assert.Equal(t, dataAccountUrl, string(dataAccount.Url))
 	})
 
 	keyPageUrl := adiName + "/page1"
@@ -176,7 +176,7 @@ func TestValidate(t *testing.T) {
 		})
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
+		assert.Equal(t, keyPageUrl, string(keyPage.Url))
 	})
 
 	keyBookUrl := adiName + "/book1"
@@ -194,7 +194,7 @@ func TestValidate(t *testing.T) {
 		})
 		keyBook := NewKeyBook()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
-		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
+		assert.Equal(t, keyBookUrl, string(keyBook.Url))
 	})
 
 	t.Run("Key page credits 2", func(t *testing.T) {
@@ -244,7 +244,7 @@ func TestValidate(t *testing.T) {
 		})
 		tokenAccount := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
-		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
+		assert.Equal(t, tokenAccountUrl, string(tokenAccount.Url))
 	})
 
 	t.Run("Query Key Index", func(t *testing.T) {

@@ -32,7 +32,7 @@ func (UpdateManager) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
 	chain := st.Origin
-	chain.Header().ManagerKeyBook = book.ChainUrl
+	chain.Header().ManagerKeyBook = body.ManagerKeyBook
 	st.Update(chain)
 	return nil, nil
 }

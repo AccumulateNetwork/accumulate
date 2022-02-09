@@ -108,7 +108,7 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 		return nil, err
 	}
 
-	account, err := protocol.NewChain(typ.Type)
+	account, err := protocol.NewAccount(typ.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions
 	env.Transaction.Body = binaryPayload
 
 	hdr.Nonce = nonce
-	env.Transaction.Header = *hdr
+	env.Transaction.TransactionHeader = *hdr
 
 	ed := new(transactions.ED25519Sig)
 	err := ed.Sign(nonce, privKey, env.GetTxHash())
@@ -459,7 +459,7 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving token url, %v", err)
 	}
-	t := protocol.TokenIssuer{}
+	t := protocol.CreateToken{}
 	err = Remarshal(qr.Data, &t)
 	if err != nil {
 		return nil, err
@@ -513,12 +513,8 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
-	t := protocol.TokenIssuer{}
-	dataBytes, err := json.Marshal(tokenData.Data)
-	if err != nil {
-		return "", err
-	}
-	err = json.Unmarshal(dataBytes, &t)
+	t := protocol.CreateToken{}
+	err = Remarshal(tokenData.Data, &t)
 	if err != nil {
 		return "", err
 	}
@@ -611,13 +607,13 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 				return "", err
 			}
 
-			chainDesc := header.Type.Name()
+			chainDesc := header.Type.String()
 			if err == nil {
 				if v, ok := ApiToString[header.Type]; ok {
 					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
+			out += fmt.Sprintf("\t%v (%s)\n", header.Url, chainDesc)
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
@@ -663,7 +659,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		cred.Mul(cred, big.NewFloat(0.01))
 
 		var out string
-		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
+		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", cred.Text('f', 2))
@@ -683,7 +679,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		var out string
-		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
+		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
@@ -697,7 +693,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		var out string
-		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.ChainUrl)
+		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.Url)
 		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
 
 		return out, nil
@@ -746,7 +742,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if ti.HasSupplyLimit {
 			hasSupplyLimit = "yes"
 		}
-		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.ChainUrl)
+		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.Url)
 		out += fmt.Sprintf("\n\tSymbol\t\t:\t%s", ti.Symbol)
 		out += fmt.Sprintf("\n\tPrecision\t:\t%d", ti.Precision)
 		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", ti.Supply.String())
@@ -810,7 +806,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		var out string
 		for _, cp := range scc.Chains {
-			c, err := protocol.UnmarshalChain(cp.Data)
+			c, err := protocol.UnmarshalAccount(cp.Data)
 			if err != nil {
 				return "", err
 			}
@@ -819,7 +815,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().ChainUrl, c.Header().Type)
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.Header().Type)
 		}
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
