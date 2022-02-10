@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var tokenCmd = &cobra.Command{
@@ -118,7 +117,7 @@ func CreateToken(origin string, args []string) (string, error) {
 			return "", fmt.Errorf("cannot query properties url, %v", err)
 		}
 		//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
-		if res.Type != types.AccountTypeDataAccount.String() {
+		if res.Type != protocol.AccountTypeDataAccount.String() {
 			return "", fmt.Errorf("properties url is not a valid properties data account")
 		}
 	}

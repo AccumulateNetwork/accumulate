@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
@@ -133,7 +132,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 
 	// Check that the nonce is the only thing that changed
 	switch record.Header().Type {
-	case types.AccountTypeLiteTokenAccount:
+	case protocol.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.Nonce = new.Nonce
 		old.CreditBalance = new.CreditBalance
@@ -141,7 +140,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 			return fmt.Errorf("attempted to change more than the nonce and the credit balance")
 		}
 
-	case types.AccountTypeKeyPage:
+	case protocol.AccountTypeKeyPage:
 		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
 		old.CreditBalance = new.CreditBalance
 		for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
@@ -189,7 +188,7 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 
 	var stateRec state.Chain
 
-	if record.Header().Type == types.AccountTypeLiteDataAccount {
+	if record.Header().Type == protocol.AccountTypeLiteDataAccount {
 		stateRec = record
 	}
 

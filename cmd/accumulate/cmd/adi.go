@@ -22,7 +22,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -129,7 +128,7 @@ func GetADI(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.AccountTypeIdentity.String() {
+	if res.Type != protocol.AccountTypeIdentity.String() {
 		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
 	}
 

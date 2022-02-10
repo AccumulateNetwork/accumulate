@@ -130,7 +130,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 
 func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	var typ struct {
-		Type types.AccountType
+		Type protocol.AccountType
 	}
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
@@ -548,14 +548,14 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 }
 
 var (
-	ApiToString = map[types.AccountType]string{
-		types.AccountTypeLiteTokenAccount: "Lite Account",
-		types.AccountTypeTokenAccount:     "ADI Token Account",
-		types.AccountTypeIdentity:         "ADI",
-		types.AccountTypeKeyBook:          "Key Book",
-		types.AccountTypeKeyPage:          "Key Page",
-		types.AccountTypeDataAccount:      "Data Chain",
-		types.AccountTypeLiteDataAccount:  "Lite Data Chain",
+	ApiToString = map[protocol.AccountType]string{
+		protocol.AccountTypeLiteTokenAccount: "Lite Account",
+		protocol.AccountTypeTokenAccount:     "ADI Token Account",
+		protocol.AccountTypeIdentity:         "ADI",
+		protocol.AccountTypeKeyBook:          "Key Book",
+		protocol.AccountTypeKeyPage:          "Key Page",
+		protocol.AccountTypeDataAccount:      "Data Chain",
+		protocol.AccountTypeLiteDataAccount:  "Lite Data Chain",
 	}
 )
 
@@ -594,7 +594,7 @@ func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 		if err != nil {
 			return nil, err
 		}
-		if res.Type != types.AccountTypeTokenAccount.String() {
+		if res.Type != protocol.AccountTypeTokenAccount.String() {
 			return nil, fmt.Errorf("expecting token account but received %s", res.Type)
 		}
 		ta := protocol.TokenAccount{}
@@ -612,6 +612,15 @@ func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 	}
 	return tokenUrl, nil
 }
+func amountToString(precision uint64, amount *big.Int) string {
+	bf := big.Float{}
+	bd := big.Float{}
+	bd.SetFloat64(math.Pow(10.0, float64(precision)))
+	bf.SetInt(amount)
+	bal := big.Float{}
+	bal.Quo(&bf, &bd)
+	return bal.Text('f', int(precision))
+}
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
@@ -620,22 +629,12 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
 	t := protocol.TokenIssuer{}
-	dataBytes, err := json.Marshal(tokenData.Data)
-	if err != nil {
-		return "", err
-	}
-	err = json.Unmarshal(dataBytes, &t)
+	err = Remarshal(tokenData.Data, &t)
 	if err != nil {
 		return "", err
 	}
 
-	bf := big.Float{}
-	bd := big.Float{}
-	bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
-	bf.SetInt(amount)
-	bal := big.Float{}
-	bal.Quo(&bf, &bd)
-	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
+	return fmt.Sprintf("%s %s", amountToString(t.Precision, amount), t.Symbol), nil
 }
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
@@ -753,7 +752,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 
 func outputForHumans(res *QueryResponse) (string, error) {
 	switch string(res.Type) {
-	case types.AccountTypeLiteTokenAccount.String():
+	case protocol.AccountTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
 		err := Remarshal(res.Data, &ata)
 		if err != nil {
@@ -765,18 +764,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			amt = "unknown"
 		}
 
-		cred := big.NewFloat(0).SetInt(&ata.CreditBalance)
-		cred.Mul(cred, big.NewFloat(0.01))
-
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", cred.Text('f', 2))
+		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", amountToString(2, &ata.CreditBalance))
 		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
 		return out, nil
-	case types.AccountTypeTokenAccount.String():
+	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
 		err := Remarshal(res.Data, &ata)
 		if err != nil {
@@ -795,7 +791,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
 
 		return out, nil
-	case types.AccountTypeIdentity.String():
+	case protocol.AccountTypeIdentity.String():
 		adi := protocol.ADI{}
 		err := Remarshal(res.Data, &adi)
 		if err != nil {
@@ -807,7 +803,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
 
 		return out, nil
-	case types.AccountTypeKeyBook.String():
+	case protocol.AccountTypeKeyBook.String():
 		book := protocol.KeyBook{}
 		err := Remarshal(res.Data, &book)
 		if err != nil {
@@ -820,17 +816,14 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
 		}
 		return out, nil
-	case types.AccountTypeKeyPage.String():
+	case protocol.AccountTypeKeyPage.String():
 		ss := protocol.KeyPage{}
 		err := Remarshal(res.Data, &ss)
 		if err != nil {
 			return "", err
 		}
 
-		cred := big.NewFloat(0).SetInt(&ss.CreditBalance)
-		cred.Mul(cred, big.NewFloat(0.01))
-
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", cred.Text('f', 2))
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", amountToString(2, &ss.CreditBalance))
 		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
@@ -841,8 +834,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 		}
 		return out, nil
-
-	case types.AccountTypeTokenIssuer.String():
+	case "token", protocol.AccountTypeTokenIssuer.String():
 		ti := protocol.TokenIssuer{}
 		err := Remarshal(res.Data, &ti)
 		if err != nil {
@@ -852,10 +844,11 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if ti.HasSupplyLimit {
 			hasSupplyLimit = "yes"
 		}
+
 		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.Url)
 		out += fmt.Sprintf("\n\tSymbol\t\t:\t%s", ti.Symbol)
 		out += fmt.Sprintf("\n\tPrecision\t:\t%d", ti.Precision)
-		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", ti.Supply.String())
+		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", amountToString(ti.Precision, &ti.Supply))
 		out += fmt.Sprintf("\n\tSupply Limit\t:\t%s", hasSupplyLimit)
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"

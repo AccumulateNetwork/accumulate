@@ -21,7 +21,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	case *protocol.KeyBook:
 		group = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeIdentity, types.AccountTypeKeyBook, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook, origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyPage)
@@ -72,6 +72,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		ss := new(protocol.KeySpec)
 		ss.PublicKey = sig.PublicKey
 		page.Keys = append(page.Keys, ss)
+	}
+	if body.Manager != "" {
+		page.ManagerKeyBook = body.Manager
 	}
 
 	err = scc.Create(page)
