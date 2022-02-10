@@ -1,5 +1,18 @@
 package cmd
 
+/*
+	This file centers around creation and manipulation of token accounts via
+	the Cobra command "account" and its subcommands.
+	Behavior
+
+	This file is part of a client application.
+
+	For more information, see TODO: create database structure docs
+
+	TODO: Many of the functions in this file need renaming to make clear
+	whether they handle data accounts, token accounts, or both.
+*/
+
 import (
 	"context"
 	"encoding/hex"
@@ -66,6 +79,8 @@ var dataCmd = &cobra.Command{
 	},
 }
 
+// Print usage for "accumulate data get",
+// which gets data entries from the specified account.
 func PrintDataGet() {
 	fmt.Println("  accumulate data get [DataAccountURL]			  Get most current data entry by URL")
 	fmt.Println("  accumulate data get [DataAccountURL] [EntryHash]  Get data entry by entryHash in hex")
@@ -75,6 +90,8 @@ func PrintDataGet() {
 	//./cli data get acc://actor/dataAccount start limit
 }
 
+// Print usage for "accumulate account create data",
+// which creates a data account.
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
 	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
@@ -85,20 +102,27 @@ func PrintDataAccountCreate() {
 	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
 }
 
+// Print usage for "accumulate data write",
+// which writes entries to a data account.
 func PrintDataWrite() {
 	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
 }
 
+// Print usage for "accumulate data write-to",
+// which TODO: does what?
 func PrintDataWriteTo() {
 	fmt.Println("accumulate data write-to [account url] [signing key] [lite data account] [extid_0 (optional)] ... [extid_n (optional)] [data]")
 }
 
+// Print usage for "accumulate account create data lite",
+// which creates a data lite account.
 func PrintDataLiteAccountCreate() {
 	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor signingKeyName example1 example2 ")
 }
 
+// Print usage for all data subcommands.
 func PrintData() {
 	PrintDataAccountCreate()
 	PrintDataLiteAccountCreate()
@@ -107,14 +131,15 @@ func PrintData() {
 	PrintDataWriteTo()
 }
 
-func GetDataEntry(accountUrl string, args []string) (string, error) {
-	u, err := url.Parse(accountUrl)
+// Get the data from the specified data account.
+func GetDataEntry(accountURLstring string, args []string) (string, error) {
+	accountURL, err := url.Parse(accountURLstring)
 	if err != nil {
 		return "", err
 	}
 
 	params := api.DataEntryQuery{}
-	params.Url = u
+	params.Url = accountURL.String()
 	if len(args) > 0 {
 		n, err := hex.Decode(params.EntryHash[:], []byte(args[0]))
 		if err != nil {

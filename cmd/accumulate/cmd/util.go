@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,12 +24,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
-	u, err := url2.Parse(urlStr)
-	if err != nil {
-		return nil, err
-	}
-
+// Retrieve, from the general ledger, the data at the specified URL.
+func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	params := api2.UrlQuery{
 		Url: u,
 	}
@@ -52,55 +49,83 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
+// Create a transaction header containing a signing key (and the origin).
+//
+// The first parameter is the lite account or key page which initiated the
+// transaction. All user-supplied arguments from the CLI are arrayed into
+// the second parameter.
+//
+// Returns the provided list of user-supplied CLI arguments minus those
+// used to resolve a signing key, a transaction header, and a private key
+// for signing a transaction.
 func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Header, []byte, error) {
-	var privKey []byte
+	var privateKey []byte
 	var err error
 
-	ct := 0
+	// This function "consumes" the user-supplied (CLI) arguments needed to
+	// specify target account information by stripping them from the argument
+	// list and returning the remainder, for the convenience of the calling
+	// function.
+	usedArgsCount := 0
+
 	if len(args) == 0 {
 		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	hdr := transactions.Header{}
-	hdr.Origin = origin
-	hdr.KeyPageHeight = 1
-	hdr.KeyPageIndex = 0
+	// Create a new transaction header.
+	header := transactions.Header{}
+	header.Origin = origin
+	header.KeyPageHeight = 1
+	header.KeyPageIndex = 0
 
+	// If the transaction origin is a lite account, we can just use default
+	// private key data for that account.
+	//
+	// SUGGEST: The first thing IsLiteAccount does is resolve the given string
+	// to an Accumulate URL. origin is necessarily an accumulate URL, so
+	// couldn't we create something like IsLiteAccountFromURL to save work, and
+	// wrap it with the existing IsLiteAccount function?
 	if IsLiteAccount(origin.String()) {
-		privKey, err = LookupByLabel(origin.String())
+		privateKey, err = LookupByLabel(origin.String())
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-		return args, &hdr, privKey, nil
+		return args, &header, privateKey, nil
 	}
 
-	privKey, err = resolvePrivateKey(args[0])
+	// The provided transaction origin is NOT a lite account, so try to resolve
+	// the first argument as a private key.
+	privateKey, err = resolvePrivateKey(args[0])
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	ct++
+	usedArgsCount++
 
-	if len(args) > 1 {
+	// If there are at least two args and the second arg is an integer, interpret
+	// it as a key page index.
+	if len(args) >= 2 {
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
-			ct++
-			hdr.KeyPageIndex = uint64(v)
+			usedArgsCount++
+			header.KeyPageIndex = uint64(v)
 		}
 	}
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
+	// Get key info for the origin account.
+
+	keyInfo, err := getKey(origin.String(), privateKey[32:])
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	ms, err := getRecord(keyInfo.KeyPage.String(), nil)
+	merkleState, err := getRecord(keyInfo.KeyPage, nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
 
-	hdr.KeyPageIndex = keyInfo.Index
-	hdr.KeyPageHeight = ms.Height
+	header.KeyPageIndex = keyInfo.Index
+	header.KeyPageHeight = merkleState.Height
 
-	return args[ct:], &hdr, privKey, nil
+	return args[usedArgsCount:], &header, privateKey, nil
 }
 
 func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
@@ -125,32 +150,50 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-	env := new(transactions.Envelope)
-	env.TxHash = txHash
-	env.Transaction = new(transactions.Transaction)
-	env.Transaction.Body = payload
+// Sign a transaction with the provided private key.
+// Returns the mechanism used to sign the transaction, not the signature
+// itself, though the mechanism will have already signed and has the
+// singature.
+//
+// Returns an error if the signing mechanism fails to sign.
+func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, trxHeader *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 
-	hdr.Nonce = nonce
-	env.Transaction.TransactionHeader = *hdr
+	// Prepare an envelope and populate it with transaction data which is
+	// used later when we call
+	// transactions.Envelope.Transaction.GetTxHash().
+	trxEnvelope := new(transactions.Envelope)
+	trxEnvelope.TxHash = txHash
+	trxEnvelope.Transaction = new(transactions.Transaction)
+	trxEnvelope.Transaction.Body = binaryPayload
 
-	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, env.GetTxHash())
+	trxHeader.Nonce = nonce
+	trxEnvelope.Transaction.TransactionHeader = *trxHeader
+
+	signingMechanism := new(transactions.ED25519Sig)
+	err := signingMechanism.Sign(nonce, privKey, trxEnvelope.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
-	return ed, nil
+	return signingMechanism, nil
 }
 
-func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
+// Generate a transaction request with a signature.
+// Returns an error if signing fails.
+// TODO: This function's predecessor no longer exists. The V2 suffix
+// on this function is superfluous and could lead to confusion.
+func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+
+	// Sign the transaction and retrieve the mechanism used to do so.
+	signingMechanism, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
+	// Create and populate a new transaction request.
 	params := &api2.TxRequest{}
 	params.TxHash = txHash
 
+	// TxPretend is set with each CLI command via a user-provided flag.
 	if TxPretend {
 		params.CheckOnly = true
 	}
@@ -162,15 +205,20 @@ func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []b
 	params.KeyPage.Height = si.KeyPageHeight
 	params.KeyPage.Index = si.KeyPageIndex
 
-	params.Signature = ed.GetSignature()
+	params.Signature = signingMechanism.GetSignature()
 	//The public key needs to be used to verify the signature, however,
 	//to pass verification, the validator will hash the key and check the
 	//sig spec group to make sure this key belongs to the identity.
-	params.Signer.PublicKey = ed.GetPublicKey()
+	params.Signer.PublicKey = signingMechanism.GetPublicKey()
 
 	return params, err
 }
 
+// SUGGEST: Ungraceful exits can occur in this function.
+// QUESTION: All we're checking here is that the provided URL is
+// a valid ADI host followed by some valid Accumulate URL.
+// Is a lite account really the only thing that can reside
+// at such a location?
 func IsLiteAccount(url string) bool {
 	u, err := url2.Parse(url)
 	if err != nil {
@@ -203,12 +251,19 @@ type QueryResponse struct {
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty"`
 }
 
-func GetUrl(url string) (*QueryResponse, error) {
+// Return whatever is stored at the specified Accumulate URL, or nil and
+// an error.
+func GetUrl(subject string) (*QueryResponse, error) {
 	var res QueryResponse
 
-	u, err := url2.Parse(url)
+	// Read the subject string as an Accumulate URL
+	url, err := url2.Parse(subject)
+	if err != nil {
+		return nil, err
+	}
+
 	params := api2.UrlQuery{}
-	params.Url = u
+	params.Url = url.String()
 
 	err = queryAs("query", &params, &res)
 	if err != nil {
@@ -232,15 +287,44 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+// Prepare a transaction for dispatch and then pass it to the local client
+// for sending to the Accumulate network.
+//
+// The first parameter must be a valid action as defined in
+// /internal/api/v2/api_gen.go#populateMethodTable().
+// SUGGEST: Can this be done with an Enum instead of string literals?
+//
+// trxHeader should be a header prepared by prepareSigner().
+//
+// Returns an error if the data is malformed or signing fails.
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, trxHeader *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
 	if payload == nil && txHash != nil {
 		payload = new(protocol.SignPending)
 	}
+
+	/*
+		In order to send the transaction we'll construct a big, multi-layered
+		data snowball:
+
+		STEP 1: Marshal the payload (the recipient and the amount) into binary.
+		STEP 2: The same payload is also JSON-ized (except for "execute" trxs).
+		STEP 3: All the data from steps 1 and 2 are then rolled up into a single
+				transaction request.
+		STEP 4: That whole transaction request is then JSON-ized.
+	*/
+
+	//
+	// STEP 1
+	//
 
 	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
+
+	//
+	// STEP 2
+	//
 
 	var data []byte
 	if action == "execute" {
@@ -252,16 +336,32 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 		return nil, err
 	}
 
+	//
+	// STEP 3
+	//
+
+	// TODO: Why are we passing the nonce around? The first thing
+	// prepareGenTxV2 does is pass it to signGenTx which then attaches it to
+	// the trxHeader, which has been passed by reference. Why not attach it
+	// here and shorten several param lists?
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(payload, data, txHash, origin, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, trxHeader, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
+
+	//
+	// STEP 4
+	//
 
 	data, err = json.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
+
+	//
+	// SEND
+	//
 
 	var res api2.TxResponse
 	if err := Client.RequestAPIv2(context.Background(), action, json.RawMessage(data), &res); err != nil {
@@ -272,6 +372,8 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 	return &res, nil
 }
 
+// An upgraded form of TxResponse with a few extra fields
+// and some helper methods.
 type ActionResponse struct {
 	TransactionHash types.Bytes  `json:"transactionHash"`
 	EnvelopeHash    types.Bytes  `json:"envelopeHash"`
@@ -356,6 +458,8 @@ func (a *ActionDataResponse) Print() (string, error) {
 	return out, nil
 }
 
+// Converts a transaction response into an ActionResponse which has a few
+// extra fields and some helper methods.
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	return &ActionResponse{
 		TransactionHash: r.TransactionHash,
@@ -366,6 +470,11 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	}
 }
 
+// Generates a human-readable, multi-line string detailing data about this
+// ActionResponse instance.
+// TODO: SUGGEST: This method doesn't actually print anything to system output.
+// Instead it prepares a string which is intended to be printed.
+// Consider renaming.
 func (a *ActionResponse) Print() (string, error) {
 	ok := a.Code == "0" || a.Code == ""
 
@@ -412,6 +521,8 @@ type JsonRpcError struct {
 
 func (e *JsonRpcError) Error() string { return e.Msg }
 
+// QUESTION: SUGGEST: This function's return is always an empty string.
+// Why return a string at all?
 func PrintJsonRpcError(err error) (string, error) {
 	var e jsonrpc2.Error
 	switch err := err.(type) {
@@ -436,6 +547,7 @@ func PrintJsonRpcError(err error) (string, error) {
 	}
 }
 
+// Prints the given error, or the given output if the error is nil.
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
 		cmd.PrintErrf("Error: %v\n", err)
@@ -553,7 +665,22 @@ func PrintJson(v interface{}) (string, error) {
 	return string(data), nil
 }
 
+// Generates a human-readable, multi-line string detailing data from the
+// given query response, followed by a list of all synthetic transactions
+// associated with the response.
+//
+// The information printed will not be about the query response itself,
+// but about the data it carries. For example, if we mail a letter to our
+// cousin in Wisconsin and they send us a reply, this function is the
+// equivalent of opening the response envelope and reading what they wrote
+// inside - not just reading what's on the envelope.
+//
+// TODO: SUGGEST: This function doesn't print anything. It prepares a string
+// for the purpose of printing later, but nothing is actually rendered to
+// system output. Consider renaming.
 func PrintChainQueryResponseV2(res *QueryResponse) (string, error) {
+	// WantJsonOutput can be set in the client's configuration.
+	// Default false.
 	if WantJsonOutput || res.Type == "dataEntry" {
 		return PrintJson(res)
 	}
@@ -585,7 +712,12 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	return out, nil
 }
 
+// Prints a human-readable expansion of all data returned from a query.
+// TODO: SUGGEST: This function does not print anything; instead it returns
+// a string which is intended to be printed. Consider renaming.
 func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
+	// WantJsonOutput can be set in the client's configuration.
+	// Default false.
 	if WantJsonOutput || res.Type == "dataSet" {
 		return PrintJson(res)
 	}
@@ -650,6 +782,11 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 	return out, nil
 }
 
+// Generates a human-readable, multi-line string detailing data about the
+// given query response, according to the response's type.
+// TODO: SUGGEST: This function does not output anything to the system
+// output, as the name might suggest; it instead creates a string which
+// is intended to be output later. Consider renaming.
 func outputForHumans(res *QueryResponse) (string, error) {
 	switch string(res.Type) {
 	case protocol.AccountTypeLiteTokenAccount.String():

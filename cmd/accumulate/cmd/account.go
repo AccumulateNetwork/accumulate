@@ -1,19 +1,33 @@
 package cmd
 
+/*
+	This file centers around creation and manipulation of token accounts via
+	the Cobra command "account" and its subcommands.
+	This file includes subcommand definitions for creation of data accounts,
+	but behavior for those commands is defined in ./data.go
+
+	This file is part of a client application.
+
+	For more information, see TODO: create database structure docs
+
+	TODO: Many of the functions in this file need renaming to make clear
+	whether they handle data accounts, token accounts, or both.
+*/
+
 import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 
+<<<<<<< HEAD
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/mdp/qrterminal"
+=======
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -158,12 +172,25 @@ var accountRestoreCmd = &cobra.Command{
 	},
 }
 
+// GetAccount begins execution of a request to retrieve the account at the
+// specified URL.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in var accountGetCmd.
 func GetAccount(url string) (string, error) {
+
+	// Get WHATEVER is at the provided URL. We'll check later to see what's
+	// actually there.
 	res, err := GetUrl(url)
 	if err != nil {
+		// Either the URL was invalid or there was nothing there.
 		return "", err
 	}
 
+<<<<<<< HEAD
+=======
+	// Check if what was retrieved is a token account or data account.
+>>>>>>> 7bdaa389 (Progress on commentaries.)
 	if res.Type != protocol.AccountTypeTokenAccount.String() && res.Type != protocol.AccountTypeLiteTokenAccount.String() &&
 		res.Type != protocol.AccountTypeDataAccount.String() && res.Type != protocol.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
@@ -172,16 +199,17 @@ func GetAccount(url string) (string, error) {
 	return PrintChainQueryResponseV2(res)
 }
 
-func QrAccount(s string) (string, error) {
-	u, err := url2.Parse(s)
+// Render the given Accumulate URL into a QR code.
+func QrAccount(subject string) (string, error) {
+	url, err := url2.Parse(subject)
 	if err != nil {
-		return "", fmt.Errorf("%q is not a valid Accumulate URL: %v\n", s, err)
+		return "", fmt.Errorf("%q is not a valid Accumulate URL: %v\n", subject, err)
 	}
 
-	b := bytes.NewBufferString("")
-	qrterminal.GenerateWithConfig(u.String(), qrterminal.Config{
+	buffer := bytes.NewBufferString("")
+	qrterminal.GenerateWithConfig(url.String(), qrterminal.Config{
 		Level:          qrterminal.M,
-		Writer:         b,
+		Writer:         buffer,
 		HalfBlocks:     true,
 		BlackChar:      qrterminal.BLACK_BLACK,
 		BlackWhiteChar: qrterminal.BLACK_WHITE,
@@ -190,19 +218,45 @@ func QrAccount(s string) (string, error) {
 		QuietZone:      2,
 	})
 
-	r, err := ioutil.ReadAll(b)
+	r, err := ioutil.ReadAll(buffer)
 	return string(r), err
 }
 
+<<<<<<< HEAD
 //CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
 func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, error) {
 	u, err := url2.Parse(origin)
+=======
+// CreateAccount begins creation of a token account.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in accountCreateTokenCmd or accountCreateaDataCmd. VERIFY:
+//
+// The second parameter is the first user-supplied argument from the CLI
+// and all subsequent arguments are arrayed in the third parameter.
+//
+// TODO: This function should be renamed to reflect that it only creates
+// token accounts.
+func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, error) {
+
+	// TODO: Perform an arg count check before proceeding, min and max.
+
+	// Resolve the first user-supplied argument to a lite account or
+	// ADI key page, which is indicated by a URL.
+	originURL, err := url2.Parse(origin)
+>>>>>>> 7bdaa389 (Progress on commentaries.)
 	if err != nil {
 		_ = cmd.Usage()
 		return "", err
 	}
 
+<<<<<<< HEAD
 	args, si, privKey, err := prepareSigner(u, args)
+=======
+	// Resolve the remaining user-supplied arguments to a signing key.
+	// Note that the args used to do this are removed from the arg list.
+	args, trxHeader, privKey, err := prepareSigner(originURL, args)
+>>>>>>> 7bdaa389 (Progress on commentaries.)
 	if err != nil {
 		return "", err
 	}
@@ -210,27 +264,55 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		return "", fmt.Errorf("not enough arguments")
 	}
 
-	accountUrl, err := url2.Parse(args[0])
+	// Aside from the args used to define a signing key, there must be at least
+	// two args supplied by the user: a URL at which to create the account and
+	// TODO:
+	if len(args) < 2 {
+		return "", fmt.Errorf("not enough arguments")
+	}
+
+	// Resolve the first remaining user-supplied argument to a validated
+	// Accumulate URL, which is the address at which to create a new account.
+	newAccountURL, err := url2.Parse(args[0])
 	if err != nil {
 		_ = cmd.Usage()
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
-	if u.Authority != accountUrl.Authority {
-		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
+	if originURL.Authority != newAccountURL.Authority {
+		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", newAccountURL.Authority, originURL.Authority)
+		// TODO: This requires some architecture explaining. Create a document doing that, and point to it here.
 	}
-	tok, err := url2.Parse(args[1])
+
+	// Resolve the second remaining user-supplied argument to a validated
+	// Accumulate URL.
+	tokenAccountURL, err := url2.Parse(args[1])
 	if err != nil {
 		return "", fmt.Errorf("invalid token url")
 	}
 
+<<<<<<< HEAD
 	var keybook *url2.URL
 	if len(args) > 2 {
 		keybook, err = url2.Parse(args[2])
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
+=======
+	// If the user provided three or more arguments in addition to what was
+	// required to resolve a signing key, then try to read the third argument
+	// to a keybook URL.
+	var keybook string
+	if len(args) >= 3 {
+		keyBookURL, err := url2.Parse(args[2])
+		if err != nil {
+			return "", fmt.Errorf("invalid key book url")
+		}
+		keybook = keyBookURL.String()
+>>>>>>> 7bdaa389 (Progress on commentaries.)
 	}
+	// else { keybook = "" }
 
+<<<<<<< HEAD
 	//make sure this is a valid token account
 	req := new(api.GeneralQuery)
 	req.Url = tok
@@ -249,6 +331,32 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.Scratch = flagAccount.Scratch
 
 	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
+=======
+	// Create a query request. We will be asking what, if anything, exists at
+	// the user-supplied token account URL.
+	queryRequest := new(api.GeneralQuery)
+	queryRequest.Url = tokenAccountURL.String()
+	queryResponse := new(api.ChainQueryResponse)
+	token := protocol.TokenIssuer{}
+	queryResponse.Data = &token
+	// Execute the query.
+	err = Client.RequestAPIv2(context.Background(), "query", queryRequest, queryResponse)
+	// Determine what is actually at the token account URL. We expect a token
+	// account.
+	if err != nil || queryResponse.Type != protocol.AccountTypeTokenIssuer.String() {
+		return "", fmt.Errorf("invalid token type %v", err)
+	}
+
+	// Assemble all the data we've gathered so far.
+	newAccount := protocol.CreateTokenAccount{}
+	newAccount.Url = newAccountURL.String()
+	newAccount.TokenUrl = tokenAccountURL.String()
+	newAccount.KeyBookUrl = keybook
+	newAccount.Scratch = flagAccount.Scratch
+
+	// Send the account creation request out to the Accumulate network.
+	res, err := dispatchTxRequest("create-token-account", &newAccount, nil, originURL, trxHeader, privKey)
+>>>>>>> 7bdaa389 (Progress on commentaries.)
 	if err != nil {
 		return "", err
 	}

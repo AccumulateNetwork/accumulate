@@ -1,5 +1,24 @@
 package cmd
 
+/*
+	This file centers around creation and manipulation ADI's via the Cobra
+	command "adi" and its subcommands.
+
+	This file is part of a client application.
+
+	ADI stands for Accumulate Digital Identity.
+	===========================================
+
+	An ADI represents a single entity (a user) which has zero or more assets.
+	Note that nothing stops a single entity from having more than one ADI, but
+	Accumulate would neither know nor care about that.
+
+	All Accumulate assets (accounts, keys, etc), except for lite accounts, are
+	associated with exactly one	ADI.
+
+	For more information, see TODO: create database structure docs
+*/
+
 import (
 	"context"
 	"encoding/json"
@@ -68,31 +87,83 @@ var adiCreateCmd = &cobra.Command{
 	},
 }
 
+var adiGetCmd = &cobra.Command{
+	Use:   "get [url]",
+	Short: "Get existing ADI by URL",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GetADI(args[0])
+		printOutput(cmd, out, err)
+	},
+}
+var adiListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Show all ADIs", // VERIFY:
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		out, err := ListADIs()
+		printOutput(cmd, out, err)
+	},
+}
+var adiDirectoryCmd = &cobra.Command{
+	Use:   "directory [url] [from] [to]",
+	Short: "Get directory of URL's associated with an ADI with starting index and number of directories to receive",
+	Args:  cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GetAdiDirectory(args[0], args[1], args[2])
+		printOutput(cmd, out, err)
+	},
+}
+var adiCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create new ADI",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) < 3 {
+			PrintADICreate()
+			return
+		}
+		out, err := NewADI(args[0], args[1:])
+		printOutput(cmd, out, err)
+	},
+}
+
 func PrintADICreate() {
 	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite token account")
 	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
+// GetAdiDirectory begins execution of a query for everything that is stored
+// in the specified directory.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in var adiDirectoryCmd.
+//
+// Returns the data at the specified URL.
+// TODO: Deep dive into database indexes required: does this fail
+// if the given URL points to something that is not a directory?
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
-	u, err := url2.Parse(origin)
+	originURL, err := url2.Parse(origin)
+	if err != nil {
+		return "", fmt.Errorf("invalid Accumulate URL")
+	}
 
-	st, err := strconv.ParseInt(start, 10, 64)
+	startVal, err := strconv.ParseInt(start, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid start value")
 	}
 
-	ct, err := strconv.ParseInt(count, 10, 64)
+	countVal, err := strconv.ParseInt(count, 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("invalid count value")
 	}
-	if ct < 1 {
+	if countVal < 1 {
 		return "", fmt.Errorf("count must be greater than zero")
 	}
 
 	params := api2.DirectoryQuery{}
-	params.Url = u
-	params.Start = uint64(st)
-	params.Count = uint64(ct)
+	params.Url = originURL.String()
+	params.Start = uint64(startVal)
+	params.Count = uint64(countVal)
 	params.Expand = true
 
 	data, err := json.Marshal(&params)
@@ -112,6 +183,14 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	return PrintMultiResponse(&res)
 }
 
+// GetAdi begins execution of a query for all information about the specified
+// ADI.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in var adiGetCmd.
+//
+// Verifies that an ADI resides at the given Accumulate URL and prints
+// everything about it.
 func GetADI(url string) (string, error) {
 	res, err := GetUrl(url)
 	if err != nil {
@@ -125,35 +204,43 @@ func GetADI(url string) (string, error) {
 	return PrintChainQueryResponseV2(res)
 }
 
-func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
-	var si *transactions.Header
+// NewADI() redirects here after validating the origin URL.
+// SUGGEST: These functions don't appear to need to be separate.
+func NewADIFromADISigner(originURL *url2.URL, args []string) (string, error) {
+
+	// TODO: Perform arg count check before proceeding, min and max.
+
+	var trxHeader *transactions.Header
 	var privKey []byte
 	var err error
 
-	args, si, privKey, err = prepareSigner(origin, args)
+	args, trxHeader, privKey, err = prepareSigner(originURL, args)
 	if err != nil {
 		return "", err
 	}
 
-	var adiUrl string
-	var book string
-	var page string
+	var newbornURLstring string
+	var newbornBookName string
+	var newbornPageName string
 
-	//at this point :
-	//args[0] should be the new adi you are creating
-	//args[1] should be the public key you are assigning to the adi
-	//args[2] is an optional setting for the key book name
-	//args[3] is an optional setting for the key page name
-	//Note: if args[2] is not the keybook, the keypage also cannot be specified.
-	if len(args) == 0 {
-		return "", fmt.Errorf("insufficient number of command line arguments")
-	}
+	//
+	// Expected args at this point:
+	//
+	// args[0] - The URL for the new ADI being created.
+	// args[1] - The public being assigned to the new ADI.
+	//
+	// args[2] - Optional key book name.
+	// args[3] - Optional key page name, requires arg[2].
+	//
 
-	if len(args) > 1 {
-		adiUrl = args[0]
-	}
 	if len(args) < 2 {
 		return "", fmt.Errorf("invalid number of arguments")
+	}
+
+	newbornURLstring = args[0]
+	newbornURL, err := url2.Parse(newbornURLstring)
+	if err != nil {
+		return "", fmt.Errorf("invalid adi url %s, %v", newbornURLstring, err)
 	}
 
 	pubKey, err := resolvePublicKey(args[1])
@@ -161,30 +248,49 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", err
 	}
 
+	// If the user supplied at least 3 arguments then the third is the
+	// book name.
 	if len(args) > 2 {
-		book = args[2]
+		// TODO: SUGGEST: QUESTION: VULNERABILITY:
+		// Do we want to sanitize book name inputs?
+		// Are we sanitizing them on the server side?
+		// Are there no invalid names? What if the user provides a URL?
+		newbornBookName = args[2]
 	} else {
-		book = "book0"
+		// TODO: SUGGEST: Shouldn't we either:
+		//   A. Make this a config option
+		//   B. Show in command usage that this is the default
+		//   C. Explicitly state during execution that we're using a default
+		//      name
+		//
+		//   Recommend option C.
+		newbornBookName = "book0"
 	}
 
 	if len(args) > 3 {
-		page = args[3]
+		// TODO: SUGGEST: QUESTION: VULNERABILITY:
+		// Do we want to sanitize page name inputs?
+		// Are we sanitizing them on the server side?
+		// Are there no invalid names? What if the user provides a URL?
+		newbornPageName = args[3]
 	} else {
-		page = "page0"
+		// TODO: SUGGEST: Shouldn't we either:
+		//   A. Make this a config option
+		//   B. Show in command usage that this is the default
+		//   C. Explicitly state during execution that we're using a default
+		//      name
+		//
+		//   Recommend option C.
+		newbornPageName = "page0"
 	}
 
-	u, err := url2.Parse(adiUrl)
-	if err != nil {
-		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
-	}
+	birthRequest := protocol.CreateIdentity{}
+	birthRequest.Url = newbornURL.Authority
+	birthRequest.PublicKey = pubKey
+	birthRequest.KeyBookName = newbornBookName
+	birthRequest.KeyPageName = newbornPageName
 
-	idc := protocol.CreateIdentity{}
-	idc.Url = u
-	idc.PublicKey = pubKey
-	idc.KeyBookName = book
-	idc.KeyPageName = page
-
-	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
+	res, err := dispatchTxRequest("create-adi", &birthRequest, nil, originURL, trxHeader, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +313,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	//todo: turn around and query the ADI and store the results.
-	err = Db.Put(BucketAdi, []byte(u.Authority), pubKey)
+	err = Db.Put(BucketAdi, []byte(newbornURL.Authority), pubKey)
 	if err != nil {
 		return "", fmt.Errorf("DB: %v", err)
 	}
@@ -215,17 +321,33 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	return out, nil
 }
 
-// NewADI create a new ADI from a sponsored account.
+// NewADI begins execution of a request to create a new ADI.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in PrintADICreate().
 func NewADI(origin string, params []string) (string, error) {
 
-	u, err := url2.Parse(origin)
+	// Before doing ANYTHING else, check that the origin URL is valid.
+	originURL, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
 	}
 
-	return NewADIFromADISigner(u, params[:])
+	return NewADIFromADISigner(originURL, params[:])
 }
 
+// ListADIs begins execution of a query for all ADI's in the local memory
+// database.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in var adiListCmd.
+//
+// Prepares a human-readable, multi-line list of all ADIs which exist
+// in the memory database. VERIFY:
+//
+// TODO: SUGGEST: This function doesn't actually list anything to system
+// output. Instead it prepares a string which is intended to be printed
+// later. Consider renaming.
 func ListADIs() (string, error) {
 	b, err := Db.GetBucket(BucketAdi)
 	if err != nil {
@@ -239,7 +361,7 @@ func ListADIs() (string, error) {
 			out += fmt.Sprintf("%s\t:\t%x \n", v.Key, v.Value)
 		} else {
 			lab, err := FindLabelFromPubKey(v.Value)
-			if err != nil {
+			if err != nil { // TODO: VERIFY: I think these cases are backwards.
 				out += fmt.Sprintf("%v\t:\t%x \n", u, v.Value)
 			} else {
 				out += fmt.Sprintf("%v\t:\t%s \n", u, lab)

@@ -214,9 +214,9 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 	}
 }
 
-func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
+func (q *queryDirect) QueryDirectory(directoryURL *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	req := new(query.RequestDirectory)
-	req.Url = types.String(u.String())
+	req.Url = types.String(directoryURL.String())
 	req.Start = pagination.Start
 	req.Limit = pagination.Count
 	req.ExpandChains = opts.Expand

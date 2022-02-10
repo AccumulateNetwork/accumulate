@@ -70,7 +70,7 @@ func (b *Bucket) Delete(key []byte) (err error) {
 type DB interface {
 	Close() error                                            // Returns an error if the close fails
 	InitDB(filepath string) error                            // Sets up the database, returns error if it fails
-	Get(bucket []byte, key []byte) (value []byte, err error) // Get key from database, returns ErrNotFound if the key is not found
+	Get(bucket []byte, key []byte) (value []byte, err error) // Get key from database. Returns nil and an error if the key is not found
 	Put(bucket []byte, key []byte, value []byte) error       // Put the value in the database, throws an error if fails
 	GetBucket(bucket []byte) (*Bucket, error)                // GetBucket retrieves all the data contained within a bucket
 	Delete(bucket []byte, key []byte) error                  // Delete will remove a key/value pair from the bucket

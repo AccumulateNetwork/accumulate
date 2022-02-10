@@ -43,7 +43,19 @@ func New(server string) (*Client, error) {
 	return c, nil
 }
 
-// RequestAPIv2 makes a JSON RPC request to the Accumulate API v2.
+// Send a transaction or query request to the API server.
+// This is the request's final departure into the JSON-RPC-2
+// black box, from which it proceeds to a remote host inside the
+// Accumulate network.
+//
+// Execution resumes, on the server side, at
+// /internal/api/v2/jrpc_execute.go#execute with a protocol
+// selected from
+// /internal/api/v2/api_gen.go
+// according to the provided action.
+// TODO: Queries appear to follow a slightly different trace.
+//
+// The JSON-RPC-2 response is returned verbatim.
 func (c *Client) RequestAPIv2(ctx context.Context, method string, params, result interface{}) error {
 	if c.DebugRequest {
 		fmt.Println("accumulated:", c.serverV2)

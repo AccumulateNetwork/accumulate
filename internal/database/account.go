@@ -175,6 +175,7 @@ func (r *Account) ReadChain(name string) (*Chain, error) {
 }
 
 // Index returns a value that can read or write an index value.
+// This is one of the least helpful comments I've ever read.
 func (r *Account) Index(key ...interface{}) *Value {
 	return &Value{r.batch, r.key.Index(key...)}
 }

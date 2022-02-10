@@ -393,17 +393,23 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	return &qr, nil
 }
 
+// Gets entries from the directory indicated by the given chain ID. The set of
+// returned entries begins at index start and is of length
+// Min(limit , available-start).
 func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte, start uint64, limit uint64) (*protocol.DirectoryQueryResult, error) {
-	md, err := loadDirectoryMetadata(batch, chainId)
+	metaData, err := loadDirectoryMetadata(batch, chainId)
 	if err != nil {
 		return nil, err
 	}
 
+	// SUGGEST:
+	// count := Min(limit,metaData.Count - start)
+	// From start we cannot count past the limit or the end of the metaData.
 	count := limit
-	if start+count > md.Count {
-		count = md.Count - start
+	if start+count > metaData.Count {
+		count = metaData.Count - start
 	}
-	if count > md.Count { // when uint64 0-x is really big number
+	if count > metaData.Count { // when uint64 0-x is really big number
 		count = 0
 	}
 
@@ -416,7 +422,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
 	}
-	resp.Total = md.Count
+	resp.Total = metaData.Count
 
 	return resp, nil
 }
@@ -652,6 +658,8 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 	return &qr, nil
 }
 
+// This appears to be the entry point from Tendermint for database query
+// requests. TODO: VERIFY: verify this and figure out exactly what lies between.
 func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
 	batch := m.DB.Begin()
 	defer batch.Discard()
@@ -709,34 +717,41 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
 		}
+
+	// Querying a directory by URL is an alias for querying the directory by
+	// its chain ID as derived from the URL itself.
+	// If request option ExpandChains is true then instead of a list of URLs
+	// the data stored at those URLs is returned.
 	case types.QueryTypeDirectoryUrl:
-		chr := query.RequestDirectory{}
-		err := chr.UnmarshalBinary(q.Content)
+		request := query.RequestDirectory{}
+		err := request.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
-		u, err := url.Parse(*chr.Url.AsString())
+		requestURL, err := url.Parse(*request.Url.AsString())
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", request.Url)}
 		}
-		dir, err := m.queryDirectoryByChainId(batch, u.AccountID(), chr.Start, chr.Limit)
+		dirResult, err := m.queryDirectoryByChainId(batch, requestURL.AccountID(), request.Start, request.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 		}
 
-		if chr.ExpandChains {
-			entries, err := m.expandChainEntries(batch, dir.Entries)
+		// Expand URLs to data stored at at those URLs.
+		if request.ExpandChains {
+			entries, err := m.expandChainEntries(batch, dirResult.Entries)
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 			}
-			dir.ExpandedEntries = entries
+			dirResult.ExpandedEntries = entries
 		}
 
 		k = []byte("directory")
-		v, err = dir.MarshalBinary()
+		v, err = dirResult.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, request.Url)}
 		}
+
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
 		err := chr.UnmarshalBinary(q.Content)
@@ -855,6 +870,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 	return k, v, err
 }
 
+// Expand the given list of Accumulate URLs to descriptions of what those URLs
+// actually represent.
 func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) ([]*state.Object, error) {
 	expEntries := make([]*state.Object, len(entries))
 	for i, entry := range entries {
@@ -868,6 +885,7 @@ func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) (
 	return expEntries, nil
 }
 
+// Expand the given URL to a description of what is stored there.
 func (m *Executor) expandChainEntry(batch *database.Batch, entryUrl string) (*state.Object, error) {
 	u, err := url.Parse(entryUrl)
 	if err != nil {
