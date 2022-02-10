@@ -129,16 +129,22 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
-func resolvePrivateKey(s string) ([]byte, error) {
-	pub, priv, err := parseKey(s)
+// Resolves the given string into a private key. Valid inputs include are a
+// hex key verbatim, a token account label, or a filename.
+func resolvePrivateKey(subject string) ([]byte, error) {
+
+	// parseKey might return a private key, or might not...
+	pub, priv, err := parseKey(subject)
 	if err != nil {
 		return nil, err
 	}
 
+	// ...if it gave us a private key then we're done...
 	if priv != nil {
 		return priv, nil
 	}
 
+	// ...otherwise it gave us a public key so look it up.
 	return LookupByPubKey(pub)
 }
 
@@ -151,49 +157,62 @@ func resolvePublicKey(s string) ([]byte, error) {
 	return pub, nil
 }
 
-func parseKey(s string) (pubKey, privKey []byte, err error) {
-	pubKey, err = pubKeyFromString(s)
+// Resolve keys from the given public key string:
+// 1. Returns public key, nil, nil if given a valid hex key string
+// 2. Returns public key, private key, nil if given a valid token account label
+// 3. Returns public key, private key, nil if given a valid file path
+// 4. Returns nil, nil, error if a key cannot be resolved.
+func parseKey(subject string) (pubKey, privKey []byte, err error) {
+
+	// First, try to decode the string as a verbatim hex key.
+	pubKey, err = pubKeyFromString(subject)
 	if err == nil {
 		return pubKey, nil, nil
 	}
 
-	privKey, err = LookupByLabel(s)
+	// Try to interpret the string as a token account label.
+	privKey, err = LookupByLabel(subject)
 	if err == nil {
 		// Assume ED25519
 		return privKey[32:], privKey, nil
 	}
 
-	b, err := ioutil.ReadFile(s)
+	// Try to read key data from the file at the specified path.
+	fileContents, err := ioutil.ReadFile(subject)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
+		return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", subject)
 	}
 
 	var pvkey privval.FilePVKey
-	if tmjson.Unmarshal(b, &pvkey) == nil {
+	if tmjson.Unmarshal(fileContents, &pvkey) == nil {
 		return pvkey.PubKey.Bytes(), pvkey.PrivKey.Bytes(), nil
 	}
 
-	return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
+	return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", subject)
 }
 
-func pubKeyFromString(s string) ([]byte, error) {
+// Decodes the provided string of hex characters into a public key.
+// Does not check that the key actually exists.
+func pubKeyFromString(subject string) ([]byte, error) {
 	var pubKey types.Bytes32
-	if len(s) != 64 {
+	if len(subject) != 64 {
 		return nil, fmt.Errorf("invalid public key or wallet key name")
 	}
-	i, err := hex.Decode(pubKey[:], []byte(s))
+	bytesDecoded, err := hex.Decode(pubKey[:], []byte(subject))
 
 	if err != nil {
 		return nil, err
 	}
 
-	if i != 32 {
+	if bytesDecoded != 32 {
 		return nil, fmt.Errorf("invalid public key")
 	}
 
 	return pubKey[:], nil
 }
 
+// Returns the private key for the token account associated with the given
+// label.
 func LookupByLabel(label string) ([]byte, error) {
 	label, _ = LabelForLiteTokenAccount(label)
 
@@ -204,23 +223,24 @@ func LookupByLabel(label string) ([]byte, error) {
 	return LookupByPubKey(pubKey)
 }
 
-// LabelForLiteTokenAccount returns the identity of the token account if label
-// is a valid token account URL. Otherwise, LabelForLiteTokenAccount returns the
-// original value.
+// Resolves the hostname for the provided token account URL:
+// Returns the hostname and TRUE if successful.
+// Returns the original input and FALSE if unsuccessful.
 func LabelForLiteTokenAccount(label string) (string, bool) {
-	u, err := url.Parse(label)
+	url, err := url.Parse(label)
 	if err != nil {
 		return label, false
 	}
 
-	key, _, err := protocol.ParseLiteTokenAddress(u)
+	key, _, err := protocol.ParseLiteTokenAddress(url)
 	if key == nil || err != nil {
 		return label, false
 	}
 
-	return u.Hostname(), true
+	return url.Hostname(), true
 }
 
+// Returns the private key for the given public key, or nil and an error.
 func LookupByPubKey(pubKey []byte) ([]byte, error) {
 	return Db.Get(BucketKeys, pubKey)
 }

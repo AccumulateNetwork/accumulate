@@ -34,6 +34,8 @@ type Values = url.Values
 // which case `acc://` will be added, but if present it must be `acc`. The
 // hostname must be non-empty. RawPath, ForceQuery, and RawFragment are not
 // preserved.
+//
+// Returns nil and an error on failure.
 func Parse(s string) (*URL, error) {
 	u, err := url.Parse(s)
 	if err == nil && u.Scheme == "" {
