@@ -97,6 +97,9 @@ TransactionType:
   UpdateKeyPage:
     value: 0x0F
     description: adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction
+  UpdateManager:
+    value: 0x10
+    description: updates manager for the existing chain
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
@@ -136,9 +139,6 @@ TransactionType:
   InternalTransactionsSent:
     value: 0x63
     description: notifies the executor of synthetic transactions that have been sent
-  UpdateManager:
-    value: 0x40
-    description: updates manager for the existing chain
 
 AccountType:
   Unknown:
