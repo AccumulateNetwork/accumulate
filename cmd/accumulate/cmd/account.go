@@ -167,6 +167,7 @@ func GetAccount(url string) (string, error) {
 		return "", err
 	}
 
+	// Check if what was retrieved is a token account or data account.
 	if res.Type != protocol.AccountTypeTokenAccount.String() && res.Type != protocol.AccountTypeLiteTokenAccount.String() &&
 		res.Type != protocol.AccountTypeDataAccount.String() && res.Type != protocol.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
@@ -270,9 +271,12 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	queryRequest.Url = tokenAccountURL.String()
 	queryResponse := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
-	resp.Data = &token
-	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
-	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
+	// Execute the query.
+	queryResponse.Data = &token
+	// Determine what is actually at the token account URL. We expect a token
+	// account.
+	err = Client.RequestAPIv2(context.Background(), "query", queryRequest, queryResponse)
+	if err != nil || queryResponse.Type != protocol.AccountTypeTokenIssuer.String() {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
