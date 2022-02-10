@@ -1,5 +1,17 @@
 package cmd
 
+/*
+	ADI stands for Accumulate Digital Identity.
+	===========================================
+
+	An ADI represents a single entity (a user) which has zero or more assets.
+	Note that nothing stops a single entity from having more than one ADI, but
+	Accumulate would neither know nor care about that.
+
+	All Accumulate assets (accounts, keys, etc), except for lite accounts, are
+	associated with exactly one	ADI.
+*/
+
 import (
 	"context"
 	"encoding/json"

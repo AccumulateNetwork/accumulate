@@ -28,42 +28,64 @@ var creditsCmd = &cobra.Command{
 
 func PrintCredits() {
 	fmt.Println("  accumulate credits [origin lite account] [lite account or key page url] [amount] 		Send credits using a lite account or adi key page to another lite account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key or key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
 }
 
+// AddCredits begins execution of a transaction sending credits from one
+// specified account to another.
+//
+// This method is called when a user enters the appropriate command from their
+// CLI as defined in PrintCredits().
+//
+// The first parameter is the first user-supplied argument from the CLI
+// and all subsequent arguments are arrayed in the second parameter.
 func AddCredits(origin string, args []string) (string, error) {
-	u, err := url2.Parse(origin)
+
+	// Resolve the first user-supplied argument to a lite account or
+	// ADI key page, which is indicated by a URL.
+	originURL, err := url2.Parse(origin)
 	if err != nil {
 		PrintCredits()
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	// Resolve the remaining user-supplied arguments to a signing key.
+	// Note that the args used to do this are removed from the arg list.
+	args, trxHeader, privKey, err := prepareSigner(originURL, args)
 	if err != nil {
 		return "", err
 	}
 
+	// Check how many args were NOT used by prepareSigner() to resolve a
+	// signing key. There must be at least two: a target and an amount.
 	if len(args) < 2 {
 		return "", err
 	}
 
-	u2, err := url2.Parse(args[0])
+	// The target must be specified by a URL in a single arg.
+	targetURL, err := url2.Parse(args[0])
 	if err != nil {
 		return "", err
 	}
 
-	amt, err := strconv.ParseFloat(args[1], 64)
+	// Read the amount of credits for this transaction.
+	amount, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
 
-	credits := protocol.AddCredits{}
-	credits.Recipient = u2.String()
-	credits.Amount = uint64(amt * protocol.CreditPrecision)
+	payload := protocol.AddCredits{}
+	payload.Recipient = targetURL.String()
+	payload.Amount = uint64(amount * protocol.CreditPrecision)
 
-	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
+	// Send the transaction request.
+	res, err := dispatchTxRequest("add-credits", &payload, nil, originURL, trxHeader, privKey)
 	if err != nil {
 		return "", err
 	}
+
+	// Return the response from transaction execution.
+	// SUGGEST: Print() doesn't actually print anything to system output,
+	// it returns a String. Consider renaming.
 	return ActionResponseFrom(res).Print()
 }
