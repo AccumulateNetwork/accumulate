@@ -142,6 +142,17 @@ func (c *Client) ExecuteIssueTokens(ctx context.Context, req *api.TxRequest) (*a
 	return &resp, nil
 }
 
+func (c *Client) ExecuteRemoveManager(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "remove-manager", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 

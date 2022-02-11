@@ -148,3 +148,8 @@ ExecuteBurnTokens:
   kind: execute
   rpc: burn-tokens
   input: BurnTokens
+
+ExecuteRemoveManager:
+  kind: execute
+  rpc: remove-manager
+  input: RemoveManager

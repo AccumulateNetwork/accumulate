@@ -421,3 +421,7 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
+
+RemoveManager:
+  kind: tx
+  fields:
