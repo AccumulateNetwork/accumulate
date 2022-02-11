@@ -277,7 +277,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelo
 		return fmt.Errorf("invalid signature(s)")
 	}
 
-	// // TODO Do we need this check? It appears to be causing issues.
+	// // TODO Do we need this check? It appears to be causing issues and we can't guarantee that the governor sends transactions only once.
 	// // Check the envelope
 	// _, err := batch.Transaction(env.EnvHash()).GetState()
 	// switch {

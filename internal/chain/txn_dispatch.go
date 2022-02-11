@@ -48,7 +48,7 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
-	subnet := d.Network.ID
+	subnet := d.Network.LocalSubnetID
 	d.batches[subnet] = append(d.batches[subnet], tx...)
 }
 

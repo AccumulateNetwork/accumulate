@@ -73,6 +73,7 @@ docker buildx:
 build images:
   stage: build
   needs: [ 'docker buildx' ]
+  tags: [ docker, linux ]
   image: docker:20
   services:
     - name: docker:20-dind
@@ -199,6 +200,7 @@ deploy 4/4:
 validate docker:
   stage: validate
   needs: ['build images']
+  tags: [docker, linux]
   image: docker
   services: ['docker:dind']
   variables:
