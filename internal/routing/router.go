@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	core "github.com/tendermint/tendermint/rpc/core/types"
-	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
@@ -26,14 +24,6 @@ type Router interface {
 	Route(account *url.URL) (string, error)
 	Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
 	Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*ResponseSubmit, error)
-}
-
-// Client is a subset of from TM/rpc/client.ABCIClient.
-type Client interface {
-	ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
-	CheckTx(ctx context.Context, tx tm.Tx) (*core.ResultCheckTx, error)
-	BroadcastTxAsync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
-	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 }
 
 // ResponseSubmit is the response from a call to Submit.
