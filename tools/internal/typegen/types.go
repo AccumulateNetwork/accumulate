@@ -89,4 +89,5 @@ type Type map[string]*TypeValue
 type TypeValue struct {
 	Value       interface{}
 	Description string
+	Aliases     []string
 }

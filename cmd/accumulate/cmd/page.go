@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var pageCmd = &cobra.Command{
@@ -88,7 +87,7 @@ func GetKeyPage(url string) (*QueryResponse, *protocol.KeyPage, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.AccountTypeKeyPage.String() {
+	if res.Type != protocol.AccountTypeKeyPage.String() {
 		return nil, nil, fmt.Errorf("expecting key page but received %v", res.Type)
 	}
 

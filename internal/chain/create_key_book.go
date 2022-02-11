@@ -15,7 +15,7 @@ func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeIdentity, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyBook)
@@ -80,6 +80,9 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal state: %v", err)
 		}
+	}
+	if body.Manager != "" {
+		book.ManagerKeyBook = body.Manager
 	}
 
 	err = scc.Create(book)

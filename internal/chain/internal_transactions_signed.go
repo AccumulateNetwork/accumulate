@@ -22,7 +22,7 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.En
 
 	ledger, ok := st.Origin.(*protocol.InternalLedger)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeInternalLedger, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.Header().Type)
 	}
 
 	signatures := map[[32]byte]*transactions.ED25519Sig{}
