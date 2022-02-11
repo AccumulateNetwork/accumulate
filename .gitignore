@@ -3,9 +3,10 @@ accumulated
 accumulate
 !*/
 
-# Binaries
+# Binaries and test data
 *.exe
 *.test
+.testdata
 
 # Temp and log files
 *~
