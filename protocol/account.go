@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding"
+	"encoding/json"
 	"fmt"
 )
 
@@ -60,4 +61,24 @@ func UnmarshalAccount(data []byte) (Account, error) {
 	}
 
 	return chain, nil
+}
+
+func UnmarshalAccountJSON(data []byte) (Account, error) {
+	var typ struct{ Type AccountType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	acnt, err := NewAccount(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
 }
