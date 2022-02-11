@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // bookCmd are the commands associated with managing key books
@@ -75,7 +74,7 @@ func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.AccountTypeKeyBook.String() {
+	if res.Type != protocol.AccountTypeKeyBook.String() {
 		return nil, nil, fmt.Errorf("expecting key book but received %v", res.Type)
 	}
 

@@ -26,7 +26,7 @@ func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
