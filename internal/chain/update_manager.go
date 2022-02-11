@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"net/url"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -22,12 +21,8 @@ func (UpdateManager) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	if st.Origin.Header().ManagerKeyBook != "" {
 		return nil, fmt.Errorf("manager keybook already assigned")
 	}
-	managerUrl, err := url.Parse(body.ManagerKeyBook)
-	if err != nil {
-		return nil, err
-	}
 	chain := st.Origin
-	chain.Header().ManagerKeyBook = managerUrl.String()
+	chain.Header().ManagerKeyBook = body.ManagerKeyBook.String()
 	st.Update(chain)
 	return nil, nil
 }

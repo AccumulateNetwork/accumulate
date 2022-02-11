@@ -397,7 +397,7 @@ type UpdateKeyPage struct {
 }
 
 type UpdateManager struct {
-	ManagerKeyBook string `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
+	ManagerKeyBook *url.URL `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
 }
 
 type WriteData struct {
@@ -1662,7 +1662,7 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 }
 
 func (v *UpdateManager) Equal(u *UpdateManager) bool {
-	if !(v.ManagerKeyBook == u.ManagerKeyBook) {
+	if !(v.ManagerKeyBook.Equal(u.ManagerKeyBook)) {
 		return false
 	}
 
@@ -2641,7 +2641,7 @@ func (v *UpdateManager) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(TransactionTypeUpdateManager.ID())
 
-	n += encoding.StringBinarySize(v.ManagerKeyBook)
+	n += v.ManagerKeyBook.BinarySize()
 
 	return n
 }
@@ -3792,7 +3792,11 @@ func (v *UpdateManager) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(TransactionTypeUpdateManager.ID()))
 
-	buffer.Write(encoding.StringMarshalBinary(v.ManagerKeyBook))
+	if b, err := v.ManagerKeyBook.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding ManagerKeyBook: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -5775,12 +5779,11 @@ func (v *UpdateManager) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+	v.ManagerKeyBook = new(url.URL)
+	if err := v.ManagerKeyBook.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding ManagerKeyBook: %w", err)
-	} else {
-		v.ManagerKeyBook = x
 	}
-	data = data[encoding.StringBinarySize(v.ManagerKeyBook):]
+	data = data[v.ManagerKeyBook.BinarySize():]
 
 	return nil
 }

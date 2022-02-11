@@ -426,4 +426,6 @@ UpdateManager:
   kind: tx
   fields:
     - name: ManagerKeyBook
-      type: string
+      type: url.URL
+      pointer: true
+      marshal-as: reference
