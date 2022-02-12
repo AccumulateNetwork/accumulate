@@ -173,7 +173,7 @@ func (tx *SyntheticCreateChain) Update(chains ...Account) error {
 
 func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {
 	recipient := new(TokenRecipient)
-	recipient.Url = to.String()
+	recipient.Url = to
 	recipient.Amount = *amount
 	tx.To = append(tx.To, recipient)
 }

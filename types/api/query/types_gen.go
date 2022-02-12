@@ -26,8 +26,8 @@ type MultiResponse struct {
 
 type RequestKeyPageIndex struct {
 	fieldsSet []bool
-	Url       string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Key       []byte   `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 }
 
 type ResponseByTxId struct {
@@ -58,9 +58,9 @@ type ResponseChainRange struct {
 
 type ResponseKeyPageIndex struct {
 	fieldsSet []bool
-	KeyBook   string `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
-	KeyPage   string `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Index     uint64 `json:"index" form:"index" query:"index" validate:"required"`
+	KeyBook   *url.URL `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
+	KeyPage   *url.URL `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
 }
 
 type ResponsePending struct {
@@ -85,7 +85,7 @@ type TxReceipt struct {
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
-	if !(v.Url == u.Url) {
+	if !((v.Url).Equal(u.Url)) {
 		return false
 	}
 	if !(bytes.Equal(v.Key, u.Key)) {
@@ -173,10 +173,10 @@ func (v *ResponseChainRange) Equal(u *ResponseChainRange) bool {
 }
 
 func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
-	if !(v.KeyBook == u.KeyBook) {
+	if !((v.KeyBook).Equal(u.KeyBook)) {
 		return false
 	}
-	if !(v.KeyPage == u.KeyPage) {
+	if !((v.KeyPage).Equal(u.KeyPage)) {
 		return false
 	}
 	if !(v.Index == u.Index) {
@@ -314,8 +314,8 @@ func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Url) == 0) {
-		writer.WriteString(1, v.Url)
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
 	}
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(2, v.Key)
@@ -330,7 +330,7 @@ func (v *RequestKeyPageIndex) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
-	} else if len(v.Url) == 0 {
+	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -561,11 +561,11 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.KeyBook) == 0) {
-		writer.WriteString(1, v.KeyBook)
+	if !(v.KeyBook == nil) {
+		writer.WriteUrl(1, v.KeyBook)
 	}
-	if !(len(v.KeyPage) == 0) {
-		writer.WriteString(2, v.KeyPage)
+	if !(v.KeyPage == nil) {
+		writer.WriteUrl(2, v.KeyPage)
 	}
 	writer.WriteUint(3, v.Index)
 
@@ -578,12 +578,12 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field KeyBook is missing")
-	} else if len(v.KeyBook) == 0 {
+	} else if v.KeyBook == nil {
 		errs = append(errs, "field KeyBook is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field KeyPage is missing")
-	} else if len(v.KeyPage) == 0 {
+	} else if v.KeyPage == nil {
 		errs = append(errs, "field KeyPage is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -798,7 +798,7 @@ func (v *RequestKeyPageIndex) UnmarshalBinary(data []byte) error {
 func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
+	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
 	}
 	if x, ok := reader.ReadBytes(2); ok {
@@ -914,10 +914,10 @@ func (v *ResponseKeyPageIndex) UnmarshalBinary(data []byte) error {
 func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
+	if x, ok := reader.ReadUrl(1); ok {
 		v.KeyBook = x
 	}
-	if x, ok := reader.ReadString(2); ok {
+	if x, ok := reader.ReadUrl(2); ok {
 		v.KeyPage = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
@@ -1005,8 +1005,8 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url string  `json:"url,omitempty"`
-		Key *string `json:"key,omitempty"`
+		Url *url.URL `json:"url,omitempty"`
+		Key *string  `json:"key,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Key = encoding.BytesToJSON(v.Key)
@@ -1081,8 +1081,8 @@ func (v *ResponsePending) MarshalJSON() ([]byte, error) {
 
 func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url string  `json:"url,omitempty"`
-		Key *string `json:"key,omitempty"`
+		Url *url.URL `json:"url,omitempty"`
+		Key *string  `json:"key,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Key = encoding.BytesToJSON(v.Key)

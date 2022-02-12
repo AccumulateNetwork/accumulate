@@ -23,9 +23,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
+func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
+	u, err := url2.Parse(urlStr)
+	if err != nil {
+		return nil, err
+	}
+
 	params := api2.UrlQuery{
-		Url: url,
+		Url: u,
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
@@ -87,7 +92,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	ms, err := getRecord(keyInfo.KeyPage, nil)
+	ms, err := getRecord(keyInfo.KeyPage.String(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
@@ -203,7 +208,7 @@ func GetUrl(url string) (*QueryResponse, error) {
 
 	u, err := url2.Parse(url)
 	params := api2.UrlQuery{}
-	params.Url = u.String()
+	params.Url = u
 
 	err = queryAs("query", &params, &res)
 	if err != nil {
@@ -495,10 +500,7 @@ func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error remarshaling token account, %v", err)
 		}
-		tokenUrl, err = url2.Parse(ta.TokenUrl)
-		if err != nil {
-			return nil, err
-		}
+		tokenUrl = ta.TokenUrl
 	}
 	if tokenUrl == nil {
 		return nil, fmt.Errorf("invalid token url was obtained from %s", u.String())
@@ -657,7 +659,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
+		amt, err := formatAmount(ata.TokenUrl.String(), &ata.Balance)
 		if err != nil {
 			amt = "unknown"
 		}
@@ -677,7 +679,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
+		amt, err := formatAmount(ata.TokenUrl.String(), &ata.Balance)
 		if err != nil {
 			amt = "unknown"
 		}
@@ -790,7 +792,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		}
 
 		out := "\n"
-		amt, err := formatAmount(deposit.Token, &deposit.Amount)
+		amt, err := formatAmount(deposit.Token.String(), &deposit.Amount)
 		if err != nil {
 			amt = "unknown"
 		}
@@ -868,7 +870,7 @@ func resolveKeyBookUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return book.Url, nil
+	return book.Url.String(), nil
 }
 
 func resolveKeyPageUrl(chainId []byte) (string, error) {
@@ -881,7 +883,7 @@ func resolveKeyPageUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return kp.Url, nil
+	return kp.Url.String(), nil
 }
 
 func nonceFromTimeNow() uint64 {

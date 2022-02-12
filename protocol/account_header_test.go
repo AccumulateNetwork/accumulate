@@ -2,10 +2,15 @@ package protocol
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 func TestStateHeader(t *testing.T) {
-	header := AccountHeader{Url: "acme/chain/path"}
+	u, err := url.Parse("acme/chain/path")
+	require.NoError(t, err)
+	header := AccountHeader{Url: u}
 
 	data, err := header.MarshalBinary()
 	if err != nil {

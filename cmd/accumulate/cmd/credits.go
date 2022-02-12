@@ -58,7 +58,7 @@ func AddCredits(origin string, args []string) (string, error) {
 	}
 
 	credits := protocol.AddCredits{}
-	credits.Recipient = u2.String()
+	credits.Recipient = u2
 	credits.Amount = uint64(amt * protocol.CreditPrecision)
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)

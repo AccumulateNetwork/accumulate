@@ -20,12 +20,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (pro
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
 	}
 
-	identityUrl, err := url.Parse(body.Url)
-	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %v", err)
-	}
-
-	err = protocol.IsValidAdiUrl(identityUrl)
+	err = protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
@@ -41,34 +36,32 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (pro
 	if body.KeyBookName == "" {
 		return nil, fmt.Errorf("missing key book name")
 	} else {
-		bookUrl = identityUrl.JoinPath(body.KeyBookName)
+		bookUrl = body.Url.JoinPath(body.KeyBookName)
 	}
 	if body.KeyPageName == "" {
 		return nil, fmt.Errorf("missing key page name")
 	} else {
-		pageUrl = identityUrl.JoinPath(body.KeyPageName)
+		pageUrl = body.Url.JoinPath(body.KeyPageName)
 	}
 
 	keySpec := new(protocol.KeySpec)
 	keySpec.PublicKey = body.PublicKey
 
 	page := protocol.NewKeyPage()
-	page.Url = pageUrl.String() // TODO Allow override
+	page.Url = pageUrl // TODO Allow override
 	page.Keys = append(page.Keys, keySpec)
-	page.KeyBook = bookUrl.String()
+	page.KeyBook = bookUrl
 	page.Threshold = 1 // Require one signature from the Key Page
 
 	book := protocol.NewKeyBook()
-	book.Url = bookUrl.String() // TODO Allow override
-	book.Pages = append(book.Pages, pageUrl.String())
+	book.Url = bookUrl // TODO Allow override
+	book.Pages = append(book.Pages, pageUrl)
 
 	identity := protocol.NewADI()
 
-	identity.Url = identityUrl.String()
-	identity.KeyBook = bookUrl.String()
-	if body.Manager != "" {
-		identity.ManagerKeyBook = body.Manager
-	}
+	identity.Url = body.Url
+	identity.KeyBook = bookUrl
+	identity.ManagerKeyBook = body.Manager
 
 	st.Create(identity, book, page)
 	return nil, nil

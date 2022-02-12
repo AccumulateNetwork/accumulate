@@ -1,16 +1,19 @@
 RequestKeyPageIndex:
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Key
       type: bytes
 
 ResponseKeyPageIndex:
   fields:
     - name: KeyBook
-      type: string
+      type: url
+      pointer: true
     - name: KeyPage
-      type: string
+      type: url
+      pointer: true
     - name: Index
       type: uvarint
       keep-empty: true

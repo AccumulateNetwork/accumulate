@@ -88,7 +88,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	}
 
 	params := api2.DirectoryQuery{}
-	params.Url = u.String()
+	params.Url = u
 	params.Start = uint64(st)
 	params.Count = uint64(ct)
 	params.Expand = true
@@ -177,7 +177,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	idc := protocol.CreateIdentity{}
-	idc.Url = u.Authority
+	idc.Url = u
 	idc.PublicKey = pubKey
 	idc.KeyBookName = book
 	idc.KeyPageName = page
