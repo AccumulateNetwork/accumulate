@@ -12,8 +12,8 @@ import (
 
 var flags struct {
 	Package  string
-	Out      string
 	Language string
+	Out      string
 }
 
 func main() {

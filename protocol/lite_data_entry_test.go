@@ -39,7 +39,7 @@ func TestLiteDataEntry(t *testing.T) {
 	}
 
 	if !bytes.Equal(chainId, factomChainId[:]) {
-		t.Fatalf("lite account id doesn't match the expected id")
+		t.Fatalf("lite token account id doesn't match the expected id")
 	}
 
 	lde := NewLiteDataEntry()
