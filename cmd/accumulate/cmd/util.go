@@ -14,11 +14,11 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
@@ -766,20 +766,20 @@ func outputForHumans(res *QueryResponse) (string, error) {
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	switch string(res.Type) {
 	case types.TxTypeSendTokens.String():
-		tx := response.TokenTx{}
+		tx := new(api.TokenSend)
 		err := Remarshal(res.Data, &tx)
 		if err != nil {
 			return "", err
 		}
 
 		var out string
-		for i := range tx.ToAccount {
-			amt, err := formatAmount("acc://ACME", &tx.ToAccount[i].Amount)
+		for i := range tx.To {
+			amt, err := formatAmount("acc://ACME", &tx.To[i].Amount)
 			if err != nil {
 				amt = "unknown"
 			}
-			out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL)
-			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.ToAccount[i].SyntheticTxId)
+			out += fmt.Sprintf("Send %s from %s to %s\n", amt, res.Origin, tx.To[i].Url)
+			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.To[i].Txid)
 		}
 
 		out += printGeneralTransactionParameters(res)
