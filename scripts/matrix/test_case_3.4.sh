@@ -2,7 +2,7 @@
 #
 # test case 3.4
 #
-# fund an adi "redwagon" sponsored by a lite account and get the balance
+# fund an adi "redwagon" sponsored by a lite token account and get the balance
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists

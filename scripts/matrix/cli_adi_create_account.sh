@@ -1,7 +1,7 @@
 #!/bin/bash 
 #
 # This script uses the accumulate cli to create an ADI account
-# The script expects a lite account, an account name, a key name and server IP:Port to be passed in
+# The script expects a lite token account, an account name, a key name and server IP:Port to be passed in
 #
 # Use jq to parse the returned json information to get the public key
 #
@@ -21,7 +21,7 @@ if [ -z $cli ]; then
 	cli=../../cmd/accumulate/accumulate
 fi
 
-# if lite account, account name, and key name not entered on the command line, prompt and exit 
+# if lite token account, account name, and key name not entered on the command line, prompt and exit
 
 if [ -z $1 ] || [ -z $2 ] || [ -z $3 ] || [ -z $4 ]; then
 	echo "Usage: cli_adi_create_account.sh liteacct acctname keyname IPAddress:Port"
