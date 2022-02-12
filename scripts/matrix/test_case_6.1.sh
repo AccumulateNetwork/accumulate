@@ -2,7 +2,7 @@
 #
 # test case 6.1
 #
-# xfer funds between lite accounts
+# xfer funds between lite token accounts
 # ids, amount and server IP:Port needed
 #
 # set cli command and see if it exists
