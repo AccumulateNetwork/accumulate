@@ -236,7 +236,7 @@ func IsValidAdiUrl(u *url.URL) error {
 		errs = append(errs, "identity is a number")
 	}
 	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
-		errs = append(errs, "identity could be a lite account key")
+		errs = append(errs, "identity could be a lite token account key")
 	}
 	if u.Path != "" {
 		errs = append(errs, "path is not empty")

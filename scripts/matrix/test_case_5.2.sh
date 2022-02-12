@@ -2,7 +2,7 @@
 #
 # test case 5.2
 #
-# fund an adi "redwagon" sponsored by a lite account
+# fund an adi "redwagon" sponsored by a lite token account
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists
