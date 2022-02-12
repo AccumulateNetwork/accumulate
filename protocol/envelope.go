@@ -97,8 +97,7 @@ func (t *Transaction) calculateHash() []byte {
 
 // Type decodes the transaction type from the body.
 func (t *Transaction) Type() TransactionType {
-	typ := TransactionTypeUnknown
-	_ = typ.UnmarshalBinary(t.Body)
+	typ, _ := UnmarshalTransactionType(bytes.NewReader(t.Body))
 	return typ
 }
 

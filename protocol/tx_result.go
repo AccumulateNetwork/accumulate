@@ -1,12 +1,10 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
-	"fmt"
 	"io"
-
-	accenc "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
@@ -28,8 +26,7 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 }
 
 func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
-	var typ TransactionType
-	err := typ.UnmarshalBinary(data)
+	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -55,14 +52,9 @@ func UnmarshalTransactionResultFrom(rd io.ReadSeeker) (TransactionResult, error)
 	}
 
 	// Read the type code
-	reader := accenc.NewReader(rd)
-	typ, ok := reader.ReadUint(1)
-	_, err = reader.Reset([]string{"Type"})
+	typ, err := UnmarshalTransactionType(rd)
 	if err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, fmt.Errorf("field Type: missing")
 	}
 
 	// Reset the reader's position

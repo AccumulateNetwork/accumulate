@@ -74,7 +74,7 @@ func (m *stateCache) Update(record ...state.Chain) {
 
 func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	// Update: update an existing record. Non-synthetic transactions are
-	// not allowed to create records, so we must check if the record
+	// not allowed to create accounts, so we must check if the record
 	// already exists. The record may have been added to the DB
 	// transaction already, so in order to actually know if the record
 	// exists on disk, we have to use GetPersistentEntry.
@@ -90,12 +90,11 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to check for an existing record: %v", err)
 
 	case st.txType.IsSynthetic() || st.txType.IsInternal():
-		// Synthetic and internal transactions are allowed to create records
+		// Synthetic and internal transactions are allowed to create accounts
 
 	default:
-		// Non-synthetic transactions are NOT allowed to create records
-		// (except for TX records)
-		return nil, fmt.Errorf("cannot create a data record in a non-synthetic transaction")
+		// Non-synthetic transactions are NOT allowed to create accounts
+		return nil, fmt.Errorf("cannot create an account in a non-synthetic transaction")
 	}
 
 	header := op.record.Header()

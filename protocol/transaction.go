@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 
 	accenc "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -73,18 +74,27 @@ func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 	}
 }
 
-func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
-	reader := accenc.NewReader(bytes.NewReader(data))
+func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
+	reader := accenc.NewReader(r)
 	typ, ok := reader.ReadUint(1)
 	_, err := reader.Reset([]string{"Type"})
 	if err != nil {
-		return nil, err
+		return TransactionTypeUnknown, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("field Type: missing")
+		return TransactionTypeUnknown, fmt.Errorf("field Type: missing")
 	}
 
-	txn, err := NewTransaction(TransactionType(typ))
+	return TransactionType(typ), nil
+}
+
+func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
+	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	txn, err := NewTransaction(typ)
 	if err != nil {
 		return nil, err
 	}
