@@ -2,7 +2,7 @@
 #
 # test case 2.3
 #
-# create an adi with an invalid UTF-8 in the name sponsored by a lite account
+# create an adi with an invalid UTF-8 in the name sponsored by a lite token account
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists
