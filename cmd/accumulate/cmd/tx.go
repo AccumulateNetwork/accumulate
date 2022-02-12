@@ -140,7 +140,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	case 0:
 		//query with no parameters
 		u.Fragment = "pending"
-		params.Url = u.String()
+		params.Url = u
 		res := api2.MultiResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
@@ -162,7 +162,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			}
 			u.Fragment = fmt.Sprintf("pending/%d", height)
 		}
-		params.Url = u.String()
+		params.Url = u
 		res := api2.TransactionQueryResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
@@ -180,7 +180,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			return "", fmt.Errorf("error converting count %v", err)
 		}
 		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
-		params.Url = u.String()
+		params.Url = u
 		res := api2.MultiResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
@@ -303,7 +303,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 	}
 
 	params := new(api2.TxHistoryQuery)
-	params.UrlQuery.Url = u.String()
+	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
 

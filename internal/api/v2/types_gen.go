@@ -39,7 +39,7 @@ type DataEntry struct {
 
 type DataEntryQuery struct {
 	fieldsSet []bool
-	Url       string   `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash"`
 }
 
@@ -121,13 +121,13 @@ type Signer struct {
 }
 
 type TokenDeposit struct {
-	Url    string  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
-	Txid   []byte  `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Url    *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Txid   []byte   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
 
 type TokenSend struct {
-	From string         `json:"from,omitempty" form:"from" query:"from" validate:"required"`
+	From *url.URL       `json:"from,omitempty" form:"from" query:"from" validate:"required"`
 	To   []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
 }
 
@@ -135,7 +135,7 @@ type TransactionQueryResponse struct {
 	Type            string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	MainChain       *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
 	Data            interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Origin          string                      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	Origin          *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	KeyPage         *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	TransactionHash []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
 	Signatures      []*transactions.ED25519Sig  `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -177,7 +177,7 @@ type TxnQuery struct {
 }
 
 type UrlQuery struct {
-	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 }
 
 type VersionResponse struct {
@@ -203,7 +203,7 @@ func (v *DataEntry) Equal(u *DataEntry) bool {
 }
 
 func (v *DataEntryQuery) Equal(u *DataEntryQuery) bool {
-	if !(v.Url == u.Url) {
+	if !((v.Url).Equal(u.Url)) {
 		return false
 	}
 	if !(v.EntryHash == u.EntryHash) {
@@ -279,8 +279,8 @@ func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Url) == 0) {
-		writer.WriteString(1, v.Url)
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
 	}
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
@@ -295,7 +295,7 @@ func (v *DataEntryQuery) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
-	} else if len(v.Url) == 0 {
+	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
 
@@ -383,7 +383,7 @@ func (v *DataEntryQuery) UnmarshalBinary(data []byte) error {
 func (v *DataEntryQuery) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
+	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
 	}
 	if x, ok := reader.ReadHash(2); ok {
@@ -453,8 +453,8 @@ func (v *DataEntry) MarshalJSON() ([]byte, error) {
 
 func (v *DataEntryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url       string `json:"url,omitempty"`
-		EntryHash string `json:"entryHash,omitempty"`
+		Url       *url.URL `json:"url,omitempty"`
+		EntryHash string   `json:"entryHash,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
@@ -473,13 +473,13 @@ func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 
 func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url          string `json:"url,omitempty"`
-		Start        uint64 `json:"start,omitempty"`
-		Count        uint64 `json:"count,omitempty"`
-		Expand       bool   `json:"expand,omitempty"`
-		ExpandChains bool   `json:"expandChains,omitempty"`
-		Height       uint64 `json:"height,omitempty"`
-		Prove        bool   `json:"prove,omitempty"`
+		Url          *url.URL `json:"url,omitempty"`
+		Start        uint64   `json:"start,omitempty"`
+		Count        uint64   `json:"count,omitempty"`
+		Expand       bool     `json:"expand,omitempty"`
+		ExpandChains bool     `json:"expandChains,omitempty"`
+		Height       uint64   `json:"height,omitempty"`
+		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -493,13 +493,13 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url          string `json:"url,omitempty"`
-		Start        uint64 `json:"start,omitempty"`
-		Count        uint64 `json:"count,omitempty"`
-		Expand       bool   `json:"expand,omitempty"`
-		ExpandChains bool   `json:"expandChains,omitempty"`
-		Height       uint64 `json:"height,omitempty"`
-		Prove        bool   `json:"prove,omitempty"`
+		Url          *url.URL `json:"url,omitempty"`
+		Start        uint64   `json:"start,omitempty"`
+		Count        uint64   `json:"count,omitempty"`
+		Expand       bool     `json:"expand,omitempty"`
+		ExpandChains bool     `json:"expandChains,omitempty"`
+		Height       uint64   `json:"height,omitempty"`
+		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -513,11 +513,11 @@ func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 
 func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url          string `json:"url,omitempty"`
-		Expand       bool   `json:"expand,omitempty"`
-		ExpandChains bool   `json:"expandChains,omitempty"`
-		Height       uint64 `json:"height,omitempty"`
-		Prove        bool   `json:"prove,omitempty"`
+		Url          *url.URL `json:"url,omitempty"`
+		Expand       bool     `json:"expand,omitempty"`
+		ExpandChains bool     `json:"expandChains,omitempty"`
+		Height       uint64   `json:"height,omitempty"`
+		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Expand = v.QueryOptions.Expand
@@ -529,8 +529,8 @@ func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
 
 func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url string  `json:"url,omitempty"`
-		Key *string `json:"key,omitempty"`
+		Url *url.URL `json:"url,omitempty"`
+		Key *string  `json:"key,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
@@ -620,9 +620,9 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 
 func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url    string  `json:"url,omitempty"`
-		Amount *string `json:"amount,omitempty"`
-		Txid   *string `json:"txid,omitempty"`
+		Url    *url.URL `json:"url,omitempty"`
+		Amount *string  `json:"amount,omitempty"`
+		Txid   *string  `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Amount = encoding.BigintToJSON(&v.Amount)
@@ -636,8 +636,8 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		MainChain       *MerkleState                `json:"mainChain,omitempty"`
 		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
 		Data            interface{}                 `json:"data,omitempty"`
-		Origin          string                      `json:"origin,omitempty"`
-		Sponsor         string                      `json:"sponsor,omitempty"`
+		Origin          *url.URL                    `json:"origin,omitempty"`
+		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
 		KeyPage         *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash *string                     `json:"transactionHash,omitempty"`
 		Txid            *string                     `json:"txid,omitempty"`
@@ -667,9 +667,9 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 
 func (v *TxHistoryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url   string `json:"url,omitempty"`
-		Start uint64 `json:"start,omitempty"`
-		Count uint64 `json:"count,omitempty"`
+		Url   *url.URL `json:"url,omitempty"`
+		Start uint64   `json:"start,omitempty"`
+		Count uint64   `json:"count,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -825,8 +825,8 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 
 func (v *DataEntryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url       string `json:"url,omitempty"`
-		EntryHash string `json:"entryHash,omitempty"`
+		Url       *url.URL `json:"url,omitempty"`
+		EntryHash string   `json:"entryHash,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
@@ -863,13 +863,13 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 
 func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url          string `json:"url,omitempty"`
-		Start        uint64 `json:"start,omitempty"`
-		Count        uint64 `json:"count,omitempty"`
-		Expand       bool   `json:"expand,omitempty"`
-		ExpandChains bool   `json:"expandChains,omitempty"`
-		Height       uint64 `json:"height,omitempty"`
-		Prove        bool   `json:"prove,omitempty"`
+		Url          *url.URL `json:"url,omitempty"`
+		Start        uint64   `json:"start,omitempty"`
+		Count        uint64   `json:"count,omitempty"`
+		Expand       bool     `json:"expand,omitempty"`
+		ExpandChains bool     `json:"expandChains,omitempty"`
+		Height       uint64   `json:"height,omitempty"`
+		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -896,13 +896,13 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url          string `json:"url,omitempty"`
-		Start        uint64 `json:"start,omitempty"`
-		Count        uint64 `json:"count,omitempty"`
-		Expand       bool   `json:"expand,omitempty"`
-		ExpandChains bool   `json:"expandChains,omitempty"`
-		Height       uint64 `json:"height,omitempty"`
-		Prove        bool   `json:"prove,omitempty"`
+		Url          *url.URL `json:"url,omitempty"`
+		Start        uint64   `json:"start,omitempty"`
+		Count        uint64   `json:"count,omitempty"`
+		Expand       bool     `json:"expand,omitempty"`
+		ExpandChains bool     `json:"expandChains,omitempty"`
+		Height       uint64   `json:"height,omitempty"`
+		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -929,11 +929,11 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 
 func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url          string `json:"url,omitempty"`
-		Expand       bool   `json:"expand,omitempty"`
-		ExpandChains bool   `json:"expandChains,omitempty"`
-		Height       uint64 `json:"height,omitempty"`
-		Prove        bool   `json:"prove,omitempty"`
+		Url          *url.URL `json:"url,omitempty"`
+		Expand       bool     `json:"expand,omitempty"`
+		ExpandChains bool     `json:"expandChains,omitempty"`
+		Height       uint64   `json:"height,omitempty"`
+		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Expand = v.QueryOptions.Expand
@@ -956,8 +956,8 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 
 func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url string  `json:"url,omitempty"`
-		Key *string `json:"key,omitempty"`
+		Url *url.URL `json:"url,omitempty"`
+		Key *string  `json:"key,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
@@ -1131,9 +1131,9 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 
 func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url    string  `json:"url,omitempty"`
-		Amount *string `json:"amount,omitempty"`
-		Txid   *string `json:"txid,omitempty"`
+		Url    *url.URL `json:"url,omitempty"`
+		Amount *string  `json:"amount,omitempty"`
+		Txid   *string  `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Amount = encoding.BigintToJSON(&v.Amount)
@@ -1161,8 +1161,8 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		MainChain       *MerkleState                `json:"mainChain,omitempty"`
 		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
 		Data            interface{}                 `json:"data,omitempty"`
-		Origin          string                      `json:"origin,omitempty"`
-		Sponsor         string                      `json:"sponsor,omitempty"`
+		Origin          *url.URL                    `json:"origin,omitempty"`
+		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
 		KeyPage         *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash *string                     `json:"transactionHash,omitempty"`
 		Txid            *string                     `json:"txid,omitempty"`
@@ -1201,7 +1201,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Data = x
 	}
-	if u.Origin != "" {
+	if u.Origin != nil {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
@@ -1236,9 +1236,9 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 
 func (v *TxHistoryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url   string `json:"url,omitempty"`
-		Start uint64 `json:"start,omitempty"`
-		Count uint64 `json:"count,omitempty"`
+		Url   *url.URL `json:"url,omitempty"`
+		Start uint64   `json:"start,omitempty"`
+		Count uint64   `json:"count,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start

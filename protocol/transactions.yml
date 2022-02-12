@@ -98,7 +98,8 @@ CreateIdentity:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: PublicKey
       type: bytes
     - name: KeyBookName
@@ -108,24 +109,29 @@ CreateIdentity:
       type: string
       optional: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 CreateTokenAccount:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: TokenUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: KeyBookUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
       optional: true
     - name: Scratch
       type: bool
       optional: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 SendTokens:
@@ -147,12 +153,15 @@ CreateDataAccount:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: KeyBookUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
       optional: true
     - name: ManagerKeyBookUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
       optional: true
     - name: Scratch
       type: bool
@@ -169,7 +178,8 @@ WriteDataTo:
   kind: tx
   fields:
     - name: Recipient
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Entry
       type: DataEntry
       marshal-as: reference
@@ -178,22 +188,26 @@ AcmeFaucet:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
 
 CreateToken:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: KeyBookUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
       optional: true
     - name: Symbol
       type: string
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string # TODO change to url
+      type: url
+      pointer: true
       optional: true
     - name: InitialSupply
       type: bigint
@@ -202,14 +216,16 @@ CreateToken:
       type: bool
       optional: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 IssueTokens:
   kind: tx
   fields:
     - name: Recipient
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Amount
       type: bigint
 
@@ -223,33 +239,39 @@ CreateKeyPage:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Keys
       repeatable: true
       type: KeySpecParams
       pointer: true
       marshal-as: reference
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 CreateKeyBook:
   kind: tx
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Pages
       repeatable: true
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Manager
-      type: string # TODO change to url
+      type: url
+      pointer: true
       optional: true
 
 AddCredits:
   kind: tx
   fields:
     - name: Recipient
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Amount
       type: uvarint
 
@@ -305,7 +327,8 @@ SyntheticDepositTokens:
     - name: Cause
       type: chain
     - name: Token
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Amount
       type: bigint
 
@@ -313,7 +336,8 @@ SyntheticAnchor:
   kind: tx
   fields:
     - name: Source
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Major
       type: bool
     - name: RootAnchor
@@ -360,7 +384,8 @@ SegWitDataEntry:
     - name: Cause
       type: chain
     - name: EntryUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: EntryHash
       type: chain
 
@@ -387,7 +412,8 @@ WriteDataResult:
 TokenRecipient:
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Amount
       type: bigint
 

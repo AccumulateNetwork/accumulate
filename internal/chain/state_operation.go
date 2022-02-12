@@ -98,8 +98,8 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	}
 
 	header := op.record.Header()
-	if header.Url == "" {
-		header.Url = op.url.String()
+	if header.Url == nil {
+		header.Url = op.url
 	}
 
 	record := st.batch.Account(op.url)

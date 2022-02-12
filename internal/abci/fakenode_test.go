@@ -232,21 +232,21 @@ func (n *FakeNode) NextHeight() int64 {
 }
 
 func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
-	r, err := n.api.QueryUrl(url, api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
 	n.Require().NoError(err)
 	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
 	return r.(*api2.ChainQueryResponse)
 }
 
 func (n *FakeNode) QueryTransaction(url string) *api2.TransactionQueryResponse {
-	r, err := n.api.QueryUrl(url, api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
 	n.require.NoError(err)
 	n.Require().IsType((*api2.TransactionQueryResponse)(nil), r)
 	return r.(*api2.TransactionQueryResponse)
 }
 
 func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
-	r, err := n.api.QueryUrl(url, api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
 	n.require.NoError(err)
 	n.Require().IsType((*api2.MultiResponse)(nil), r)
 	return r.(*api2.MultiResponse)

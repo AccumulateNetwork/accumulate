@@ -3,15 +3,14 @@
 AccountHeader:
   fields:
   - name: Url
-    type: string # TODO change to url
-  - name: KeyBook
-    type: string # TODO change to url
-  - name: ManagerKeyBook
-    type: string # TODO change to url
-  - name: url
     type: url
     pointer: true
-    marshal-as: none
+  - name: KeyBook
+    type: url
+    pointer: true
+  - name: ManagerKeyBook
+    type: url
+    pointer: true
 
 LiteTokenAccount:
   kind: chain
@@ -19,7 +18,8 @@ LiteTokenAccount:
   - AccountHeader
   fields:
     - name: TokenUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Balance
       type: bigint
     - name: Nonce
@@ -48,7 +48,8 @@ TokenAccount:
   - AccountHeader
   fields:
     - name: TokenUrl
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Balance
       type: bigint
     - name: Scratch
@@ -77,7 +78,8 @@ KeyBook:
   fields:
     - name: Pages
       repeatable: true
-      type: string # TODO change to url
+      type: url
+      pointer: true
 
 DataAccount:
   kind: chain
@@ -98,7 +100,8 @@ TokenIssuer:
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Supply
       type: bigint
       optional: true
