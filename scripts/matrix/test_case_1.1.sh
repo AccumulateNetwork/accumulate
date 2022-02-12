@@ -2,7 +2,7 @@
 #
 # test case 1.1
 #
-# generate 100 lite accounts
+# generate 100 lite token accounts
 # server IP:Port needed
 #
 # set cli command and see if it exists

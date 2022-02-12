@@ -2,7 +2,7 @@
 #
 # test case 5.1
 #
-# fund lite account
+# fund lite token account
 # id and server IP:Port needed
 #
 # set cli command and see if it exists
