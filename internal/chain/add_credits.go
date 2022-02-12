@@ -16,10 +16,9 @@ type AddCredits struct{}
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
 func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.AddCredits)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
 	}
 
 	// tokens = credits / (credits per dollar) / (dollars per token)

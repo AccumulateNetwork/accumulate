@@ -17,10 +17,9 @@ func (SyntheticDepositTokens) Type() types.TxType {
 
 func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// *big.Int, tokenChain, *url.URL
-	body := new(protocol.SyntheticDepositTokens)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
 	}
 
 	tokenUrl, err := url.Parse(body.Token)

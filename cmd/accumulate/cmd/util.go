@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -121,11 +120,11 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	env := new(transactions.Envelope)
 	env.TxHash = txHash
 	env.Transaction = new(transactions.Transaction)
-	env.Transaction.Body = binaryPayload
+	env.Transaction.Body = payload
 
 	hdr.Nonce = nonce
 	env.Transaction.TransactionHeader = *hdr
@@ -138,8 +137,8 @@ func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions
 	return ed, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
+func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +227,7 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
 	if payload == nil && txHash != nil {
 		payload = new(protocol.SignPending)
 	}
@@ -249,7 +248,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash [
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, si, privKey, nonce)
+	params, err := prepareGenTxV2(payload, data, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}

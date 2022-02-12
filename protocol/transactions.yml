@@ -38,7 +38,10 @@ Transaction:
     - TransactionHeader
   fields:
     - name: Body
-      type: bytes
+      type: TransactionPayload
+      unmarshal-with: UnmarshalTransaction
+      marshal-as: value
+      zero-value: nil
     - name: hash
       type: bytes
       marshal-as: none
@@ -50,7 +53,10 @@ TxState:
       marshal-as: reference
       pointer: true
     - name: Transaction
-      type: bytes
+      type: TransactionPayload
+      unmarshal-with: UnmarshalTransaction
+      marshal-as: value
+      zero-value: nil
     - name: TransactionHash
       type: chain
       marshal-as: none

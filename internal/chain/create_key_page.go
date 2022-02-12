@@ -24,10 +24,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook, origin.GetType())
 	}
 
-	body := new(protocol.CreateKeyPage)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyPage), tx.Transaction.Body)
 	}
 
 	if len(body.Keys) == 0 {

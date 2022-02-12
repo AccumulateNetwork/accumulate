@@ -18,10 +18,9 @@ func (UpdateKeyPage) Type() types.TxType {
 }
 
 func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.UpdateKeyPage)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
@@ -60,6 +59,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	var bookUrl *url.URL
 	var priority = -1
 	if page.KeyBook != "" {
+		var err error
 		book = new(protocol.KeyBook)
 		bookUrl, err = url.Parse(page.KeyBook)
 		if err != nil {

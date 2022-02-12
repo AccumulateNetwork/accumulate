@@ -13,10 +13,9 @@ type BurnTokens struct{}
 func (BurnTokens) Type() types.TxType { return types.TxTypeBurnTokens }
 
 func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.BurnTokens)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.BurnTokens)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BurnTokens), tx.Transaction.Body)
 	}
 
 	var account tokenChain

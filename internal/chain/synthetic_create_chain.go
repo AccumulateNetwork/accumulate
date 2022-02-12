@@ -19,10 +19,9 @@ func (SyntheticCreateChain) Type() types.TxType {
 }
 
 func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.SyntheticCreateChain)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateChain)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateChain), tx.Transaction.Body)
 	}
 
 	if body.Cause == [32]byte{} {

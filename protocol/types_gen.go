@@ -417,7 +417,7 @@ type TokenRecipient struct {
 type Transaction struct {
 	fieldsSet []bool
 	TransactionHeader
-	Body []byte `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	Body TransactionPayload `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash []byte
 }
 
@@ -454,7 +454,7 @@ type TransactionStatus struct {
 type TxState struct {
 	fieldsSet       []bool
 	SigInfo         *TransactionHeader `json:"sigInfo,omitempty" form:"sigInfo" query:"sigInfo" validate:"required"`
-	Transaction     []byte             `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Transaction     TransactionPayload `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	TransactionHash [32]byte
 }
 
@@ -1485,7 +1485,7 @@ func (v *Transaction) Equal(u *Transaction) bool {
 	if !v.TransactionHeader.Equal(&u.TransactionHeader) {
 		return false
 	}
-	if !(bytes.Equal(v.Body, u.Body)) {
+	if !(v.Body == u.Body) {
 		return false
 	}
 
@@ -1558,7 +1558,7 @@ func (v *TxState) Equal(u *TxState) bool {
 	if !((v.SigInfo).Equal(u.SigInfo)) {
 		return false
 	}
-	if !(bytes.Equal(v.Transaction, u.Transaction)) {
+	if !(v.Transaction == u.Transaction) {
 		return false
 	}
 
@@ -4490,8 +4490,8 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteValue(1, &v.TransactionHeader)
-	if !(len(v.Body) == 0) {
-		writer.WriteBytes(2, v.Body)
+	if !(v.Body == (nil)) {
+		writer.WriteValue(2, v.Body)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Transaction)
@@ -4506,7 +4506,7 @@ func (v *Transaction) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Body is missing")
-	} else if len(v.Body) == 0 {
+	} else if v.Body == (nil) {
 		errs = append(errs, "field Body is not set")
 	}
 
@@ -4751,8 +4751,8 @@ func (v *TxState) MarshalBinary() ([]byte, error) {
 	if !(v.SigInfo == nil) {
 		writer.WriteValue(1, v.SigInfo)
 	}
-	if !(len(v.Transaction) == 0) {
-		writer.WriteBytes(2, v.Transaction)
+	if !(v.Transaction == (nil)) {
+		writer.WriteValue(2, v.Transaction)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TxState)
@@ -4769,7 +4769,7 @@ func (v *TxState) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Transaction is missing")
-	} else if len(v.Transaction) == 0 {
+	} else if v.Transaction == (nil) {
 		errs = append(errs, "field Transaction is not set")
 	}
 
@@ -6491,9 +6491,13 @@ func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	reader.ReadValue(1, v.TransactionHeader.UnmarshalBinary)
 
-	if x, ok := reader.ReadBytes(2); ok {
-		v.Body = x
-	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := UnmarshalTransaction(b)
+		if err == nil {
+			v.Body = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_Transaction)
 	v.fieldsSet = seen
@@ -6611,9 +6615,13 @@ func (v *TxState) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(TransactionHeader); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.SigInfo = x
 	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.Transaction = x
-	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := UnmarshalTransaction(b)
+		if err == nil {
+			v.Transaction = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_TxState)
 	v.fieldsSet = seen
@@ -7466,17 +7474,22 @@ func (v *TokenRecipient) MarshalJSON() ([]byte, error) {
 
 func (v *Transaction) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Origin        *url.URL `json:"origin,omitempty"`
-		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
-		Body          *string  `json:"body,omitempty"`
+		Origin        *url.URL        `json:"origin,omitempty"`
+		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
+		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
+		Nonce         uint64          `json:"nonce,omitempty"`
+		Body          json.RawMessage `json:"body,omitempty"`
 	}{}
 	u.Origin = v.TransactionHeader.Origin
 	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
 	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
 	u.Nonce = v.TransactionHeader.Nonce
-	u.Body = encoding.BytesToJSON(v.Body)
+	if x, err := json.Marshal(v.Body); err != nil {
+		return nil, fmt.Errorf("error encoding Body: %w", err)
+	} else {
+		u.Body = x
+	}
+
 	return json.Marshal(&u)
 }
 
@@ -7497,14 +7510,19 @@ func (v *TransactionState) MarshalJSON() ([]byte, error) {
 		KeyBook        string             `json:"keyBook,omitempty"`
 		ManagerKeyBook string             `json:"managerKeyBook,omitempty"`
 		SigInfo        *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction    *string            `json:"transaction,omitempty"`
+		Transaction    json.RawMessage    `json:"transaction,omitempty"`
 	}{}
 	u.Type = v.GetType()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.SigInfo = v.TxState.SigInfo
-	u.Transaction = encoding.BytesToJSON(v.TxState.Transaction)
+	if x, err := json.Marshal(v.TxState.Transaction); err != nil {
+		return nil, fmt.Errorf("error encoding Transaction: %w", err)
+	} else {
+		u.Transaction = x
+	}
+
 	return json.Marshal(&u)
 }
 
@@ -7534,10 +7552,15 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 func (v *TxState) MarshalJSON() ([]byte, error) {
 	u := struct {
 		SigInfo     *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction *string            `json:"transaction,omitempty"`
+		Transaction json.RawMessage    `json:"transaction,omitempty"`
 	}{}
 	u.SigInfo = v.SigInfo
-	u.Transaction = encoding.BytesToJSON(v.Transaction)
+	if x, err := json.Marshal(v.Transaction); err != nil {
+		return nil, fmt.Errorf("error encoding Transaction: %w", err)
+	} else {
+		u.Transaction = x
+	}
+
 	return json.Marshal(&u)
 }
 
@@ -8853,17 +8876,22 @@ func (v *TokenRecipient) UnmarshalJSON(data []byte) error {
 
 func (v *Transaction) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Origin        *url.URL `json:"origin,omitempty"`
-		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
-		Body          *string  `json:"body,omitempty"`
+		Origin        *url.URL        `json:"origin,omitempty"`
+		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
+		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
+		Nonce         uint64          `json:"nonce,omitempty"`
+		Body          json.RawMessage `json:"body,omitempty"`
 	}{}
 	u.Origin = v.TransactionHeader.Origin
 	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
 	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
 	u.Nonce = v.TransactionHeader.Nonce
-	u.Body = encoding.BytesToJSON(v.Body)
+	if x, err := json.Marshal(v.Body); err != nil {
+		return fmt.Errorf("error encoding Body: %w", err)
+	} else {
+		u.Body = x
+	}
+
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8871,11 +8899,12 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	v.TransactionHeader.KeyPageHeight = u.KeyPageHeight
 	v.TransactionHeader.KeyPageIndex = u.KeyPageIndex
 	v.TransactionHeader.Nonce = u.Nonce
-	if x, err := encoding.BytesFromJSON(u.Body); err != nil {
+	if x, err := UnmarshalTransaction(u.Body); err != nil {
 		return fmt.Errorf("error decoding Body: %w", err)
 	} else {
 		v.Body = x
 	}
+
 	return nil
 }
 
@@ -8905,14 +8934,19 @@ func (v *TransactionState) UnmarshalJSON(data []byte) error {
 		KeyBook        string             `json:"keyBook,omitempty"`
 		ManagerKeyBook string             `json:"managerKeyBook,omitempty"`
 		SigInfo        *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction    *string            `json:"transaction,omitempty"`
+		Transaction    json.RawMessage    `json:"transaction,omitempty"`
 	}{}
 	u.Type = v.GetType()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.SigInfo = v.TxState.SigInfo
-	u.Transaction = encoding.BytesToJSON(v.TxState.Transaction)
+	if x, err := json.Marshal(v.TxState.Transaction); err != nil {
+		return fmt.Errorf("error encoding Transaction: %w", err)
+	} else {
+		u.Transaction = x
+	}
+
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8920,11 +8954,12 @@ func (v *TransactionState) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
 	v.TxState.SigInfo = u.SigInfo
-	if x, err := encoding.BytesFromJSON(u.Transaction); err != nil {
+	if x, err := UnmarshalTransaction(u.Transaction); err != nil {
 		return fmt.Errorf("error decoding Transaction: %w", err)
 	} else {
 		v.TxState.Transaction = x
 	}
+
 	return nil
 }
 
@@ -8968,19 +9003,25 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 func (v *TxState) UnmarshalJSON(data []byte) error {
 	u := struct {
 		SigInfo     *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction *string            `json:"transaction,omitempty"`
+		Transaction json.RawMessage    `json:"transaction,omitempty"`
 	}{}
 	u.SigInfo = v.SigInfo
-	u.Transaction = encoding.BytesToJSON(v.Transaction)
+	if x, err := json.Marshal(v.Transaction); err != nil {
+		return fmt.Errorf("error encoding Transaction: %w", err)
+	} else {
+		u.Transaction = x
+	}
+
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.SigInfo = u.SigInfo
-	if x, err := encoding.BytesFromJSON(u.Transaction); err != nil {
+	if x, err := UnmarshalTransaction(u.Transaction); err != nil {
 		return fmt.Errorf("error decoding Transaction: %w", err)
 	} else {
 		v.Transaction = x
 	}
+
 	return nil
 }
 

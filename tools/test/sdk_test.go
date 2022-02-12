@@ -62,41 +62,6 @@ func TestSDK(t *testing.T) {
 							// Compare the result to the TC
 							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
 						})
-
-						t.Run("Marshal Body", func(t *testing.T) {
-							// Unmarshal the body from the TC
-							body, err := protocol.UnmarshalTransactionJSON(tc.Inner)
-							require.NoError(t, err)
-
-							// TEST Binary marshal the body
-							flattenRawJson(t, reflect.ValueOf(body))
-							bin, err := body.MarshalBinary()
-							require.NoError(t, err)
-
-							// Unmarshal the envelope from the TC
-							env := new(protocol.Envelope)
-							require.NoError(t, json.Unmarshal(tc.JSON, env))
-
-							// Compare the result to the envelope
-							require.Equal(t, env.Transaction.Body, bin)
-						})
-
-						t.Run("Unmarshal Body", func(t *testing.T) {
-							// Unmarshal the envelope from the TC
-							env := new(protocol.Envelope)
-							require.NoError(t, json.Unmarshal(tc.JSON, env))
-
-							// TEST Binary unmarshal the body from the envelope
-							body, err := protocol.UnmarshalTransaction(env.Transaction.Body)
-							require.NoError(t, err)
-
-							// Marshal the body
-							json, err := json.Marshal(body)
-							require.NoError(t, err)
-
-							// Compare the result to the TC
-							require.Equal(t, tokenize(t, tc.Inner), tokenize(t, json))
-						})
 					})
 				}
 			})
