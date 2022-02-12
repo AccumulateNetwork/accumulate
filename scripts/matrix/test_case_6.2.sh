@@ -2,7 +2,7 @@
 #
 # test case 6.2
 #
-# xfer funds between lite account and ADI account
+# xfer funds between lite token account and ADI account
 # ids, amount and server IP:Port needed
 #
 # set cli command and see if it exists
