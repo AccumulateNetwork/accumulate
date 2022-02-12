@@ -338,3 +338,8 @@ section "create keypage with manager"
 wait-for cli-tx tx execute keytest/book keytest-0-0 '{"type": "createKeyPage","url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
 RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "keytest/book" ] && success || die "chain manager not set"
+
+section "remove manager from keypage"
+wait-for cli-tx tx execute keytest/page2 keytest-2-0 '{"type": "removeManager"}'
+RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
+[ "$RESULT" == "" ] && success || die "chain manager not removed"
