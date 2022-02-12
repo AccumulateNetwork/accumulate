@@ -63,7 +63,7 @@ TransactionType:
     description: creates an ADI token account, which produces a synthetic chain create transaction
   SendTokens:
     value: 0x03
-    description:  transfers tokens between token accounts, which produces a synthetic deposit tokens transaction
+    description: transfers tokens between token accounts, which produces a synthetic deposit tokens transaction
   CreateDataAccount:
     value: 0x04
     description: creates an ADI Data Account, which produces a synthetic chain create transaction
@@ -150,7 +150,7 @@ AccountType:
   TokenIssuer:
     value: 3
     description: is a Token Issuer account
-    aliases: [token]
+    aliases: [ token ]
   TokenAccount:
     value: 4
     description: is an ADI Token Account

@@ -3,7 +3,7 @@
 - **Lite Token Account**
   - A token account, independent of any other record
   - Identified solely by a public key (hash) and token issuer URL
-  - A lite account may only hold one type of token, which must match the account
+  - A lite token account may only hold one type of token, which must match the account
     URL
 - **ADI**
   - Accumulate Digital Identity
