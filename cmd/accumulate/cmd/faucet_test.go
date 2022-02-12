@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	api2 "gitlab.com/accumulatenetwork/accumulate/types/api"
 )
 
 func init() {
@@ -54,11 +53,10 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		r, err := tc.execute(t, commandLine)
 		require.NoError(t, err)
 
-		res := api2.APIDataResponse{}
+		res := new(api.ChainQueryResponse)
+		acc := new(protocol.LiteTokenAccount)
+		res.Data = acc
 		require.NoError(t, json.Unmarshal([]byte(r), &res))
-
-		acc := protocol.LiteTokenAccount{}
-		require.NoError(t, json.Unmarshal(*res.Data, &acc), "received error on liteAccount[%d] %s ", i, liteAccounts[i])
 
 		if !beenFauceted[i] {
 			require.Equal(t, "10000000000", acc.Balance.String(),
