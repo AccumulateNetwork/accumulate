@@ -153,10 +153,7 @@ func TestAnchorChain(t *testing.T) {
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	require.NoError(t, err)
 	first := rootChain.Height() - int64(len(ledgerState.Updates))
-	var accounts []string
 	for i, meta := range ledgerState.Updates {
-		accounts = append(accounts, fmt.Sprintf("%s#chain/%s", meta.Account, meta.Name))
-
 		root, err := rootChain.Entry(first + int64(i))
 		require.NoError(t, err)
 
@@ -171,13 +168,13 @@ func TestAnchorChain(t *testing.T) {
 		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	}
 
-	// Verify that the ADI accounts are included
-	assert.Subset(t, accounts, []string{
-		"acc://RoadRunner#chain/main",
-		"acc://RoadRunner#chain/pending",
-		"acc://RoadRunner/book#chain/main",
-		"acc://RoadRunner/page#chain/main",
-	})
+	// // TODO Once block indexing has been implemented, verify that the following chains got modified
+	// assert.Subset(t, accounts, []string{
+	// 	"acc://RoadRunner#chain/main",
+	// 	"acc://RoadRunner#chain/pending",
+	// 	"acc://RoadRunner/book#chain/main",
+	// 	"acc://RoadRunner/page#chain/main",
+	// })
 }
 
 func TestCreateADI(t *testing.T) {
@@ -520,8 +517,6 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
-	t.Skip("TODO Fix - this is broken because it sends a synthetic transaction to the DN")
-
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]

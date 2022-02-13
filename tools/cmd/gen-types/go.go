@@ -393,7 +393,7 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 		if field.Repeatable {
 			return "", fmt.Errorf("unsupported: field %s specifies unmarshal-with and repeatable", field.Name)
 		}
-		return fmt.Sprintf("\tif x, err := %s(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName), nil
+		return fmt.Sprintf("\tif x, err := %sJSON(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)

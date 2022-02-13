@@ -64,6 +64,8 @@ func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 
 	case TransactionTypeInternalGenesis:
 		return new(InternalGenesis), nil
+	case TransactionTypeInternalSendTransactions:
+		return new(InternalSendTransactions), nil
 	case TransactionTypeInternalTransactionsSigned:
 		return new(InternalTransactionsSigned), nil
 	case TransactionTypeInternalTransactionsSent:

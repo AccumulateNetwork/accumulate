@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,7 +68,9 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		for i, daemon := range daemons {
 			nodes[i], chans[i] = InitFake(t, daemon, openDb)
 		}
+		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
+		clients[strings.ToLower(netName)] = nodes[0].client
 	}
 
 	for _, netName := range subnets {
@@ -164,7 +167,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[strin
 		n.Require().NoError(err)
 	})
 
-	n.api = api2.NewQueryDirect(n.network.ID, api2.Options{
+	n.api = api2.NewQueryDispatch(api2.Options{
 		Logger:        n.logger,
 		Network:       n.network,
 		Router:        n.router,
@@ -273,11 +276,26 @@ func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte 
 	// Submit all the transactions as a batch
 	n.client.SubmitTx(context.Background(), blob)
 
-	for _, id := range ids {
-		err := n.client.WaitFor(id, true)
-		n.Require().NoError(err)
-	}
+	n.WaitForTxns32(ids...)
 	return ids
+}
+
+func (n *FakeNode) WaitForTxns32(ids ...[32]byte) {
+	ids2 := make([][]byte, len(ids))
+	for i, id := range ids {
+		// Make a copy to avoid capturing the loop variable
+		id := id
+		ids2[i] = id[:]
+	}
+	n.WaitForTxns(ids2...)
+}
+
+func (n *FakeNode) WaitForTxns(ids ...[]byte) {
+	for _, id := range ids {
+		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
+		n.Require().NoError(err)
+		n.WaitForTxns32(res.SyntheticTxids...)
+	}
 }
 
 func (n *FakeNode) ParseUrl(s string) *url.URL {
@@ -396,12 +414,4 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	d.client.SubmitTx(context.Background(), b)
-}
-
-func (d *e2eDUT) WaitForTxns(ids ...[]byte) {
-	for _, id := range ids {
-		var id32 [32]byte
-		copy(id32[:], id)
-		d.Require().NoError(d.client.WaitFor(id32, true))
-	}
 }

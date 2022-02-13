@@ -8542,7 +8542,7 @@ func (v *SendTransaction) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := UnmarshalTransaction(u.Payload); err != nil {
+	if x, err := UnmarshalTransactionJSON(u.Payload); err != nil {
 		return fmt.Errorf("error decoding Payload: %w", err)
 	} else {
 		v.Payload = x
@@ -8899,7 +8899,7 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	v.TransactionHeader.KeyPageHeight = u.KeyPageHeight
 	v.TransactionHeader.KeyPageIndex = u.KeyPageIndex
 	v.TransactionHeader.Nonce = u.Nonce
-	if x, err := UnmarshalTransaction(u.Body); err != nil {
+	if x, err := UnmarshalTransactionJSON(u.Body); err != nil {
 		return fmt.Errorf("error decoding Body: %w", err)
 	} else {
 		v.Body = x
@@ -8954,7 +8954,7 @@ func (v *TransactionState) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
 	v.TxState.SigInfo = u.SigInfo
-	if x, err := UnmarshalTransaction(u.Transaction); err != nil {
+	if x, err := UnmarshalTransactionJSON(u.Transaction); err != nil {
 		return fmt.Errorf("error decoding Transaction: %w", err)
 	} else {
 		v.TxState.Transaction = x
@@ -8991,7 +8991,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.Pending = u.Pending
 	v.Code = u.Code
 	v.Message = u.Message
-	if x, err := UnmarshalTransactionResult(u.Result); err != nil {
+	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
 		return fmt.Errorf("error decoding Result: %w", err)
 	} else {
 		v.Result = x
@@ -9016,7 +9016,7 @@ func (v *TxState) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.SigInfo = u.SigInfo
-	if x, err := UnmarshalTransaction(u.Transaction); err != nil {
+	if x, err := UnmarshalTransactionJSON(u.Transaction); err != nil {
 		return fmt.Errorf("error decoding Transaction: %w", err)
 	} else {
 		v.Transaction = x
