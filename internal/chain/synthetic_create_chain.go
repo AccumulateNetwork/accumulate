@@ -120,7 +120,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 			book := new(protocol.KeyBook)
 			err = st.LoadUrlAs(record.Header().KeyBook, book)
 			if err != nil {
-				return nil, fmt.Errorf("invalid key book for %q: %v", u, err)
+				return nil, fmt.Errorf("invalid key book %q for %q: %v", record.Header().KeyBook, u, err)
 			}
 		}
 	}

@@ -140,7 +140,7 @@ func TestAnchorChain(t *testing.T) {
 	})
 
 	// Sanity check
-	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url)
+	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url.String())
 
 	// Get the anchor chain manager
 	batch = n.db.Begin()
@@ -211,7 +211,7 @@ func TestCreateADI(t *testing.T) {
 	})
 
 	r := n.GetADI("RoadRunner")
-	require.Equal(t, "acc://RoadRunner", r.Url)
+	require.Equal(t, "acc://RoadRunner", r.Url.String())
 
 	kg := n.GetKeyBook("RoadRunner/foo-book")
 	require.Len(t, kg.Pages, 1)
@@ -268,7 +268,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := n.GetLiteDataAccount(liteDataAddress.String())
-		require.Equal(t, liteDataAddress.String(), r.Url)
+		require.Equal(t, liteDataAddress.String(), r.Url.String())
 		require.Equal(t, append(partialChainId, r.Tail...), chainId)
 	})
 }
@@ -294,7 +294,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, "acc://FooBar/oof", r.Url)
+		require.Equal(t, "acc://FooBar/oof", r.Url.String())
 
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 	})
@@ -326,9 +326,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		u := n.ParseUrl("acc://FooBar/foo/book1")
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, "acc://FooBar/oof", r.Url)
-		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook)
-		require.Equal(t, u.String(), r.KeyBook)
+		require.Equal(t, "acc://FooBar/oof", r.Url.String())
+		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook.String())
+		require.Equal(t, u.String(), r.KeyBook.String())
 
 	})
 
@@ -351,7 +351,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, "acc://FooBar/oof", r.Url)
+		require.Equal(t, "acc://FooBar/oof", r.Url.String())
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
 		wd := new(protocol.WriteData)
@@ -417,8 +417,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, "acc://FooBar/Baz", r.Url)
-		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
+		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
 		require.Equal(t, []string{
 			n.ParseUrl("FooBar").String(),
@@ -453,9 +453,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		u := n.ParseUrl("foo/book1")
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, "acc://FooBar/Baz", r.Url)
-		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
-		require.Equal(t, u.String(), r.KeyBook)
+		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
+		require.Equal(t, u.String(), r.KeyBook.String())
 	})
 }
 
@@ -568,7 +568,7 @@ func TestCreateKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/keyset1")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, "", spec.KeyBook)
+	require.Nil(t, spec.KeyBook)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
@@ -600,10 +600,10 @@ func TestCreateKeyBook(t *testing.T) {
 
 	group := n.GetKeyBook("foo/book1")
 	require.Len(t, group.Pages, 1)
-	require.Equal(t, specUrl.String(), group.Pages[0])
+	require.Equal(t, specUrl.String(), group.Pages[0].String())
 
 	spec := n.GetKeyPage("foo/page1")
-	require.Equal(t, spec.KeyBook, groupUrl.String())
+	require.Equal(t, spec.KeyBook.String(), groupUrl.String())
 }
 
 func TestAddKeyPage(t *testing.T) {
@@ -623,7 +623,7 @@ func TestAddKeyPage(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Sanity check
-	require.Equal(t, u.String(), n.GetKeyPage("foo/page1").KeyBook)
+	require.Equal(t, u.String(), n.GetKeyPage("foo/page1").KeyBook.String())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
@@ -640,7 +640,7 @@ func TestAddKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/page2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, u.String(), spec.KeyBook)
+	require.Equal(t, u.String(), spec.KeyBook.String())
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
@@ -840,7 +840,7 @@ func TestIssueTokens(t *testing.T) {
 	})
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
-	require.Equal(t, "acc://foo/tokens", account.TokenUrl)
+	require.Equal(t, "acc://foo/tokens", account.TokenUrl.String())
 	require.Equal(t, int64(123), account.Balance.Int64())
 }
 

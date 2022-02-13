@@ -121,7 +121,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
 	if u == nil {
-		account.Header().KeyBook = m.Origin.Header().Url
+		account.Header().KeyBook = m.Origin.Header().KeyBook
 		return nil
 	}
 
