@@ -93,8 +93,6 @@ const (
 	// TxTypeSignPending is used to sign a pending transaction.
 	// Deprecated: use protocol.TransactionTypeSignPending
 	TxTypeSignPending = protocol.TransactionTypeSignPending
-
-	TxTypeRemoveManager = protocol.TransactionTypeRemoveManager
 )
 
 // Synthetic transactions

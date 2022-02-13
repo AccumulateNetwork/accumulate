@@ -139,6 +139,9 @@ const TransactionTypeAddCredits TransactionType = 14
 // TransactionTypeUpdateKeyPage adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction.
 const TransactionTypeUpdateKeyPage TransactionType = 15
 
+// TransactionTypeUpdateManager updates manager for the existing chain.
+const TransactionTypeUpdateManager TransactionType = 16
+
 // TransactionTypeRemoveManager remove manager from existing chain.
 const TransactionTypeRemoveManager TransactionType = 17
 
@@ -636,6 +639,8 @@ func (v TransactionType) String() string {
 		return "addCredits"
 	case TransactionTypeUpdateKeyPage:
 		return "updateKeyPage"
+	case TransactionTypeUpdateManager:
+		return "updateManager"
 	case TransactionTypeRemoveManager:
 		return "removeManager"
 	case TransactionTypeSignPending:
@@ -702,6 +707,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeAddCredits, true
 	case "updateKeyPage":
 		return TransactionTypeUpdateKeyPage, true
+	case "updateManager":
+		return TransactionTypeUpdateManager, true
 	case "removeManager":
 		return TransactionTypeRemoveManager, true
 	case "signPending":

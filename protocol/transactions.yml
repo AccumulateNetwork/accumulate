@@ -422,6 +422,14 @@ AnchoredRecord:
     - name: Anchor
       type: chain
 
+UpdateManager:
+  kind: tx
+  fields:
+    - name: ManagerKeyBook
+      type: url.URL
+      pointer: true
+      marshal-as: reference
+
 RemoveManager:
   kind: tx
   fields:

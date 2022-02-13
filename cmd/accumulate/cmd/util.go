@@ -65,7 +65,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	if IsLiteAccount(origin.String()) {
 		privKey, err = LookupByLabel(origin.String())
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
+			return nil, nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
 		return args, &hdr, privKey, nil
 	}

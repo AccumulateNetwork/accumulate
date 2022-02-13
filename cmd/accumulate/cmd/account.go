@@ -118,7 +118,7 @@ var accountCreateDataLiteCmd = &cobra.Command{
 
 var accountQrCmd = &cobra.Command{
 	Use:   "qr [url]",
-	Short: "Display QR code for lite account URL",
+	Short: "Display QR code for lite token account URL",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := QrAccount(args[0])
@@ -364,6 +364,5 @@ func RestoreAccounts() (out string, err error) {
 			}
 		}
 	}
-
 	return out, nil
 }

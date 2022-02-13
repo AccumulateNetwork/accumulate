@@ -175,6 +175,17 @@ func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (
 	return &resp, nil
 }
 
+func (c *Client) ExecuteUpdateManager(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "update-manager", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (c *Client) ExecuteWriteData(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 

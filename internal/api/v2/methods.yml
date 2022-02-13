@@ -149,6 +149,11 @@ ExecuteBurnTokens:
   rpc: burn-tokens
   input: BurnTokens
 
+ExecuteUpdateManager:
+  kind: execute
+  rpc: update-manager
+  input: UpdateManager
+
 ExecuteRemoveManager:
   kind: execute
   rpc: remove-manager

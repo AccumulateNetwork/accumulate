@@ -41,6 +41,8 @@ func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 		return new(UpdateKeyPage), nil
 	case TransactionTypeSignPending:
 		return new(SignPending), nil
+	case TransactionTypeUpdateManager:
+		return new(UpdateManager), nil
 	case TransactionTypeRemoveManager:
 		return new(RemoveManager), nil
 

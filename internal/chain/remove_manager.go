@@ -4,13 +4,12 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type RemoveManager struct{}
 
-func (RemoveManager) Type() types.TxType { return types.TxTypeRemoveManager }
+func (RemoveManager) Type() protocol.TransactionType { return protocol.TransactionTypeRemoveManager }
 
 func (RemoveManager) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.RemoveManager)
