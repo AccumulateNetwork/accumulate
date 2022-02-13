@@ -43,7 +43,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 
 	if body.Receipt.Start != nil {
 		// If we got a receipt, verify it
-		err = x.verifyReceipt(st, body)
+		err := x.verifyReceipt(st, body)
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +54,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 	}
 
 	// Add the anchor to the chain
-	err = st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}

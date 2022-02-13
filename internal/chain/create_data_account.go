@@ -29,7 +29,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) (
 	account.Scratch = body.Scratch
 	account.ManagerKeyBook = body.ManagerKeyBookUrl
 
-	err = st.setKeyBook(account, body.KeyBookUrl)
+	err := st.setKeyBook(account, body.KeyBookUrl)
 	if err != nil {
 		return nil, err
 	}

@@ -20,7 +20,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (pro
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
 	}
 
-	err = protocol.IsValidAdiUrl(body.Url)
+	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %v", err)
 	}

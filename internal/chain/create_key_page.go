@@ -68,7 +68,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		page.Keys = append(page.Keys, ss)
 	}
 
-	err = scc.Create(page)
+	err := scc.Create(page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %v", err)
 	}

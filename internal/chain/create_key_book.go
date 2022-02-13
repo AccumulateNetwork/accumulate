@@ -33,7 +33,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	entries := make([]*protocol.KeyPage, len(body.Pages))
 	for i, page := range body.Pages {
 		entry := new(protocol.KeyPage)
-		err = st.LoadUrlAs(page, entry)
+		err := st.LoadUrlAs(page, entry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch sig spec: %v", err)
 		}
@@ -72,7 +72,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 	}
 
-	err = scc.Create(book)
+	err := scc.Create(book)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %v", err)
 	}

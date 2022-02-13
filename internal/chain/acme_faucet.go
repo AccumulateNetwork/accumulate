@@ -25,7 +25,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	// Check the recipient
 	u := body.Url
 	account := new(protocol.LiteTokenAccount)
-	err = st.LoadUrlAs(u, account)
+	err := st.LoadUrlAs(u, account)
 	switch {
 	case err == nil:
 		// If the recipient exists, it must be an ACME lite account
