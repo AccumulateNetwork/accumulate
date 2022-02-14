@@ -45,6 +45,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			WriteData{},
 			WriteDataTo{},
 			UpdateManager{},
+			RemoveManager{},
 
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},

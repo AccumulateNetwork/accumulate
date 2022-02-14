@@ -4,13 +4,12 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type UpdateManager struct{}
 
-func (UpdateManager) Type() types.TxType { return types.TxTypeUpdateManager }
+func (UpdateManager) Type() protocol.TransactionType { return protocol.TransactionTypeUpdateManager }
 
 func (UpdateManager) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.UpdateManager)

@@ -429,3 +429,7 @@ UpdateManager:
       type: url.URL
       pointer: true
       marshal-as: reference
+
+RemoveManager:
+  kind: tx
+  fields:
