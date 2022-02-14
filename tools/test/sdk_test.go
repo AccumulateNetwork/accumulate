@@ -1,11 +1,14 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -57,43 +60,7 @@ func TestSDK(t *testing.T) {
 							require.NoError(t, err)
 
 							// Compare the result to the TC
-							require.Equal(t, []byte(tc.JSON), json)
-						})
-
-						t.Run("Marshal Body", func(t *testing.T) {
-							t.Skip("TODO Enable once Type is included when marshalling a transaction")
-
-							// Unmarshal the body from the TC
-							body, err := protocol.UnmarshalTransactionJSON(tc.Inner)
-							require.NoError(t, err)
-
-							// TEST Binary marshal the body
-							bin, err := body.MarshalBinary()
-							require.NoError(t, err)
-
-							// Unmarshal the envelope from the TC
-							env := new(protocol.Envelope)
-							require.NoError(t, json.Unmarshal(tc.JSON, env))
-
-							// Compare the result to the envelope
-							require.Equal(t, env.Transaction.Body, bin)
-						})
-
-						t.Run("Unmarshal Body", func(t *testing.T) {
-							// Unmarshal the envelope from the TC
-							env := new(protocol.Envelope)
-							require.NoError(t, json.Unmarshal(tc.JSON, env))
-
-							// TEST Binary unmarshal the body from the envelope
-							body, err := protocol.UnmarshalTransaction(env.Transaction.Body)
-							require.NoError(t, err)
-
-							// Marshal the body
-							json, err := json.Marshal(body)
-							require.NoError(t, err)
-
-							// Compare the result to the TC
-							require.Equal(t, []byte(tc.Inner), json)
+							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
 						})
 					})
 				}
@@ -129,11 +96,55 @@ func TestSDK(t *testing.T) {
 							require.NoError(t, err)
 
 							// Compare the result to the TC
-							require.Equal(t, []byte(tc.JSON), json)
+							require.Equal(t, tokenize(t, tc.JSON), tokenize(t, json))
 						})
 					})
 				}
 			})
 		}
 	})
+}
+
+func tokenize(t *testing.T, in []byte) []json.Token {
+	var tokens []json.Token
+	dec := json.NewDecoder(bytes.NewReader(in))
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return tokens
+		}
+		require.NoError(t, err)
+		tokens = append(tokens, tok)
+	}
+}
+
+func flattenRawJson(t *testing.T, v reflect.Value) {
+	raw, ok := v.Interface().(json.RawMessage)
+	if ok {
+		if len(raw) == 0 {
+			return
+		}
+		var u interface{}
+		require.NoError(t, json.Unmarshal(raw, &u))
+		raw, err := json.Marshal(u)
+		require.NoError(t, err)
+		v.Set(reflect.ValueOf(raw))
+		return
+	}
+
+	for v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+
+	if v.Kind() != reflect.Struct {
+		return
+	}
+
+	typ := v.Type()
+	for i, nf := 0, v.NumField(); i < nf; i++ {
+		if !typ.Field(i).IsExported() {
+			continue
+		}
+		flattenRawJson(t, v.Field(i))
+	}
 }

@@ -1,9 +1,10 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
-	"fmt"
+	"io"
 )
 
 func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
@@ -25,8 +26,7 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 }
 
 func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
-	var typ TransactionType
-	err := typ.UnmarshalBinary(data)
+	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -37,6 +37,40 @@ func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
 	}
 
 	err = tx.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+func UnmarshalTransactionResultFrom(rd io.ReadSeeker) (TransactionResult, error) {
+	// Get the reader's current position
+	pos, err := rd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the type code
+	typ, err := UnmarshalTransactionType(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset the reader's position
+	_, err = rd.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new transaction result
+	tx, err := NewTransactionResult(TransactionType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the result
+	err = tx.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}
@@ -66,33 +100,7 @@ func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
 
 type TransactionResult interface {
 	GetType() TransactionType
-	BinarySize() int
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
-}
-
-type EmptyResult struct{}
-
-func (r *EmptyResult) GetType() TransactionType {
-	return TransactionTypeUnknown
-}
-
-func (r *EmptyResult) BinarySize() int {
-	return TransactionTypeUnknown.BinarySize()
-}
-
-func (r *EmptyResult) MarshalBinary() (data []byte, err error) {
-	return TransactionTypeUnknown.MarshalBinary()
-}
-
-func (r *EmptyResult) UnmarshalBinary(data []byte) error {
-	var typ TransactionType
-	err := typ.UnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-	if typ != TransactionTypeUnknown {
-		return fmt.Errorf("want %v, got %v", TransactionTypeUnknown, typ)
-	}
-	return nil
+	UnmarshalBinaryFrom(io.Reader) error
 }
