@@ -5,8 +5,7 @@ import (
 )
 
 func TestStateHeader(t *testing.T) {
-
-	header := AccountHeader{Url: "acme/chain/path", Type: AccountTypeLiteTokenAccount}
+	header := AccountHeader{Url: "acme/chain/path"}
 
 	data, err := header.MarshalBinary()
 	if err != nil {
@@ -20,11 +19,7 @@ func TestStateHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if header.GetType() != header2.GetType() {
-		t.Fatalf("header type doesnt match")
-	}
-
-	if header.GetChainUrl() != header2.GetChainUrl() {
+	if header.Url != header2.Url {
 		t.Fatalf("header adi chain path doesnt match")
 	}
 

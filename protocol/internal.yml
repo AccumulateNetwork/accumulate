@@ -5,6 +5,8 @@
 
 InternalLedger:
   kind: chain
+  embeddings:
+    - AccountHeader
   fields:
     - name: Index
       type: varint
@@ -14,10 +16,9 @@ InternalLedger:
       type: SyntheticLedger
       marshal-as: reference
     - name: Updates
-      type: slice
-      slice:
-        type: AnchorMetadata
-        marshal-as: reference
+      repeatable: true
+      type: AnchorMetadata
+      marshal-as: reference
 
 ##### Transactions #####
 
@@ -29,25 +30,24 @@ InternalSendTransactions:
   incomparable: true
   fields:
     - name: Transactions
-      type: slice
-      slice:
-        type: SendTransaction
-        marshal-as: reference
+      repeatable: true
+      type: SendTransaction
+      marshal-as: reference
 
 InternalTransactionsSigned:
   kind: tx
   fields:
     - name: Transactions
-      type: slice
-      slice:
-        type: TransactionSignature
-        marshal-as: reference
+      repeatable: true
+      type: TransactionSignature
+      marshal-as: reference
 
 InternalTransactionsSent:
   kind: tx
   fields:
     - name: Transactions
-      type: chainSet
+      type: chain
+      repeatable: true
 
 ##### Data Types #####
 
@@ -56,11 +56,14 @@ SyntheticLedger:
     - name: Nonce
       type: uvarint
     - name: Produced
-      type: chainSet
+      type: chain
+      repeatable: true
     - name: Unsigned
-      type: chainSet
+      type: chain
+      repeatable: true
     - name: Unsent
-      type: chainSet
+      type: chain
+      repeatable: true
 
 SendTransaction:
   incomparable: true
@@ -68,10 +71,10 @@ SendTransaction:
     - name: Payload
       type: TransactionPayload
       marshal-as: value
+      zero-value: nil
       unmarshal-with: UnmarshalTransaction
     - name: Recipient
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
 
 TransactionSignature:
@@ -81,6 +84,7 @@ TransactionSignature:
     - name: Signature
       # type: Signature
       # marshal-as: value
+      # zero-value: nil
       # unmarshal-with: UnmarshalSignature
       type: ED25519Sig
       marshal-as: reference
