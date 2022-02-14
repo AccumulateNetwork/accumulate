@@ -54,24 +54,18 @@ func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error
 }
 
 func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionPayload) (*transactions.Envelope, error) {
-	// Marshal the payload
-	data, err := body.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal synthetic transaction payload: %v", err)
-	}
-
 	// Build the transaction
 	env := new(transactions.Envelope)
 	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Origin = dest
 	env.Transaction.KeyPageHeight = 1
 	env.Transaction.KeyPageIndex = 0
-	env.Transaction.Body = data
+	env.Transaction.Body = body
 
 	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
 	ledgerState := new(protocol.InternalLedger)
-	err = st.LoadUrlAs(opts.Network.NodeUrl(protocol.Ledger), ledgerState)
+	err := st.LoadUrlAs(opts.Network.NodeUrl(protocol.Ledger), ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
