@@ -255,8 +255,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			continue
 		}
 
-		var typ types.TransactionType
-		_ = typ.UnmarshalBinary(tx.Transaction)
+		typ := tx.Transaction.GetType()
 		if typ != types.TxTypeSyntheticAnchor {
 			g.logger.Info("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}

@@ -8,6 +8,8 @@ import (
 	"io"
 	"math/big"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
@@ -262,6 +264,17 @@ func (r *Reader) ReadBigInt(n uint) (*big.Int, bool) {
 		return nil, false
 	}
 	return new(big.Int).SetBytes(v), true
+}
+
+// ReadUrl reads the value as a string.
+func (r *Reader) ReadUrl(n uint) (*url.URL, bool) {
+	s, ok := r.ReadString(n)
+	if !ok {
+		return nil, false
+	}
+	v, err := url.Parse(s)
+	r.didRead(n, err, "failed to parse url")
+	return v, err == nil
 }
 
 // ReadValue reads the value as a byte slice and unmarshals it.

@@ -19,8 +19,6 @@ type JrpcMethods struct {
 	querier  *queryDispatch
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
-	exch     chan executeRequest
-	queue    executeQueue
 	logger   log.Logger
 }
 
@@ -30,11 +28,6 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	m.Options = opts
 	m.querier = new(queryDispatch)
 	m.querier.Options = opts
-
-	m.exch = make(chan executeRequest)
-	m.queue.leader = make(chan struct{}, 1)
-	m.queue.leader <- struct{}{}
-	m.queue.enqueue = make(chan *executeRequest)
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "jrpc")
