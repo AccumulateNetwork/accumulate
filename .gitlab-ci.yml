@@ -55,18 +55,39 @@ git describe:
     reports:
       dotenv: git.env
 
-build images:
+docker buildx:
+  image: docker:20-git
   stage: build
   needs: []
-  tags: [ docker, linux ]
-  image: docker
-  services: [ 'docker:dind' ]
+  variables:
+    GIT_STRATEGY: none
+  artifacts:
+    paths:
+      - buildx
+    expire_in: 1 day
+  services: [ 'docker:20-dind' ]
   script:
-    - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
-    - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+    - export DOCKER_BUILDKIT=1
+    - git clone git://github.com/docker/buildx ./docker-buildx
+    - docker build --platform=local -o . ./docker-buildx
+
+build images:
+  stage: build
+  needs: [ 'docker buildx' ]
+  tags: [ docker, linux ]
+  image: docker:20
+  services:
+    - name: docker:20-dind
+      command: [ --experimental ] # Do we need this?
+  before_script:
+    - mkdir -p ~/.docker/cli-plugins
+    - mv buildx ~/.docker/cli-plugins/docker-buildx
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+  script:
+    - docker buildx create --use
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
-    - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
+    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
 
 lint:
   stage: build
