@@ -1,11 +1,14 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 
+	accenc "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -41,6 +44,10 @@ func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 		return new(UpdateKeyPage), nil
 	case TransactionTypeSignPending:
 		return new(SignPending), nil
+	case TransactionTypeUpdateManager:
+		return new(UpdateManager), nil
+	case TransactionTypeRemoveManager:
+		return new(RemoveManager), nil
 
 	case TransactionTypeSyntheticCreateChain:
 		return new(SyntheticCreateChain), nil
@@ -61,6 +68,8 @@ func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 
 	case TransactionTypeInternalGenesis:
 		return new(InternalGenesis), nil
+	case TransactionTypeInternalSendTransactions:
+		return new(InternalSendTransactions), nil
 	case TransactionTypeInternalTransactionsSigned:
 		return new(InternalTransactionsSigned), nil
 	case TransactionTypeInternalTransactionsSent:
@@ -71,24 +80,37 @@ func NewTransaction(typ TransactionType) (TransactionPayload, error) {
 	}
 }
 
+func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
+	reader := accenc.NewReader(r)
+	typ, ok := reader.ReadUint(1)
+	_, err := reader.Reset([]string{"Type"})
+	if err != nil {
+		return TransactionTypeUnknown, err
+	}
+	if !ok {
+		return TransactionTypeUnknown, fmt.Errorf("field Type: missing")
+	}
+
+	return TransactionType(typ), nil
+}
+
 func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
-	var typ TransactionType
-	err := typ.UnmarshalBinary(data)
+	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := NewTransaction(typ)
+	txn, err := NewTransaction(typ)
 	if err != nil {
 		return nil, err
 	}
 
-	err = tx.UnmarshalBinary(data)
+	err = txn.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
 	}
 
-	return tx, nil
+	return txn, nil
 }
 
 func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
@@ -98,24 +120,23 @@ func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
 		return nil, err
 	}
 
-	tx, err := NewTransaction(typ.Type)
+	txn, err := NewTransaction(typ.Type)
 	if err != nil {
 		return nil, err
 	}
 
-	err = json.Unmarshal(data, tx)
+	err = json.Unmarshal(data, txn)
 	if err != nil {
 		return nil, err
 	}
 
-	return tx, nil
+	return txn, nil
 }
 
 type TransactionPayload interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
 	GetType() TransactionType
-	BinarySize() int
 }
 
 type SyntheticTransaction interface {

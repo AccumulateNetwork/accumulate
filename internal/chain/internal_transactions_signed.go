@@ -14,15 +14,14 @@ type InternalTransactionsSigned struct{}
 func (InternalTransactionsSigned) Type() types.TxType { return types.TxTypeInternalTransactionsSigned }
 
 func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.InternalTransactionsSigned)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSigned)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.InternalTransactionsSigned), tx.Transaction.Body)
 	}
 
 	ledger, ok := st.Origin.(*protocol.InternalLedger)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeInternalLedger, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.GetType())
 	}
 
 	signatures := map[[32]byte]*transactions.ED25519Sig{}

@@ -222,6 +222,9 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	data, err := tx.Transaction.Body.MarshalBinary()
+	d.Require().NoError(err)
+
 	d.T().Helper()
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
@@ -231,9 +234,9 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	pl.Signature = tx.Signatures[0].Signature
 	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
 	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
-	pl.Payload = tx.Transaction.Body
+	pl.Payload = data
 
-	data, err := pl.MarshalJSON()
+	data, err = pl.MarshalJSON()
 	d.Require().NoError(err)
 
 	r := d.api().Execute(context.Background(), data)

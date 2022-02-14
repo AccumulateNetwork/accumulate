@@ -9,7 +9,6 @@ import (
 	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func TestSynthTokenDeposit_Lite(t *testing.T) {
@@ -31,7 +30,6 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	tas := new(protocol.LiteTokenAccount)
 	require.NoError(t, st.LoadUrlAs(st.OriginUrl, tas))
 	require.Equal(t, gtx.Transaction.Origin.String(), tas.Url, "invalid chain header")
-	require.Equalf(t, types.AccountTypeLiteTokenAccount, tas.Type, "chain state is not a lite account, it is %s", tas.AccountHeader.Type.String())
 	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
 
 }

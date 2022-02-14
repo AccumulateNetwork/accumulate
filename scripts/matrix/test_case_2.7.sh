@@ -2,7 +2,7 @@
 #
 # test case 2.7
 #
-# create an adi with same encoding as lite account
+# create an adi with same encoding as lite token account
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists

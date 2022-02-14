@@ -281,7 +281,7 @@ methods:
       schema:
         $ref: '#/components/schemas/keyPage'
   - name: add-credits
-    summary: Add credits to a lite account or key page
+    summary: Add credits to a lite token account or key page
     params:
       - name: wait
         summary: Wait for the transaction to complete
@@ -387,11 +387,11 @@ components:
           type: integer
         nonce:
           title: Nonce
-          description: Key nonce, for lite accounts
+          description: Key nonce, for lite token accounts
           type: integer
         creditBalance:
           title: Credit balance
-          description: Credit balance, for lite accounts
+          description: Credit balance, for lite token accounts
           type: integer
     tokenTx:
       title: Token Tx

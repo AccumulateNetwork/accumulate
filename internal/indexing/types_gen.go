@@ -5,26 +5,33 @@ package indexing
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type BlockStateIndex struct {
+	fieldsSet         []bool
 	ProducedSynthTxns []*BlockStateSynthTxnEntry `json:"producedSynthTxns,omitempty" form:"producedSynthTxns" query:"producedSynthTxns" validate:"required"`
 }
 
 type BlockStateSynthTxnEntry struct {
+	fieldsSet   []bool
 	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	ChainEntry  uint64 `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
 }
 
 type PendingTransactionsIndex struct {
+	fieldsSet    []bool
 	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
 type TransactionChainEntry struct {
+	fieldsSet   []bool
 	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Chain       string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
 	Block       uint64   `json:"block,omitempty" form:"block" query:"block" validate:"required"`
@@ -35,20 +42,18 @@ type TransactionChainEntry struct {
 }
 
 type TransactionChainIndex struct {
-	Entries []*TransactionChainEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	fieldsSet []bool
+	Entries   []*TransactionChainEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 }
 
 func (v *BlockStateIndex) Equal(u *BlockStateIndex) bool {
-	if !(len(v.ProducedSynthTxns) == len(u.ProducedSynthTxns)) {
+	if len(v.ProducedSynthTxns) != len(u.ProducedSynthTxns) {
 		return false
 	}
-
 	for i := range v.ProducedSynthTxns {
-		v, u := v.ProducedSynthTxns[i], u.ProducedSynthTxns[i]
-		if !(v.Equal(u)) {
+		if !((v.ProducedSynthTxns[i]).Equal(u.ProducedSynthTxns[i])) {
 			return false
 		}
-
 	}
 
 	return true
@@ -58,7 +63,6 @@ func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 	if !(bytes.Equal(v.Transaction, u.Transaction)) {
 		return false
 	}
-
 	if !(v.ChainEntry == u.ChainEntry) {
 		return false
 	}
@@ -67,12 +71,11 @@ func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 }
 
 func (v *PendingTransactionsIndex) Equal(u *PendingTransactionsIndex) bool {
-	if !(len(v.Transactions) == len(u.Transactions)) {
+	if len(v.Transactions) != len(u.Transactions) {
 		return false
 	}
-
 	for i := range v.Transactions {
-		if v.Transactions[i] != u.Transactions[i] {
+		if !(v.Transactions[i] == u.Transactions[i]) {
 			return false
 		}
 	}
@@ -81,30 +84,24 @@ func (v *PendingTransactionsIndex) Equal(u *PendingTransactionsIndex) bool {
 }
 
 func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
-	if !(v.Account.Equal(u.Account)) {
+	if !((v.Account).Equal(u.Account)) {
 		return false
 	}
-
 	if !(v.Chain == u.Chain) {
 		return false
 	}
-
 	if !(v.Block == u.Block) {
 		return false
 	}
-
 	if !(v.ChainEntry == u.ChainEntry) {
 		return false
 	}
-
 	if !(v.ChainAnchor == u.ChainAnchor) {
 		return false
 	}
-
 	if !(v.RootEntry == u.RootEntry) {
 		return false
 	}
-
 	if !(v.RootAnchor == u.RootAnchor) {
 		return false
 	}
@@ -113,288 +110,373 @@ func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
 }
 
 func (v *TransactionChainIndex) Equal(u *TransactionChainIndex) bool {
-	if !(len(v.Entries) == len(u.Entries)) {
+	if len(v.Entries) != len(u.Entries) {
 		return false
 	}
-
 	for i := range v.Entries {
-		v, u := v.Entries[i], u.Entries[i]
-		if !(v.Equal(u)) {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
 			return false
 		}
-
 	}
 
 	return true
 }
 
-func (v *BlockStateIndex) BinarySize() int {
-	var n int
-
-	n += encoding.UvarintBinarySize(uint64(len(v.ProducedSynthTxns)))
-
-	for _, v := range v.ProducedSynthTxns {
-		n += v.BinarySize()
-
-	}
-
-	return n
-}
-
-func (v *BlockStateSynthTxnEntry) BinarySize() int {
-	var n int
-
-	n += encoding.BytesBinarySize(v.Transaction)
-
-	n += encoding.UvarintBinarySize(v.ChainEntry)
-
-	return n
-}
-
-func (v *PendingTransactionsIndex) BinarySize() int {
-	var n int
-
-	n += encoding.ChainSetBinarySize(v.Transactions)
-
-	return n
-}
-
-func (v *TransactionChainEntry) BinarySize() int {
-	var n int
-
-	n += v.Account.BinarySize()
-
-	n += encoding.StringBinarySize(v.Chain)
-
-	n += encoding.UvarintBinarySize(v.Block)
-
-	n += encoding.UvarintBinarySize(v.ChainEntry)
-
-	n += encoding.UvarintBinarySize(v.ChainAnchor)
-
-	n += encoding.UvarintBinarySize(v.RootEntry)
-
-	n += encoding.UvarintBinarySize(v.RootAnchor)
-
-	return n
-}
-
-func (v *TransactionChainIndex) BinarySize() int {
-	var n int
-
-	n += encoding.UvarintBinarySize(uint64(len(v.Entries)))
-
-	for _, v := range v.Entries {
-		n += v.BinarySize()
-
-	}
-
-	return n
+var fieldNames_BlockStateIndex = []string{
+	1: "ProducedSynthTxns",
 }
 
 func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ProducedSynthTxns))))
-	for i, v := range v.ProducedSynthTxns {
-		_ = i
-		if b, err := v.MarshalBinary(); err != nil {
-			return nil, fmt.Errorf("error encoding ProducedSynthTxns[%d]: %w", i, err)
-		} else {
-			buffer.Write(b)
+	if !(len(v.ProducedSynthTxns) == 0) {
+		for _, v := range v.ProducedSynthTxns {
+			writer.WriteValue(1, v)
 		}
-
 	}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_BlockStateIndex)
+	return buffer.Bytes(), err
+}
+
+func (v *BlockStateIndex) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ProducedSynthTxns is missing")
+	} else if len(v.ProducedSynthTxns) == 0 {
+		errs = append(errs, "field ProducedSynthTxns is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockStateSynthTxnEntry = []string{
+	1: "Transaction",
+	2: "ChainEntry",
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.BytesMarshalBinary(v.Transaction))
+	if !(len(v.Transaction) == 0) {
+		writer.WriteBytes(1, v.Transaction)
+	}
+	if !(v.ChainEntry == 0) {
+		writer.WriteUint(2, v.ChainEntry)
+	}
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.ChainEntry))
+	_, _, err := writer.Reset(fieldNames_BlockStateSynthTxnEntry)
+	return buffer.Bytes(), err
+}
 
-	return buffer.Bytes(), nil
+func (v *BlockStateSynthTxnEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Transaction is missing")
+	} else if len(v.Transaction) == 0 {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ChainEntry is missing")
+	} else if v.ChainEntry == 0 {
+		errs = append(errs, "field ChainEntry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PendingTransactionsIndex = []string{
+	1: "Transactions",
 }
 
 func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.ChainSetMarshalBinary(v.Transactions))
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			writer.WriteHash(1, &v)
+		}
+	}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_PendingTransactionsIndex)
+	return buffer.Bytes(), err
+}
+
+func (v *PendingTransactionsIndex) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Transactions is missing")
+	} else if len(v.Transactions) == 0 {
+		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_TransactionChainEntry = []string{
+	1: "Account",
+	2: "Chain",
+	3: "Block",
+	4: "ChainEntry",
+	5: "ChainAnchor",
+	6: "RootEntry",
+	7: "RootAnchor",
 }
 
 func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	if b, err := v.Account.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding Account: %w", err)
-	} else {
-		buffer.Write(b)
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(len(v.Chain) == 0) {
+		writer.WriteString(2, v.Chain)
+	}
+	if !(v.Block == 0) {
+		writer.WriteUint(3, v.Block)
+	}
+	if !(v.ChainEntry == 0) {
+		writer.WriteUint(4, v.ChainEntry)
+	}
+	if !(v.ChainAnchor == 0) {
+		writer.WriteUint(5, v.ChainAnchor)
+	}
+	if !(v.RootEntry == 0) {
+		writer.WriteUint(6, v.RootEntry)
+	}
+	if !(v.RootAnchor == 0) {
+		writer.WriteUint(7, v.RootAnchor)
 	}
 
-	buffer.Write(encoding.StringMarshalBinary(v.Chain))
+	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
+	return buffer.Bytes(), err
+}
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.Block))
+func (v *TransactionChainEntry) IsValid() error {
+	var errs []string
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.ChainEntry))
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Chain is missing")
+	} else if len(v.Chain) == 0 {
+		errs = append(errs, "field Chain is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field ChainEntry is missing")
+	} else if v.ChainEntry == 0 {
+		errs = append(errs, "field ChainEntry is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field ChainAnchor is missing")
+	} else if v.ChainAnchor == 0 {
+		errs = append(errs, "field ChainAnchor is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field RootEntry is missing")
+	} else if v.RootEntry == 0 {
+		errs = append(errs, "field RootEntry is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field RootAnchor is missing")
+	} else if v.RootAnchor == 0 {
+		errs = append(errs, "field RootAnchor is not set")
+	}
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.ChainAnchor))
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.RootEntry))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.RootAnchor))
-
-	return buffer.Bytes(), nil
+var fieldNames_TransactionChainIndex = []string{
+	1: "Entries",
 }
 
 func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Entries))))
-	for i, v := range v.Entries {
-		_ = i
-		if b, err := v.MarshalBinary(); err != nil {
-			return nil, fmt.Errorf("error encoding Entries[%d]: %w", i, err)
-		} else {
-			buffer.Write(b)
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(1, v)
 		}
-
 	}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_TransactionChainIndex)
+	return buffer.Bytes(), err
+}
+
+func (v *TransactionChainIndex) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 func (v *BlockStateIndex) UnmarshalBinary(data []byte) error {
-	var lenProducedSynthTxns uint64
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding ProducedSynthTxns: %w", err)
-	} else {
-		lenProducedSynthTxns = x
-	}
-	data = data[encoding.UvarintBinarySize(lenProducedSynthTxns):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	v.ProducedSynthTxns = make([]*BlockStateSynthTxnEntry, lenProducedSynthTxns)
-	for i := range v.ProducedSynthTxns {
-		var x *BlockStateSynthTxnEntry
-		x = new(BlockStateSynthTxnEntry)
-		if err := x.UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding ProducedSynthTxns[%d]: %w", i, err)
+func (v *BlockStateIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(BlockStateSynthTxnEntry); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.ProducedSynthTxns = append(v.ProducedSynthTxns, x)
+		} else {
+			break
 		}
-		data = data[x.BinarySize():]
-
-		v.ProducedSynthTxns[i] = x
 	}
 
-	return nil
+	seen, err := reader.Reset(fieldNames_BlockStateIndex)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Transaction: %w", err)
-	} else {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
 		v.Transaction = x
 	}
-	data = data[encoding.BytesBinarySize(v.Transaction):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding ChainEntry: %w", err)
-	} else {
+	if x, ok := reader.ReadUint(2); ok {
 		v.ChainEntry = x
 	}
-	data = data[encoding.UvarintBinarySize(v.ChainEntry):]
 
-	return nil
+	seen, err := reader.Reset(fieldNames_BlockStateSynthTxnEntry)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *PendingTransactionsIndex) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Transactions: %w", err)
-	} else {
-		v.Transactions = x
-	}
-	data = data[encoding.ChainSetBinarySize(v.Transactions):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	return nil
+func (v *PendingTransactionsIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadHash(1); ok {
+			v.Transactions = append(v.Transactions, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_PendingTransactionsIndex)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
-	v.Account = new(url.URL)
-	if err := v.Account.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Account: %w", err)
-	}
-	data = data[v.Account.BinarySize():]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Chain: %w", err)
-	} else {
+func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadString(2); ok {
 		v.Chain = x
 	}
-	data = data[encoding.StringBinarySize(v.Chain):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Block: %w", err)
-	} else {
+	if x, ok := reader.ReadUint(3); ok {
 		v.Block = x
 	}
-	data = data[encoding.UvarintBinarySize(v.Block):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding ChainEntry: %w", err)
-	} else {
+	if x, ok := reader.ReadUint(4); ok {
 		v.ChainEntry = x
 	}
-	data = data[encoding.UvarintBinarySize(v.ChainEntry):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding ChainAnchor: %w", err)
-	} else {
+	if x, ok := reader.ReadUint(5); ok {
 		v.ChainAnchor = x
 	}
-	data = data[encoding.UvarintBinarySize(v.ChainAnchor):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding RootEntry: %w", err)
-	} else {
+	if x, ok := reader.ReadUint(6); ok {
 		v.RootEntry = x
 	}
-	data = data[encoding.UvarintBinarySize(v.RootEntry):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding RootAnchor: %w", err)
-	} else {
+	if x, ok := reader.ReadUint(7); ok {
 		v.RootAnchor = x
 	}
-	data = data[encoding.UvarintBinarySize(v.RootAnchor):]
 
-	return nil
+	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *TransactionChainIndex) UnmarshalBinary(data []byte) error {
-	var lenEntries uint64
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Entries: %w", err)
-	} else {
-		lenEntries = x
-	}
-	data = data[encoding.UvarintBinarySize(lenEntries):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	v.Entries = make([]*TransactionChainEntry, lenEntries)
-	for i := range v.Entries {
-		var x *TransactionChainEntry
-		x = new(TransactionChainEntry)
-		if err := x.UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding Entries[%d]: %w", i, err)
+func (v *TransactionChainIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(TransactionChainEntry); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
 		}
-		data = data[x.BinarySize():]
-
-		v.Entries[i] = x
 	}
 
-	return nil
+	seen, err := reader.Reset(fieldNames_TransactionChainIndex)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
@@ -411,7 +493,10 @@ func (v *PendingTransactionsIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transactions []string `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	u.Transactions = make([]string, len(v.Transactions))
+	for i, x := range v.Transactions {
+		u.Transactions[i] = encoding.ChainToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -438,14 +523,20 @@ func (v *PendingTransactionsIndex) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Transactions []string `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	u.Transactions = make([]string, len(v.Transactions))
+	for i, x := range v.Transactions {
+		u.Transactions[i] = encoding.ChainToJSON(x)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.ChainSetFromJSON(u.Transactions); err != nil {
-		return fmt.Errorf("error decoding Transactions: %w", err)
-	} else {
-		v.Transactions = x
+	v.Transactions = make([][32]byte, len(u.Transactions))
+	for i, x := range u.Transactions {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Transactions: %w", err)
+		} else {
+			v.Transactions[i] = x
+		}
 	}
 	return nil
 }

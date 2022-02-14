@@ -17,10 +17,9 @@ func (SyntheticDepositTokens) Type() types.TxType {
 
 func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// *big.Int, tokenChain, *url.URL
-	body := new(protocol.SyntheticDepositTokens)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
 	}
 
 	tokenUrl, err := url.Parse(body.Token)
@@ -36,7 +35,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		case *protocol.TokenAccount:
 			account = origin
 		default:
-			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
+			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.GetType())
 		}
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Origin); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)

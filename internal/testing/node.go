@@ -21,7 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const LogConsole = false
+const LogConsole = true
 
 const DefaultLogLevels = config.DefaultLogLevels //+ ";accumulate=debug"
 

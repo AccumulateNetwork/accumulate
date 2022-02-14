@@ -2,7 +2,7 @@
 #
 # test case 2.1
 #
-# create an adi "redwagon" sponsored by a lite account
+# create an adi "redwagon" sponsored by a lite token account
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists

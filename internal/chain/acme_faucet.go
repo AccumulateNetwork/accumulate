@@ -18,10 +18,9 @@ func (AcmeFaucet) Type() types.TxType { return types.TxTypeAcmeFaucet }
 
 func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
-	body := new(protocol.AcmeFaucet)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AcmeFaucet), tx.Transaction.Body)
 	}
 
 	u, err := url.Parse(body.Url)
@@ -34,7 +33,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	err = st.LoadUrlAs(u, account)
 	switch {
 	case err == nil:
-		// If the recipient exists, it must be an ACME lite account
+		// If the recipient exists, it must be an ACME lite token account
 		u, err := account.ParseTokenUrl()
 		if err != nil {
 			return nil, fmt.Errorf("invalid record: bad token URL: %v", err)

@@ -34,6 +34,7 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
@@ -70,7 +71,7 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, int64(count*100*AcmePrecision), account.Balance.Int64())
 	})
 
-	t.Run("Lite Account Credits", func(t *testing.T) {
+	t.Run("Lite Token Account Credits", func(t *testing.T) {
 		executeTx(t, japi, "add-credits", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,

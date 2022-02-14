@@ -14,10 +14,9 @@ type WriteDataTo struct{}
 func (WriteDataTo) Type() types.TransactionType { return types.TxTypeWriteDataTo }
 
 func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.WriteDataTo)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.WriteDataTo)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
 	}
 
 	recipient, err := url.Parse(body.Recipient)

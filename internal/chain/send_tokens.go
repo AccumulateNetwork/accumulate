@@ -14,14 +14,14 @@ type SendTokens struct{}
 func (SendTokens) Type() types.TxType { return types.TxTypeSendTokens }
 
 func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.SendTokens)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SendTokens), tx.Transaction.Body)
 	}
 
 	recipients := make([]*url.URL, len(body.To))
 	for i, to := range body.To {
+		var err error
 		recipients[i], err = url.Parse(to.Url)
 		if err != nil {
 			return nil, fmt.Errorf("invalid destination URL: %v", err)
@@ -35,7 +35,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	case *protocol.LiteTokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want %v or %v, got %v", types.AccountTypeTokenAccount, types.AccountTypeLiteTokenAccount, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want %v or %v, got %v", protocol.AccountTypeTokenAccount, protocol.AccountTypeLiteTokenAccount, st.Origin.GetType())
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
