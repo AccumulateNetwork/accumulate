@@ -10,7 +10,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 28)
+		m.methods = make(jsonrpc2.MethodMap, 29)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -25,6 +25,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-token"] = m.ExecuteCreateToken
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
 	m.methods["issue-tokens"] = m.ExecuteIssueTokens
+	m.methods["remove-manager"] = m.ExecuteRemoveManager
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["update-manager"] = m.ExecuteUpdateManager
@@ -111,6 +112,10 @@ func (m *JrpcMethods) ExecuteCreateTokenAccount(ctx context.Context, params json
 
 func (m *JrpcMethods) ExecuteIssueTokens(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.IssueTokens))
+}
+
+func (m *JrpcMethods) ExecuteRemoveManager(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.RemoveManager))
 }
 
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
