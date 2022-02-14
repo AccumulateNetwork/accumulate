@@ -26,24 +26,28 @@ type Type struct {
 	MakeConstructor bool
 	ChainType       string
 	TransactionType string
-	Embeddings      []*Type
+	Embeddings      []Embedding
 	Fields          []*Field
 }
 
-type Field struct {
-	Name            string
-	AlternativeName string
-	Type            string
-	IsPointer       bool
-	IsOptional      bool
-	IsUrl           bool
-	IsMarshalled    bool
-	AsReference     bool
-	AsValue         bool
-	OmitEmpty       bool
-	UnmarshalWith   string
-	Slice           *Field
+type Embedding struct {
+	*Type
+	Number uint
 }
+
+type Field struct {
+	typegen.Field
+	Number uint
+}
+
+func (f *Field) AlternativeName() string { return f.Alternative }
+func (f *Field) IsPointer() bool         { return f.Pointer }
+func (f *Field) IsMarshalled() bool      { return f.MarshalAs != "none" }
+func (f *Field) AsReference() bool       { return f.MarshalAs == "reference" }
+func (f *Field) AsValue() bool           { return f.MarshalAs == "value" }
+func (f *Field) IsOptional() bool        { return f.Optional }
+func (f *Field) IsRequired() bool        { return !f.Optional }
+func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
 func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
 	ttypes := new(Types)
@@ -67,42 +71,41 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
 		ttyp.Fields = make([]*Field, len(typ.Fields))
 		ttyp.MakeConstructor = !typ.OmitNewFunc
 		for i, field := range typ.Fields {
-			ttyp.Fields[i] = convertField(field)
+			ttyp.Fields[i] = &Field{Field: *field}
 		}
 	}
 
 	for i, typ := range types {
 		ttyp := ttypes.Types[i]
-		ttyp.Embeddings = make([]*Type, len(typ.Embeddings))
+		ttyp.Embeddings = make([]Embedding, len(typ.Embeddings))
 		for i, name := range typ.Embeddings {
 			etyp, ok := lup[name]
 			if !ok {
 				return nil, fmt.Errorf("unknown embedded type %s", name)
 			}
-			ttyp.Embeddings[i] = etyp
+			ttyp.Embeddings[i].Type = etyp
+		}
+	}
+
+	for _, typ := range ttypes.Types {
+		var num uint = 1
+		if typ.IsTransaction || typ.IsChain || typ.IsTxResult {
+			num += 1
+		}
+		for i := range typ.Embeddings {
+			typ.Embeddings[i].Number = num
+			num++
+		}
+		for _, field := range typ.Fields {
+			if !field.IsMarshalled() {
+				continue
+			}
+			field.Number = num
+			num++
 		}
 	}
 
 	return ttypes, nil
-}
-
-func convertField(field *typegen.Field) *Field {
-	tfield := new(Field)
-	tfield.Name = field.Name
-	tfield.AlternativeName = field.Alternative
-	tfield.Type = field.Type
-	tfield.IsPointer = field.Pointer
-	tfield.IsOptional = field.Optional
-	tfield.IsUrl = field.IsUrl
-	tfield.IsMarshalled = field.MarshalAs != "none"
-	tfield.AsReference = field.MarshalAs == "reference"
-	tfield.AsValue = field.MarshalAs == "value"
-	tfield.OmitEmpty = !field.KeepEmpty
-	tfield.UnmarshalWith = field.UnmarshalWith
-	if field.Slice != nil {
-		tfield.Slice = convertField(field.Slice)
-	}
-	return tfield
 }
 
 func lcName(s string) string {

@@ -91,7 +91,12 @@ func ComputeFee(tx *Envelope) (Fee, error) {
 	case TransactionTypeCreateDataAccount:
 		return FeeCreateDataAccount, nil
 	case TransactionTypeWriteData:
-		size := len(tx.Transaction.Body)
+		// TODO Include the header?
+		body, err := tx.Transaction.Body.MarshalBinary()
+		if err != nil {
+			return 0, err
+		}
+		size := len(body)
 		if size > WriteDataMax {
 			return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
 		}
