@@ -17,16 +17,14 @@ MetricsResponse:
 DirectoryQueryResult:
   fields:
     - name: Entries
-      type: slice
-      slice:
-        type: string
+      repeatable: true
+      type: string
       optional: true
     - name: ExpandedEntries
-      type: slice
-      slice:
-        type: Object
-        pointer: true
-        marshal-as: reference
+      repeatable: true
+      type: Object
+      pointer: true
+      marshal-as: reference
       optional: true
     - name: Total
       type: uvarint
@@ -35,8 +33,7 @@ DirectoryQueryResult:
 RequestDataEntry:
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: EntryHash
       type: chain
       optional: true
@@ -44,8 +41,7 @@ RequestDataEntry:
 RequestDataEntrySet:
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Start
       type: uvarint
     - name: Count
@@ -65,9 +61,8 @@ ResponseDataEntry:
 ResponseDataEntrySet:
   fields:
     - name: DataEntries
-      type: slice
-      slice:
-        type: ResponseDataEntry
-        marshal-as: reference
+      repeatable: true
+      type: ResponseDataEntry
+      marshal-as: reference
     - name: Total
       type: uvarint

@@ -1,9 +1,5 @@
 package protocol
 
-import (
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-)
-
 func (tx *TransactionState) Restore() *Envelope {
 	gtx := new(Envelope)
 	gtx.Transaction = new(Transaction)
@@ -13,11 +9,7 @@ func (tx *TransactionState) Restore() *Envelope {
 }
 
 func (tx *TransactionState) TxType() TransactionType {
-	if tx.Transaction == nil {
-		return TransactionTypeUnknown
-	}
-	transType, _ := common.BytesUint64(tx.Transaction)
-	return TransactionType(transType)
+	return tx.Transaction.GetType()
 }
 
 func (tx *PendingTransactionState) Restore() *Envelope {
