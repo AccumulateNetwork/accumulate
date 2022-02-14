@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/core/types"
@@ -69,7 +70,18 @@ type connectionContext struct {
 }
 
 func (cc *connectionContext) GetClient() Client {
-	return cc.client
+	if cc.client != nil {
+		return cc.client
+	}
+
+	// Client not there yet? Wait for it.
+	for i := 0; i < 100; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if cc.client != nil {
+			return cc.client
+		}
+	}
+	panic(fmt.Sprintf("Could not obtain a client for node %s  ", cc.nodeUrl))
 }
 
 func (cc *connectionContext) GetAddress() string {

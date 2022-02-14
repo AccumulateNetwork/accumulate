@@ -2,7 +2,6 @@ package routing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"strings"
@@ -13,8 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-var ErrUnknownSubnet = errors.New("unknown subnet")
 
 // Router defines a basic interface for routing and sending transactions.
 //

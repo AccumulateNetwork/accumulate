@@ -65,9 +65,16 @@ func (cm *connectionManager) doHealthCheckOnNode(cc ConnectionContext) {
 		return
 	}
 
-	/*	TODO
-		res := cm.apiMethods.Metrics(context.Background(), json.RawMessage("{Metric: \"tps\", Duration: time.Hour}"))
+	mtReq := protocol.MetricsRequest{
+		Metric:   "tps",
+		Duration: time.Hour,
+	}
+	/* TODO
+	marshalJSON, err := mtReq.MarshalJSON()
+	if err == nil {
+		res := cm.apiMethods.Metrics(context.Background(), marshalJSON)
 		cm.logger.Info("TPS response: %v", res)
+	}
 	*/
 	cc.GetMetrics().status = Up
 }
@@ -97,11 +104,11 @@ func (cm *connectionManager) SelectConnection(subnet string) (ConnectionContext,
 	bvnName := protocol.BvnNameFromSubnetName(subnet)
 	nodeList, ok := cm.bvnCtxMap[bvnName]
 	if !ok {
-		dnCtx := cm.dnCtxList[0]
-		if dnCtx.GetSubnetName() == subnet {
-			return dnCtx, nil
+		if strings.EqualFold(subnet, "directory") {
+			nodeList = cm.dnCtxList
+		} else {
+			return nil, fmt.Errorf("%w %q", ErrUnknownSubnet, subnet)
 		}
-		return nil, fmt.Errorf("%w %q", ErrUnknownSubnet, subnet)
 	}
 
 	healthyNodes := cm.getHealthyNodes(nodeList)
@@ -126,7 +133,7 @@ func (cm *connectionManager) SelectConnection(subnet string) (ConnectionContext,
 func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext) []ConnectionContext {
 	var healthyNodes = make([]ConnectionContext, 0)
 	for _, connCtx := range nodeList {
-		if connCtx.IsHealthy() {
+		if connCtx.GetNodeType() != config.Follower && connCtx.IsHealthy() { // TODO: Implement follower support?
 			healthyNodes = append(healthyNodes, connCtx)
 		}
 	}
@@ -134,7 +141,7 @@ func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext) []Con
 	if len(healthyNodes) == 0 { // When there is no alternative node available in the subnet, do another health check & try again
 		cm.ResetErrors()
 		for _, connCtx := range nodeList {
-			if connCtx.IsHealthy() {
+			if connCtx.GetNodeType() != config.Follower && connCtx.IsHealthy() {
 				healthyNodes = append(healthyNodes, connCtx)
 			}
 		}
@@ -194,12 +201,12 @@ func (cm *connectionManager) buildNodeInventory() {
 						panic("Directory subnet node is misconfigured as blockvalidator")
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
-					if !ok {
+					if ok {
+						cm.bvnCtxMap[bvnName] = append(nodeList, connCtx)
+					} else {
 						nodeList := make([]ConnectionContext, 1)
 						nodeList[0] = connCtx
 						cm.bvnCtxMap[bvnName] = nodeList
-					} else {
-						cm.bvnCtxMap[bvnName] = append(nodeList, connCtx)
 					}
 					cm.all = append(cm.all, connCtx)
 				case config.Directory:
@@ -237,7 +244,7 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 
 func (cm *connectionManager) determineNetworkGroup(subnetName string, address string) NetworkGroup {
 	switch {
-	case (strings.EqualFold(subnetName, cm.accConfig.Network.ID) && strings.EqualFold(cm.reformatAddress(address), cm.selfAddress)):
+	case strings.EqualFold(subnetName, cm.accConfig.Network.ID) && strings.EqualFold(cm.reformatAddress(address), cm.selfAddress):
 		return Local
 	case strings.EqualFold(subnetName, cm.accConfig.Network.ID):
 		return SameSubnet
@@ -265,7 +272,7 @@ func determineTypes(subnetName string, netCfg config.Network) (config.NetworkTyp
 	}
 
 	var nodeType config.NodeType
-	nodeType = config.Validator // TODO follower support
+	nodeType = config.Validator // TODO follower support?
 	return networkType, nodeType
 }
 
@@ -337,8 +344,4 @@ func resolveIPs(address string) ([]net.IP, error) {
 		return nil, fmt.Errorf("error doing DNS lookup for %s: %w", address, err)
 	}
 	return ipList, nil
-}
-
-func (m *NodeMetrics) SetStatus(status NodeStatus) {
-	m.status = status
 }
