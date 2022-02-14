@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/tendermint/tendermint/libs/log"
 	rpc "github.com/tendermint/tendermint/rpc/client"
@@ -22,6 +23,7 @@ const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml
 type ConnectionManager interface {
 	GetLocalNodeContext() ConnectionContext
 	GetLocalClient() *local.Local
+	SelectConnection(subnet string) (ConnectionContext, error)
 	GetBVNContextMap() map[string][]ConnectionContext
 	GetDNContextList() []ConnectionContext
 	GetFNContextList() []ConnectionContext
@@ -29,36 +31,28 @@ type ConnectionManager interface {
 	ResetErrors()
 }
 
-type ConnectionInitializer interface {
-	CreateClients(*local.Local) error
+type ApiMethods interface {
+	Metrics(_ context.Context, params json.RawMessage) interface{}
 }
 
-type FakeConnectionInitializer interface {
-	AssignFakeClients(interface{}) error
+type ConnectionInitializer interface {
+	InitClients(*local.Local, ApiMethods) error
 }
 
 type connectionManager struct {
-	accConfig    *config.Accumulate
-	bvnCtxMap    map[string][]ConnectionContext
-	dnCtxList    []ConnectionContext
-	fnCtxList    []ConnectionContext
-	all          []ConnectionContext
-	localNodeCtx ConnectionContext
-	localClient  *local.Local
-	logger       log.Logger
-	selfAddress  string
+	accConfig   *config.Accumulate
+	bvnCtxMap   map[string][]ConnectionContext
+	dnCtxList   []ConnectionContext
+	fnCtxList   []ConnectionContext
+	all         []ConnectionContext
+	localCtx    ConnectionContext
+	localClient *local.Local
+	logger      log.Logger
+	selfAddress string
+	apiMethods  ApiMethods
 }
 
 func (cm *connectionManager) doHealthCheckOnNode(cc ConnectionContext) {
-	// Try to get the version using the jsonRpcClient
-	/*	FIXME this call does not work.  Maybe only on v1?
-		_, err := cc.jsonRpcClient.Call("version")
-		if err != nil {
-			cc.ReportError(err)
-			return
-		}
-	*/
-
 	// Try to query Tendermint with something it should not find
 	qu := query.Query{}
 	qd, _ := qu.MarshalBinary()
@@ -71,15 +65,16 @@ func (cm *connectionManager) doHealthCheckOnNode(cc ConnectionContext) {
 		return
 	}
 
-	/*	FIXME this call does not work Maybe only on v1?
-		res, err := cc.jsonRpcClient.Call("metrics", &protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
-		cm.logger.Info("TPS response: %v", res.Result)
+	/*	TODO
+		res := cm.apiMethods.Metrics(context.Background(), json.RawMessage("{Metric: \"tps\", Duration: time.Hour}"))
+		cm.logger.Info("TPS response: %v", res)
 	*/
 	cc.GetMetrics().status = Up
 }
 
 type NodeMetrics struct {
-	status NodeStatus
+	status   NodeStatus
+	usageCnt uint64
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
@@ -90,6 +85,61 @@ func NewConnectionManager(config *config.Config, logger log.Logger) ConnectionMa
 	cm.logger = logger
 	cm.buildNodeInventory()
 	return cm
+}
+
+func (cm *connectionManager) SelectConnection(subnet string) (ConnectionContext, error) {
+
+	// When subnet is the same as the current node's subnet id, just return the local
+	if strings.EqualFold(subnet, cm.accConfig.Network.ID) {
+		return cm.localCtx, nil
+	}
+
+	bvnName := protocol.BvnNameFromSubnetName(subnet)
+	nodeList, ok := cm.bvnCtxMap[bvnName]
+	if !ok {
+		dnCtx := cm.dnCtxList[0]
+		if dnCtx.GetSubnetName() == subnet {
+			return dnCtx, nil
+		}
+		return nil, fmt.Errorf("%w %q", ErrUnknownSubnet, subnet)
+	}
+
+	healthyNodes := cm.getHealthyNodes(nodeList)
+	if len(healthyNodes) == 0 {
+		return nil, NoHealthyNodes // None of the nodes in the subnet could be reached
+	}
+
+	// Apply simple round-robin balancing to nodes in non-local subnets
+	var selCtx ConnectionContext
+	selCtxCnt := ^uint64(0)
+	for _, connCtx := range healthyNodes {
+		usageCnt := connCtx.GetMetrics().usageCnt
+		if usageCnt < selCtxCnt {
+			selCtx = connCtx
+			selCtxCnt = usageCnt
+		}
+	}
+	selCtx.GetMetrics().usageCnt++
+	return selCtx, nil
+}
+
+func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext) []ConnectionContext {
+	var healthyNodes = make([]ConnectionContext, 0)
+	for _, connCtx := range nodeList {
+		if connCtx.IsHealthy() {
+			healthyNodes = append(healthyNodes, connCtx)
+		}
+	}
+
+	if len(healthyNodes) == 0 { // When there is no alternative node available in the subnet, do another health check & try again
+		cm.ResetErrors()
+		for _, connCtx := range nodeList {
+			if connCtx.IsHealthy() {
+				healthyNodes = append(healthyNodes, connCtx)
+			}
+		}
+	}
+	return healthyNodes
 }
 
 func (cm *connectionManager) GetBVNContextMap() map[string][]ConnectionContext {
@@ -109,7 +159,7 @@ func (cm *connectionManager) GetAllNodeContexts() []ConnectionContext {
 }
 
 func (cm *connectionManager) GetLocalNodeContext() ConnectionContext {
-	return cm.localNodeCtx
+	return cm.localCtx
 }
 
 func (cm *connectionManager) GetLocalClient() *local.Local {
@@ -161,7 +211,7 @@ func (cm *connectionManager) buildNodeInventory() {
 				cm.all = append(cm.all, connCtx)
 			}
 			if connCtx.networkGroup == Local {
-				cm.localNodeCtx = connCtx
+				cm.localCtx = connCtx
 			}
 		}
 	}
@@ -219,8 +269,9 @@ func determineTypes(subnetName string, netCfg config.Network) (config.NetworkTyp
 	return networkType, nodeType
 }
 
-func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
+func (cm *connectionManager) InitClients(lclClient *local.Local, apiMethods ApiMethods) error {
 	cm.localClient = lclClient
+	cm.apiMethods = apiMethods
 
 	for _, connCtxList := range cm.bvnCtxMap {
 		for _, connCtx := range connCtxList {

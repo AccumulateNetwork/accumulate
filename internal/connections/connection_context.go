@@ -3,7 +3,6 @@ package connections
 import (
 	"context"
 	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	tm "github.com/tendermint/tendermint/types"
@@ -134,9 +133,10 @@ func (cc *connectionContext) GetMetrics() *NodeMetrics {
 }
 
 func (cc *connectionContext) ReportError(err error) {
+	// TODO Maybe we need to filter out certain errors, those should not mark the node as being out of service
 	cc.metrics.status = OutOfService
-	cc.lastError = err
 	// TODO refine err to status, OutOfService means the node is alive & kicking, but not able to handle request (ie still loading DB or syncing up)
+	cc.lastError = err
 	cc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
 }
 
@@ -144,8 +144,4 @@ func (cc *connectionContext) ReportErrorStatus(status NodeStatus, err error) {
 	cc.metrics.status = status
 	cc.lastError = err
 	cc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
-}
-
-func (cc *connectionContext) GetService() service.Service {
-	return cc.service
 }

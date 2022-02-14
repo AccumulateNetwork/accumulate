@@ -3,6 +3,7 @@ package accumulated
 import (
 	"context"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"io"
 	"net"
 	"net/http"
@@ -133,13 +134,11 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	// Create a proxy local client which we will populate with the local client
-	// after the node has been created.
-	clientProxy := node.NewLocalClient()
+	connectionManager := connections.NewConnectionManager(d.Config, d.Logger)
 
 	router := routing.RPC{
-		Network: &d.Config.Accumulate.Network,
-		Local:   clientProxy,
+		ConnectionManager: connectionManager,
+		Network:           &d.Config.Accumulate.Network,
 	}
 	execOpts := chain.ExecutorOptions{
 		DB:      d.db,
@@ -196,7 +195,6 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
-	clientProxy.Set(lclient)
 
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
@@ -213,6 +211,9 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
+
+	// Let the connection manager create and assign clients
+	connectionManager.(connections.ConnectionInitializer).InitClients(lclient, d.jrpc)
 
 	// Enable debug methods
 	if d.Config.Accumulate.API.EnableDebugMethods {

@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"strings"
 
 	"github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/client/http"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -61,45 +60,70 @@ func routeModulo(network *config.Network, account *url.URL) (string, error) {
 }
 
 // submit calls the appropriate client method to submit a transaction.
-func submit(client Client, ctx context.Context, tx []byte, pretend, async bool) (*ResponseSubmit, error) {
-	if pretend {
-		r1, err := client.CheckTx(ctx, tx)
+func submit(ctx context.Context, connMgr connections.ConnectionManager, subnet string, tx []byte, async bool) (*ResponseSubmit, error) {
+	var r1 *core.ResultBroadcastTx
+	errorCnt := 0
+	for {
+		connCtx, err := connMgr.SelectConnection(subnet)
 		if err != nil {
 			return nil, err
 		}
 
-		r2 := new(ResponseSubmit)
-		r2.Code = r1.Code
-		r2.Data = r1.Data
-		r2.Log = r1.Log
-		r2.Info = r1.Info
-		r2.MempoolError = r1.MempoolError
-		return r2, nil
-	}
+		if async {
+			r1, err = connCtx.GetClient().BroadcastTxAsync(ctx, tx)
+		} else {
+			r1, err = connCtx.GetClient().BroadcastTxSync(ctx, tx)
+		}
+		if err == nil {
+			r2 := new(ResponseSubmit)
+			r2.Code = r1.Code
+			r2.Data = r1.Data
+			r2.Log = r1.Log
+			r2.MempoolError = r1.MempoolError
+			return r2, nil
+		}
 
-	var r1 *core.ResultBroadcastTx
-	var err error
-	if async {
-		r1, err = client.BroadcastTxAsync(ctx, tx)
-	} else {
-		r1, err = client.BroadcastTxSync(ctx, tx)
+		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		connCtx.ReportError(err)
+		errorCnt++
+		if errorCnt > 1 {
+			return nil, err
+		}
 	}
-	if err != nil {
-		return nil, err
-	}
+}
 
-	r2 := new(ResponseSubmit)
-	r2.Code = r1.Code
-	r2.Data = r1.Data
-	r2.Log = r1.Log
-	r2.MempoolError = r1.MempoolError
-	return r2, nil
+func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, subnet string, tx []byte) (*ResponseSubmit, error) {
+	var r1 *core.ResultCheckTx
+	errorCnt := 0
+	for {
+		connCtx, err := connMgr.SelectConnection(subnet)
+		if err != nil {
+			return nil, err
+		}
+		r1, err = connCtx.GetClient().CheckTx(ctx, tx)
+		if err == nil {
+			r2 := new(ResponseSubmit)
+			r2.Code = r1.Code
+			r2.Data = r1.Data
+			r2.Log = r1.Log
+			r2.Info = r1.Info
+			r2.MempoolError = r1.MempoolError
+			return r2, nil
+		}
+
+		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		connCtx.ReportError(err)
+		errorCnt++
+		if errorCnt > 1 {
+			return nil, err
+		}
+	}
 }
 
 // RPC sends transactions to remote nodes via RPC calls.
 type RPC struct {
 	*config.Network
-	Local Client
+	ConnectionManager connections.ConnectionManager
 }
 
 var _ Router = (*RPC)(nil)
@@ -109,55 +133,45 @@ func (r *RPC) Route(account *url.URL) (string, error) {
 	return routeModulo(r.Network, account)
 }
 
-func (r *RPC) getClient(subnet string) (Client, error) {
-	if strings.EqualFold(r.ID, subnet) {
-		return r.Local, nil
-	}
-
-	// Viper always lower-cases map keys
-	subnet = strings.ToLower(subnet)
-
-	if len(r.Addresses[subnet]) == 0 {
-		return nil, fmt.Errorf("%w %q", ErrUnknownSubnet, subnet)
-	}
-
-	addr := r.Network.AddressWithPortOffset(subnet, networks.TmRpcPortOffset)
-	client, err := http.New(addr)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client: %v", err)
-	}
-
-	return client, nil
-}
-
 // Query queries the specified subnet. If the subnet matches this
 // network's ID, the transaction is broadcasted via the local client. Otherwise
 // the transaction is broadcasted via an RPC client.
 func (r *RPC) Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
-	client, err := r.getClient(subnet)
-	if err != nil {
-		return nil, err
-	}
+	errorCnt := 0
+	for {
+		connCtx, err := r.ConnectionManager.SelectConnection(subnet)
+		if err != nil {
+			return nil, err
+		}
+		result, err := connCtx.GetClient().ABCIQueryWithOptions(ctx, "", query, opts)
+		if err == nil {
+			return result, err
+		}
 
-	return client.ABCIQueryWithOptions(ctx, "", query, opts)
+		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		connCtx.ReportError(err)
+		errorCnt++
+		if errorCnt > 1 {
+			return nil, err
+		}
+	}
 }
 
 // Submit submits the transaction to the specified subnet. If the subnet matches
 // this network's ID, the transaction is broadcasted via the local client.
 // Otherwise the transaction is broadcasted via an RPC client.
 func (r *RPC) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*ResponseSubmit, error) {
-	client, err := r.getClient(subnet)
-	if err != nil {
-		return nil, err
+	if pretend {
+		return submitPretend(ctx, r.ConnectionManager, subnet, tx)
+	} else {
+		return submit(ctx, r.ConnectionManager, subnet, tx, async)
 	}
-
-	return submit(client, ctx, tx, pretend, async)
 }
 
 // Direct sends transactions directly to a client.
 type Direct struct {
 	*config.Network
-	Clients map[string]Client
+	ConnectionManager connections.ConnectionManager
 }
 
 var _ Router = (*Direct)(nil)
@@ -169,20 +183,32 @@ func (r *Direct) Route(account *url.URL) (string, error) {
 
 // Query sends the query to the specified subnet.
 func (r *Direct) Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
-	client, ok := r.Clients[subnet]
-	if !ok {
-		return nil, fmt.Errorf("%w %q", ErrUnknownSubnet, subnet)
-	}
+	errorCnt := 0
+	for {
+		connCtx, err := r.ConnectionManager.SelectConnection(subnet)
+		if err != nil {
+			return nil, err
+		}
 
-	return client.ABCIQueryWithOptions(ctx, "", query, opts)
+		result, err := connCtx.GetClient().ABCIQueryWithOptions(ctx, "", query, opts)
+		if err == nil {
+			return result, err
+		}
+
+		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		connCtx.ReportError(err)
+		errorCnt++
+		if errorCnt > 1 {
+			return nil, err
+		}
+	}
 }
 
 // Submit sends the transaction to the specified subnet.
 func (r *Direct) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*ResponseSubmit, error) {
-	client, ok := r.Clients[subnet]
-	if !ok {
-		return nil, fmt.Errorf("%w %q", ErrUnknownSubnet, subnet)
+	if pretend {
+		return submitPretend(ctx, r.ConnectionManager, subnet, tx)
+	} else {
+		return submit(ctx, r.ConnectionManager, subnet, tx, async)
 	}
-
-	return submit(client, ctx, tx, pretend, async)
 }
