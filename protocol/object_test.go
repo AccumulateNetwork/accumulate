@@ -11,7 +11,6 @@ func TestStateObject(t *testing.T) {
 
 	chain := new(AccountHeader)
 	chain.Url = "myadi"
-	chain.Type = AccountTypeLiteTokenAccount
 	so.Entry, err = chain.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)

@@ -170,20 +170,15 @@ func txnTest1(origin string, body TransactionPayload) *TC {
 }
 
 func txnTest(header *TransactionHeader, body TransactionPayload) *TC {
-	bodyBytes, err := body.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-
 	env := new(Envelope)
 	txn := new(Transaction)
 	sig := new(ED25519Sig)
 
 	env.Transaction = txn
 	txn.TransactionHeader = *header
-	txn.Body = bodyBytes
+	txn.Body = body
 
-	err = sig.Sign(header.Nonce, key, env.GetTxHash())
+	err := sig.Sign(header.Nonce, key, env.GetTxHash())
 	if err != nil {
 		panic(err)
 	}
