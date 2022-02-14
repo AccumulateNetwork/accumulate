@@ -142,6 +142,9 @@ const TransactionTypeUpdateKeyPage TransactionType = 15
 // TransactionTypeUpdateManager updates manager for the existing chain.
 const TransactionTypeUpdateManager TransactionType = 16
 
+// TransactionTypeRemoveManager remove manager from existing chain.
+const TransactionTypeRemoveManager TransactionType = 17
+
 // TransactionTypeSignPending is used to sign a pending transaction.
 const TransactionTypeSignPending TransactionType = 48
 
@@ -638,6 +641,8 @@ func (v TransactionType) String() string {
 		return "updateKeyPage"
 	case TransactionTypeUpdateManager:
 		return "updateManager"
+	case TransactionTypeRemoveManager:
+		return "removeManager"
 	case TransactionTypeSignPending:
 		return "signPending"
 	case TransactionTypeSyntheticCreateChain:
@@ -704,6 +709,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateKeyPage, true
 	case "updateManager":
 		return TransactionTypeUpdateManager, true
+	case "removeManager":
+		return TransactionTypeRemoveManager, true
 	case "signPending":
 		return TransactionTypeSignPending, true
 	case "syntheticCreateChain":
