@@ -95,7 +95,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..100}
+for i in {1..10}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
@@ -337,4 +337,4 @@ RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 section "create keypage with manager"
 wait-for cli-tx tx execute keytest/book keytest-0-0 '{"type": "createKeyPage","url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
 RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
-[ "$RESULT" == "keytest/book" ] && success || die "chain manager not set"
+[ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
