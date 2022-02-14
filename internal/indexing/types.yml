@@ -1,16 +1,15 @@
 TransactionChainIndex:
   fields:
   - name: Entries
-    type: slice
-    slice:
-      type: TransactionChainEntry
-      pointer: true
-      marshal-as: reference
+    repeatable: true
+    type: TransactionChainEntry
+    pointer: true
+    marshal-as: reference
 
 TransactionChainEntry:
   fields:
   - name: Account
-    type: url.URL
+    type: url
     marshal-as: reference
     pointer: true
   - name: Chain
@@ -29,11 +28,10 @@ TransactionChainEntry:
 BlockStateIndex:
   fields:
   - name: ProducedSynthTxns
-    type: slice
-    slice:
-      type: BlockStateSynthTxnEntry
-      pointer: true
-      marshal-as: reference
+    repeatable: true
+    type: BlockStateSynthTxnEntry
+    pointer: true
+    marshal-as: reference
 
 BlockStateSynthTxnEntry:
   fields:
@@ -45,4 +43,5 @@ BlockStateSynthTxnEntry:
 PendingTransactionsIndex:
   fields:
   - name: Transactions
-    type: chainSet
+    type: chain
+    repeatable: true
