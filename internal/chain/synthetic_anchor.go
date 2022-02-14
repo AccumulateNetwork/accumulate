@@ -20,15 +20,14 @@ func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor 
 
 func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body := new(protocol.SyntheticAnchor)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.GetType())
 	}
 
 	// Check the source URL

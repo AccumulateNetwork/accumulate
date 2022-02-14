@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -90,7 +89,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		}
 
 		acme := new(protocol.TokenIssuer)
-		acme.Type = types.AccountTypeTokenIssuer
 		acme.KeyBook = uBook.String()
 		acme.Url = protocol.AcmeUrl().String()
 		acme.Precision = 8

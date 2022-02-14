@@ -14,10 +14,9 @@ type SyntheticWriteData struct{}
 func (SyntheticWriteData) Type() types.TransactionType { return types.TxTypeSyntheticWriteData }
 
 func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.SyntheticWriteData)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
 	var account state.Chain
@@ -45,7 +44,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			result.AccountUrl = tx.Transaction.Origin
 		default:
 			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
-				types.AccountTypeLiteDataAccount, origin.Header().Type)
+				protocol.AccountTypeLiteDataAccount, origin.GetType())
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
 		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)
@@ -105,11 +104,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 	// produced the data entry
 
 	//now replace the original data entry payload with the new segwit payload
-	segWitPayload, err := sw.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to marshal segwit, %v", err)
-	}
-	tx.Transaction.Body = segWitPayload
+	tx.Transaction.Body = &sw
 
 	st.UpdateData(account, sw.EntryHash[:], &body.Entry)
 

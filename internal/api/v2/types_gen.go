@@ -5,8 +5,11 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -29,16 +32,19 @@ type ChainQueryResponse struct {
 }
 
 type DataEntry struct {
-	ExtIds [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
-	Data   []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	fieldsSet []bool
+	ExtIds    [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
+	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
 type DataEntryQuery struct {
-	Url       string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	fieldsSet []bool
+	Url       string   `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash"`
 }
 
 type DataEntryQueryResponse struct {
+	fieldsSet []bool
 	EntryHash [32]byte  `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
@@ -171,7 +177,7 @@ type TxnQuery struct {
 }
 
 type UrlQuery struct {
-	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 }
 
 type VersionResponse struct {
@@ -181,18 +187,14 @@ type VersionResponse struct {
 }
 
 func (v *DataEntry) Equal(u *DataEntry) bool {
-	if !(len(v.ExtIds) == len(u.ExtIds)) {
+	if len(v.ExtIds) != len(u.ExtIds) {
 		return false
 	}
-
 	for i := range v.ExtIds {
-		v, u := v.ExtIds[i], u.ExtIds[i]
-		if !(bytes.Equal(v, u)) {
+		if !(bytes.Equal(v.ExtIds[i], u.ExtIds[i])) {
 			return false
 		}
-
 	}
-
 	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
@@ -204,7 +206,6 @@ func (v *DataEntryQuery) Equal(u *DataEntryQuery) bool {
 	if !(v.Url == u.Url) {
 		return false
 	}
-
 	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
@@ -216,150 +217,201 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
-
-	if !(v.Entry.Equal(&u.Entry)) {
+	if !((&v.Entry).Equal(&u.Entry)) {
 		return false
 	}
 
 	return true
 }
 
-func (v *DataEntry) BinarySize() int {
-	var n int
-
-	n += encoding.UvarintBinarySize(uint64(len(v.ExtIds)))
-
-	for _, v := range v.ExtIds {
-		n += encoding.BytesBinarySize(v)
-
-	}
-
-	n += encoding.BytesBinarySize(v.Data)
-
-	return n
-}
-
-func (v *DataEntryQuery) BinarySize() int {
-	var n int
-
-	n += encoding.StringBinarySize(v.Url)
-
-	n += encoding.ChainBinarySize(&v.EntryHash)
-
-	return n
-}
-
-func (v *DataEntryQueryResponse) BinarySize() int {
-	var n int
-
-	n += encoding.ChainBinarySize(&v.EntryHash)
-
-	n += v.Entry.BinarySize()
-
-	return n
+var fieldNames_DataEntry = []string{
+	1: "ExtIds",
+	2: "Data",
 }
 
 func (v *DataEntry) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ExtIds))))
-	for i, v := range v.ExtIds {
-		_ = i
-		buffer.Write(encoding.BytesMarshalBinary(v))
-
+	if !(len(v.ExtIds) == 0) {
+		for _, v := range v.ExtIds {
+			writer.WriteBytes(1, v)
+		}
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(2, v.Data)
 	}
 
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
+	_, _, err := writer.Reset(fieldNames_DataEntry)
+	return buffer.Bytes(), err
+}
 
-	return buffer.Bytes(), nil
+func (v *DataEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ExtIds is missing")
+	} else if len(v.ExtIds) == 0 {
+		errs = append(errs, "field ExtIds is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DataEntryQuery = []string{
+	1: "Url",
+	2: "EntryHash",
 }
 
 func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.StringMarshalBinary(v.Url))
+	if !(len(v.Url) == 0) {
+		writer.WriteString(1, v.Url)
+	}
+	if !(v.EntryHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.EntryHash)
+	}
 
-	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
+	_, _, err := writer.Reset(fieldNames_DataEntryQuery)
+	return buffer.Bytes(), err
+}
 
-	return buffer.Bytes(), nil
+func (v *DataEntryQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if len(v.Url) == 0 {
+		errs = append(errs, "field Url is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DataEntryQueryResponse = []string{
+	1: "EntryHash",
+	2: "Entry",
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
 
-	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
-
-	if b, err := v.Entry.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding Entry: %w", err)
-	} else {
-		buffer.Write(b)
+	if !(v.EntryHash == ([32]byte{})) {
+		writer.WriteHash(1, &v.EntryHash)
+	}
+	if !((v.Entry).Equal(new(DataEntry))) {
+		writer.WriteValue(2, &v.Entry)
 	}
 
-	return buffer.Bytes(), nil
+	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
+	return buffer.Bytes(), err
+}
+
+func (v *DataEntryQueryResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field EntryHash is missing")
+	} else if v.EntryHash == ([32]byte{}) {
+		errs = append(errs, "field EntryHash is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Entry is missing")
+	} else if (v.Entry).Equal(new(DataEntry)) {
+		errs = append(errs, "field Entry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 func (v *DataEntry) UnmarshalBinary(data []byte) error {
-	var lenExtIds uint64
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding ExtIds: %w", err)
-	} else {
-		lenExtIds = x
-	}
-	data = data[encoding.UvarintBinarySize(lenExtIds):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	v.ExtIds = make([][]byte, lenExtIds)
-	for i := range v.ExtIds {
-		if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding ExtIds[%d]: %w", i, err)
+func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadBytes(1); ok {
+			v.ExtIds = append(v.ExtIds, x)
 		} else {
-			v.ExtIds[i] = x
+			break
 		}
-		data = data[encoding.BytesBinarySize(v.ExtIds[i]):]
-
 	}
-
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
+	if x, ok := reader.ReadBytes(2); ok {
 		v.Data = x
 	}
-	data = data[encoding.BytesBinarySize(v.Data):]
 
-	return nil
+	seen, err := reader.Reset(fieldNames_DataEntry)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *DataEntryQuery) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Url: %w", err)
-	} else {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DataEntryQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
 		v.Url = x
 	}
-	data = data[encoding.StringBinarySize(v.Url):]
-
-	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding EntryHash: %w", err)
-	} else {
-		v.EntryHash = x
+	if x, ok := reader.ReadHash(2); ok {
+		v.EntryHash = *x
 	}
-	data = data[encoding.ChainBinarySize(&v.EntryHash):]
 
-	return nil
+	seen, err := reader.Reset(fieldNames_DataEntryQuery)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *DataEntryQueryResponse) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding EntryHash: %w", err)
-	} else {
-		v.EntryHash = x
-	}
-	data = data[encoding.ChainBinarySize(&v.EntryHash):]
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	if err := v.Entry.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Entry: %w", err)
-	}
-	data = data[v.Entry.BinarySize():]
+func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
-	return nil
+	if x, ok := reader.ReadHash(1); ok {
+		v.EntryHash = *x
+	}
+	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.Entry = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
+	v.fieldsSet = seen
+	return err
 }
 
 func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
@@ -605,7 +657,10 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Signatures = v.Signatures
 	u.Status = v.Status
-	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
+	u.SyntheticTxids = make([]string, len(v.SyntheticTxids))
+	for i, x := range v.SyntheticTxids {
+		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
+	}
 	u.Receipts = v.Receipts
 	return json.Marshal(&u)
 }
@@ -726,8 +781,11 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.MainChain = u.MerkleState
 	}
-	v.Data = encoding.AnyFromJSON(u.Data)
-
+	if x, err := encoding.AnyFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
 	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
 		return fmt.Errorf("error decoding ChainId: %w", err)
 	} else {
@@ -752,7 +810,7 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 	v.ExtIds = make([][]byte, len(u.ExtIds))
 	for i, x := range u.ExtIds {
 		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ExtIds[%d]: %w", i, err)
+			return fmt.Errorf("error decoding ExtIds: %w", err)
 		} else {
 			v.ExtIds[i] = x
 		}
@@ -938,7 +996,7 @@ func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	v.Roots = make([][]byte, len(u.Roots))
 	for i, x := range u.Roots {
 		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Roots[%d]: %w", i, err)
+			return fmt.Errorf("error decoding Roots: %w", err)
 		} else {
 			v.Roots[i] = x
 		}
@@ -973,8 +1031,11 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Value = encoding.AnyFromJSON(u.Value)
-
+	if x, err := encoding.AnyFromJSON(u.Value); err != nil {
+		return fmt.Errorf("error decoding Value: %w", err)
+	} else {
+		v.Value = x
+	}
 	return nil
 }
 
@@ -1005,14 +1066,22 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	v.Type = u.Type
 	v.Items = make([]interface{}, len(u.Items))
 	for i, x := range u.Items {
-		v.Items[i] = encoding.AnyFromJSON(x)
+		if x, err := encoding.AnyFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Items: %w", err)
+		} else {
+			v.Items[i] = x
+		}
 	}
 	v.Start = u.Start
 	v.Count = u.Count
 	v.Total = u.Total
 	v.OtherItems = make([]interface{}, len(u.OtherItems))
 	for i, x := range u.OtherItems {
-		v.OtherItems[i] = encoding.AnyFromJSON(x)
+		if x, err := encoding.AnyFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding OtherItems: %w", err)
+		} else {
+			v.OtherItems[i] = x
+		}
 	}
 	return nil
 }
@@ -1113,7 +1182,10 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Signatures = v.Signatures
 	u.Status = v.Status
-	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
+	u.SyntheticTxids = make([]string, len(v.SyntheticTxids))
+	for i, x := range v.SyntheticTxids {
+		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
+	}
 	u.Receipts = v.Receipts
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1124,8 +1196,11 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.MainChain = u.MerkleState
 	}
-	v.Data = encoding.AnyFromJSON(u.Data)
-
+	if x, err := encoding.AnyFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
 	if u.Origin != "" {
 		v.Origin = u.Origin
 	} else {
@@ -1147,10 +1222,13 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Signatures = u.Signatures
 	v.Status = u.Status
-	if x, err := encoding.ChainSetFromJSON(u.SyntheticTxids); err != nil {
-		return fmt.Errorf("error decoding SyntheticTxids: %w", err)
-	} else {
-		v.SyntheticTxids = x
+	v.SyntheticTxids = make([][32]byte, len(u.SyntheticTxids))
+	for i, x := range u.SyntheticTxids {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding SyntheticTxids: %w", err)
+		} else {
+			v.SyntheticTxids[i] = x
+		}
 	}
 	v.Receipts = u.Receipts
 	return nil
@@ -1217,8 +1295,11 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TxHash = x
 	}
-	v.Payload = encoding.AnyFromJSON(u.Payload)
-
+	if x, err := encoding.AnyFromJSON(u.Payload); err != nil {
+		return fmt.Errorf("error decoding Payload: %w", err)
+	} else {
+		v.Payload = x
+	}
 	return nil
 }
 
@@ -1280,8 +1361,11 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	v.Code = u.Code
 	v.Message = u.Message
 	v.Delivered = u.Delivered
-	v.Result = encoding.AnyFromJSON(u.Result)
-
+	if x, err := encoding.AnyFromJSON(u.Result); err != nil {
+		return fmt.Errorf("error decoding Result: %w", err)
+	} else {
+		v.Result = x
+	}
 	return nil
 }
 

@@ -5,8 +5,8 @@ package client
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 )
 
 func (c *Client) Describe(ctx context.Context) (*api.DescriptionResponse, error) {
@@ -142,6 +142,17 @@ func (c *Client) ExecuteIssueTokens(ctx context.Context, req *api.TxRequest) (*a
 	return &resp, nil
 }
 
+func (c *Client) ExecuteRemoveManager(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "remove-manager", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 
@@ -157,6 +168,17 @@ func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (
 	var resp api.TxResponse
 
 	err := c.RequestAPIv2(ctx, "update-key-page", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func (c *Client) ExecuteUpdateManager(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "update-manager", req, &resp)
 	if err != nil {
 		return nil, err
 	}

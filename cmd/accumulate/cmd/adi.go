@@ -10,7 +10,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -68,7 +67,7 @@ var adiCreateCmd = &cobra.Command{
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite token account")
 	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
@@ -117,7 +116,7 @@ func GetADI(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.AccountTypeIdentity.String() {
+	if res.Type != protocol.AccountTypeIdentity.String() {
 		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
 	}
 

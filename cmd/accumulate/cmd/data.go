@@ -77,6 +77,10 @@ func PrintDataAccountCreate() {
 	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
 	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
 	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
+
+	//scratch data account
+	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
+	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
 }
 
 func PrintDataWrite() {
@@ -347,7 +351,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteDataTo{}
 	r, err := url.Parse(args[0])
 	if err != nil {
-		return "", fmt.Errorf("unable to parse lite account url")
+		return "", fmt.Errorf("unable to parse lite token account url")
 	}
 
 	accountId, err := protocol.ParseLiteDataAddress(r)

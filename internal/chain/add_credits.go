@@ -16,10 +16,9 @@ type AddCredits struct{}
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
 func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.AddCredits)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
 	}
 
 	// tokens = credits / (credits per dollar) / (dollars per token)
@@ -42,7 +41,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		case *protocol.LiteTokenAccount, *protocol.KeyPage:
 			// OK
 		default:
-			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeKeyPage, recv.Header().Type)
+			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.GetType())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Transaction.Origin.Routing() {

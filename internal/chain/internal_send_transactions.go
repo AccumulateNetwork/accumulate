@@ -13,10 +13,9 @@ type InternalSendTransactions struct{}
 func (InternalSendTransactions) Type() types.TxType { return types.TxTypeInternalSendTransactions }
 
 func (InternalSendTransactions) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.InternalSendTransactions)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.InternalSendTransactions)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.InternalSendTransactions), tx.Transaction.Body)
 	}
 
 	for _, tx := range body.Transactions {

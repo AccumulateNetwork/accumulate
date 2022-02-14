@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -58,8 +57,8 @@ func TestProofADI(t *testing.T) {
 	})
 
 	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
-	require.Equal(t, types.AccountTypeIdentity, n.GetADI("RoadRunner").Type)
-	require.Equal(t, types.AccountTypeTokenAccount, n.GetTokenAccount("RoadRunner/Baz").Type)
+	n.GetADI("RoadRunner")
+	n.GetTokenAccount("RoadRunner/Baz")
 
 	// TODO Verify proofs
 }

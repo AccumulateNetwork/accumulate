@@ -15,13 +15,12 @@ func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeIdentity, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.GetType())
 	}
 
-	body := new(protocol.CreateKeyBook)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.CreateKeyBook)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), tx.Transaction.Body)
 	}
 
 	if len(body.Pages) == 0 {
