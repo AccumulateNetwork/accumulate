@@ -3,7 +3,6 @@ package protocol
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding"
 )
 
 // GetTxHash returns the hash of the transaction.
@@ -78,28 +77,32 @@ func (t *Transaction) calculateHash() []byte {
 	}
 
 	// Marshal the header
-	data, err := t.TransactionHeader.MarshalBinary()
+	header, err := t.TransactionHeader.MarshalBinary()
 	if err != nil {
 		// TransactionHeader.MarshalBinary will never return an error, but better safe than sorry.
 		panic(err)
 	}
 
+	body, err := t.Body.MarshalBinary()
+	if err != nil {
+		// TransactionPayload.MarshalBinary should never return an error, but better safe than sorry.
+		panic(err)
+	}
+
 	// Calculate the hash
-	h1 := sha256.Sum256(data)
-	h2 := sha256.Sum256(t.Body)
-	data = make([]byte, sha256.Size*2)
-	copy(data, h1[:])
-	copy(data[sha256.Size:], h2[:])
-	h := sha256.Sum256(data)
+	h1 := sha256.Sum256(header)
+	h2 := sha256.Sum256(body)
+	header = make([]byte, sha256.Size*2)
+	copy(header, h1[:])
+	copy(header[sha256.Size:], h2[:])
+	h := sha256.Sum256(header)
 	t.hash = h[:]
 	return h[:]
 }
 
 // Type decodes the transaction type from the body.
 func (t *Transaction) Type() TransactionType {
-	typ := TransactionTypeUnknown
-	_ = typ.UnmarshalBinary(t.Body)
-	return typ
+	return t.Body.GetType()
 }
 
 // Verify verifies that the signatures are valid.
@@ -115,9 +118,4 @@ func (e *Envelope) Verify() bool {
 	}
 
 	return true
-}
-
-// As unmarshals the transaction payload as the given sub transaction type.
-func (e *Envelope) As(subTx encoding.BinaryUnmarshaler) error {
-	return subTx.UnmarshalBinary(e.Transaction.Body)
 }

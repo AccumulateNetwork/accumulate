@@ -14,10 +14,9 @@ type CreateDataAccount struct{}
 func (CreateDataAccount) Type() types.TransactionType { return types.TxTypeCreateDataAccount }
 
 func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.CreateDataAccount)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.CreateDataAccount)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), tx.Transaction.Body)
 	}
 
 	dataAccountUrl, err := url.Parse(body.Url)

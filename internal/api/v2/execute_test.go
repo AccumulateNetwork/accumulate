@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"encoding/hex"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -11,12 +12,16 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestExecuteCheckOnly(t *testing.T) {
+	payload, err := new(protocol.SignPending).MarshalBinary()
+	require.NoError(t, err)
+
 	baseReq := TxRequest{
 		Origin:  &url.URL{Authority: "check"},
-		Payload: "",
+		Payload: hex.EncodeToString(payload),
 		Signer: Signer{
 			PublicKey: make([]byte, 32),
 		},
@@ -42,7 +47,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 
 		req := baseReq
 		req.CheckOnly = true
-		r := j.DoExecute(context.Background(), &req, []byte{})
+		r := j.DoExecute(context.Background(), &req, payload)
 		err, _ = r.(error)
 		require.NoError(t, err)
 	})
@@ -66,7 +71,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 
 		req := baseReq
 		req.CheckOnly = false
-		r := j.DoExecute(context.Background(), &req, []byte{})
+		r := j.DoExecute(context.Background(), &req, payload)
 		err, _ = r.(error)
 		require.NoError(t, err)
 	})
