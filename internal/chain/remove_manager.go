@@ -12,10 +12,9 @@ type RemoveManager struct{}
 func (RemoveManager) Type() protocol.TransactionType { return protocol.TransactionTypeRemoveManager }
 
 func (RemoveManager) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.RemoveManager)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	_, ok := tx.Transaction.Body.(*protocol.RemoveManager)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.RemoveManager), tx.Transaction.Body)
 	}
 	if st.Origin.Header().ManagerKeyBook == "" {
 		return nil, fmt.Errorf("manager keybook not assigned")

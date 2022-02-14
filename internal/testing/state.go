@@ -45,21 +45,16 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	deposit.Token = protocol.ACME
 	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
 
-	depData, err := deposit.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
 	tx := new(transactions.Envelope)
 	tx.Transaction = new(transactions.Transaction)
-	tx.Transaction.Body = depData
+	tx.Transaction.Body = deposit
 	tx.Transaction.Origin = recipientAdi
 	tx.Transaction.KeyPageHeight = 1
 
 	ed := new(transactions.ED25519Sig)
 	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
+	err := ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
@@ -80,14 +75,9 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	txData, err := send.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal token tx: %v", err)
-	}
-
 	gtx := new(transactions.Envelope)
 	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = txData
+	gtx.Transaction.Body = &send
 	gtx.Transaction.Origin = from
 
 	ed := new(transactions.ED25519Sig)
@@ -118,20 +108,15 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
 	// deposit.TokenUrl = tokenUrl
 
-	depData, err := deposit.MarshalBinary()
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("failed to marshal deposit: %v", err)
-	}
-
 	gtx := new(transactions.Envelope)
 	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = depData
+	gtx.Transaction.Body = deposit
 	gtx.Transaction.Origin = destAddress
 
 	ed := new(transactions.ED25519Sig)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
+	err := ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}

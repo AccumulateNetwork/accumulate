@@ -24,12 +24,6 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 		if typ.ChainType == "" {
 			typ.ChainType = typ.Name
 		}
-
-		for _, f := range typ.Fields {
-			if f.Slice != nil {
-				f.Slice.Name = f.Name
-			}
-		}
 	}
 
 	sort.Slice(t, func(i, j int) bool {
@@ -64,12 +58,12 @@ type Field struct {
 	Type          string
 	MarshalAs     string `yaml:"marshal-as"`
 	UnmarshalWith string `yaml:"unmarshal-with"`
-	Slice         *Field
+	Repeatable    bool
 	Pointer       bool
 	Optional      bool
-	IsUrl         bool `yaml:"is-url"`
 	KeepEmpty     bool `yaml:"keep-empty"`
 	Alternative   string
+	ZeroValue     interface{} `yaml:"zero-value"`
 }
 
 type API map[string]Method
