@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/exp/rand"
 	"sort"
+	"strconv"
 	"testing"
 )
 
@@ -48,19 +50,20 @@ func TestRoutingSpread1(t *testing.T) {
 
 func TestRoutingSpread2(t *testing.T) {
 	var counters = make(map[string]uint)
+	for j := 0; j < 100; j++ {
+		for i := 0; i < len(accWords); i += 2 {
+			accUrl := url.URL{
+				Authority: strconv.Itoa(i) + "_" + accWords[i] + "_" + accWords[i+1] + "_" + strconv.Itoa(rand.Int()),
+			}
+			adiRoutingNr := accUrl.Routing()
+			i := adiRoutingNr % uint64(65536)
+			var selectedBvn = fmt.Sprintf("bvn-%d", i)
 
-	for i := 0; i < len(accWords); i += 2 {
-		accUrl := url.URL{
-			Authority: accWords[i] + "_" + accWords[i+1],
+			if _, ok := counters[selectedBvn]; !ok {
+				counters[selectedBvn] = 0
+			}
+			counters[selectedBvn]++
 		}
-		adiRoutingNr := accUrl.Routing()
-		i := adiRoutingNr % uint64(100)
-		var selectedBvn = bvnWords[i]
-
-		if _, ok := counters[selectedBvn]; !ok {
-			counters[selectedBvn] = 0
-		}
-		counters[selectedBvn]++
 	}
 
 	bvnNames := make([]string, 0, len(counters))
@@ -73,6 +76,7 @@ func TestRoutingSpread2(t *testing.T) {
 	for _, name := range bvnNames {
 		fmt.Printf("%-7v %v\n", name, counters[name])
 	}
+	fmt.Printf("We have %d shards\n", len(counters))
 }
 
 var bvnWords = [...]string{"different", "metal", "specific", "teach", "appropriate", "observe", "waste", "major", "satisfied", "above", "unknown", "familiar", "article", "bottle", "per", "poetry", "cry", "tank", "soft", "contrast", "donkey", "needed", "during", "mix", "explore", "want", "frequently", "table", "neighbor", "coach", "sold", "biggest", "stone", "live", "show", "pool", "onto", "trade", "trunk", "party", "studied", "mysterious", "than", "agree", "strip", "bicycle", "paper", "pen", "officer", "long", "former", "extra", "almost", "till", "morning", "habit", "danger", "action", "instead", "highest", "steel", "pink", "follow", "range", "butter", "birthday", "teeth", "till", "spoken", "usual", "known", "joined", "mix", "win", "lucky", "pie", "six", "shelf", "work", "calm", "flag", "bent", "bag", "smaller", "weigh", "title", "about", "characteristic", "region", "practical", "single", "good", "putting", "range", "finest", "basis", "wait", "smoke", "hope", "onlinetools", "birth", "sink", "pet", "fewer", "reach", "rice", "stage", "shall", "volume", "it", "happen", "charge", "wrote", "dozen", "solid", "everything", "nearest", "single", "care", "social", "fire", "earn", "goose", "function", "wise", "white", "cap", "will", "arrive", "health", "compass", "cake", "standard", "carefully", "stems", "unusual", "while", "they", "cream", "stranger", "where", "few", "yourself", "cattle", "horn", "personal", "habit", "promised", "least", "birds", "apple", "roll", "hold", "burst", "orbit", "fear", "week", "brown", "police", "silly", "ourselves", "smile", "rays", "wonder", "end", "syllable", "part", "range", "life", "sum", "fine", "quite", "factor", "dear", "appropriate", "become", "seen", "broken", "union", "independent", "practical", "post", "tight", "brother", "doll", "coming", "applied", "out", "rear", "came", "comfortable", "pet", "mysterious", "able", "improve", "laugh", "radio", "history", "yourself", "third", "able"}
