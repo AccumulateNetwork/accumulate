@@ -30,7 +30,11 @@ func (e *DataEntry) Hash() []byte {
 //CheckSize is the marshaled size minus the implicit type header,
 //returns error if there is too much or no data
 func (e *DataEntry) CheckSize() (int, error) {
-	size := e.BinarySize()
+	b, err := e.MarshalBinary()
+	if err != nil {
+		return 0, err
+	}
+	size := len(b)
 	if size > WriteDataMax {
 		return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
 	}

@@ -8,6 +8,8 @@ import (
 	"io"
 	"math/big"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 var ErrInvalidFieldNumber = errors.New("field number is invalid")
@@ -189,6 +191,11 @@ func (w *Writer) WriteDuration(n uint, v time.Duration) {
 // WriteBigInt writes the value as a big-endian byte slice.
 func (w *Writer) WriteBigInt(n uint, v *big.Int) {
 	w.WriteBytes(n, v.Bytes())
+}
+
+// WriteUrl writes the value as a string.
+func (w *Writer) WriteUrl(n uint, v *url.URL) {
+	w.WriteString(n, v.String())
 }
 
 // WriteValue marshals the value and writes it as a byte slice.

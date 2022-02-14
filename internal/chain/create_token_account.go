@@ -14,10 +14,9 @@ type CreateTokenAccount struct{}
 func (CreateTokenAccount) Type() types.TxType { return types.TxTypeCreateTokenAccount }
 
 func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.CreateTokenAccount)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.CreateTokenAccount)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
 	}
 
 	accountUrl, err := url.Parse(body.Url)

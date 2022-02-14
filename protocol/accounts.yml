@@ -2,26 +2,24 @@
 
 AccountHeader:
   fields:
-    - name: Type
-      type: AccountType
-      marshal-as: value
-    - name: Url
-      type: string
-    - name: KeyBook
-      type: string
-    - name: ManagerKeyBook
-      type: string
-    - name: url
-      type: url.URL
-      pointer: true
-      marshal-as: none
+  - name: Url
+    type: string # TODO change to url
+  - name: KeyBook
+    type: string # TODO change to url
+  - name: ManagerKeyBook
+    type: string # TODO change to url
+  - name: url
+    type: url
+    pointer: true
+    marshal-as: none
 
 LiteTokenAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Balance
       type: bigint
     - name: Nonce
@@ -31,21 +29,26 @@ LiteTokenAccount:
 
 LiteDataAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Tail
       type: bytes
 
 ADI:
   kind: chain
+  embeddings:
+  - AccountHeader
   chain-type: Identity
   fields: [ ]
 
 TokenAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Balance
       type: bigint
     - name: Scratch
@@ -54,29 +57,32 @@ TokenAccount:
 
 KeyPage:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: CreditBalance
       type: bigint
     - name: Threshold
       type: uvarint
     - name: Keys
-      type: slice
-      slice:
-        type: KeySpec
-        pointer: true
-        marshal-as: reference
+      repeatable: true
+      type: KeySpec
+      pointer: true
+      marshal-as: reference
 
 KeyBook:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Pages
-      type: slice
-      slice:
-        type: string
-        is-url: true
+      repeatable: true
+      type: string # TODO change to url
 
 DataAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Scratch
       type: bool
@@ -84,14 +90,15 @@ DataAccount:
 
 TokenIssuer:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Symbol
       type: string
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string
-      is-url: true
+      type: string # TODO change to url
     - name: Supply
       type: bigint
       optional: true
@@ -101,6 +108,8 @@ TokenIssuer:
 
 Anchor:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields: [ ]
 
 ##### Data Types #####

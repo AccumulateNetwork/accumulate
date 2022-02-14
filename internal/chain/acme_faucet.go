@@ -18,10 +18,9 @@ func (AcmeFaucet) Type() types.TxType { return types.TxTypeAcmeFaucet }
 
 func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
-	body := new(protocol.AcmeFaucet)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AcmeFaucet), tx.Transaction.Body)
 	}
 
 	u, err := url.Parse(body.Url)

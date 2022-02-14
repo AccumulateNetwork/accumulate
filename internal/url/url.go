@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"path"
 	"strings"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 // ErrMissingHost means that a URL did not include a hostname.
@@ -212,32 +210,6 @@ func (u *URL) JoinPath(s ...string) *URL {
 	v := *u
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
 	return &v
-}
-
-// BinarySize returns the number of bytes the URL will marshal to.
-func (u *URL) BinarySize() int {
-	return encoding.StringBinarySize(u.String())
-}
-
-// MarshalBinary marshals the URL to binary.
-func (u *URL) MarshalBinary() ([]byte, error) {
-	return encoding.StringMarshalBinary(u.String()), nil
-}
-
-// UnmarshalBinary unmarshals the URL from binary.
-func (u *URL) UnmarshalBinary(data []byte) error {
-	s, err := encoding.StringUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	v, err := Parse(s)
-	if err != nil {
-		return err
-	}
-
-	*u = *v
-	return nil
 }
 
 // MarshalJSON marshals the URL to JSON as a string.

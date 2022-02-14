@@ -1,13 +1,13 @@
 txSignatures:
   fields:
     - name: Signatures
-      type: slice
-      slice:
-        type: transactions.ED25519Sig
-        pointer: true
-        marshal-as: reference
+      repeatable: true
+      type: transactions.ED25519Sig
+      pointer: true
+      marshal-as: reference
 
 txSyntheticTxns:
   fields:
     - name: Txids
-      type: chainSet
+      type: chain
+      repeatable: true
