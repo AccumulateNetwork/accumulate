@@ -220,12 +220,12 @@ func TestValidate(t *testing.T) {
 			Payload: &UpdateKeyPage{
 				Operation: protocol.KeyPageOperationAdd,
 				NewKey:    adiKey2[32:],
-				Owner:     "acc://foo/book1",
+				Owner:     makeUrl(t, "acc://foo/book1"),
 			},
 		})
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner)
+		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner.String())
 	})
 
 	tokenAccountUrl := adiName.JoinPath("/account")

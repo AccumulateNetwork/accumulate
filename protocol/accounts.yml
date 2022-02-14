@@ -124,4 +124,5 @@ KeySpec:
     - name: Nonce
       type: uvarint
     - name: Owner
-      type: string
+      type: url
+      pointer: true

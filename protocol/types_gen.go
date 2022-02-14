@@ -215,9 +215,9 @@ type KeyPage struct {
 
 type KeySpec struct {
 	fieldsSet []bool
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Owner     string `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
@@ -466,7 +466,7 @@ type UpdateKeyPage struct {
 	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
 	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
 	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
-	Owner     string           `json:"owner,omitempty" form:"owner" query:"owner"`
+	Owner     *url.URL         `json:"owner,omitempty" form:"owner" query:"owner"`
 	Threshold uint64           `json:"threshold,omitempty" form:"threshold" query:"threshold"`
 }
 
@@ -1071,7 +1071,7 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 	if !(v.Nonce == u.Nonce) {
 		return false
 	}
-	if !(v.Owner == u.Owner) {
+	if !((v.Owner).Equal(u.Owner)) {
 		return false
 	}
 
@@ -1592,7 +1592,7 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	if !(bytes.Equal(v.NewKey, u.NewKey)) {
 		return false
 	}
-	if !(v.Owner == u.Owner) {
+	if !((v.Owner).Equal(u.Owner)) {
 		return false
 	}
 	if !(v.Threshold == u.Threshold) {
@@ -3051,8 +3051,8 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	if !(v.Nonce == 0) {
 		writer.WriteUint(2, v.Nonce)
 	}
-	if !(len(v.Owner) == 0) {
-		writer.WriteString(3, v.Owner)
+	if !(v.Owner == nil) {
+		writer.WriteUrl(3, v.Owner)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpec)
@@ -3074,7 +3074,7 @@ func (v *KeySpec) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Owner is missing")
-	} else if len(v.Owner) == 0 {
+	} else if v.Owner == nil {
 		errs = append(errs, "field Owner is not set")
 	}
 
@@ -4858,8 +4858,8 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	if !(len(v.NewKey) == 0) {
 		writer.WriteBytes(4, v.NewKey)
 	}
-	if !(len(v.Owner) == 0) {
-		writer.WriteString(5, v.Owner)
+	if !(v.Owner == nil) {
+		writer.WriteUrl(5, v.Owner)
 	}
 	if !(v.Threshold == 0) {
 		writer.WriteUint(6, v.Threshold)
@@ -5844,7 +5844,7 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Nonce = x
 	}
-	if x, ok := reader.ReadString(3); ok {
+	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
 	}
 
@@ -6756,7 +6756,7 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.NewKey = x
 	}
-	if x, ok := reader.ReadString(5); ok {
+	if x, ok := reader.ReadUrl(5); ok {
 		v.Owner = x
 	}
 	if x, ok := reader.ReadUint(6); ok {
@@ -7227,9 +7227,9 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-		Nonce     uint64  `json:"nonce,omitempty"`
-		Owner     string  `json:"owner,omitempty"`
+		PublicKey *string  `json:"publicKey,omitempty"`
+		Nonce     uint64   `json:"nonce,omitempty"`
+		Owner     *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
@@ -7706,7 +7706,7 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
-		Owner     string           `json:"owner,omitempty"`
+		Owner     *url.URL         `json:"owner,omitempty"`
 		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Type = v.GetType()
@@ -8346,9 +8346,9 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-		Nonce     uint64  `json:"nonce,omitempty"`
-		Owner     string  `json:"owner,omitempty"`
+		PublicKey *string  `json:"publicKey,omitempty"`
+		Nonce     uint64   `json:"nonce,omitempty"`
+		Owner     *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
@@ -9188,7 +9188,7 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
-		Owner     string           `json:"owner,omitempty"`
+		Owner     *url.URL         `json:"owner,omitempty"`
 		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Type = v.GetType()

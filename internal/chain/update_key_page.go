@@ -80,13 +80,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 	}
 
-	if body.Owner != "" {
-		_, err := url.Parse(body.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key book url : %s", body.Owner)
-		}
-	}
-
 	switch body.Operation {
 	case protocol.KeyPageOperationAdd:
 		// Check that a NewKey was provided, and that the key isn't already on
@@ -101,7 +94,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		key := &protocol.KeySpec{
 			PublicKey: body.NewKey,
 		}
-		if body.Owner != "" {
+		if body.Owner != nil {
 			key.Owner = body.Owner
 		}
 		page.Keys = append(page.Keys, key)
@@ -121,7 +114,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		bodyKey.PublicKey = body.NewKey
-		if body.Owner != "" {
+		if body.Owner != nil {
 			bodyKey.Owner = body.Owner
 		}
 

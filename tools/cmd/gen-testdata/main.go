@@ -140,7 +140,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *new(big.Int).SetInt64(12345), Nonce: 654, CreditBalance: *big.NewInt(9835)}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKey: key[32:], Nonce: 651896, Owner: "foo/bar"}}, CreditBalance: *big.NewInt(98532), Threshold: 3}),
+		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKey: key[32:], Nonce: 651896, Owner: parseUrl("foo/bar")}}, CreditBalance: *big.NewInt(98532), Threshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
 		testdata.NewAcntTest(&KeyBook{AccountHeader: AccountHeader{Url: parseUrl("adi/book")}, Pages: []*url.URL{parseUrl("adi/page")}}),

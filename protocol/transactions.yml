@@ -289,7 +289,8 @@ UpdateKeyPage:
       type: bytes
       optional: true
     - name: Owner
-      type: string
+      type: url
+      pointer: true
       optional: true
     - name: Threshold
       type: uvarint
