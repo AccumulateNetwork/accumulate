@@ -1,9 +1,6 @@
 package pmt
 
-import (
-	"bytes"
-	"crypto/sha256"
-)
+import "bytes"
 
 // Value
 // holds the key / hash mapping for the BPT. With Accumulate, the key
@@ -20,11 +17,9 @@ func (v *Value) T() int {
 }
 
 // GetHash
-// Returns the combination hash of the Key and the Hash.  This is the
-// state that really must be proven to users
+// Returns the hash as a slice
 func (v *Value) GetHash() []byte {
-	h := sha256.Sum256(append(v.Key[:], v.Hash[:]...))
-	return h[:]
+	return append([]byte{},v.Hash[:]...)
 }
 
 // Marshal

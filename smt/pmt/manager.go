@@ -9,9 +9,9 @@ var kBptRoot = kBpt.Append("Root")
 
 type Manager struct {
 	DBManager storage.KeyValueTxn
-	Dirty     []*Node
+	Dirty     []*BptNode
 	Bpt       *BPT
-	LoadedBB  map[[32]byte]*Node
+	LoadedBB  map[[32]byte]*BptNode
 }
 
 // NewBPTManager
@@ -22,7 +22,7 @@ func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPT
 	manager.DBManager = dbManager               //            populate with pointer to the database manager
 	manager.Bpt = NewBPT()                      //            Allocate a new BPT
 	manager.Bpt.manager = manager               //            Allow the Bpt to call back to the manager for db access
-	manager.LoadedBB = make(map[[32]byte]*Node) //            Allocate an initial map
+	manager.LoadedBB = make(map[[32]byte]*BptNode) //            Allocate an initial map
 	data, e := dbManager.Get(kBptRoot)          //            Get the BPT settings from disk
 	if e == nil {                               //            If nothing is found, well this is a fresh instance
 		manager.Bpt.UnMarshal(data)        //                 But if data is found, then unmarshal
@@ -42,7 +42,7 @@ func (m *Manager) GetRootHash() [32]byte {
 
 // LoadNode
 // Loads the nodes under the given node into the BPT
-func (m *Manager) LoadNode(node *Node) *Node {
+func (m *Manager) LoadNode(node *BptNode) *BptNode {
 	if node.Height&m.Bpt.mask != 0 { //                                           Throw an error if not a border node
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
@@ -61,7 +61,7 @@ func (m *Manager) LoadNode(node *Node) *Node {
 
 // FlushNode
 // Flushes the Byte Block to disk
-func (m *Manager) FlushNode(node *Node) { //   Flush a Byte Block
+func (m *Manager) FlushNode(node *BptNode) { //   Flush a Byte Block
 	data := m.Bpt.MarshalByteBlock(node)              //
 	m.DBManager.Put(kBpt.Append(node.BBKey[:]), data) //
 	if node.Height == 0 {

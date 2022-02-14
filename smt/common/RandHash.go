@@ -29,7 +29,15 @@ func (n *RandHash) Next() []byte {
 	return append([]byte{}, n.seed[:]...)
 }
 
-// Next
+// NextA
+// Returns the next hash array in a deterministic sequence of hashes 
+func (n *RandHash) NextA() (A [32]byte){
+	n.seed = sha256.Sum256(n.seed[:])
+	A = n.seed
+	return A
+}
+
+// NextList
 // Just like Next, but each hash is logged in RandHash.List
 func (n *RandHash) NextList() []byte {
 	h := n.Next()
