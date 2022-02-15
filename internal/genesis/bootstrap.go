@@ -47,18 +47,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 
 		adi := protocol.NewADI()
-		adi.Url = uAdi.String()
-		adi.KeyBook = uBook.String()
+		adi.Url = uAdi
+		adi.KeyBook = uBook
 		records = append(records, adi)
 
 		book := protocol.NewKeyBook()
-		book.Url = uBook.String()
-		book.Pages = []string{uPage.String()}
+		book.Url = uBook
+		book.Pages = []*url.URL{uPage}
 		records = append(records, book)
 
 		page := protocol.NewKeyPage()
-		page.Url = uPage.String()
-		page.KeyBook = uBook.String()
+		page.Url = uPage
+		page.KeyBook = uBook
 		page.Threshold = 1
 		records = append(records, page)
 
@@ -71,15 +71,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ledger
 		ledger := protocol.NewInternalLedger()
-		ledger.Url = uAdi.JoinPath(protocol.Ledger).String()
-		ledger.KeyBook = uBook.String()
+		ledger.Url = uAdi.JoinPath(protocol.Ledger)
+		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1
 		records = append(records, ledger)
 
 		// Create the anchor pool
 		anchors := protocol.NewAnchor()
-		anchors.Url = uAdi.JoinPath(protocol.AnchorPool).String()
-		anchors.KeyBook = uBook.String()
+		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
+		anchors.KeyBook = uBook
 		records = append(records, anchors)
 
 		// Create records and directory entries
@@ -89,8 +89,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		}
 
 		acme := new(protocol.TokenIssuer)
-		acme.KeyBook = uBook.String()
-		acme.Url = protocol.AcmeUrl().String()
+		acme.KeyBook = uBook
+		acme.Url = protocol.AcmeUrl()
 		acme.Precision = 8
 		acme.Symbol = "ACME"
 		records = append(records, acme)
@@ -107,8 +107,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			}
 
 			lite := protocol.NewLiteTokenAccount()
-			lite.Url = protocol.FaucetUrl.String()
-			lite.TokenUrl = protocol.AcmeUrl().String()
+			lite.Url = protocol.FaucetUrl
+			lite.TokenUrl = protocol.AcmeUrl()
 			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
 			records = append(records, lite)
 		}

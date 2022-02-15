@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -31,16 +30,12 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 	}
 
 	// Check the source URL
-	source, err := url.Parse(body.Source)
-	if err != nil {
-		return nil, fmt.Errorf("invalid source: %v", err)
-	}
-	name, ok := protocol.ParseBvnUrl(source)
+	name, ok := protocol.ParseBvnUrl(body.Source)
 	var fromDirectory bool
 	switch {
 	case ok:
 		name = "bvn-" + name
-	case protocol.IsDnUrl(source):
+	case protocol.IsDnUrl(body.Source):
 		name, fromDirectory = "dn", true
 	default:
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
@@ -48,7 +43,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 
 	if body.Receipt.Start != nil {
 		// If we got a receipt, verify it
-		err = x.verifyReceipt(st, body)
+		err := x.verifyReceipt(st, body)
 		if err != nil {
 			return nil, err
 		}
@@ -59,7 +54,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 	}
 
 	// Add the anchor to the chain
-	err = st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}

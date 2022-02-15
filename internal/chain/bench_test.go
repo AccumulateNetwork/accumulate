@@ -88,7 +88,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 				}, edSigner(tmed25519.PrivKey(fromKey), 1),
 				&protocol.SendTokens{
 					To: []*protocol.TokenRecipient{
-						{Url: toUrl0.String(), Amount: *big.NewInt(1)},
+						{Url: toUrl0, Amount: *big.NewInt(1)},
 					},
 				},
 			)

@@ -173,8 +173,6 @@ func GoJsonType(field *Field) string {
 		jtype = "*string"
 	case "chain":
 		jtype = "string"
-	case "chainSet":
-		jtype = "[]string"
 	case "duration", "any":
 		jtype = "interface{}"
 	default:
@@ -225,8 +223,12 @@ func GoIsZero(field *Field, varName string) (string, error) {
 }
 
 func GoJsonZeroValue(field *Field) (string, error) {
+	if field.IsPointer() {
+		return "nil", nil
+	}
+
 	switch field.Type {
-	case "bytes", "bigint", "chainSet", "duration", "any", "slice", "rawJson":
+	case "bytes", "bigint", "duration", "any", "slice", "rawJson":
 		return "nil", nil
 	case "bool":
 		return "false", nil
