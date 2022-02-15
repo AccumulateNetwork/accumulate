@@ -42,7 +42,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol
 	sw := protocol.SegWitDataEntry{}
 	sw.Cause = *(*[32]byte)(tx.GetTxHash())
 	sw.EntryHash = *(*[32]byte)(body.Entry.Hash())
-	sw.EntryUrl = tx.Transaction.Origin.String()
+	sw.EntryUrl = tx.Transaction.Origin
 
 	//now replace the original data entry payload with the new segwit payload
 	tx.Transaction.Body = &sw

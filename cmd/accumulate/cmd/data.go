@@ -112,7 +112,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 	}
 
 	params := api.DataEntryQuery{}
-	params.Url = u.String()
+	params.Url = u
 	if len(args) > 0 {
 		n, err := hex.Decode(params.EntryHash[:], []byte(args[0]))
 		if err != nil {
@@ -149,7 +149,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 	}
 
 	params := api.DataEntrySetQuery{}
-	params.Url = u.String()
+	params.Url = u
 
 	v, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
@@ -212,9 +212,9 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid lite data address created from name(s)")
 	}
-	wdt.Recipient = addr.String()
+	wdt.Recipient = addr
 
-	lite, err := GetUrl(wdt.Recipient)
+	lite, err := GetUrl(wdt.Recipient.String())
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
@@ -259,17 +259,16 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
 	}
 
-	var keybook string
-	if len(args) > 1 {
-		kbu, err := url.Parse(args[1])
+	var keybook *url.URL
+	if len(args) > 2 {
+		keybook, err = url.Parse(args[2])
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
-		keybook = kbu.String()
 	}
 
 	cda := protocol.CreateDataAccount{}
-	cda.Url = accountUrl.String()
+	cda.Url = accountUrl
 	cda.KeyBookUrl = keybook
 	cda.Scratch = flagAccount.Scratch
 
@@ -359,7 +358,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid lite data account url")
 	}
 
-	wd.Recipient = r.String()
+	wd.Recipient = r
 
 	if len(args) < 2 {
 		return "", fmt.Errorf("expecting data")
@@ -373,7 +372,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	}
 
 	lda := protocol.LiteDataAccount{}
-	q, err := GetUrl(wd.Recipient)
+	q, err := GetUrl(wd.Recipient.String())
 	if err == nil {
 		Remarshal(q.Data, &lda)
 	}
@@ -381,5 +380,5 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	lde := protocol.LiteDataEntry{}
 	copy(lde.AccountId[:], append(accountId, lda.Tail...))
 	lde.DataEntry = &wd.Entry
-	return ActionResponseFromLiteData(res, wd.Recipient, lde.AccountId[:], wd.Entry.Hash()).Print()
+	return ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash()).Print()
 }

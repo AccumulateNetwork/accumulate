@@ -16,7 +16,6 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/kardianos/service v1.2.0
 	github.com/mdp/qrterminal v1.0.1
-	github.com/mitchellh/mapstructure v1.4.2
 	github.com/pelletier/go-toml v1.9.4
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.30.0
@@ -85,6 +84,7 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/minio/highwayhash v1.0.2 // indirect
+	github.com/mitchellh/mapstructure v1.4.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20210609091139-0a56a4bca00b // indirect
