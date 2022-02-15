@@ -105,14 +105,13 @@ func CreateToken(origin string, args []string) (string, error) {
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
-	var properties string
+	var properties *url2.URL
 	if len(args) > 3 {
-		u, err := url2.Parse(args[3])
+		properties, err = url2.Parse(args[3])
 		if err != nil {
 			return "", fmt.Errorf("invalid properties url, %v", err)
 		}
-		properties = u.String()
-		res, err := GetUrl(properties)
+		res, err := GetUrl(properties.String())
 		if err != nil {
 			return "", fmt.Errorf("cannot query properties url, %v", err)
 		}
@@ -133,7 +132,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	}
 
 	params := protocol.CreateToken{}
-	params.Url = u.String()
+	params.Url = u
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
@@ -172,7 +171,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	}
 
 	params := protocol.IssueTokens{}
-	params.Recipient = recipient.String()
+	params.Recipient = recipient
 	params.Amount.Set(amt)
 
 	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, si, privKey)

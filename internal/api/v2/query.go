@@ -2,17 +2,19 @@ package api
 
 import (
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type Querier interface {
-	QueryUrl(url string, opts QueryOptions) (interface{}, error)
-	QueryDirectory(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
+	QueryUrl(url *url.URL, opts QueryOptions) (interface{}, error)
+	QueryDirectory(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryChain(id []byte) (*ChainQueryResponse, error)
 	QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error)
-	QueryTxHistory(url string, pagination QueryPagination) (*MultiResponse, error)
-	QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error)
-	QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
-	QueryKeyPageIndex(url string, key []byte) (*ChainQueryResponse, error)
+	QueryTxHistory(url *url.URL, pagination QueryPagination) (*MultiResponse, error)
+	QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error)
+	QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
+	QueryKeyPageIndex(url *url.URL, key []byte) (*ChainQueryResponse, error)
 }
 
 func NewQueryDirect(subnet string, opts Options) Querier {

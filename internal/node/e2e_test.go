@@ -44,8 +44,10 @@ type e2eDUT struct {
 	client *local.Local
 }
 
-func (d *e2eDUT) queryAccount(url string) *apiv2.ChainQueryResponse {
-	data, err := json.Marshal(&apiv2.UrlQuery{Url: url})
+func (d *e2eDUT) queryAccount(s string) *apiv2.ChainQueryResponse {
+	u, err := url.Parse(s)
+	d.Require().NoError(err)
+	data, err := json.Marshal(&apiv2.UrlQuery{Url: u})
 	d.Require().NoError(err)
 	r := d.api.Query(context.Background(), data)
 	if err, ok := r.(error); ok {
@@ -161,7 +163,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	require.NotEqual(t, lite.Routing()%3, protocol.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
 
 	txResp := new(apiv2.TxResponse)
-	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite.String()}, txResp)
+	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite}, txResp)
 	txqResp := new(apiv2.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
 	for _, txid := range txqResp.SyntheticTxids {
@@ -174,6 +176,6 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	account := new(protocol.LiteTokenAccount)
 	qResp := new(apiv2.ChainQueryResponse)
 	qResp.Data = account
-	rpcCall(t, jrpc.Query, &apiv2.UrlQuery{Url: lite.String()}, qResp)
+	rpcCall(t, jrpc.Query, &apiv2.UrlQuery{Url: lite}, qResp)
 	require.NotZero(t, account.Balance)
 }
