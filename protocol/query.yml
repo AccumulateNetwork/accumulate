@@ -33,7 +33,8 @@ DirectoryQueryResult:
 RequestDataEntry:
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: EntryHash
       type: chain
       optional: true
@@ -41,7 +42,8 @@ RequestDataEntry:
 RequestDataEntrySet:
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: Start
       type: uvarint
     - name: Count

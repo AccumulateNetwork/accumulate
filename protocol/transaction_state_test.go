@@ -40,7 +40,7 @@ func TestTransactionState(t *testing.T) {
 	trans.Signatures = append(trans.Signatures, eSig)
 
 	txPendingState := state.NewPendingTransaction(trans)
-	txPendingState.Url = "RedWagon/myAccount"
+	txPendingState.Url = &url.URL{Authority: "RedWagon", Path: "/myAccount"}
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
 		t.Fatalf("error marshaling pending tx state %v", err)
