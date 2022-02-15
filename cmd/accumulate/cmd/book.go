@@ -108,7 +108,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 	}
 
 	keyBook := protocol.CreateKeyBook{}
-	keyBook.Url = newUrl.String()
+	keyBook.Url = newUrl
 
 	pageUrls := args[1:]
 	for i := range pageUrls {
@@ -116,7 +116,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
-		keyBook.Pages = append(keyBook.Pages, u2.String())
+		keyBook.Pages = append(keyBook.Pages, u2)
 	}
 
 	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, bookUrl, si, privKey)

@@ -40,7 +40,7 @@ func Faucet(url string) (string, error) {
 		return "", err
 	}
 
-	params.Url = u.String()
+	params.Url = u
 
 	data, err := json.Marshal(&params)
 	if err != nil {

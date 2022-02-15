@@ -98,18 +98,19 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	u, err := url.Parse(params.Origin)
 	require.NoError(t, err)
 
-	var signator string
+	var signator *url.URL
 	var keyPageIndex uint64
 	if key, _, _ := protocol.ParseLiteTokenAddress(u); key != nil {
-		signator = params.Origin
+		signator = u
 	} else {
 		q := new(api.KeyPageIndexQuery)
-		q.Url = params.Origin
+		q.Url = u
 		q.Key = params.Key.Public().(ed25519.PublicKey)
 		qr := queryRecord(t, japi, "query-key-index", q)
 		resp := new(query.ResponseKeyPageIndex)
 		recode(t, qr.Data, resp)
-		signator, keyPageIndex = resp.KeyPage, resp.Index
+		keyPageIndex = resp.Index
+		signator = resp.KeyPage
 	}
 
 	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: signator})
@@ -202,9 +203,11 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 	return d.daemon.Jrpc_TESTONLY()
 }
 
-func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
+func (d *e2eDUT) GetRecordAs(s string, target state.Chain) {
 	d.T().Helper()
-	r, err := d.api().Querier().QueryUrl(url, api.QueryOptions{})
+	u, err := url.Parse(s)
+	d.Require().NoError(err)
+	r, err := d.api().Querier().QueryUrl(u, api.QueryOptions{})
 	d.Require().NoError(err)
 	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
 	qr := r.(*api.ChainQueryResponse)
@@ -212,9 +215,11 @@ func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(qr.Data).Elem())
 }
 
-func (d *e2eDUT) GetRecordHeight(url string) uint64 {
+func (d *e2eDUT) GetRecordHeight(s string) uint64 {
 	d.T().Helper()
-	r, err := d.api().Querier().QueryUrl(url, api.QueryOptions{})
+	u, err := url.Parse(s)
+	d.Require().NoError(err)
+	r, err := d.api().Querier().QueryUrl(u, api.QueryOptions{})
 	d.Require().NoError(err)
 	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
 	qr := r.(*api.ChainQueryResponse)

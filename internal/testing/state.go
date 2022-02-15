@@ -42,7 +42,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.ACME
+	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
 
 	tx := new(transactions.Envelope)
@@ -101,7 +101,7 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.ACME
+	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
 	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
 	// amtToDeposit := int64(50000)                             //deposit 50k tokens
@@ -197,17 +197,17 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.Url = pageUrl.String()
+	mss.Url = pageUrl
 	mss.Keys = append(mss.Keys, ss)
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
-	book.Url = bookUrl.String() // TODO Allow override
-	book.Pages = append(book.Pages, pageUrl.String())
+	book.Url = bookUrl // TODO Allow override
+	book.Pages = append(book.Pages, pageUrl)
 
 	adi := protocol.NewADI()
-	adi.Url = identityUrl.String()
-	adi.KeyBook = bookUrl.String()
+	adi.Url = identityUrl
+	adi.KeyBook = bookUrl
 
 	return WriteStates(db, adi, book, mss)
 }
@@ -232,18 +232,23 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		return err
 	}
 
+	tu, err := url.Parse(tokenUrl)
+	if err != nil {
+		return err
+	}
+
 	var chain state.Chain
 	if lite {
 		account := new(protocol.LiteTokenAccount)
-		account.Url = u.String()
-		account.TokenUrl = tokenUrl
+		account.Url = u
+		account.TokenUrl = tu
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	} else {
 		account := protocol.NewTokenAccount()
-		account.Url = u.String()
-		account.TokenUrl = tokenUrl
-		account.KeyBook = u.Identity().JoinPath("book0").String()
+		account.Url = u
+		account.TokenUrl = tu
+		account.KeyBook = u.Identity().JoinPath("book0")
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -258,8 +263,8 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	}
 
 	issuer := new(protocol.TokenIssuer)
-	issuer.Url = u.String()
-	issuer.KeyBook = u.Identity().JoinPath("book0").String()
+	issuer.Url = u
+	issuer.KeyBook = u.Identity().JoinPath("book0")
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 
@@ -273,7 +278,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	}
 
 	mss := protocol.NewKeyPage()
-	mss.Url = u.String()
+	mss.Url = u
 	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
@@ -292,29 +297,28 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	}
 
 	group := protocol.NewKeyBook()
-	group.Url = groupUrl.String()
-	group.Pages = pageUrls
+	group.Url = groupUrl
 	states := []state.Chain{group}
 
+	group.Pages = make([]*url.URL, len(pageUrls))
 	for i, s := range pageUrls {
-		specUrl, err := url.Parse(s)
+		u, err := url.Parse(s)
 		if err != nil {
 			return err
 		}
-
-		group.Pages[i] = specUrl.String()
+		group.Pages[i] = u
 
 		spec := new(protocol.KeyPage)
-		err = db.Account(specUrl).GetStateAs(spec)
+		err = db.Account(u).GetStateAs(spec)
 		if err != nil {
 			return err
 		}
 
-		if spec.KeyBook != "" {
+		if spec.KeyBook != nil {
 			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
-		spec.KeyBook = groupUrl.String()
+		spec.KeyBook = groupUrl
 		states = append(states, spec)
 	}
 

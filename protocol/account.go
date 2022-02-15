@@ -18,19 +18,12 @@ type Account interface {
 }
 
 // ParseUrl returns the parsed chain URL
+//
+// Deprecated: use Url field
 func (h *AccountHeader) ParseUrl() (*url.URL, error) {
-	if h.url != nil {
-		return h.url, nil
-	}
-
-	u, err := url.Parse(h.Url)
-	if err != nil {
-		return nil, err
-	}
-
-	h.url = u
-	return u, nil
+	return h.Url, nil
 }
+
 func NewAccount(typ AccountType) (Account, error) {
 	new(Anchor).Header()
 	switch typ {
