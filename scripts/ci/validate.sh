@@ -340,7 +340,7 @@ RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
-wait-for cli-tx tx execute keytest/page2 keytest-2-0 '{"type": "updateManager","managerKeyBook": "keytest/book"}'
+wait-for cli-tx manager set keytest/page2 keytest-2-0 keytest/book
 RESULT=$(accumulate -j get keytest/page2 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
