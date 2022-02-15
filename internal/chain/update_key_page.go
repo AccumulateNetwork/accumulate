@@ -58,24 +58,15 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	var book *protocol.KeyBook
 	var bookUrl *url.URL
 	var priority = -1
-	if page.KeyBook != "" {
-		var err error
+	if page.KeyBook != nil {
 		book = new(protocol.KeyBook)
-		bookUrl, err = url.Parse(page.KeyBook)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key book url : %s", page.KeyBook)
-		}
-		err = st.LoadUrlAs(bookUrl, book)
+		err := st.LoadUrlAs(page.KeyBook, book)
 		if err != nil {
 			return nil, fmt.Errorf("invalid key book: %v", err)
 		}
 
 		for i, p := range book.Pages {
-			u, err := url.Parse(p)
-			if err != nil {
-				return nil, fmt.Errorf("invalid key page url : %s", p)
-			}
-			if u.AccountID32() == st.OriginChainId {
+			if p.AccountID32() == st.OriginChainId {
 				priority = i
 			}
 		}
@@ -86,13 +77,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		// 0 is the highest priority, followed by 1, etc
 		if tx.Transaction.KeyPageIndex > uint64(priority) {
 			return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
-		}
-	}
-
-	if body.Owner != "" {
-		_, err := url.Parse(body.Owner)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key book url : %s", body.Owner)
 		}
 	}
 
@@ -110,7 +94,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		key := &protocol.KeySpec{
 			PublicKey: body.NewKey,
 		}
-		if body.Owner != "" {
+		if body.Owner != nil {
 			key.Owner = body.Owner
 		}
 		page.Keys = append(page.Keys, key)
@@ -130,7 +114,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		bodyKey.PublicKey = body.NewKey
-		if body.Owner != "" {
+		if body.Owner != nil {
 			bodyKey.Owner = body.Owner
 		}
 

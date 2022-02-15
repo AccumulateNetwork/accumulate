@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -95,9 +96,14 @@ func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
 	return &res, nil
 }
 
-func Get(url string) (string, error) {
+func Get(urlStr string) (string, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return "", err
+	}
+
 	params := api2.UrlQuery{}
-	params.Url = url
+	params.Url = u
 
 	method := "query"
 	if GetDirect {
@@ -105,7 +111,7 @@ func Get(url string) (string, error) {
 	}
 
 	var res json.RawMessage
-	err := queryAs(method, &params, &res)
+	err = queryAs(method, &params, &res)
 	if err != nil {
 		return "", err
 	}
@@ -135,16 +141,21 @@ func Get(url string) (string, error) {
 	return string(res), nil
 }
 
-func getKey(url string, key []byte) (*query.ResponseKeyPageIndex, error) {
+func getKey(urlStr string, key []byte) (*query.ResponseKeyPageIndex, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return nil, err
+	}
+
 	params := new(api2.KeyPageIndexQuery)
-	params.Url = url
+	params.Url = u
 	params.Key = key
 
 	res := new(query.ResponseKeyPageIndex)
 	qres := new(api2.ChainQueryResponse)
 	qres.Data = res
 
-	err := queryAs("query-key-index", &params, &qres)
+	err = queryAs("query-key-index", &params, &qres)
 	if err != nil {
 		return nil, err
 	}

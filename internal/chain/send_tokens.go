@@ -21,11 +21,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 
 	recipients := make([]*url.URL, len(body.To))
 	for i, to := range body.To {
-		var err error
-		recipients[i], err = url.Parse(to.Url)
-		if err != nil {
-			return nil, fmt.Errorf("invalid destination URL: %v", err)
-		}
+		recipients[i] = to.Url
 	}
 
 	var account tokenChain
@@ -58,7 +54,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
 		copy(deposit.Cause[:], tx.GetTxHash())
-		deposit.Token = tokenUrl.String()
+		deposit.Token = tokenUrl
 		deposit.Amount = body.To[i].Amount
 		st.Submit(u, deposit)
 	}

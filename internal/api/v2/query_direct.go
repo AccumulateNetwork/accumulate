@@ -63,12 +63,7 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 	return "", nil, perr
 }
 
-func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
-	}
-
+func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
 	req := new(query.RequestByUrl)
 	req.Url = types.String(u.String())
 	k, v, err := q.query(req, opts)
@@ -219,12 +214,7 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 	}
 }
 
-func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
-	}
-
+func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	req := new(query.RequestDirectory)
 	req.Url = types.String(u.String())
 	req.Start = pagination.Start
@@ -355,12 +345,7 @@ query:
 	return packed, nil
 }
 
-func (q *queryDirect) QueryTxHistory(s string, pagination QueryPagination) (*MultiResponse, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
-	}
-
+func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New("count must be greater than 0"))
@@ -413,7 +398,7 @@ func (q *queryDirect) QueryTxHistory(s string, pagination QueryPagination) (*Mul
 	return res, nil
 }
 
-func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error) {
+func (q *queryDirect) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error) {
 	r, err := q.QueryUrl(url, QueryOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
@@ -446,7 +431,7 @@ func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*ChainQueryResp
 	return qr, nil
 }
 
-func (q *queryDirect) QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
+func (q *queryDirect) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New("count must be greater than 0"))
@@ -491,14 +476,9 @@ func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagin
 	return respDataSet, nil
 }
 
-func (q *queryDirect) QueryKeyPageIndex(s string, key []byte) (*ChainQueryResponse, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
-	}
-
+func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResponse, error) {
 	req := new(query.RequestKeyPageIndex)
-	req.Url = u.String()
+	req.Url = u
 	req.Key = key
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
