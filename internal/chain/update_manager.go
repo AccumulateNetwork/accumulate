@@ -16,12 +16,12 @@ func (UpdateManager) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateManager), tx.Transaction.Body)
 	}
-	if st.Origin.Header().ManagerKeyBook != "" {
+	if st.Origin.Header().ManagerKeyBook != nil {
 		return nil, fmt.Errorf("manager keybook already assigned")
 	}
 
 	chain := st.Origin
-	chain.Header().ManagerKeyBook = body.ManagerKeyBook.String()
+	chain.Header().ManagerKeyBook = body.ManagerKeyBook
 	st.Update(chain)
 	return nil, nil
 }

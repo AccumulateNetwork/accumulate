@@ -759,11 +759,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 
-		u, err := url.Parse(chr.Url)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
-		}
-
+		u := chr.Url
 		var ret *protocol.ResponseDataEntry
 		if chr.EntryHash != [32]byte{} {
 			ret, err = m.queryDataByEntryHash(batch, u, chr.EntryHash[:])
@@ -788,11 +784,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
-		u, err := url.Parse(chr.Url)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
-		}
-
+		u := chr.Url
 		ret, err := m.queryDataSet(batch, u, int64(chr.Start), int64(chr.Count), chr.ExpandChains)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
@@ -806,10 +798,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
-		u, err := url.Parse(chr.Url)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
-		}
+		u := chr.Url
 		obj, err := m.queryByChainId(batch, u.AccountID())
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
@@ -819,11 +808,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("inavid object error")}
 		}
 		if account.GetType() != protocol.AccountTypeKeyBook {
-			u, err := url.Parse(account.Header().KeyBook)
-			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
-			}
-			obj, err = m.queryByChainId(batch, u.AccountID())
+			obj, err = m.queryByChainId(batch, account.Header().KeyBook.AccountID())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 			}
@@ -842,11 +827,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			KeyBook: keyBook.Url,
 		}
 		for index, page := range keyBook.Pages {
-			u, err := url.Parse(page)
-			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", u.String())}
-			}
-			pageObject, err := m.queryByChainId(batch, u.AccountID())
+			pageObject, err := m.queryByChainId(batch, page.AccountID())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 			}

@@ -118,3 +118,19 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 	m.newValidators = append(m.newValidators, pubKey)
 }
+
+func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
+	if u == nil {
+		account.Header().KeyBook = m.Origin.Header().KeyBook
+		return nil
+	}
+
+	book := new(protocol.KeyBook)
+	err := m.LoadUrlAs(u, book)
+	if err != nil {
+		return fmt.Errorf("invalid key book %q: %v", u, err)
+	}
+
+	account.Header().KeyBook = u
+	return nil
+}

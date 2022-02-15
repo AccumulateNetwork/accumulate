@@ -28,7 +28,8 @@ TransactionQueryResponse:
     - name: Data
       type: any
     - name: Origin
-      type: string
+      type: url
+      pointer: true
       alternative: Sponsor
     - name: KeyPage
       type: KeyPage
@@ -114,7 +115,8 @@ TokenSend:
   incomparable: true
   fields:
   - name: From
-    type: string
+    type: url
+    pointer: true
   - name: To
     repeatable: true
     type: TokenDeposit
@@ -125,7 +127,8 @@ TokenDeposit:
   incomparable: true
   fields:
   - name: Url
-    type: string
+    type: url
+    pointer: true
   - name: Amount
     type: bigint
   - name: Txid
@@ -143,7 +146,8 @@ UrlQuery:
   incomparable: true
   fields:
   - name: Url
-    type: string # TODO change to url
+    type: url
+    pointer: true
 
 KeyPageIndexQuery:
   non-binary: true
@@ -242,7 +246,6 @@ TxRequest:
     optional: true
   - name: Origin
     type: url
-    marshal-as: reference
     pointer: true
     alternative: Sponsor
   - name: Signer
@@ -292,7 +295,8 @@ DataEntry:
 DataEntryQuery:
   fields:
     - name: Url
-      type: string # TODO change to url
+      type: url
+      pointer: true
     - name: EntryHash
       type: chain
       optional: true
