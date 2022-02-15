@@ -47,5 +47,6 @@ resource "aws_efs_mount_target" "main_1" {
   ]
 }
 
-
-
+resource "aws_cloudwatch_log_group" "testnet_log" {
+  name = "accumulate-testnet-log"
+}

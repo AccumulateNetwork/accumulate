@@ -43,7 +43,7 @@ resource "aws_security_group_rule" "tool_allow_testnet" {
     from_port                = 0
     to_port                  = 26660
     protocol                 = "tcp"
-    ipv6_cidr_blocks         = ["::/0"]
+ #   ipv6_cidr_blocks         = ["::/0"]
     security_group_id        = "${aws_security_group.tool_service.id}"
     source_security_group_id = "${aws_security_group.testnet.id}"
 }

@@ -6,19 +6,19 @@ resource "aws_ecs_cluster" "test_cluster" {
 
 
 data "aws_ecs_task_definition" "tool_service" {
-  task_definition = "${aws_ecs_task_definition.tool_service[count.index].family}"
-  count           = 4
+  task_definition = "${aws_ecs_task_definition.tool_service.family}"
+  # count           = 4
 }
 
 resource "aws_ecs_task_definition" "tool_service" {
-  count                    = 4
+  #count                    = 4
   depends_on               = [aws_ecs_cluster.test_cluster]
   family                   = "tool_service" # Name of first task
   container_definitions    = <<DEFINITION
   [
     {
       "name": "tool_service",
-      "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:stable",
+      "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
       "portMappings": [{"containerPort": 80}],
       "memory": 512,

@@ -5,7 +5,7 @@ terraform {
       version    = "2.15.0"
     }
       aws = {
-          version = "~> 3.0"
+          version = "~> 2.0"
       }
       gitlab = {
       source  = "gitlabhq/gitlab"
@@ -23,12 +23,15 @@ provider "gitlab" {
     base_url = "https://gitlab.com/accumulatenetwork/accumulate"
 }
 
-provider "aws" {
-  #shared_credentials_file = "~/.aws/credentials"
-  profile                 = "default"
-  region                  = "us-east-1"
+variable "gitlab_token" {
+  type = string
 }
 
+provider "aws" {
+  # shared_credentials_file = "~/.aws/credentials"
+  profile                 = "myAWS"
+  region                  = "us-east-1"
+}
 
 
   terraform {
