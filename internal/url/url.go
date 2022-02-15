@@ -202,6 +202,12 @@ func (u *URL) Routing() uint64 {
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,
 // are equal under Unicode case-folding.
 func (u *URL) Equal(v *URL) bool {
+	if u == v {
+		return true
+	}
+	if u == nil || v == nil {
+		return false
+	}
 	return strings.EqualFold(u.String(), v.String())
 }
 

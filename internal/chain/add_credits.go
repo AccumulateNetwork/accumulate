@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -27,12 +26,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	amount.Div(protocol.CreditsPerFiatUnit)           // Amount in dollars
 	amount.Div(protocol.FiatUnitsPerAcmeToken)        // Amount in tokens
 
-	recvUrl, err := url.Parse(body.Recipient)
-	if err != nil {
-		return nil, fmt.Errorf("invalid recipient")
-	}
-
-	recv, err := st.LoadUrl(recvUrl)
+	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {
 		// If the recipient happens to be on the same BVC, ensure it is a valid
 		// recipient. Most credit transfers will be within the same ADI, so this
@@ -44,7 +38,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.GetType())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
-		if recvUrl.Routing() == tx.Transaction.Origin.Routing() {
+		if body.Recipient.Routing() == tx.Transaction.Origin.Routing() {
 			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
@@ -87,7 +81,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	sdc := new(protocol.SyntheticDepositCredits)
 	copy(sdc.Cause[:], tx.GetTxHash())
 	sdc.Amount = body.Amount
-	st.Submit(recvUrl, sdc)
+	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token
 	burnAcme := new(protocol.SyntheticBurnTokens)

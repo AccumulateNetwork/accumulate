@@ -123,7 +123,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 
 	ckp := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
-	ckp.Url = newUrl.String()
+	ckp.Url = newUrl
 	ckp.Keys = ksp
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}

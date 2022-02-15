@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -17,11 +16,6 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	body, ok := tx.Transaction.Body.(*protocol.IssueTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.IssueTokens), tx.Transaction.Body)
-	}
-
-	accountUrl, err := url.Parse(body.Recipient)
-	if err != nil {
-		return nil, fmt.Errorf("invalid recipient account URL: %v", err)
 	}
 
 	issuer, ok := st.Origin.(*protocol.TokenIssuer)
@@ -38,7 +32,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	copy(deposit.Cause[:], tx.GetTxHash())
 	deposit.Token = issuer.Header().Url
 	deposit.Amount = body.Amount
-	st.Submit(accountUrl, deposit)
+	st.Submit(body.Recipient, deposit)
 
 	st.Update(issuer)
 
