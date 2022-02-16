@@ -37,7 +37,7 @@ type Client interface {
 }
 
 type partition struct {
-	partitionIdx uint16
+	partitionIdx uint32
 	bvnIdx       uint16
 	size         uint64
 }

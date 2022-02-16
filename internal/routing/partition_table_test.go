@@ -3,59 +3,89 @@ package routing
 import (
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"math"
 	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestPartitions1(t *testing.T) {
-	var counters = make(map[string]uint)
+	var nodeCounters = make(map[string]uint)
 	var bvnUrls = make([]*url.URL, 256)
 	var err error
-	for i := uint8(0); i < 255; i++ {
+	for i := 0; i < 256; i++ {
 		bvnUrls[i], err = url.Parse(fmt.Sprintf("acc://bvn-%d", i))
 		if err != nil {
 			t.Fail()
 		}
 	}
-	var partitions = make([]*partition, 65536)
-	for i := uint16(0); i < 65535; i++ {
+	dimension := uint32(math.Pow(2, 24)) // 16777216
+	var partitions = make([]*partition, dimension)
+	for i := uint32(0); i < dimension; i++ {
 		partitions[i] = &partition{
-			partitionIdx: i,
+			partitionIdx: uint32(i),
 			bvnIdx:       uint16(rand.Uint32() & 0x00FF),
 			size:         rand.Uint64(),
 		}
 	}
 
+	total := uint64(0)
+	start := time.Now()
 	for j := 0; j < 100; j++ {
 		for i := 0; i < len(accWords); i += 2 {
 			accUrl := url.URL{
 				Authority: strconv.Itoa(i) + "_" + accWords[i] + "_" + accWords[i+1],
 			}
 			adiRoutingNr := accUrl.Routing()
-			selPartitionIdx := adiRoutingNr % uint64(65536)
+			selPartitionIdx := adiRoutingNr % uint64(dimension)
 			partition := partitions[selPartitionIdx]
 
 			u := bvnUrls[partition.bvnIdx]
-			t.Logf("selected idx %d, bvn %s", partition.bvnIdx, u.Hostname())
-			var selectedBvn = u.String()
-			if _, ok := counters[selectedBvn]; !ok {
-				counters[selectedBvn] = 0
+			if u == nil {
+				t.Error("nil URL")
 			}
-			counters[selectedBvn]++
+			var selectedBvn = u.String()
+			if _, ok := nodeCounters[selectedBvn]; !ok {
+				nodeCounters[selectedBvn] = 0
+			}
+			nodeCounters[selectedBvn]++
+			partition.size++
+			total++
 		}
 	}
+	end := time.Now()
 
-	bvnNames := make([]string, 0, len(counters))
-	for name := range counters {
+	fmt.Printf("The total number of lookups is %d\n", total)
+
+	bvnNames := make([]string, 0, len(nodeCounters))
+	for name := range nodeCounters {
 		bvnNames = append(bvnNames, name)
 	}
 	sort.Slice(bvnNames, func(i, j int) bool {
-		return counters[bvnNames[i]] > counters[bvnNames[j]]
+		return nodeCounters[bvnNames[i]] > nodeCounters[bvnNames[j]]
 	})
 	for _, name := range bvnNames {
-		fmt.Printf("%-7v %v\n", name, counters[name])
+		fmt.Printf("%-7v %v\n", name, nodeCounters[name])
 	}
-	fmt.Printf("We have %d shards\n", len(counters))
+	fmt.Printf("We have %d nodes\n", len(nodeCounters))
+
+	sizes := make([]uint64, 0, dimension)
+	for i := uint32(0); i < dimension; i++ {
+		p := partitions[i]
+		if p != nil {
+			sizes[i] = p.size
+		} else {
+			sizes[i] = 0
+		}
+	}
+	sort.Slice(sizes, func(i, j int) bool {
+		return sizes[i] > sizes[j]
+	})
+	for i := uint32(0); i < dimension; i++ {
+		fmt.Printf("Partition %d has size %d \n", i, sizes[i])
+	}
+
+	fmt.Printf("The processing time was %dms\n", end.UnixMilli()-start.UnixMilli())
 }
