@@ -36,6 +36,12 @@ type Client interface {
 	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 }
 
+type partition struct {
+	partitionIdx uint16
+	bvnIdx       uint16
+	size         uint64
+}
+
 // ResponseSubmit is the response from a call to Submit.
 type ResponseSubmit struct {
 	Code         uint32
