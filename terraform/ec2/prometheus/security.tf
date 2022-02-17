@@ -1,6 +1,6 @@
 resource "aws_security_group" "ec2_security_grp" {
   name        = var.security_group
-  description = "security group for tendament"
+  description = "security group for prometheus"
 
   ingress {
     from_port   = 9090
@@ -30,7 +30,7 @@ resource "aws_security_group" "ec2_security_grp" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
- # outbound from jenkis server
+ # outbound from prometheus server
   egress {
     from_port   = 0
     to_port     = 0

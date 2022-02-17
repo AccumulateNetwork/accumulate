@@ -18,19 +18,9 @@ variable "security_group" {
     default     = "accumulate-prometheus-ec2-group" 
 }
 
-variable "tag_name1" { 
+variable "tag_name" { 
     description = "Tag Name of for Ec2 instance" 
     default     = "accumulate-prometheus-instance" 
-} 
-
-variable "tag_name2" { 
-    description = "Tag Name of for Ec2 instance" 
-    default     = "accumulate-node-exporter-instance" 
-} 
-
-variable "tag_name3" { 
-    description = "Tag Name of for Ec2 instance" 
-    default     = "accumulate-alert-instance" 
 } 
 
 variable "ami_id" { 

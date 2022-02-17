@@ -5,7 +5,7 @@ resource "aws_instance" "prometheus" {
 #   security_groups = ["${aws_security_group.ec2_security_grp.id}"]
   security_groups = [var.security_group]
   tags= {
-    Name = var.tag_name1
+    Name = var.tag_name
   }
 }
 

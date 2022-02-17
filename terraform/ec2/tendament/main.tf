@@ -1,6 +1,6 @@
 resource "aws_security_group" "ec2_security_grp" {
   name        = var.security_group
-  description = "security group for tendament"
+  description = "security group for tendermint"
 
   ingress {
     from_port   = 8080
@@ -23,7 +23,7 @@ resource "aws_security_group" "ec2_security_grp" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
- # outbound from jenkis server
+ # outbound from tendermint server
   egress {
     from_port   = 0
     to_port     = 0
@@ -52,6 +52,6 @@ resource "aws_eip" "myElasticIP" {
   vpc      = true
   instance = aws_instance.myFirstInstance.id
 tags= {
-    Name = "accumulate-tendament-elastic-ip"
+    Name = "accumulate-tendermint-elastic-ip"
   }
 }
