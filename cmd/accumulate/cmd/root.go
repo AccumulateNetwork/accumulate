@@ -54,6 +54,8 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
 	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
+	flags.BoolVar(&TxNoWait, "no-wait", false, "Don't wait for the transaction to complete")
+	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)
