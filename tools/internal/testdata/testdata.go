@@ -21,7 +21,6 @@ type TestCaseGroup struct {
 type TestCase struct {
 	Binary []byte          `json:"binary,omitempty"`
 	JSON   json.RawMessage `json:"json,omitempty"`
-	Inner  json.RawMessage `json:"inner,omitempty"`
 }
 
 func Load(file string) (*TestSuite, error) {
@@ -59,15 +58,9 @@ func NewTxnTest(env *protocol.Envelope, body protocol.TransactionPayload) *TestC
 		panic(err)
 	}
 
-	inner, err := json.Marshal(body)
-	if err != nil {
-		panic(err)
-	}
-
 	return &TestCase{
 		Binary: binary,
 		JSON:   jsonb,
-		Inner:  inner,
 	}
 }
 
