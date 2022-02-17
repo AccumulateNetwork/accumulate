@@ -18,13 +18,13 @@ type Manager struct {
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
 func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPTManager
-	manager := new(Manager)                     //            Allocate the struct
-	manager.DBManager = dbManager               //            populate with pointer to the database manager
-	manager.Bpt = NewBPT()                      //            Allocate a new BPT
-	manager.Bpt.manager = manager               //            Allow the Bpt to call back to the manager for db access
+	manager := new(Manager)                        //            Allocate the struct
+	manager.DBManager = dbManager                  //            populate with pointer to the database manager
+	manager.Bpt = NewBPT()                         //            Allocate a new BPT
+	manager.Bpt.manager = manager                  //            Allow the Bpt to call back to the manager for db access
 	manager.LoadedBB = make(map[[32]byte]*BptNode) //            Allocate an initial map
-	data, e := dbManager.Get(kBptRoot)          //            Get the BPT settings from disk
-	if e == nil {                               //            If nothing is found, well this is a fresh instance
+	data, e := dbManager.Get(kBptRoot)             //            Get the BPT settings from disk
+	if e == nil {                                  //            If nothing is found, well this is a fresh instance
 		manager.Bpt.UnMarshal(data)        //                 But if data is found, then unmarshal
 		manager.LoadNode(manager.Bpt.Root) //                 and load up the root data for the BPT
 	} //

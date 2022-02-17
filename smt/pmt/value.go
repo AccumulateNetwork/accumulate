@@ -19,7 +19,7 @@ func (v *Value) T() int {
 // GetHash
 // Returns the hash as a slice
 func (v *Value) GetHash() []byte {
-	return append([]byte{},v.Hash[:]...)
+	return append([]byte{}, v.Hash[:]...)
 }
 
 // Marshal

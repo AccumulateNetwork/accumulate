@@ -153,7 +153,7 @@ func TestInsert(t *testing.T) {
 		bpt.Update() //                             Update hashes so far
 	}
 
-	CheckOrder(t,bpt)
+	CheckOrder(t, bpt)
 
 }
 

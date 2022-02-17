@@ -17,8 +17,8 @@ type RandHash struct {
 
 // GetAElement
 // Get an Array of an element out of the list of hashes
-func (n *RandHash) GetAElement(i int)(A[32]byte){
-	copy(A[:],n.List[i])
+func (n *RandHash) GetAElement(i int) (A [32]byte) {
+	copy(A[:], n.List[i])
 	return A
 }
 
