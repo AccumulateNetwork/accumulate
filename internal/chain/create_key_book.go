@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -15,46 +14,36 @@ func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.GetType())
 	}
 
-	body := new(protocol.CreateKeyBook)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.CreateKeyBook)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), tx.Transaction.Body)
 	}
 
 	if len(body.Pages) == 0 {
 		return nil, fmt.Errorf("cannot create empty sig spec group")
 	}
 
-	sgUrl, err := url.Parse(body.Url)
-	if err != nil {
-		return nil, fmt.Errorf("invalid target URL: %v", err)
-	}
-
-	if !sgUrl.Identity().Equal(st.OriginUrl) {
-		return nil, fmt.Errorf("%q does not belong to %q", sgUrl, st.OriginUrl)
+	if !body.Url.Identity().Equal(st.OriginUrl) {
+		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
 	}
 
 	entries := make([]*protocol.KeyPage, len(body.Pages))
 	for i, page := range body.Pages {
-		u, err := url.Parse(page)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key page url : %s", page)
-		}
 		entry := new(protocol.KeyPage)
-		err = st.LoadUrlAs(u, entry)
+		err := st.LoadUrlAs(page, entry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch sig spec: %v", err)
 		}
 
-		if !u.Identity().Equal(st.OriginUrl) {
-			return nil, fmt.Errorf("%q does not belong to %q", u, st.OriginUrl)
+		if !page.Identity().Equal(st.OriginUrl) {
+			return nil, fmt.Errorf("%q does not belong to %q", page, st.OriginUrl)
 		}
 
-		if entry.KeyBook != "" {
-			return nil, fmt.Errorf("%q has already been assigned to a key book", u)
+		if entry.KeyBook != nil {
+			return nil, fmt.Errorf("%q has already been assigned to a key book", page)
 		}
 
 		entries[i] = entry
@@ -65,7 +54,8 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	st.Submit(st.OriginUrl, scc)
 
 	book := protocol.NewKeyBook()
-	book.Url = sgUrl.String()
+	book.Url = body.Url
+	book.ManagerKeyBook = body.Manager
 
 	for _, spec := range entries {
 		u, err := spec.ParseUrl()
@@ -74,18 +64,15 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			return nil, fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
-		book.Pages = append(book.Pages, u.String())
-		spec.KeyBook = sgUrl.String()
+		book.Pages = append(book.Pages, u)
+		spec.KeyBook = body.Url
 		err = scc.Update(spec)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal state: %v", err)
 		}
 	}
-	if body.Manager != "" {
-		book.ManagerKeyBook = body.Manager
-	}
 
-	err = scc.Create(book)
+	err := scc.Create(book)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %v", err)
 	}

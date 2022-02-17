@@ -13,19 +13,18 @@ type WriteData struct{}
 func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
 
 func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.WriteData)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.WriteData)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
-	if st.Origin.Header().Type != protocol.AccountTypeDataAccount {
+	if st.Origin.GetType() != protocol.AccountTypeDataAccount {
 		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
-			protocol.AccountTypeDataAccount, st.Origin.Header().Type)
+			protocol.AccountTypeDataAccount, st.Origin.GetType())
 	}
 
 	//check will return error if there is too much data or no data for the entry
-	_, err = body.Entry.CheckSize()
+	_, err := body.Entry.CheckSize()
 	if err != nil {
 		return nil, err
 	}
@@ -43,15 +42,10 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol
 	sw := protocol.SegWitDataEntry{}
 	sw.Cause = *(*[32]byte)(tx.GetTxHash())
 	sw.EntryHash = *(*[32]byte)(body.Entry.Hash())
-	sw.EntryUrl = tx.Transaction.Origin.String()
-
-	segWitPayload, err := sw.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to marshal segwit, %v", err)
-	}
+	sw.EntryUrl = tx.Transaction.Origin
 
 	//now replace the original data entry payload with the new segwit payload
-	tx.Transaction.Body = segWitPayload
+	tx.Transaction.Body = &sw
 
 	//store the entry
 	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)

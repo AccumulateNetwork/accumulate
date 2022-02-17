@@ -97,7 +97,7 @@ func TestFaucet(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	alice := generateKey()
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice).String()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.AcmeFaucet)
@@ -113,7 +113,7 @@ func TestFaucet(t *testing.T) {
 		send(tx)
 	})
 
-	require.Equal(t, int64(100*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
+	require.Equal(t, int64(100*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 }
 
 func TestAnchorChain(t *testing.T) {
@@ -128,7 +128,7 @@ func TestAnchorChain(t *testing.T) {
 
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = "RoadRunner"
+		adi.Url = n.ParseUrl("RoadRunner")
 		adi.KeyBookName = "book"
 		adi.KeyPageName = "page"
 
@@ -140,7 +140,7 @@ func TestAnchorChain(t *testing.T) {
 	})
 
 	// Sanity check
-	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url)
+	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url.String())
 
 	// Get the anchor chain manager
 	batch = n.db.Begin()
@@ -153,10 +153,7 @@ func TestAnchorChain(t *testing.T) {
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	require.NoError(t, err)
 	first := rootChain.Height() - int64(len(ledgerState.Updates))
-	var accounts []string
 	for i, meta := range ledgerState.Updates {
-		accounts = append(accounts, fmt.Sprintf("%s#chain/%s", meta.Account, meta.Name))
-
 		root, err := rootChain.Entry(first + int64(i))
 		require.NoError(t, err)
 
@@ -171,13 +168,13 @@ func TestAnchorChain(t *testing.T) {
 		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	}
 
-	// Verify that the ADI accounts are included
-	assert.Subset(t, accounts, []string{
-		"acc://RoadRunner#chain/main",
-		"acc://RoadRunner#chain/pending",
-		"acc://RoadRunner/book#chain/main",
-		"acc://RoadRunner/page#chain/main",
-	})
+	// // TODO Once block indexing has been implemented, verify that the following chains got modified
+	// assert.Subset(t, accounts, []string{
+	// 	"acc://RoadRunner#chain/main",
+	// 	"acc://RoadRunner#chain/pending",
+	// 	"acc://RoadRunner/book#chain/main",
+	// 	"acc://RoadRunner/page#chain/main",
+	// })
 }
 
 func TestCreateADI(t *testing.T) {
@@ -199,7 +196,7 @@ func TestCreateADI(t *testing.T) {
 
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = "RoadRunner"
+		adi.Url = n.ParseUrl("RoadRunner")
 		adi.PublicKey = keyHash[:]
 		adi.KeyBookName = "foo-book"
 		adi.KeyPageName = "bar-page"
@@ -214,7 +211,7 @@ func TestCreateADI(t *testing.T) {
 	})
 
 	r := n.GetADI("RoadRunner")
-	require.Equal(t, "acc://RoadRunner", r.Url)
+	require.Equal(t, "acc://RoadRunner", r.Url.String())
 
 	kg := n.GetKeyBook("RoadRunner/foo-book")
 	require.Len(t, kg.Pages, 1)
@@ -259,7 +256,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		require.NoError(t, batch.Commit())
 		n.Batch(func(send func(*transactions.Envelope)) {
 			wdt := new(protocol.WriteDataTo)
-			wdt.Recipient = liteDataAddress.String()
+			wdt.Recipient = liteDataAddress
 			wdt.Entry = firstEntry
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), wdt)
 			require.NoError(t, err)
@@ -271,8 +268,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := n.GetLiteDataAccount(liteDataAddress.String())
-		require.Equal(t, protocol.AccountTypeLiteDataAccount, r.Type)
-		require.Equal(t, liteDataAddress.String(), r.Url)
+		require.Equal(t, liteDataAddress.String(), r.Url.String())
 		require.Equal(t, append(partialChainId, r.Tail...), chainId)
 	})
 }
@@ -291,15 +287,14 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		n.Batch(func(send func(*transactions.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
-			tac.Url = "FooBar/oof"
+			tac.Url = n.ParseUrl("FooBar/oof")
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
 			require.NoError(t, err)
 			send(tx)
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
-		require.Equal(t, "acc://FooBar/oof", r.Url)
+		require.Equal(t, "acc://FooBar/oof", r.Url.String())
 
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 	})
@@ -320,9 +315,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		n.Batch(func(send func(*transactions.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
-			cda.Url = "FooBar/oof"
-			cda.KeyBookUrl = "acc://FooBar/foo/book1"
-			cda.ManagerKeyBookUrl = "acc://FooBar/mgr/book1"
+			cda.Url = n.ParseUrl("FooBar/oof")
+			cda.KeyBookUrl = n.ParseUrl("acc://FooBar/foo/book1")
+			cda.ManagerKeyBookUrl = n.ParseUrl("acc://FooBar/mgr/book1")
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), cda)
 			require.NoError(t, err)
 			send(tx)
@@ -331,10 +326,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		u := n.ParseUrl("acc://FooBar/foo/book1")
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
-		require.Equal(t, "acc://FooBar/oof", r.Url)
-		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook)
-		require.Equal(t, u.String(), r.KeyBook)
+		require.Equal(t, "acc://FooBar/oof", r.Url.String())
+		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook.String())
+		require.Equal(t, u.String(), r.KeyBook.String())
 
 	})
 
@@ -350,15 +344,14 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		n.Batch(func(send func(*transactions.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
-			tac.Url = "FooBar/oof"
+			tac.Url = n.ParseUrl("FooBar/oof")
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
 			require.NoError(t, err)
 			send(tx)
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, protocol.AccountTypeDataAccount, r.Type)
-		require.Equal(t, "acc://FooBar/oof", r.Url)
+		require.Equal(t, "acc://FooBar/oof", r.Url.String())
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
 		wd := new(protocol.WriteData)
@@ -416,17 +409,16 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		n.Batch(func(send func(*transactions.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
-			tac.Url = "FooBar/Baz"
-			tac.TokenUrl = protocol.AcmeUrl().String()
+			tac.Url = n.ParseUrl("FooBar/Baz")
+			tac.TokenUrl = protocol.AcmeUrl()
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
 			require.NoError(t, err)
 			send(tx)
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, protocol.AccountTypeTokenAccount, r.Type)
-		require.Equal(t, "acc://FooBar/Baz", r.Url)
-		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
+		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
 		require.Equal(t, []string{
 			n.ParseUrl("FooBar").String(),
@@ -450,9 +442,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		n.Batch(func(send func(*transactions.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
-			tac.Url = "FooBar/Baz"
-			tac.TokenUrl = protocol.AcmeUrl().String()
-			tac.KeyBookUrl = "foo/book1"
+			tac.Url = n.ParseUrl("FooBar/Baz")
+			tac.TokenUrl = protocol.AcmeUrl()
+			tac.KeyBookUrl = n.ParseUrl("foo/book1")
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
 			require.NoError(t, err)
 			send(tx)
@@ -461,10 +453,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		u := n.ParseUrl("foo/book1")
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, protocol.AccountTypeTokenAccount, r.Type)
-		require.Equal(t, "acc://FooBar/Baz", r.Url)
-		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
-		require.Equal(t, u.String(), r.KeyBook)
+		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
+		require.Equal(t, u.String(), r.KeyBook.String())
 	})
 }
 
@@ -526,8 +517,6 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
-	t.Skip("TODO Fix - this is broken because it sends a synthetic transaction to the DN")
-
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
@@ -541,7 +530,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	n.Batch(func(send func(*transactions.Envelope)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = 55
-		ac.Recipient = "foo/page0"
+		ac.Recipient = n.ParseUrl("foo/page0")
 
 		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), ac)
 		require.NoError(t, err)
@@ -566,7 +555,7 @@ func TestCreateKeyPage(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = "foo/keyset1"
+		cms.Url = n.ParseUrl("foo/keyset1")
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey.PubKey().Bytes(),
 		})
@@ -579,7 +568,7 @@ func TestCreateKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/keyset1")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, "", spec.KeyBook)
+	require.Nil(t, spec.KeyBook)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
@@ -601,8 +590,8 @@ func TestCreateKeyBook(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		csg := new(protocol.CreateKeyBook)
-		csg.Url = "foo/book1"
-		csg.Pages = append(csg.Pages, specUrl.String())
+		csg.Url = n.ParseUrl("foo/book1")
+		csg.Pages = append(csg.Pages, specUrl)
 
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), csg)
 		require.NoError(t, err)
@@ -611,10 +600,10 @@ func TestCreateKeyBook(t *testing.T) {
 
 	group := n.GetKeyBook("foo/book1")
 	require.Len(t, group.Pages, 1)
-	require.Equal(t, specUrl.String(), group.Pages[0])
+	require.Equal(t, specUrl.String(), group.Pages[0].String())
 
 	spec := n.GetKeyPage("foo/page1")
-	require.Equal(t, spec.KeyBook, groupUrl.String())
+	require.Equal(t, spec.KeyBook.String(), groupUrl.String())
 }
 
 func TestAddKeyPage(t *testing.T) {
@@ -634,11 +623,11 @@ func TestAddKeyPage(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Sanity check
-	require.Equal(t, u.String(), n.GetKeyPage("foo/page1").KeyBook)
+	require.Equal(t, u.String(), n.GetKeyPage("foo/page1").KeyBook.String())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = "foo/page2"
+		cms.Url = n.ParseUrl("foo/page2")
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey2.PubKey().Bytes(),
 		})
@@ -651,7 +640,7 @@ func TestAddKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/page2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, u.String(), spec.KeyBook)
+	require.Equal(t, u.String(), spec.KeyBook.String())
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
@@ -774,7 +763,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = "foo"
+		adi.Url = n.ParseUrl("foo")
 		adi.PublicKey = fooKey.PubKey().Bytes()
 		adi.KeyBookName = "book"
 		adi.KeyPageName = "page0"
@@ -792,8 +781,8 @@ func TestSignatorHeight(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
-		tac.Url = tokenUrl.String()
-		tac.TokenUrl = protocol.AcmeUrl().String()
+		tac.Url = tokenUrl
+		tac.TokenUrl = protocol.AcmeUrl()
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), tac)
 		require.NoError(t, err)
 		send(tx)
@@ -814,7 +803,7 @@ func TestCreateToken(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.CreateToken)
-		body.Url = "foo/tokens"
+		body.Url = n.ParseUrl("foo/tokens")
 		body.Symbol = "FOO"
 		body.Precision = 10
 
@@ -842,7 +831,7 @@ func TestIssueTokens(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.IssueTokens)
-		body.Recipient = liteAddr.String()
+		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
 
 		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), body)
@@ -851,7 +840,7 @@ func TestIssueTokens(t *testing.T) {
 	})
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
-	require.Equal(t, "acc://foo/tokens", account.TokenUrl)
+	require.Equal(t, "acc://foo/tokens", account.TokenUrl.String())
 	require.Equal(t, int64(123), account.Balance.Int64())
 }
 
@@ -874,7 +863,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
-		body.Token = "foo2/tokens"
+		body.Token = n.ParseUrl("foo2/tokens")
 		body.Amount.SetUint64(123)
 
 		tx, err := transactions.New(liteAddr.String(), 1, edSigner(n.key.Bytes(), 1), body)
@@ -890,7 +879,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	account := batch.Account(accountUrl)
 	state, err := account.GetState()
 	require.NoError(t, err)
-	fmt.Println("Dump", accountUrl, state.Header().Type)
+	fmt.Println("Dump", accountUrl, state.GetType())
 	meta, err := account.GetObject()
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -18,23 +17,18 @@ func (AcmeFaucet) Type() types.TxType { return types.TxTypeAcmeFaucet }
 
 func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
-	body := new(protocol.AcmeFaucet)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
-	}
-
-	u, err := url.Parse(body.Url)
-	if err != nil {
-		return nil, fmt.Errorf("invalid recipient URL: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AcmeFaucet), tx.Transaction.Body)
 	}
 
 	// Check the recipient
+	u := body.Url
 	account := new(protocol.LiteTokenAccount)
-	err = st.LoadUrlAs(u, account)
+	err := st.LoadUrlAs(u, account)
 	switch {
 	case err == nil:
-		// If the recipient exists, it must be an ACME lite account
+		// If the recipient exists, it must be an ACME lite token account
 		u, err := account.ParseTokenUrl()
 		if err != nil {
 			return nil, fmt.Errorf("invalid record: bad token URL: %v", err)
@@ -74,7 +68,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	amount := new(big.Int).SetUint64(100 * protocol.AcmePrecision)
 	deposit := new(protocol.SyntheticDepositTokens)
 	copy(deposit.Cause[:], tx.GetTxHash())
-	deposit.Token = protocol.ACME
+	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *amount
 	st.Submit(u, deposit)
 

@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -22,25 +20,6 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	}
 
 	return &obj, chain, nil
-}
-
-func unmarshalTxType(b []byte) types.TxType {
-	v, _ := common.BytesUint64(b)
-	return types.TxType(v)
-}
-
-func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
-	payload, err := protocol.NewTransaction(unmarshalTxType(b))
-	if err != nil {
-		return nil, err
-	}
-
-	err = payload.UnmarshalBinary(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return payload, nil
 }
 
 func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.PendingTransaction, protocol.TransactionPayload, error) {
@@ -69,7 +48,7 @@ func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.
 	var payload protocol.TransactionPayload
 	switch {
 	case main != nil:
-		payload, err = unmarshalTxPayload(main.Transaction)
+		payload = main.Transaction
 
 	case pend == nil:
 		// TX state can be nil missing if the transaction is pending. TX pending
@@ -80,10 +59,7 @@ func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.
 		return nil, nil, nil, fmt.Errorf("no transaction state for transaction on pending or main chains")
 
 	default: // pend != nil && pend.TransactionState != nil
-		payload, err = unmarshalTxPayload(pend.TransactionState.Transaction)
-	}
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid TX response: %v", err)
+		payload = pend.TransactionState.Transaction
 	}
 
 	return main, pend, payload, nil

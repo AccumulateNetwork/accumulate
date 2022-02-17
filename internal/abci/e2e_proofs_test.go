@@ -28,7 +28,7 @@ func TestProofADI(t *testing.T) {
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = "RoadRunner"
+		adi.Url = n.ParseUrl("RoadRunner")
 		adi.KeyBookName = "book0"
 		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
@@ -49,16 +49,16 @@ func TestProofADI(t *testing.T) {
 	// Create ADI token account
 	n.Batch(func(send func(*transactions.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
-		tac.Url = "RoadRunner/Baz"
-		tac.TokenUrl = protocol.AcmeUrl().String()
+		tac.Url = n.ParseUrl("RoadRunner/Baz")
+		tac.TokenUrl = protocol.AcmeUrl()
 		tx, err := transactions.New("RoadRunner", 1, edSigner(adiKey, 1), tac)
 		require.NoError(t, err)
 		send(tx)
 	})
 
 	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
-	require.Equal(t, protocol.AccountTypeIdentity, n.GetADI("RoadRunner").Type)
-	require.Equal(t, protocol.AccountTypeTokenAccount, n.GetTokenAccount("RoadRunner/Baz").Type)
+	n.GetADI("RoadRunner")
+	n.GetTokenAccount("RoadRunner/Baz")
 
 	// TODO Verify proofs
 }

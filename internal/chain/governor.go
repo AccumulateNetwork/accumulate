@@ -255,8 +255,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			continue
 		}
 
-		var typ types.TransactionType
-		_ = typ.UnmarshalBinary(tx.Transaction)
+		typ := tx.Transaction.GetType()
 		if typ != types.TxTypeSyntheticAnchor {
 			g.logger.Info("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
@@ -337,7 +336,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 	}
 
 	body := new(protocol.SyntheticAnchor)
-	body.Source = g.Network.NodeUrl().String()
+	body.Source = g.Network.NodeUrl()
 	body.RootIndex = uint64(msg.rootHeight - 1)
 	body.Block = uint64(msg.ledger.Index)
 	copy(body.RootAnchor[:], msg.rootAnchor)

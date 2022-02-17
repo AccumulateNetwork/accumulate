@@ -2,26 +2,24 @@
 
 AccountHeader:
   fields:
-  - name: Type
-    type: AccountType
-    marshal-as: value
   - name: Url
-    type: string
-  - name: KeyBook
-    type: string
-  - name: ManagerKeyBook
-    type: string
-  - name: url
-    type: url.URL
+    type: url
     pointer: true
-    marshal-as: none
+  - name: KeyBook
+    type: url
+    pointer: true
+  - name: ManagerKeyBook
+    type: url
+    pointer: true
 
 LiteTokenAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Balance
       type: bigint
     - name: Nonce
@@ -31,21 +29,27 @@ LiteTokenAccount:
 
 LiteDataAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Tail
       type: bytes
 
 ADI:
   kind: chain
+  embeddings:
+  - AccountHeader
   chain-type: Identity
   fields: [ ]
 
 TokenAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Balance
       type: bigint
     - name: Scratch
@@ -54,29 +58,33 @@ TokenAccount:
 
 KeyPage:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: CreditBalance
       type: bigint
     - name: Threshold
       type: uvarint
     - name: Keys
-      type: slice
-      slice:
-        type: KeySpec
-        pointer: true
-        marshal-as: reference
+      repeatable: true
+      type: KeySpec
+      pointer: true
+      marshal-as: reference
 
 KeyBook:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Pages
-      type: slice
-      slice:
-        type: string
-        is-url: true
+      repeatable: true
+      type: url
+      pointer: true
 
 DataAccount:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Scratch
       type: bool
@@ -84,14 +92,16 @@ DataAccount:
 
 TokenIssuer:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields:
     - name: Symbol
       type: string
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Supply
       type: bigint
       optional: true
@@ -101,6 +111,8 @@ TokenIssuer:
 
 Anchor:
   kind: chain
+  embeddings:
+  - AccountHeader
   fields: [ ]
 
 ##### Data Types #####
@@ -112,4 +124,5 @@ KeySpec:
     - name: Nonce
       type: uvarint
     - name: Owner
-      type: string
+      type: url
+      pointer: true

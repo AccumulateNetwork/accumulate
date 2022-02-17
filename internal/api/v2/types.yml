@@ -28,7 +28,8 @@ TransactionQueryResponse:
     - name: Data
       type: any
     - name: Origin
-      type: string
+      type: url
+      pointer: true
       alternative: Sponsor
     - name: KeyPage
       type: KeyPage
@@ -38,21 +39,20 @@ TransactionQueryResponse:
       type: bytes
       alternative: Txid
     - name: Signatures
-      type: slice
-      slice:
-        type: transactions.ED25519Sig
-        pointer: true
+      repeatable: true
+      type: transactions.ED25519Sig
+      pointer: true
     - name: Status
       type: protocol.TransactionStatus
       pointer: true
     - name: SyntheticTxids
-      type: chainSet
+      type: chain
+      repeatable: true
     - name: Receipts
-      type: slice
-      slice:
-        type: query.TxReceipt
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      type: query.TxReceipt
+      marshal-as: reference
+      pointer: true
 
 MerkleState:
   non-binary: true
@@ -62,9 +62,8 @@ MerkleState:
       type: uvarint
       alternative: Count
     - name: Roots
-      type: slice
-      slice:
-        type: bytes
+      repeatable: true
+      type: bytes
 
 MultiResponse:
   non-binary: true
@@ -73,9 +72,8 @@ MultiResponse:
     - name: Type
       type: string
     - name: Items
-      type: slice
-      slice:
-        type: any
+      repeatable: true
+      type: any
     - name: Start
       type: uvarint
       keep-empty: true
@@ -86,9 +84,8 @@ MultiResponse:
       type: uvarint
       keep-empty: true
     - name: OtherItems
-      type: slice
-      slice:
-        type: any
+      repeatable: true
+      type: any
 
 KeyPage:
   non-binary: true
@@ -118,19 +115,20 @@ TokenSend:
   incomparable: true
   fields:
   - name: From
-    type: string
+    type: url
+    pointer: true
   - name: To
-    type: slice
-    slice:
-      type: TokenDeposit
-      marshal-as: reference
+    repeatable: true
+    type: TokenDeposit
+    marshal-as: reference
 
 TokenDeposit:
   non-binary: true
   incomparable: true
   fields:
   - name: Url
-    type: string
+    type: url
+    pointer: true
   - name: Amount
     type: bigint
   - name: Txid
@@ -148,8 +146,8 @@ UrlQuery:
   incomparable: true
   fields:
   - name: Url
-    type: string
-    is-url: true
+    type: url
+    pointer: true
 
 KeyPageIndexQuery:
   non-binary: true
@@ -247,8 +245,7 @@ TxRequest:
     type: bool
     optional: true
   - name: Origin
-    type: url.URL
-    marshal-as: reference
+    type: url
     pointer: true
     alternative: Sponsor
   - name: Signer
@@ -289,9 +286,8 @@ TxResponse:
 DataEntry:
   fields:
     - name: ExtIds
-      type: slice
-      slice:
-        type: bytes
+      repeatable: true
+      type: bytes
     - name: Data
       type: bytes
 
@@ -299,8 +295,8 @@ DataEntry:
 DataEntryQuery:
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: EntryHash
       type: chain
       optional: true

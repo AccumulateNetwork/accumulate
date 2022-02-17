@@ -19,10 +19,9 @@ func (SyntheticCreateChain) Type() types.TxType {
 }
 
 func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.SyntheticCreateChain)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateChain)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateChain), tx.Transaction.Body)
 	}
 
 	if body.Cause == [32]byte{} {
@@ -72,7 +71,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		}
 
 		// Check the identity
-		switch record.Header().Type {
+		switch record.GetType() {
 		case protocol.AccountTypeIdentity:
 			// An ADI must be its own identity
 			if !u.Identity().Equal(u) {
@@ -81,11 +80,11 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		default:
 			// Anything else must be a sub-path
 			if u.Identity().Equal(u) {
-				return nil, fmt.Errorf("account type %v cannot be its own identity", record.Header().Type)
+				return nil, fmt.Errorf("account type %v cannot be its own identity", record.GetType())
 			}
 
 			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return nil, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.Header().Type)
+				return nil, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.GetType())
 			}
 
 			// Make sure the ADI actually exists
@@ -99,10 +98,10 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		}
 
 		// Check the key book
-		switch record.Header().Type {
+		switch record.GetType() {
 		case protocol.AccountTypeKeyBook:
 			// A key book does not itself have a key book
-			if record.Header().KeyBook != "" {
+			if record.Header().KeyBook != nil {
 				return nil, errors.New("invalid key book: KeyBook is not empty")
 			}
 
@@ -111,21 +110,17 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 
 		default:
 			// Anything else must have a key book
-			if record.Header().KeyBook == "" {
+			if record.Header().KeyBook == nil {
 				return nil, fmt.Errorf("%q does not specify a key book", u)
 			}
 		}
 
 		// Make sure the key book actually exists
-		if record.Header().KeyBook != "" {
+		if record.Header().KeyBook != nil {
 			book := new(protocol.KeyBook)
-			url, err := url.Parse(record.Header().KeyBook)
+			err = st.LoadUrlAs(record.Header().KeyBook, book)
 			if err != nil {
-				return nil, fmt.Errorf("invalid keybook url %s", url.String())
-			}
-			err = st.LoadUrlAs(url, book)
-			if err != nil {
-				return nil, fmt.Errorf("invalid key book for %q: %v", u, err)
+				return nil, fmt.Errorf("invalid key book %q for %q: %v", record.Header().KeyBook, u, err)
 			}
 		}
 	}

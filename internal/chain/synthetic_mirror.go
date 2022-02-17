@@ -13,10 +13,9 @@ type SyntheticMirror struct{}
 func (SyntheticMirror) Type() types.TxType { return types.TxTypeSyntheticMirror }
 
 func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.SyntheticMirror)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticMirror)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticMirror), tx.Transaction.Body)
 	}
 
 	for _, obj := range body.Objects {

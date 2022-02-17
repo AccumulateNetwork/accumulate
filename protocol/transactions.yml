@@ -3,14 +3,14 @@
 Envelope:
   fields:
     - name: Signatures
-      type: slice
-      slice:
-        # type: Signature
-        # marshal-as: value
-        # unmarshal-with: UnmarshalSignature
-        type: ED25519Sig
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      # type: Signature
+      # marshal-as: value
+      # zero-value: nil
+      # unmarshal-with: UnmarshalSignature
+      type: ED25519Sig
+      marshal-as: reference
+      pointer: true
     - name: TxHash
       type: bytes
     - name: Transaction
@@ -24,8 +24,7 @@ Envelope:
 TransactionHeader:
   fields:
     - name: Origin
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
     - name: KeyPageHeight
       type: uvarint
@@ -39,7 +38,10 @@ Transaction:
     - TransactionHeader
   fields:
     - name: Body
-      type: bytes
+      type: TransactionPayload
+      unmarshal-with: UnmarshalTransaction
+      marshal-as: value
+      zero-value: nil
     - name: hash
       type: bytes
       marshal-as: none
@@ -51,7 +53,10 @@ TxState:
       marshal-as: reference
       pointer: true
     - name: Transaction
-      type: bytes
+      type: TransactionPayload
+      unmarshal-with: UnmarshalTransaction
+      marshal-as: value
+      zero-value: nil
     - name: TransactionHash
       type: chain
       marshal-as: none
@@ -61,22 +66,25 @@ TransactionState:
   chain-type: Transaction
   omit-new-func: true
   embeddings:
+    - AccountHeader
     - TxState
 
 PendingTransactionState:
   kind: chain
   chain-type: PendingTransaction
   omit-new-func: true
+  embeddings:
+  - AccountHeader
   fields:
     - name: Signature
-      type: slice
-      slice:
-        # type: Signature
-        # marshal-as: value
-        # unmarshal-with: UnmarshalSignature
-        type: ED25519Sig
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      # type: Signature
+      # marshal-as: value
+      # zero-value: nil
+      # unmarshal-with: UnmarshalSignature
+      type: ED25519Sig
+      marshal-as: reference
+      pointer: true
     - name: TransactionState
       type: TxState
       marshal-as: reference
@@ -90,8 +98,8 @@ CreateIdentity:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: PublicKey
       type: bytes
     - name: KeyBookName
@@ -101,27 +109,29 @@ CreateIdentity:
       type: string
       optional: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 CreateTokenAccount:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: KeyBookUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
       optional: true
     - name: Scratch
       type: bool
       optional: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 SendTokens:
@@ -134,25 +144,24 @@ SendTokens:
       type: rawJson
       optional: true
     - name: To
-      type: slice
-      slice:
-        type: TokenRecipient
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
 
 CreateDataAccount:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: KeyBookUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
       optional: true
     - name: ManagerKeyBookUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
       optional: true
     - name: Scratch
       type: bool
@@ -169,8 +178,8 @@ WriteDataTo:
   kind: tx
   fields:
     - name: Recipient
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Entry
       type: DataEntry
       marshal-as: reference
@@ -179,26 +188,26 @@ AcmeFaucet:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
 
 CreateToken:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: KeyBookUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
       optional: true
     - name: Symbol
       type: string
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string
-      is-url: true
+      type: url
+      pointer: true
       optional: true
     - name: InitialSupply
       type: bigint
@@ -207,15 +216,16 @@ CreateToken:
       type: bool
       optional: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 IssueTokens:
   kind: tx
   fields:
     - name: Recipient
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Amount
       type: bigint
 
@@ -229,38 +239,39 @@ CreateKeyPage:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Keys
-      type: slice
-      slice:
-        type: KeySpecParams
-        pointer: true
-        marshal-as: reference
+      repeatable: true
+      type: KeySpecParams
+      pointer: true
+      marshal-as: reference
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 CreateKeyBook:
   kind: tx
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Pages
-      type: slice
-      slice:
-        type: string
-        is-url: true
+      repeatable: true
+      type: url
+      pointer: true
     - name: Manager
-      type: string
+      type: url
+      pointer: true
       optional: true
 
 AddCredits:
   kind: tx
   fields:
     - name: Recipient
-      type: string
+      type: url
+      pointer: true
     - name: Amount
       type: uvarint
 
@@ -270,6 +281,7 @@ UpdateKeyPage:
     - name: Operation
       type: KeyPageOperation
       marshal-as: value
+      zero-value: 0
     - name: Key
       type: bytes
       optional: true
@@ -277,7 +289,8 @@ UpdateKeyPage:
       type: bytes
       optional: true
     - name: Owner
-      type: string
+      type: url
+      pointer: true
       optional: true
     - name: Threshold
       type: uvarint
@@ -295,10 +308,9 @@ SyntheticCreateChain:
     - name: Cause
       type: chain
     - name: Chains
-      type: slice
-      slice:
-        type: ChainParams
-        marshal-as: reference
+      repeatable: true
+      type: ChainParams
+      marshal-as: reference
 
 
 SyntheticWriteData:
@@ -316,8 +328,8 @@ SyntheticDepositTokens:
     - name: Cause
       type: chain
     - name: Token
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Amount
       type: bigint
 
@@ -325,8 +337,8 @@ SyntheticAnchor:
   kind: tx
   fields:
     - name: Source
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Major
       type: bool
     - name: RootAnchor
@@ -363,10 +375,9 @@ SyntheticMirror:
   kind: tx
   fields:
     - name: Objects
-      type: slice
-      slice:
-        type: AnchoredRecord
-        marshal-as: reference
+      repeatable: true
+      type: AnchoredRecord
+      marshal-as: reference
 
 SegWitDataEntry:
   kind: tx
@@ -374,12 +385,17 @@ SegWitDataEntry:
     - name: Cause
       type: chain
     - name: EntryUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: EntryHash
       type: chain
 
 ##### Result Types #####
+
+EmptyResult:
+  kind: tx-result
+  tx-type: Unknown
+  fields: []
 
 WriteDataResult:
   kind: tx-result
@@ -387,8 +403,7 @@ WriteDataResult:
     - name: EntryHash
       type: chain
     - name: AccountUrl
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
     - name: AccountID
       type: bytes
@@ -398,8 +413,8 @@ WriteDataResult:
 TokenRecipient:
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Amount
       type: bigint
 
@@ -421,3 +436,14 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
+
+UpdateManager:
+  kind: tx
+  fields:
+    - name: ManagerKeyBook
+      type: url
+      pointer: true
+
+RemoveManager:
+  kind: tx
+  fields:

@@ -67,7 +67,7 @@ var adiCreateCmd = &cobra.Command{
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite token account")
 	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
@@ -88,7 +88,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	}
 
 	params := api2.DirectoryQuery{}
-	params.Url = u.String()
+	params.Url = u
 	params.Start = uint64(st)
 	params.Count = uint64(ct)
 	params.Expand = true
@@ -177,7 +177,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	idc := protocol.CreateIdentity{}
-	idc.Url = u.Authority
+	idc.Url = u
 	idc.PublicKey = pubKey
 	idc.KeyBookName = book
 	idc.KeyPageName = page

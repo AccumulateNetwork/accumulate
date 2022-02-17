@@ -5,8 +5,7 @@ import "gitlab.com/accumulatenetwork/accumulate/protocol"
 // NewPendingTransaction will create a new pending transaction from a general transaction
 func NewPendingTransaction(env *protocol.Envelope) *PendingTransaction {
 	ret := &PendingTransaction{}
-	ret.Url = env.Transaction.Origin.String()
-	ret.Type = protocol.AccountTypePendingTransaction
+	ret.Url = env.Transaction.Origin
 	ret.Signature = env.Signatures
 	ret.TransactionState = &TxState{}
 	ret.TransactionState.SigInfo = &env.Transaction.TransactionHeader
@@ -20,7 +19,6 @@ func NewPendingTransaction(env *protocol.Envelope) *PendingTransaction {
 func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransaction) {
 	txState := &Transaction{}
 	txState.Url = pending.Url
-	txState.Type = protocol.AccountTypeTransaction
 	txState.Transaction = pending.TransactionState.Transaction
 	txState.SigInfo = pending.TransactionState.SigInfo
 	txState.TxState.TransactionHash = pending.TransactionState.TransactionHash

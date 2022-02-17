@@ -31,7 +31,7 @@ func (m *stateCache) Create(record ...state.Chain) {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
 	for _, r := range record {
-		if r.Header().Type.IsTransaction() {
+		if r.GetType().IsTransaction() {
 			panic("Called StateManager.Create with a transaction record!")
 		}
 
@@ -74,7 +74,7 @@ func (m *stateCache) Update(record ...state.Chain) {
 
 func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	// Update: update an existing record. Non-synthetic transactions are
-	// not allowed to create records, so we must check if the record
+	// not allowed to create accounts, so we must check if the record
 	// already exists. The record may have been added to the DB
 	// transaction already, so in order to actually know if the record
 	// exists on disk, we have to use GetPersistentEntry.
@@ -90,17 +90,16 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to check for an existing record: %v", err)
 
 	case st.txType.IsSynthetic() || st.txType.IsInternal():
-		// Synthetic and internal transactions are allowed to create records
+		// Synthetic and internal transactions are allowed to create accounts
 
 	default:
-		// Non-synthetic transactions are NOT allowed to create records
-		// (except for TX records)
-		return nil, fmt.Errorf("cannot create a data record in a non-synthetic transaction")
+		// Non-synthetic transactions are NOT allowed to create accounts
+		return nil, fmt.Errorf("cannot create an account in a non-synthetic transaction")
 	}
 
 	header := op.record.Header()
-	if header.Url == "" {
-		header.Url = op.url.String()
+	if header.Url == nil {
+		header.Url = op.url
 	}
 
 	record := st.batch.Account(op.url)
@@ -131,7 +130,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 	}
 
 	// Check that the nonce is the only thing that changed
-	switch record.Header().Type {
+	switch record.GetType() {
 	case protocol.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.Nonce = new.Nonce
@@ -151,7 +150,7 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 		}
 
 	default:
-		return fmt.Errorf("account type %d is not a signator", old.Header().Type)
+		return fmt.Errorf("account type %d is not a signator", old.GetType())
 	}
 
 	m.chains[u.AccountID32()] = record
@@ -188,7 +187,7 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 
 	var stateRec state.Chain
 
-	if record.Header().Type == protocol.AccountTypeLiteDataAccount {
+	if record.GetType() == protocol.AccountTypeLiteDataAccount {
 		stateRec = record
 	}
 

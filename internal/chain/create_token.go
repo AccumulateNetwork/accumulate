@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -14,25 +13,9 @@ type CreateToken struct{}
 func (CreateToken) Type() types.TxType { return types.TxTypeCreateToken }
 
 func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.CreateToken)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
-	}
-
-	tokenUrl, err := url.Parse(body.Url)
-	if err != nil {
-		return nil, fmt.Errorf("invalid token URL: %v", err)
-	}
-
-	if body.KeyBookUrl == "" {
-		body.KeyBookUrl = string(st.Origin.Header().KeyBook)
-	} else {
-		u, err := url.Parse(body.KeyBookUrl)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key book URL: %v", err)
-		}
-		body.KeyBookUrl = u.String()
+	body, ok := tx.Transaction.Body.(*protocol.CreateToken)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), tx.Transaction.Body)
 	}
 
 	if body.Precision > 18 {
@@ -40,17 +23,17 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	}
 
 	token := protocol.NewTokenIssuer()
-	token.Url = tokenUrl.String()
-	token.KeyBook = body.KeyBookUrl
+	token.Url = body.Url
 	token.Precision = body.Precision
 	token.Supply = body.InitialSupply
 	token.HasSupplyLimit = body.HasSupplyLimit
 	token.Symbol = body.Symbol
-	if body.Properties != "" {
-		token.Properties = body.Properties
-	}
-	if body.Manager != "" {
-		token.ManagerKeyBook = body.Manager
+	token.Properties = body.Properties
+	token.ManagerKeyBook = body.Manager
+
+	err := st.setKeyBook(token, body.KeyBookUrl)
+	if err != nil {
+		return nil, err
 	}
 
 	st.Create(token)

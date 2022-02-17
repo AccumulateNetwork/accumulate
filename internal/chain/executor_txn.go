@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -209,14 +208,10 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 		return st, executor, true, m.validateAgainstLite(st, env, fee)
 
 	case *protocol.ADI, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount, *protocol.TokenIssuer:
-		if origin.Header().KeyBook == "" {
+		if origin.Header().KeyBook == nil {
 			return nil, nil, false, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
-		u, err := url.Parse(origin.Header().KeyBook)
-		if err != nil {
-			return nil, nil, false, fmt.Errorf("invalid keybook url %s", u.String())
-		}
-		err = st.LoadUrlAs(u, book)
+		err = st.LoadUrlAs(origin.Header().KeyBook, book)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("invalid KeyBook: %v", err)
 		}
@@ -227,7 +222,7 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 	default:
 		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
+		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.GetType())
 	}
 
 	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee)
@@ -344,14 +339,10 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		return false, fmt.Errorf("invalid sig spec index")
 	}
 
-	var err error
-	st.SignatorUrl, err = url.Parse(book.Pages[env.Transaction.KeyPageIndex])
-	if err != nil {
-		return false, fmt.Errorf("invalid key page url : %s", book.Pages[env.Transaction.KeyPageIndex])
-	}
+	st.SignatorUrl = book.Pages[env.Transaction.KeyPageIndex]
 	page := new(protocol.KeyPage)
 	st.Signator = page
-	err = st.LoadUrlAs(st.SignatorUrl, page)
+	err := st.LoadUrlAs(st.SignatorUrl, page)
 	if err != nil {
 		return false, fmt.Errorf("invalid sig spec: %v", err)
 	}

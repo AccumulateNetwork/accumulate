@@ -118,7 +118,7 @@ var accountCreateDataLiteCmd = &cobra.Command{
 
 var accountQrCmd = &cobra.Command{
 	Use:   "qr [url]",
-	Short: "Display QR code for lite account URL",
+	Short: "Display QR code for lite token account URL",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := QrAccount(args[0])
@@ -221,18 +221,17 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		return "", fmt.Errorf("invalid token url")
 	}
 
-	var keybook string
+	var keybook *url2.URL
 	if len(args) > 2 {
-		kbu, err := url2.Parse(args[2])
+		keybook, err = url2.Parse(args[2])
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
-		keybook = kbu.String()
 	}
 
 	//make sure this is a valid token account
 	req := new(api.GeneralQuery)
-	req.Url = tok.String()
+	req.Url = tok
 	resp := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
 	resp.Data = &token
@@ -242,8 +241,8 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
-	tac.Url = accountUrl.String()
-	tac.TokenUrl = tok.String()
+	tac.Url = accountUrl
+	tac.TokenUrl = tok
 	tac.KeyBookUrl = keybook
 	tac.Scratch = flagAccount.Scratch
 
@@ -364,6 +363,5 @@ func RestoreAccounts() (out string, err error) {
 			}
 		}
 	}
-
 	return out, nil
 }
