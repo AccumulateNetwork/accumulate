@@ -223,10 +223,9 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 		node.Right = n.Right
 	}
 
-
 	if bit&key[BIdx] > 0 { //       Note that this is the code that calls the Inline function Insert, and Insert
 		Insert(&node.Left) //       in turn calls step.  We check the bit on the given BIdx. 0 goes Left
-	} else { //       
+	} else { //
 		Insert(&node.Right) //      0 goes Right
 	}
 
@@ -235,7 +234,6 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
 func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
-	fmt.Println()
 	if debug {
 		fmt.Printf("BPT insert key=%v value=%X\n", storage.Key(key), hash)
 	}

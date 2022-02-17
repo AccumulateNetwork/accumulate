@@ -144,24 +144,33 @@ func TestInsert(t *testing.T) {
 
 	const numElements = 1000 // Choose a number of transactions to process
 
-	b := NewBPT()              //                 Allocate a BPT
+	bpt := NewBPT()            //                 Allocate a BPT
 	var rh common.RandHash     //                 Provides a sequence of hashes
 	for i := 0; i < 100; i++ { //                 Process the elements some number of times
 		for j := 0; j < numElements; j++ { //     For each element
-			b.Insert(rh.NextA(), rh.NextA()) //   Insert the key value pair
+			bpt.Insert(rh.NextA(), rh.NextA()) //   Insert the key value pair
 		}
-		b.Update() //                             Update hashes so far
+		bpt.Update() //                             Update hashes so far
 	}
-	List := KeyList(b.Root, [][]byte{})
+
+	CheckOrder(t,bpt)
+
+}
+
+// CheckOrder
+// All the keys in the bpt must be ordered from low to high, if the bpt is
+// properly built.  Check that order.
+func CheckOrder(t *testing.T, bpt *BPT) {
+	List := KeyList(bpt.Root, [][]byte{})
 	s := List[0]
-	fmt.Printf("%01x %08b %3d\n", s[0], s[0], s[0])
+	// fmt.Printf("%01x %08b %3d\n", s[0], s[0], s[0])
 	for _, v := range List[1:] {
-		fmt.Printf("%01x %08b %3d\n", v[0], v[0], v[0])
+		//fmt.Printf("%01x %08b %3d\n", v[0], v[0], v[0])
 		require.True(t, bytes.Compare(s, v) >= 0 || true, "Insertion out of order")
 		s = v
 	}
-
 }
+
 func KeyList(b *BptNode, List [][]byte) [][]byte {
 	if node, ok := b.Left.(*BptNode); ok {
 		List = KeyList(node, List)

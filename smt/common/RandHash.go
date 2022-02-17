@@ -15,6 +15,13 @@ type RandHash struct {
 	List [][]byte
 }
 
+// GetAElement
+// Get an Array of an element out of the list of hashes
+func (n *RandHash) GetAElement(i int)(A[32]byte){
+	copy(A[:],n.List[i])
+	return A
+}
+
 // SetSeed
 // If the tester wishes a different sequence of hashes, a seed can be
 // specified
@@ -30,8 +37,8 @@ func (n *RandHash) Next() []byte {
 }
 
 // NextA
-// Returns the next hash array in a deterministic sequence of hashes 
-func (n *RandHash) NextA() (A [32]byte){
+// Returns the next hash array in a deterministic sequence of hashes
+func (n *RandHash) NextA() (A [32]byte) {
 	n.seed = sha256.Sum256(n.seed[:])
 	A = n.seed
 	return A
@@ -43,6 +50,14 @@ func (n *RandHash) NextList() []byte {
 	h := n.Next()
 	n.List = append(n.List, h)
 	return h
+}
+
+// NextAList
+// Just like NextA, but each ash is logged in RandHash.ListA
+func (n *RandHash) NextAList() (A [32]byte) {
+	h := n.NextList()
+	copy(A[:], h)
+	return A
 }
 
 // If you just use RandHash with the default seed of nil, you can count
