@@ -347,3 +347,5 @@ RESULT=$(accumulate -j get keytest/page2 | jq -re .data.managerKeyBook)
 section "Remove manager from keypage"
 wait-for cli-tx tx execute keytest/page3 keytest-2-0 '{"type": "removeManager"}'
 accumulate -j get keytest/page3 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
+
+accumulate adi directory $LITE 0 10 | echo jq -e .data

@@ -50,5 +50,13 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 	}
 	st.Update(account)
 
+	liteIdentity := protocol.NewLiteIdentity()
+	err := st.LoadUrlAs(tx.Transaction.Origin, liteIdentity)
+	if err != nil {
+		liteIdentity.Url = tx.Transaction.Origin
+		liteIdentity.KeyBook = account.Header().KeyBook
+	}
+	st.AddDirectoryEntry(liteIdentity.Url)
+
 	return nil, nil
 }

@@ -126,3 +126,11 @@ KeySpec:
     - name: Owner
       type: url
       pointer: true
+
+LiteIdentity:
+  kind: chain
+  embeddings:
+  - AccountHeader
+  chain-type: Identity
+  fields: [ ]
+

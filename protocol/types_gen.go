@@ -231,6 +231,11 @@ type LiteDataAccount struct {
 	Tail []byte `json:"tail,omitempty" form:"tail" query:"tail" validate:"required"`
 }
 
+type LiteIdentity struct {
+	fieldsSet []bool
+	AccountHeader
+}
+
 type LiteTokenAccount struct {
 	fieldsSet []bool
 	AccountHeader
@@ -528,6 +533,11 @@ func NewLiteDataAccount() *LiteDataAccount {
 	return new(LiteDataAccount)
 }
 
+// Deprated: use new(LiteIdentity)
+func NewLiteIdentity() *LiteIdentity {
+	return new(LiteIdentity)
+}
+
 // Deprated: use new(LiteTokenAccount)
 func NewLiteTokenAccount() *LiteTokenAccount {
 	return new(LiteTokenAccount)
@@ -592,6 +602,8 @@ func (*KeyBook) GetType() AccountType { return AccountTypeKeyBook }
 func (*KeyPage) GetType() AccountType { return AccountTypeKeyPage }
 
 func (*LiteDataAccount) GetType() AccountType { return AccountTypeLiteDataAccount }
+
+func (*LiteIdentity) GetType() AccountType { return AccountTypeIdentity }
 
 func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAccount }
 
@@ -1091,6 +1103,14 @@ func (v *LiteDataAccount) Equal(u *LiteDataAccount) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Tail, u.Tail)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LiteIdentity) Equal(u *LiteIdentity) bool {
+	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
 	}
 
@@ -3153,6 +3173,39 @@ func (v *LiteDataAccount) IsValid() error {
 		errs = append(errs, "field Tail is missing")
 	} else if len(v.Tail) == 0 {
 		errs = append(errs, "field Tail is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_LiteIdentity = []string{
+	"Type",
+	2: "AccountHeader",
+}
+
+func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, AccountTypeIdentity.ID())
+	writer.WriteValue(2, &v.AccountHeader)
+
+	_, _, err := writer.Reset(fieldNames_LiteIdentity)
+	return buffer.Bytes(), err
+}
+
+func (v *LiteIdentity) IsValid() error {
+	var errs []string
+
+	if err := v.AccountHeader.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -5893,6 +5946,26 @@ func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *LiteIdentity) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); !ok {
+		return fmt.Errorf("field Type: missing")
+	} else if x != AccountTypeIdentity.ID() {
+		return fmt.Errorf("field Type: want %v, got %v", AccountTypeIdentity, AccountType(x))
+	}
+
+	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
+
+	seen, err := reader.Reset(fieldNames_LiteIdentity)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *LiteTokenAccount) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7261,6 +7334,20 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type           AccountType `json:"type"`
+		Url            *url.URL    `json:"url,omitempty"`
+		KeyBook        *url.URL    `json:"keyBook,omitempty"`
+		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+	}{}
+	u.Type = v.GetType()
+	u.Url = v.AccountHeader.Url
+	u.KeyBook = v.AccountHeader.KeyBook
+	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	return json.Marshal(&u)
+}
+
 func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type           AccountType `json:"type"`
@@ -8406,6 +8493,26 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Tail = x
 	}
+	return nil
+}
+
+func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type           AccountType `json:"type"`
+		Url            *url.URL    `json:"url,omitempty"`
+		KeyBook        *url.URL    `json:"keyBook,omitempty"`
+		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+	}{}
+	u.Type = v.GetType()
+	u.Url = v.AccountHeader.Url
+	u.KeyBook = v.AccountHeader.KeyBook
+	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.AccountHeader.Url = u.Url
+	v.AccountHeader.KeyBook = u.KeyBook
+	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
 	return nil
 }
 
