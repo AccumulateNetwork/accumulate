@@ -3,9 +3,11 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -185,6 +187,17 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
 	}
 
 	ar := ActionResponseFrom(res)
