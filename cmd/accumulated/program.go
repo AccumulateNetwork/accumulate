@@ -9,7 +9,6 @@ import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 type Program struct {
@@ -48,14 +47,10 @@ func (p *Program) Start(s service.Service) error {
 		return err
 	}
 
-	var logWriter func(string) (io.Writer, error)
-	if !service.Interactive() {
-		logWriter = func(format string) (io.Writer, error) {
-			return logging.NewServiceLogger(s, format)
-		}
-	}
-
-	daemon, err := accumulated.Load(workDir, logWriter)
+	logWriter := newLogWriter(s)
+	daemon, err := accumulated.Load(workDir, func(format string) (io.Writer, error) {
+		return logWriter(format, nil)
+	})
 	if err != nil {
 		return err
 	}
