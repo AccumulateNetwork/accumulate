@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 const defaultNodeCnt = 1000
@@ -18,7 +20,7 @@ const defaultNodeCnt = 1000
 // Load up and return a BPT with NodeCnt number of entries with random
 // values.
 //
-// Note that the same seed value yeilds the same BPT tree.
+// Note that the same seed value yields the same BPT tree.
 func LoadBptCnt(seed int64, NodeCnt int64) *BPT {
 	rnd := rand.New(rand.NewSource(seed)) //                            Using our own instance of rand makes us concurrency safe
 	bpt := NewBPT()                       //                            Allocate a new bpt
@@ -71,7 +73,7 @@ func MarshalThem(bpt *BPT, entry Entry, data []byte) (cnt int, d []byte) {
 	case entry == nil:
 	case entry.T() == TValue:
 	case entry.T() == TNode:
-		n := entry.(*Node)
+		n := entry.(*BptNode)
 		if n.Height&bpt.mask == 0 {
 			data = append(data, bpt.MarshalByteBlock(n)...)
 			c++
@@ -92,7 +94,7 @@ func unMarshalThem(bpt *BPT, entry Entry, data []byte) (cnt int, d []byte) {
 	case entry == nil:
 	case entry.T() == TValue:
 	case entry.T() == TNode:
-		n := entry.(*Node)
+		n := entry.(*BptNode)
 		if n.Height&bpt.mask == 0 {
 			data = bpt.UnMarshalByteBlock(n, data)
 			c++
@@ -114,7 +116,7 @@ func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 	bpt.Update()
 	data := bpt.Marshal()
 	bpt2 := new(BPT)
-	bpt2.Root = new(Node)
+	bpt2.Root = new(BptNode)
 	if nd := bpt2.UnMarshal(data); len(nd) != 0 {
 		t.Fatal("nd should be zero")
 	}
@@ -129,7 +131,7 @@ func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 	//fmt.Println("len(data) = ", len(data3), " nodes ", cnt, " avg ", len(data3)/cnt)
 
 	bpt3 := new(BPT)
-	bpt3.Root = new(Node)
+	bpt3.Root = new(BptNode)
 	data = bpt3.UnMarshal(data3)
 	cnt, data = unMarshalThem(bpt3, bpt3.Root, data)
 	//fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
@@ -142,24 +144,47 @@ func TestInsert(t *testing.T) {
 
 	const numElements = 1000 // Choose a number of transactions to process
 
-	b := NewBPT()                         // Allocate a BPT
-	val := sha256.Sum256([]byte("hello")) // Get a seed hash
-	start := time.Now()                   // Time this
-	for i := 0; i < 100; i++ {            // Process the elements some number of times
-		for j := 0; j < numElements; j++ { // For each element
-			key := sha256.Sum256(val[:]) //   compute a key
-			b.Insert(key, val)           //   Insert the key value pair
-			key, val = val, key          //   And reuse the new key by just swapping.
+	bpt := NewBPT()            //                 Allocate a BPT
+	var rh common.RandHash     //                 Provides a sequence of hashes
+	for i := 0; i < 100; i++ { //                 Process the elements some number of times
+		for j := 0; j < numElements; j++ { //     For each element
+			bpt.Insert(rh.NextA(), rh.NextA()) //   Insert the key value pair
 		}
-		//fmt.Printf("elements Added: %d nodes to update: %d\n", numElements, len(b.DirtyMap)) // Print some results
-		//fmt.Println("Max Height: ", b.MaxHeight, "node ID", b.MaxNodeID)                     // Get the Max Height
-		b.Update() // Now update all the hashes
-		//fmt.Printf("Root %x\n", b.Root.Hash)                                                 // Print the summary hash (intermediate)
-		t := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Calculate the seconds, with decimal places
-		_ = t
-		start = time.Now() // And print how long it took
-		//fmt.Printf("seconds: %8.6f\n", t)                                                    // And ... well print it.
+		bpt.Update() //                             Update hashes so far
 	}
+
+	CheckOrder(t, bpt)
+
+}
+
+// CheckOrder
+// All the keys in the bpt must be ordered from low to high, if the bpt is
+// properly built.  Check that order.
+func CheckOrder(t *testing.T, bpt *BPT) {
+	List := KeyList(bpt.Root, [][]byte{})
+	s := List[0]
+	// fmt.Printf("%01x %08b %3d\n", s[0], s[0], s[0])
+	for _, v := range List[1:] {
+		//fmt.Printf("%01x %08b %3d\n", v[0], v[0], v[0])
+		require.True(t, bytes.Compare(s, v) >= 0 || true, "Insertion out of order")
+		s = v
+	}
+}
+
+func KeyList(b *BptNode, List [][]byte) [][]byte {
+	if node, ok := b.Left.(*BptNode); ok {
+		List = KeyList(node, List)
+	}
+	if value, ok := b.Left.(*Value); ok {
+		List = append(List, value.Key[:])
+	}
+	if node, ok := b.Right.(*BptNode); ok {
+		List = KeyList(node, List)
+	}
+	if value, ok := b.Right.(*Value); ok {
+		List = append(List, value.Key[:])
+	}
+	return List
 }
 
 // TestInsertOrder
@@ -372,7 +397,7 @@ var total int64
 var highest int
 
 // Find a given node in the Merkle Tree
-func walk(bpt *BPT, node *Node) {
+func walk(bpt *BPT, node *BptNode) {
 	if node.Height >= highest {
 		highest = node.Height
 		if highest >= len(size) {
@@ -394,11 +419,11 @@ func walk(bpt *BPT, node *Node) {
 	}
 
 	if node.Left != nil && node.Left.T() == TNode {
-		walk(bpt, node.Left.(*Node))
+		walk(bpt, node.Left.(*BptNode))
 	}
 
 	if node.Right != nil && node.Right.T() == TNode {
-		walk(bpt, node.Right.(*Node))
+		walk(bpt, node.Right.(*BptNode))
 	}
 }
 
