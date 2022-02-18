@@ -9,7 +9,7 @@ import (
 // mapping up to down and down to up is valid if a need to have the tree
 // grow down is viewed as important.
 
-// Node
+// BptNode
 // A node in our binary patricia/merkle tree
 //
 // A note about Byte Blocks.  Byte Blocks hold nodes and values, and are
@@ -32,17 +32,17 @@ import (
 // byte.  This will only cause us issues if we use 248 bits of the key
 // to create a node.  In other words, not too much of an issue.
 
-type Node struct {
+type BptNode struct {
 	ID     uint64   // Node Count
 	Height int      // Root is 0. above root is 1. Above above root is 2, etc.
 	BBKey  [32]byte // Byte Block Key.
 	Hash   [32]byte // This is the summary hash for the tree
 	Left   Entry    // The hash of the child Left and up the tree, bit is zero
 	Right  Entry    // the hash to the child Right and up the tree, bit is one
-	Parent *Node    // the Parent node "below" this node
+	Parent *BptNode // the Parent node "below" this node
 }
 
-func (n *Node) Equal(entry Entry) (equal bool) {
+func (n *BptNode) Equal(entry Entry) (equal bool) {
 
 	defer func() { //                          When an entry is cast to *Node, it might panic. Then the test is false
 		if err := recover(); err != nil { //   Also left or right (which is not nil) may be compared to a nil.
@@ -54,8 +54,8 @@ func (n *Node) Equal(entry Entry) (equal bool) {
 	// then the code would loop infinitely.  Certainly we could avoid retracing
 	// paths, but if we wish to compare entire BPT trees, we can compare their
 	// roots.
-	node := entry.(*Node) //                              The entry considered must be a node.  If it is not
-	switch {              //                              this conversion will panic, get caught, and return false
+	node := entry.(*BptNode) //                           The entry considered must be a node.  If it is not
+	switch {                 //                              this conversion will panic, get caught, and return false
 	case n.Height != node.Height: //                      Height == Height
 		return false //
 	case n.BBKey != node.BBKey: //                        BBKey == BBKey
@@ -79,14 +79,14 @@ func (n *Node) Equal(entry Entry) (equal bool) {
 // is really a Value.  We possibly want a way for Node to compress the
 // distance to child nodes that have a long single path to leaves just
 // because a key matches a number of bits before differentiating.
-func (n *Node) T() int {
+func (n *BptNode) T() int {
 	return TNode
 }
 
 // GetID
 // Returns the ID for this node.  This is used to compare nodes and serve
 // as a key in the BPT.DirtyMap.
-func (n *Node) GetID() uint64 {
+func (n *BptNode) GetID() uint64 {
 	return n.ID
 }
 
@@ -95,16 +95,16 @@ func (n *Node) GetID() uint64 {
 // being in the interface, it does eliminate some book keeping where
 // a node easily has L and R nodes, but doesn't know if those are Node or
 // Value instances.
-func (n *Node) GetHash() []byte {
-	return n.Hash[:] //             The Hash held by a node is a summary
-} //                                hash of everything above it.
+func (n *BptNode) GetHash() []byte {
+	return append([]byte{}, n.Hash[:]...) //   The Hash held by a node is a summary
+} //                                           hash of everything above it.
 
 // Marshal
 // Serialize the fields of the Node.  Note this doesn't do too much
 // towards fitting the node into the actual BPT, but it helps a bit.
 //
 // See (p *BPT)MarshalByteBlock
-func (n *Node) Marshal() (data []byte) {
+func (n *BptNode) Marshal() (data []byte) {
 	data = append(data, common.Uint64Bytes(n.ID)...)
 	data = append(data, n.BBKey[:]...)
 	data = append(data, byte(n.Height))
@@ -114,7 +114,7 @@ func (n *Node) Marshal() (data []byte) {
 
 // UnMarshal
 // Deserialize the fields of the Node.  See (p *BPT)UnMarshalByteBlock
-func (n *Node) UnMarshal(data []byte) []byte {
+func (n *BptNode) UnMarshal(data []byte) []byte {
 	n.ID, data = common.BytesUint64(data)
 	keySlice, data := data[:32], data[32:]
 	copy(n.BBKey[:], keySlice)
