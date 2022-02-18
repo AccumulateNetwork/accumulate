@@ -6,15 +6,15 @@ import (
 	"math"
 )
 
-// Node
+// ReceiptNode
 // Holds the Left/Right hash combinations for Receipts
-type Node struct {
+type ReceiptNode struct {
 	Right bool
 	Hash  Hash
 }
 
-func (n *Node) Copy() *Node {
-	node := new(Node)
+func (n *ReceiptNode) Copy() *ReceiptNode {
+	node := new(ReceiptNode)
 	node.Right = n.Right
 	node.Hash = n.Hash.Copy()
 	return n
@@ -23,12 +23,12 @@ func (n *Node) Copy() *Node {
 // Receipt
 // Struct builds the Merkle Tree path component of a Merkle Tree Proof.
 type Receipt struct {
-	Element      Hash    // Hash for which we want a proof.
-	ElementIndex int64   //
-	Anchor       Hash    // Hash at the point where the Anchor was created.
-	AnchorIndex  int64   //
-	MDRoot       Hash    // Root expected once all nodes are applied
-	Nodes        []*Node // Apply these hashes to create an anchor
+	Element      Hash           // Hash for which we want a proof.
+	ElementIndex int64          //
+	Anchor       Hash           // Hash at the point where the Anchor was created.
+	AnchorIndex  int64          //
+	MDRoot       Hash           // Root expected once all nodes are applied
+	Nodes        []*ReceiptNode // Apply these hashes to create an anchor
 
 	// None of the following is persisted.
 	manager *MerkleManager // The Merkle Tree Manager from which we are building a receipt
@@ -180,9 +180,9 @@ func (r *Receipt) BuildReceipt() error {
 			}
 			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash) // We don't have to calculate the MDRoot, but it
 			if stay {                                                  //   helps debugging.  Check if still in column
-				r.Nodes = append(r.Nodes, &Node{Hash: lHash, Right: false}) // If so, combine from left
+				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: lHash, Right: false}) // If so, combine from left
 			} else { //                                                     Otherwise
-				r.Nodes = append(r.Nodes, &Node{Hash: rHash, Right: true}) //  combine from right
+				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: rHash, Right: true}) //  combine from right
 			}
 			stay = true // By default assume a stay in the column
 			height++    // and increment the height.
@@ -222,12 +222,12 @@ func (r *Receipt) BuildReceipt() error {
 		}
 		if stay { //                                                     If in the same column
 			if int64(i) >= height { //                                    And the proof is at this hight or higher
-				r.Nodes = append(r.Nodes, &Node{Hash: v, Right: false}) // Add to the receipt
+				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: v, Right: false}) // Add to the receipt
 			}
 			continue
 		}
-		r.Nodes = append(r.Nodes, &Node{Hash: lastIH, Right: true}) // First time in this column, so add to receipt
-		stay = true                                                 // Indicate processing the same column now.
+		r.Nodes = append(r.Nodes, &ReceiptNode{Hash: lastIH, Right: true}) // First time in this column, so add to receipt
+		stay = true                                                        // Indicate processing the same column now.
 
 	}
 	r.MDRoot = intermediateHash // The Merkle Dag Root is the last intermediate Hash produced.
