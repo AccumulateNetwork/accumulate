@@ -32,8 +32,8 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 				liteIdentity.Url = tx.Transaction.Origin.Identity()
 				liteIdentity.KeyBook = tx.Transaction.Origin.Identity()
 				st.Update(liteIdentity)
+				st.AddDirectoryEntry(tx.Transaction.Origin)
 			}
-			st.AddDirectoryEntry(tx.Transaction.Origin)
 		case *protocol.TokenAccount:
 			account = origin
 		default:
