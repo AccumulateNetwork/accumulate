@@ -9,27 +9,27 @@ import (
 // GetLeaf
 // Find a leaf node in the given BPT tree.  Take a random path
 // (But if you set the seed, you can get the same random path)
-func GetPath(bpt *BPT) (path []*Node) {
+func GetPath(bpt *BPT) (path []*BptNode) {
 	bpt.Update()
 	here := bpt.Root //                                 Find a leaf node
 	for {
 		path = append(path, here)
 		if rand.Int()&1 == 0 {
 			if here.Left != nil && here.Left.T() == TNode { //   If I have a Left child
-				here = here.Left.(*Node) //                      chase it, and continue
+				here = here.Left.(*BptNode) //                      chase it, and continue
 				continue
 			}
 			if here.Right != nil && here.Right.T() == TNode { // If I have a Right child
-				here = here.Right.(*Node) //                     chase it, and continue
+				here = here.Right.(*BptNode) //                     chase it, and continue
 				continue
 			}
 		} else {
 			if here.Right != nil && here.Right.T() == TNode { // If I have a Left child
-				here = here.Right.(*Node) //                     chase it, and continue
+				here = here.Right.(*BptNode) //                     chase it, and continue
 				continue
 			}
 			if here.Left != nil && here.Left.T() == TNode { //   If I have a Right child
-				here = here.Left.(*Node) //                      chase it, and continue
+				here = here.Left.(*BptNode) //                      chase it, and continue
 				continue
 			}
 		}
@@ -115,14 +115,14 @@ func TestBPT_Equal(t *testing.T) {
 }
 
 func TestNode_Marshal(t *testing.T) {
-	node1 := new(Node)
+	node1 := new(BptNode)
 	node1.Height = 27
 	node1.BBKey = [32]byte{0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 14, 15}
 	node1.Hash = [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 10, 20}
 	node1.ID = 87654
 
 	data := node1.Marshal()
-	node2 := new(Node)
+	node2 := new(BptNode)
 	data = (node2).UnMarshal(data)
 
 	if len(data) != 0 {
