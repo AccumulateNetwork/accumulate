@@ -165,7 +165,7 @@ func txnTest1(origin string, body TransactionPayload) *TC {
 	return txnTest(&TransactionHeader{
 		Origin:        parseUrl(origin),
 		KeyPageHeight: 1,
-		Nonce:         rand.Uint64(),
+		Nonce:         uint64(rand.Uint32()),
 	}, body)
 }
 

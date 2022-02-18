@@ -25,6 +25,7 @@ func TestSDK(t *testing.T) {
 	if err != nil && errors.Is(err, fs.ErrNotExist) && *sdkTestData == defaultSdkTestData {
 		t.Skip("Test data has not been created")
 	}
+	require.NoError(t, err)
 
 	// For the Unmarshal tests, we're JSON marshalling and comparing the result.
 	// It doesn't actually matter if the JSON marshalling is identical, but Go's
@@ -41,6 +42,7 @@ func TestSDK(t *testing.T) {
 							// Unmarshal the envelope from the TC
 							env := new(protocol.Envelope)
 							require.NoError(t, json.Unmarshal(tc.JSON, env))
+							flattenRawJson(t, reflect.ValueOf(env))
 
 							// TEST Binary marshal the envelope
 							bin, err := env.MarshalBinary()
@@ -77,6 +79,7 @@ func TestSDK(t *testing.T) {
 							// Unmarshal the account from the TC
 							acnt, err := protocol.UnmarshalAccountJSON(tc.JSON)
 							require.NoError(t, err)
+							flattenRawJson(t, reflect.ValueOf(acnt))
 
 							// TEST Binary marshal the account
 							bin, err := acnt.MarshalBinary()
@@ -119,8 +122,47 @@ func tokenize(t *testing.T, in []byte) []json.Token {
 }
 
 func flattenRawJson(t *testing.T, v reflect.Value) {
-	raw, ok := v.Interface().(json.RawMessage)
-	if ok {
+	switch v.Kind() {
+	case reflect.Ptr:
+		flattenRawJson(t, v.Elem())
+	case reflect.Struct:
+		typ := v.Type()
+		s := typ.String()
+		println(s)
+		for i, nf := 0, v.NumField(); i < nf; i++ {
+			if !typ.Field(i).IsExported() {
+				continue
+			}
+			s := typ.Field(i).Name
+			println(s)
+			flattenRawJson(t, v.Field(i))
+		}
+	case reflect.Slice, reflect.Array:
+		if v.Len() == 0 {
+			return
+		}
+
+		switch vv := v.Interface().(type) {
+		case json.RawMessage:
+			var u interface{}
+			require.NoError(t, json.Unmarshal(vv, &u))
+			vv, err := json.Marshal(u)
+			require.NoError(t, err)
+			v.Set(reflect.ValueOf(vv))
+		default:
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				return
+			}
+			for i, n := 0, v.Len(); i < n; i++ {
+				flattenRawJson(t, v.Index(i))
+			}
+		}
+	case reflect.Interface:
+		raw, ok := v.Interface().(json.RawMessage)
+		if !ok {
+			flattenRawJson(t, v.Elem())
+			return
+		}
 		if len(raw) == 0 {
 			return
 		}
@@ -129,22 +171,5 @@ func flattenRawJson(t *testing.T, v reflect.Value) {
 		raw, err := json.Marshal(u)
 		require.NoError(t, err)
 		v.Set(reflect.ValueOf(raw))
-		return
-	}
-
-	for v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-
-	if v.Kind() != reflect.Struct {
-		return
-	}
-
-	typ := v.Type()
-	for i, nf := 0, v.NumField(); i < nf; i++ {
-		if !typ.Field(i).IsExported() {
-			continue
-		}
-		flattenRawJson(t, v.Field(i))
 	}
 }
