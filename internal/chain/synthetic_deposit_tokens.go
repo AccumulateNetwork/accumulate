@@ -26,6 +26,14 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
 			account = origin
+			liteIdentity := protocol.NewLiteIdentity()
+			err := st.LoadUrlAs(tx.Transaction.Origin.Identity(), liteIdentity)
+			if err != nil {
+				liteIdentity.Url = tx.Transaction.Origin.Identity()
+				liteIdentity.KeyBook = tx.Transaction.Origin.Identity()
+				st.Update(liteIdentity)
+			}
+			st.AddDirectoryEntry(tx.Transaction.Origin)
 		case *protocol.TokenAccount:
 			account = origin
 		default:
@@ -49,14 +57,6 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
 	st.Update(account)
-
-	liteIdentity := protocol.NewLiteIdentity()
-	err := st.LoadUrlAs(tx.Transaction.Origin, liteIdentity)
-	if err != nil {
-		liteIdentity.Url = tx.Transaction.Origin
-		liteIdentity.KeyBook = account.Header().KeyBook
-	}
-	st.AddDirectoryEntry(liteIdentity.Url)
 
 	return nil, nil
 }
