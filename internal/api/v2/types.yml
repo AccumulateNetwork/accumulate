@@ -317,6 +317,13 @@ DataEntryQueryResponse:
       type: DataEntry
       marshal-as: reference
 
+StatusResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Ok
+      type: bool
+
 VersionResponse:
   non-binary: true
   incomparable: true
