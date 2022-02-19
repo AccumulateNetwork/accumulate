@@ -13,10 +13,12 @@ Envelope:
       pointer: true
     - name: TxHash
       type: bytes
+      optional: true
     - name: Transaction
       type: Transaction
       marshal-as: reference
       pointer: true
+      optional: true
     - name: hash
       type: bytes
       marshal-as: none
@@ -45,6 +47,15 @@ Transaction:
     - name: hash
       type: bytes
       marshal-as: none
+
+ED25519Sig:
+  fields:
+    - name: Nonce
+      type: uint
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
 
 TxState:
   fields:
@@ -280,8 +291,7 @@ UpdateKeyPage:
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: value
-      zero-value: 0
+      marshal-as: enum
     - name: Key
       type: bytes
       optional: true

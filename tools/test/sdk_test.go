@@ -127,14 +127,10 @@ func flattenRawJson(t *testing.T, v reflect.Value) {
 		flattenRawJson(t, v.Elem())
 	case reflect.Struct:
 		typ := v.Type()
-		s := typ.String()
-		println(s)
 		for i, nf := 0, v.NumField(); i < nf; i++ {
 			if !typ.Field(i).IsExported() {
 				continue
 			}
-			s := typ.Field(i).Name
-			println(s)
 			flattenRawJson(t, v.Field(i))
 		}
 	case reflect.Slice, reflect.Array:
