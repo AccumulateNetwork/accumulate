@@ -45,6 +45,7 @@ func (f *Field) IsPointer() bool         { return f.Pointer }
 func (f *Field) IsMarshalled() bool      { return f.MarshalAs != "none" }
 func (f *Field) AsReference() bool       { return f.MarshalAs == "reference" }
 func (f *Field) AsValue() bool           { return f.MarshalAs == "value" }
+func (f *Field) AsEnum() bool            { return f.MarshalAs == "enum" }
 func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
