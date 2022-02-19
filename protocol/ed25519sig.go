@@ -5,18 +5,9 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
-
-// ED25519Sig
-// Implements signing and validating ED25519 signatures
-type ED25519Sig struct {
-	Nonce     uint64 // Nonce of Signature
-	PublicKey []byte // 32 byte public key
-	Signature []byte // a set of 64 byte signatures
-}
 
 var _ Signature = (*ED25519Sig)(nil) // Verify at compile time that ED25519Sig implements the Signature interface
 
@@ -37,15 +28,6 @@ func (e *ED25519Sig) GetPublicKey() []byte {
 // Returns the signature used to sign the hash of some transaction
 func (e *ED25519Sig) GetSignature() []byte {
 	return e.Signature
-}
-
-// Equal
-// Return true if the given Signature has the same Nonce, PublicKey,
-// and Signature
-func (e *ED25519Sig) Equal(e2 Signature) bool {
-	return e.Nonce == e2.GetNonce() &&
-		bytes.Equal(e.PublicKey, e2.GetPublicKey()) && //  the publickey is the same and
-		bytes.Equal(e.Signature, e2.GetSignature()) //        the signature is the same
 }
 
 // Sign
@@ -90,42 +72,4 @@ func (e *ED25519Sig) Verify(hash []byte) bool {
 			e.PublicKey, //                                     with the public key of the signature
 			append(common.Uint64Bytes(e.Nonce), hash...), //    Of the nonce+transaction hash
 			e.Signature) //                                     with the signature
-}
-
-// Marshal
-// Marshal a signature.  The data can be unmarshaled
-func (e *ED25519Sig) Marshal() (data []byte, err error) {
-	if !e.WellFormed() { //            Double check data sizes
-		return nil, fmt.Errorf("poorly formed signature") //            Report error if sizes are wrong
-	} //
-	data = append(data, common.Uint64Bytes(e.Nonce)...) //              Add Nonce
-	data = append(data, e.PublicKey...)                 //              Add Public Key
-	data = append(data, e.Signature...)                 //              Add Signature
-	return data, nil                                    //              Return the bytes
-}
-
-// Unmarshal
-// UnMarshal a signature
-// further unmarshalling can be done with the returned data
-func (e *ED25519Sig) Unmarshal(data []byte) (nextData []byte, err error) {
-	e.Nonce, data = common.BytesUint64(data)
-	e.PublicKey = append([]byte{}, data[:32]...)
-	data = data[32:]
-	e.Signature = append([]byte{}, data[:64]...)
-	data = data[64:]
-	return data, nil
-}
-
-func (e *ED25519Sig) BinarySize() int {
-	data, _ := e.Marshal()
-	return len(data)
-}
-
-func (e *ED25519Sig) MarshalBinary() ([]byte, error) {
-	return e.Marshal()
-}
-
-func (e *ED25519Sig) UnmarshalBinary(data []byte) error {
-	_, err := e.Unmarshal(data)
-	return err
 }
