@@ -187,6 +187,18 @@ const TransactionTypeInternalTransactionsSent TransactionType = 99
 // ID returns the ID of the Account Type
 func (v AccountType) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *AccountType) Set(id uint64) bool {
+	u := AccountType(id)
+	switch u {
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the Account Type
 func (v AccountType) String() string {
 	switch v {
@@ -302,6 +314,18 @@ func (v *AccountType) UnmarshalBinary(data []byte) error {
 // ID returns the ID of the Chain Type
 func (v ChainType) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *ChainType) Set(id uint64) bool {
+	u := ChainType(id)
+	switch u {
+	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the Chain Type
 func (v ChainType) String() string {
 	switch v {
@@ -378,6 +402,18 @@ func (v *ChainType) UnmarshalBinary(data []byte) error {
 
 // ID returns the ID of the Key PageOpe ration
 func (v KeyPageOperation) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *KeyPageOperation) Set(id uint64) bool {
+	u := KeyPageOperation(id)
+	switch u {
+	case KeyPageOperationUnknown, KeyPageOperationUpdate, KeyPageOperationRemove, KeyPageOperationAdd, KeyPageOperationSetThreshold:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
 
 // String returns the name of the Key PageOpe ration
 func (v KeyPageOperation) String() string {
@@ -460,6 +496,18 @@ func (v *KeyPageOperation) UnmarshalBinary(data []byte) error {
 // ID returns the ID of the Object Type
 func (v ObjectType) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *ObjectType) Set(id uint64) bool {
+	u := ObjectType(id)
+	switch u {
+	case ObjectTypeUnknown, ObjectTypeAccount, ObjectTypeTransaction:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the Object Type
 func (v ObjectType) String() string {
 	switch v {
@@ -533,6 +581,18 @@ func (v *ObjectType) UnmarshalBinary(data []byte) error {
 // ID returns the ID of the Transaction Max
 func (v TransactionMax) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *TransactionMax) Set(id uint64) bool {
+	u := TransactionMax(id)
+	switch u {
+	case TransactionMaxUser, TransactionMaxSynthetic, TransactionMaxInternal:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the Transaction Max
 func (v TransactionMax) String() string {
 	switch v {
@@ -605,6 +665,18 @@ func (v *TransactionMax) UnmarshalBinary(data []byte) error {
 
 // ID returns the ID of the Transaction Type
 func (v TransactionType) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *TransactionType) Set(id uint64) bool {
+	u := TransactionType(id)
+	switch u {
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
 
 // String returns the name of the Transaction Type
 func (v TransactionType) String() string {
