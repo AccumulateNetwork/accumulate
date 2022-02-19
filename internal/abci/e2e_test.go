@@ -79,7 +79,7 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 
 			exch := new(protocol.SendTokens)
 			exch.AddRecipient(n.ParseUrl(recipient.Addr), big.NewInt(int64(1000)))
-			tx, err := transactions.New(origin.Addr, origin.Nonce, func(hash []byte) (*transactions.ED25519Sig, error) {
+			tx, err := transactions.New(origin.Addr, origin.Nonce, func(hash []byte) (protocol.Signature, error) {
 				return origin.Sign(hash), nil
 			}, exch)
 			require.NoError(n.t, err)
@@ -202,7 +202,7 @@ func TestCreateADI(t *testing.T) {
 		adi.KeyPageName = "bar-page"
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
-		tx, err := transactions.New(sponsorUrl, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+		tx, err := transactions.New(sponsorUrl, 1, func(hash []byte) (protocol.Signature, error) {
 			return wallet.Sign(hash), nil
 		}, adi)
 		require.NoError(t, err)

@@ -15,9 +15,9 @@ type WalletEntry struct {
 // Sign
 // Makes it easier to sign transactions.  Create the ED25519Sig object, sign
 // the message, and return the ED25519Sig object to caller
-func (we *WalletEntry) Sign(message []byte) *protocol.ED25519Sig { // sign a message
+func (we *WalletEntry) Sign(message []byte) *protocol.LegacyED25519Signature { // sign a message
 	we.Nonce++                                     //                            Everytime we sign, increment the nonce
-	sig := new(protocol.ED25519Sig)                //                     create a signature object
+	sig := new(protocol.LegacyED25519Signature)                //                     create a signature object
 	_ = sig.Sign(we.Nonce, we.PrivateKey, message) //                  sign the message
 	return sig                                     //                            return the signature object
 }

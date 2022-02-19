@@ -30,7 +30,7 @@ func TestTransactionState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eSig := new(ED25519Sig)
+	eSig := new(LegacyED25519Signature)
 	transHash := trans.GetTxHash()
 
 	if err := eSig.Sign(we.Nonce, we.PrivateKey, transHash); err != nil {

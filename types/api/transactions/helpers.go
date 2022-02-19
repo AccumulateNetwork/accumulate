@@ -8,7 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func New(origin string, height uint64, signer func(hash []byte) (*ED25519Sig, error), tx protocol.TransactionPayload) (*Envelope, error) {
+func New(origin string, height uint64, signer func(hash []byte) (protocol.Signature, error), tx protocol.TransactionPayload) (*Envelope, error) {
 	u, err := url.Parse(origin)
 	if err != nil {
 		return nil, fmt.Errorf("invalid origin URL: %v", err)
@@ -20,12 +20,12 @@ func New(origin string, height uint64, signer func(hash []byte) (*ED25519Sig, er
 	}, signer, tx)
 }
 
-func NewWith(header *protocol.TransactionHeader, signer func(hash []byte) (*ED25519Sig, error), tx protocol.TransactionPayload) (*Envelope, error) {
+func NewWith(header *protocol.TransactionHeader, signer func(hash []byte) (protocol.Signature, error), tx protocol.TransactionPayload) (*Envelope, error) {
 	env := new(Envelope)
 	env.Transaction = new(Transaction)
 	env.Transaction.TransactionHeader = *header
 	env.Transaction.Body = tx
-	env.Signatures = make([]*ED25519Sig, 1)
+	env.Signatures = make([]protocol.Signature, 1)
 
 	var err error
 	hash := env.GetTxHash()

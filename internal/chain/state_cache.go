@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -123,7 +122,7 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 }
 
 // LoadTxn loads and unmarshals a saved transaction
-func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.TransactionStatus, []*transactions.ED25519Sig, error) {
+func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	return c.batch.Transaction(txid[:]).Get()
 }
 

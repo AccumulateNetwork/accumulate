@@ -121,8 +121,8 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		KeyPageIndex:  keyPageIndex,
 		KeyPageHeight: qr.MainChain.Height,
 		Nonce:         nonce,
-	}, func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
+	}, func(hash []byte) (protocol.Signature, error) {
+		sig := new(protocol.LegacyED25519Signature)
 		return sig, sig.Sign(nonce, params.Key, hash)
 	}, params.Payload)
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	req.Origin = u
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
-	req.Signature = tx.Signatures[0].Signature
+	req.Signature = tx.Signatures[0].GetSignature()
 	req.KeyPage.Index = keyPageIndex
 	req.KeyPage.Height = qr.MainChain.Height
 	req.Payload = params.Payload
@@ -165,8 +165,8 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIn
 		KeyPageIndex:  keyPageIndex,
 		KeyPageHeight: keyPageHeight,
 		Nonce:         nonce,
-	}, func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
+	}, func(hash []byte) (protocol.Signature, error) {
+		sig := new(protocol.LegacyED25519Signature)
 		return sig, sig.Sign(nonce, params.Key, hash)
 	}, params.Payload)
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIn
 	req.Origin = u
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
-	req.Signature = tx.Signatures[0].Signature
+	req.Signature = tx.Signatures[0].GetSignature()
 	req.KeyPage.Index = keyPageIndex
 	req.KeyPage.Height = keyPageHeight
 	req.Payload = params.Payload
@@ -235,8 +235,8 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	pl := new(api.TxRequest)
 	pl.Origin = tx.Transaction.Origin
 	pl.Signer.Nonce = tx.Transaction.Nonce
-	pl.Signer.PublicKey = tx.Signatures[0].PublicKey
-	pl.Signature = tx.Signatures[0].Signature
+	pl.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
+	pl.Signature = tx.Signatures[0].GetSignature()
 	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
 	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
 	pl.Payload = data

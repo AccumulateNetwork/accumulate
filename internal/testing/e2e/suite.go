@@ -63,8 +63,8 @@ func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, bod
 		Origin:        sponsor,
 		KeyPageHeight: s.dut.GetRecordHeight(sponsor.String()),
 		Nonce:         nonce,
-	}, func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
+	}, func(hash []byte) (protocol.Signature, error) {
+		sig := new(protocol.LegacyED25519Signature)
 		return sig, sig.Sign(nonce, key, hash)
 	}, body)
 	s.Require().NoError(err)
