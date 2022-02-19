@@ -120,6 +120,10 @@ type Signer struct {
 	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
 }
 
+type StatusResponse struct {
+	Ok bool `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+}
+
 type TokenDeposit struct {
 	Url    *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Amount big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
