@@ -153,6 +153,13 @@ type DirectoryQueryResult struct {
 	Total           uint64    `json:"total" form:"total" query:"total" validate:"required"`
 }
 
+type ED25519Sig struct {
+	fieldsSet []bool
+	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+}
+
 type EmptyResult struct {
 	fieldsSet []bool
 }
@@ -160,8 +167,8 @@ type EmptyResult struct {
 type Envelope struct {
 	fieldsSet   []bool
 	Signatures  []*ED25519Sig `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
-	TxHash      []byte        `json:"txHash,omitempty" form:"txHash" query:"txHash" validate:"required"`
-	Transaction *Transaction  `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	TxHash      []byte        `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Transaction *Transaction  `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	hash        []byte
 }
 
@@ -929,6 +936,20 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 		}
 	}
 	if !(v.Total == u.Total) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ED25519Sig) Equal(u *ED25519Sig) bool {
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
 
@@ -2014,8 +2035,8 @@ func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
 	if !(len(v.Name) == 0) {
 		writer.WriteString(1, v.Name)
 	}
-	if !(v.Type == (0)) {
-		writer.WriteValue(2, v.Type)
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainMetadata)
@@ -2032,7 +2053,7 @@ func (v *ChainMetadata) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Type is missing")
-	} else if v.Type == (0) {
+	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
 
@@ -2586,6 +2607,59 @@ func (v *DirectoryQueryResult) IsValid() error {
 	}
 }
 
+var fieldNames_ED25519Sig = []string{
+	1: "Nonce",
+	2: "PublicKey",
+	3: "Signature",
+}
+
+func (v *ED25519Sig) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Nonce == 0) {
+		writer.WriteUint(1, v.Nonce)
+	}
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ED25519Sig)
+	return buffer.Bytes(), err
+}
+
+func (v *ED25519Sig) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Nonce is missing")
+	} else if v.Nonce == 0 {
+		errs = append(errs, "field Nonce is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_EmptyResult = []string{
 	"Type",
 }
@@ -2646,16 +2720,6 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field TxHash is missing")
-	} else if len(v.TxHash) == 0 {
-		errs = append(errs, "field TxHash is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Transaction is missing")
-	} else if v.Transaction == nil {
-		errs = append(errs, "field Transaction is not set")
 	}
 
 	switch len(errs) {
@@ -3342,8 +3406,8 @@ func (v *ObjectMetadata) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Type == (0)) {
-		writer.WriteValue(1, v.Type)
+	if !(v.Type == 0) {
+		writer.WriteEnum(1, v.Type)
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
@@ -3360,7 +3424,7 @@ func (v *ObjectMetadata) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
-	} else if v.Type == (0) {
+	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -4849,8 +4913,8 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, TransactionTypeUpdateKeyPage.ID())
-	if !(v.Operation == (0)) {
-		writer.WriteValue(2, v.Operation)
+	if !(v.Operation == 0) {
+		writer.WriteEnum(2, v.Operation)
 	}
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(3, v.Key)
@@ -4874,7 +4938,7 @@ func (v *UpdateKeyPage) IsValid() error {
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Operation is missing")
-	} else if v.Operation == (0) {
+	} else if v.Operation == 0 {
 		errs = append(errs, "field Operation is not set")
 	}
 
@@ -5250,7 +5314,7 @@ func (v *ChainMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(1); ok {
 		v.Name = x
 	}
-	if x := new(ChainType); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(ChainType); reader.ReadEnum(2, x) {
 		v.Type = *x
 	}
 
@@ -5567,6 +5631,28 @@ func (v *DirectoryQueryResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DirectoryQueryResult)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *ED25519Sig) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ED25519Sig) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Nonce = x
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ED25519Sig)
 	v.fieldsSet = seen
 	return err
 }
@@ -5978,7 +6064,7 @@ func (v *ObjectMetadata) UnmarshalBinary(data []byte) error {
 func (v *ObjectMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(ObjectType); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(ObjectType); reader.ReadEnum(1, x) {
 		v.Type = *x
 	}
 	for {
@@ -6747,7 +6833,7 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	} else if x != TransactionTypeUpdateKeyPage.ID() {
 		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateKeyPage, TransactionType(x))
 	}
-	if x := new(KeyPageOperation); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(KeyPageOperation); reader.ReadEnum(2, x) {
 		v.Operation = *x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
@@ -7091,6 +7177,18 @@ func (v *DataEntry) MarshalJSON() ([]byte, error) {
 		u.ExtIds[i] = encoding.BytesToJSON(x)
 	}
 	u.Data = encoding.BytesToJSON(v.Data)
+	return json.Marshal(&u)
+}
+
+func (v *ED25519Sig) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Nonce     uint64  `json:"nonce,omitempty"`
+		PublicKey *string `json:"publicKey,omitempty"`
+		Signature *string `json:"signature,omitempty"`
+	}{}
+	u.Nonce = v.Nonce
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
 	return json.Marshal(&u)
 }
 
@@ -8135,6 +8233,32 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
 		v.Data = x
+	}
+	return nil
+}
+
+func (v *ED25519Sig) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Nonce     uint64  `json:"nonce,omitempty"`
+		PublicKey *string `json:"publicKey,omitempty"`
+		Signature *string `json:"signature,omitempty"`
+	}{}
+	u.Nonce = v.Nonce
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Nonce = u.Nonce
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
 	}
 	return nil
 }
