@@ -50,13 +50,13 @@ function wait-for-tx {
 
 # cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
 function cli-tx {
-    JSON=`accumulate -j "$@"` || return 1
+    JSON=`accumulate --nonce nano -j "$@"` || return 1
     echo "$JSON" | jq -re .transactionHash
 }
 
 # cli-tx-env <args...> - Execute a CLI command and extract the envelope hash from the result
 function cli-tx-env {
-    JSON=`accumulate -j "$@"` || return 1
+    JSON=`accumulate --nonce nano -j "$@"` || return 1
     echo "$JSON" | jq -re .envelopeHash
 }
 

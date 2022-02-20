@@ -97,7 +97,7 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
-	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
+	fullCommand := fmt.Sprintf("--nonce nano -j -s %s/v2 %s",
 		c.jsonRpcAddr, cmdLine)
 	args := strings.Split(fullCommand, " ")
 

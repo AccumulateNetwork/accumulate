@@ -23,6 +23,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
+type NonceModeT int
+
+const (
+	NonceSeconds NonceModeT = iota + 1
+	NonceMilli
+	NonceMicro
+	NonceNano
+)
+
+var NonceModes = map[NonceModeT][]string{
+	NonceSeconds: []string{"s", "sec", "second"},
+	NonceMilli:   []string{"ms", "milli", "millisecond"},
+	NonceMicro:   []string{"us", "micro", "microsecond"},
+	NonceNano:    []string{"ns", "nano", "nanosecond"},
+}
+
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	u, err := url2.Parse(urlStr)
 	if err != nil {
@@ -887,6 +903,17 @@ func resolveKeyPageUrl(chainId []byte) (string, error) {
 }
 
 func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
+	t := time.Now().UTC()
+	switch NonceMode {
+	case NonceSeconds:
+		return uint64(t.Unix())
+	case NonceMilli:
+		return uint64(t.UnixMilli())
+	case NonceMicro:
+		return uint64(t.UnixMicro())
+	case NonceNano:
+		return uint64(t.UnixNano())
+	default:
+		return uint64(t.Unix())
+	}
 }

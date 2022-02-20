@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/thediveo/enumflag"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
@@ -21,6 +22,7 @@ var (
 	WantJsonOutput = false
 	TxPretend      = false
 	TxProve        = false
+	NonceMode      = NonceMicro
 )
 
 var currentUser = func() *user.User {
@@ -56,6 +58,8 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
 	flags.BoolVar(&TxNoWait, "no-wait", false, "Don't wait for the transaction to complete")
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
+
+	flags.Var(enumflag.New(&NonceMode, "nonce", NonceModes, enumflag.EnumCaseInsensitive), "nonce", "Set the nonce mode")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)
