@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	api2 "gitlab.com/accumulatenetwork/accumulate/types/api"
 )
 
 func init() {
@@ -82,16 +82,13 @@ func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error
 		return "", err
 	}
 
-	res := api2.APIDataResponse{}
+	res := new(api.ChainQueryResponse)
+	acc := new(protocol.LiteTokenAccount)
+	res.Data = acc
 	err = json.Unmarshal([]byte(r), &res)
 	if err != nil {
 		return "", err
 	}
 
-	acc := protocol.LiteTokenAccount{}
-	err = json.Unmarshal(*res.Data, &acc)
-	if err != nil {
-		return "", err
-	}
 	return acc.Balance.String(), nil
 }
