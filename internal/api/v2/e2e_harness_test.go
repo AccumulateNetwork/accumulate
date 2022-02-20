@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -114,27 +115,21 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	}
 
 	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: signator})
-	now := time.Now()
-	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.Header{
-		Origin:        u,
-		KeyPageIndex:  keyPageIndex,
-		KeyPageHeight: qr.MainChain.Height,
-		Nonce:         nonce,
-	}, func(hash []byte) (protocol.Signature, error) {
-		sig := new(protocol.LegacyED25519Signature)
-		return sig, sig.Sign(nonce, params.Key, hash)
-	}, params.Payload)
-	require.NoError(t, err)
+	env := acctesting.NewTransaction().
+		WithOrigin(u).
+		WithKeyPage(keyPageIndex, qr.MainChain.Height).
+		WithNonceTimestamp().
+		WithBody(params.Payload).
+		SignLegacyED25519(params.Key)
 
 	req := new(api.TxRequest)
-	req.Origin = u
-	req.Signer.PublicKey = params.Key[32:]
-	req.Signer.Nonce = nonce
-	req.Signature = tx.Signatures[0].GetSignature()
-	req.KeyPage.Index = keyPageIndex
-	req.KeyPage.Height = qr.MainChain.Height
-	req.Payload = params.Payload
+	req.Origin = env.Transaction.Origin
+	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
+	req.Signer.Nonce = env.Transaction.Nonce
+	req.Signature = env.Signatures[0].GetSignature()
+	req.KeyPage.Index = env.Transaction.KeyPageIndex
+	req.KeyPage.Height = env.Transaction.KeyPageHeight
+	req.Payload = env.Transaction.Body
 	return req
 }
 
@@ -158,27 +153,21 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIn
 	u, err := url.Parse(params.Origin)
 	require.NoError(t, err)
 
-	now := time.Now()
-	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.Header{
-		Origin:        u,
-		KeyPageIndex:  keyPageIndex,
-		KeyPageHeight: keyPageHeight,
-		Nonce:         nonce,
-	}, func(hash []byte) (protocol.Signature, error) {
-		sig := new(protocol.LegacyED25519Signature)
-		return sig, sig.Sign(nonce, params.Key, hash)
-	}, params.Payload)
-	require.NoError(t, err)
+	env := acctesting.NewTransaction().
+		WithOrigin(u).
+		WithKeyPage(keyPageIndex, keyPageHeight).
+		WithNonceTimestamp().
+		WithBody(params.Payload).
+		SignLegacyED25519(params.Key)
 
 	req := new(api.TxRequest)
-	req.Origin = u
-	req.Signer.PublicKey = params.Key[32:]
-	req.Signer.Nonce = nonce
-	req.Signature = tx.Signatures[0].GetSignature()
-	req.KeyPage.Index = keyPageIndex
-	req.KeyPage.Height = keyPageHeight
-	req.Payload = params.Payload
+	req.Origin = env.Transaction.Origin
+	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
+	req.Signer.Nonce = env.Transaction.Nonce
+	req.Signature = env.Signatures[0].GetSignature()
+	req.KeyPage.Index = env.Transaction.KeyPageIndex
+	req.KeyPage.Height = env.Transaction.KeyPageHeight
+	req.Payload = env.Transaction.Body
 
 	resp := new(api.TxResponse)
 	callApi(t, japi, method, req, resp)

@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func BenchmarkExecuteSendTokens(b *testing.B) {
@@ -80,19 +79,16 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(fromKey), 1e9, 1e9))
 			require.NoError(b, batch.Commit())
 
-			env, err := transactions.NewWith(
-				&transactions.Header{
-					Origin:        fromUrl,
-					KeyPageHeight: 1,
-					Nonce:         1,
-				}, edSigner(tmed25519.PrivKey(fromKey), 1),
-				&protocol.SendTokens{
+			env := acctesting.NewTransaction().
+				WithOrigin(fromUrl).
+				WithKeyPage(0, 1).
+				WithNonce(1).
+				WithBody(&protocol.SendTokens{
 					To: []*protocol.TokenRecipient{
 						{Url: toUrl0, Amount: *big.NewInt(1)},
 					},
-				},
-			)
-			require.NoError(b, err)
+				}).
+				SignLegacyED25519(fromKey)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

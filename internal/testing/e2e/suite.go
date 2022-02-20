@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -59,14 +60,10 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 
 func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body protocol.TransactionPayload) *transactions.Envelope {
 	s.T().Helper()
-	tx, err := transactions.NewWith(&transactions.Header{
-		Origin:        sponsor,
-		KeyPageHeight: s.dut.GetRecordHeight(sponsor.String()),
-		Nonce:         nonce,
-	}, func(hash []byte) (protocol.Signature, error) {
-		sig := new(protocol.LegacyED25519Signature)
-		return sig, sig.Sign(nonce, key, hash)
-	}, body)
-	s.Require().NoError(err)
-	return tx
+	return testing.NewTransaction().
+		WithOrigin(sponsor).
+		WithKeyPage(0, s.dut.GetRecordHeight(sponsor.String())).
+		WithNonce(nonce).
+		WithBody(body).
+		SignLegacyED25519(key)
 }

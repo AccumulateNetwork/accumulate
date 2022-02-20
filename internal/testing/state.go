@@ -345,13 +345,3 @@ func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {
 func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
 	return AcmeLiteAddress(key[32:])
 }
-
-func NewWalletEntry() *WalletEntry {
-	wallet := new(WalletEntry)
-
-	wallet.Nonce = 1 // Put the private key for the origin
-	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
-	wallet.Addr = AcmeLiteAddressStdPriv(wallet.PrivateKey).String() // Generate the origin address
-
-	return wallet
-}

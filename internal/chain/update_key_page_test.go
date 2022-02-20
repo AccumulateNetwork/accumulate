@@ -12,7 +12,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"golang.org/x/exp/rand"
 )
 
@@ -53,16 +52,16 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			u, err := url.Parse("foo/page1")
 			require.NoError(t, err)
 
-			tx, err := transactions.NewWith(&transactions.Header{
-				Origin:       u,
-				KeyPageIndex: idx,
-			}, edSigner(testKey, 1), body)
+			env := acctesting.NewTransaction().
+				WithOrigin(u).
+				WithKeyPage(idx, 1).
+				WithBody(body).
+				SignLegacyED25519(testKey)
+
+			st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), env)
 			require.NoError(t, err)
 
-			st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), tx)
-			require.NoError(t, err)
-
-			_, err = UpdateKeyPage{}.Validate(st, tx)
+			_, err = UpdateKeyPage{}.Validate(st, env)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {
