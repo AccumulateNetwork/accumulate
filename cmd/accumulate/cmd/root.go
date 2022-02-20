@@ -22,7 +22,10 @@ var (
 	WantJsonOutput = false
 	TxPretend      = false
 	TxProve        = false
-	NonceMode      = NonceMicro
+
+	// TODO Change the default to seconds or milliseconds? Talk with community,
+	// ecosystem devs.
+	NonceMode = NonceMicro
 )
 
 var currentUser = func() *user.User {
