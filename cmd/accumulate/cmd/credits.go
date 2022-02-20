@@ -90,7 +90,7 @@ func AddCredits(origin string, args []string) (string, error) {
 	}
 
 	payload := protocol.AddCredits{}
-	payload.Recipient = targetURL.String()
+	payload.Recipient = targetURL
 	payload.Amount = uint64(amount * protocol.CreditPrecision)
 
 	// Send the transaction request.

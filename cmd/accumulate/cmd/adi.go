@@ -58,46 +58,6 @@ var adiGetCmd = &cobra.Command{
 }
 var adiListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "Get existing ADI by URL",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
-		out, err := ListADIs()
-		printOutput(cmd, out, err)
-	},
-}
-var adiDirectoryCmd = &cobra.Command{
-	Use:   "directory [url] [from] [to]",
-	Short: "Get directory of URL's associated with an ADI with starting index and number of directories to receive",
-	Args:  cobra.ExactArgs(3),
-	Run: func(cmd *cobra.Command, args []string) {
-		out, err := GetAdiDirectory(args[0], args[1], args[2])
-		printOutput(cmd, out, err)
-	},
-}
-var adiCreateCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create new ADI",
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 3 {
-			PrintADICreate()
-			return
-		}
-		out, err := NewADI(args[0], args[1:])
-		printOutput(cmd, out, err)
-	},
-}
-
-var adiGetCmd = &cobra.Command{
-	Use:   "get [url]",
-	Short: "Get existing ADI by URL",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		out, err := GetADI(args[0])
-		printOutput(cmd, out, err)
-	},
-}
-var adiListCmd = &cobra.Command{
-	Use:   "list",
 	Short: "Show all ADIs", // VERIFY:
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
@@ -161,7 +121,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	}
 
 	params := api2.DirectoryQuery{}
-	params.Url = originURL.String()
+	params.Url = originURL
 	params.Start = uint64(startVal)
 	params.Count = uint64(countVal)
 	params.Expand = true
@@ -285,7 +245,7 @@ func NewADIFromADISigner(originURL *url2.URL, args []string) (string, error) {
 	}
 
 	birthRequest := protocol.CreateIdentity{}
-	birthRequest.Url = newbornURL.Authority
+	birthRequest.Url = newbornURL
 	birthRequest.PublicKey = pubKey
 	birthRequest.KeyBookName = newbornBookName
 	birthRequest.KeyPageName = newbornPageName

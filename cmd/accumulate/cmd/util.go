@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -25,9 +24,14 @@ import (
 )
 
 // Retrieve, from the general ledger, the data at the specified URL.
-func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
+func getRecord(urlString string, rec interface{}) (*api2.MerkleState, error) {
+	url, err := url2.Parse(urlString)
+	if err != nil {
+		return nil, err
+	}
+
 	params := api2.UrlQuery{
-		Url: u,
+		Url: url,
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
@@ -117,7 +121,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	merkleState, err := getRecord(keyInfo.KeyPage, nil)
+	merkleState, err := getRecord(keyInfo.KeyPage.String(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
@@ -156,15 +160,14 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 // singature.
 //
 // Returns an error if the signing mechanism fails to sign.
-func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, trxHeader *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-
+func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, trxHeader *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	// Prepare an envelope and populate it with transaction data which is
 	// used later when we call
 	// transactions.Envelope.Transaction.GetTxHash().
 	trxEnvelope := new(transactions.Envelope)
 	trxEnvelope.TxHash = txHash
 	trxEnvelope.Transaction = new(transactions.Transaction)
-	trxEnvelope.Transaction.Body = binaryPayload
+	trxEnvelope.Transaction.Body = payload
 
 	trxHeader.Nonce = nonce
 	trxEnvelope.Transaction.TransactionHeader = *trxHeader
@@ -181,10 +184,9 @@ func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, trxHeader *transa
 // Returns an error if signing fails.
 // TODO: This function's predecessor no longer exists. The V2 suffix
 // on this function is superfluous and could lead to confusion.
-func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-
+func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
 	// Sign the transaction and retrieve the mechanism used to do so.
-	signingMechanism, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
+	signingMechanism, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +265,7 @@ func GetUrl(subject string) (*QueryResponse, error) {
 	}
 
 	params := api2.UrlQuery{}
-	params.Url = url.String()
+	params.Url = url
 
 	err = queryAs("query", &params, &res)
 	if err != nil {
@@ -297,7 +299,7 @@ func queryAs(method string, input, output interface{}) error {
 // trxHeader should be a header prepared by prepareSigner().
 //
 // Returns an error if the data is malformed or signing fails.
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, trxHeader *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, trxHeader *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
 	if payload == nil && txHash != nil {
 		payload = new(protocol.SignPending)
 	}
@@ -345,7 +347,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash [
 	// the trxHeader, which has been passed by reference. Why not attach it
 	// here and shorten several param lists?
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, trxHeader, privKey, nonce)
+	params, err := prepareGenTxV2(payload, data, txHash, origin, trxHeader, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}

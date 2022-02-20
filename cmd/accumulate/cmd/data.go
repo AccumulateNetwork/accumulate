@@ -139,7 +139,7 @@ func GetDataEntry(accountURLstring string, args []string) (string, error) {
 	}
 
 	params := api.DataEntryQuery{}
-	params.Url = accountURL.String()
+	params.Url = accountURL
 	if len(args) > 0 {
 		n, err := hex.Decode(params.EntryHash[:], []byte(args[0]))
 		if err != nil {

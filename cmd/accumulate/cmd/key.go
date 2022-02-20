@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
@@ -140,10 +141,9 @@ func resolvePrivateKey(subject string) ([]byte, error) {
 
 	// ...if it gave us a private key then we're done...
 	if priv != nil {
-	return LookupByPubKey(pub)
-}
+		return priv, nil
+	}
 
-=======
 	// ...otherwise it gave us a public key so look it up.
 	return LookupByPubKey(pub)
 }
@@ -152,7 +152,6 @@ func resolvePrivateKey(subject string) ([]byte, error) {
 // and an error.
 // SUGGEST: Consider removing. Calling this function is the equivalent
 // of calling parseKey() and then checking twice for the same error.
->>>>>>> 7bdaa389 (Progress on commentaries.)
 func resolvePublicKey(s string) ([]byte, error) {
 	pub, _, err := parseKey(s)
 	if err != nil {

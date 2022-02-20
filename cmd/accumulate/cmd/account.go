@@ -18,16 +18,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 
-<<<<<<< HEAD
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-=======
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -187,10 +187,7 @@ func GetAccount(url string) (string, error) {
 		return "", err
 	}
 
-<<<<<<< HEAD
-=======
 	// Check if what was retrieved is a token account or data account.
->>>>>>> 7bdaa389 (Progress on commentaries.)
 	if res.Type != protocol.AccountTypeTokenAccount.String() && res.Type != protocol.AccountTypeLiteTokenAccount.String() &&
 		res.Type != protocol.AccountTypeDataAccount.String() && res.Type != protocol.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
@@ -222,11 +219,6 @@ func QrAccount(subject string) (string, error) {
 	return string(r), err
 }
 
-<<<<<<< HEAD
-//CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
-func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, error) {
-	u, err := url2.Parse(origin)
-=======
 // CreateAccount begins creation of a token account.
 //
 // This method is called when a user enters the appropriate command from their
@@ -244,19 +236,14 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	// Resolve the first user-supplied argument to a lite account or
 	// ADI key page, which is indicated by a URL.
 	originURL, err := url2.Parse(origin)
->>>>>>> 7bdaa389 (Progress on commentaries.)
 	if err != nil {
 		_ = cmd.Usage()
 		return "", err
 	}
 
-<<<<<<< HEAD
-	args, si, privKey, err := prepareSigner(u, args)
-=======
 	// Resolve the remaining user-supplied arguments to a signing key.
 	// Note that the args used to do this are removed from the arg list.
 	args, trxHeader, privKey, err := prepareSigner(originURL, args)
->>>>>>> 7bdaa389 (Progress on commentaries.)
 	if err != nil {
 		return "", err
 	}
@@ -290,52 +277,22 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		return "", fmt.Errorf("invalid token url")
 	}
 
-<<<<<<< HEAD
+	// If the user provided three or more arguments in addition to what was
+	// required to resolve a signing key, then try to read the third argument
+	// to a keybook URL.
 	var keybook *url2.URL
 	if len(args) > 2 {
 		keybook, err = url2.Parse(args[2])
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
-=======
-	// If the user provided three or more arguments in addition to what was
-	// required to resolve a signing key, then try to read the third argument
-	// to a keybook URL.
-	var keybook string
-	if len(args) >= 3 {
-		keyBookURL, err := url2.Parse(args[2])
-		if err != nil {
-			return "", fmt.Errorf("invalid key book url")
-		}
-		keybook = keyBookURL.String()
->>>>>>> 7bdaa389 (Progress on commentaries.)
 	}
 	// else { keybook = "" }
 
-<<<<<<< HEAD
-	//make sure this is a valid token account
-	req := new(api.GeneralQuery)
-	req.Url = tok
-	resp := new(api.ChainQueryResponse)
-	token := protocol.TokenIssuer{}
-	resp.Data = &token
-	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
-	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-		return "", fmt.Errorf("invalid token type %v", err)
-	}
-
-	tac := protocol.CreateTokenAccount{}
-	tac.Url = accountUrl
-	tac.TokenUrl = tok
-	tac.KeyBookUrl = keybook
-	tac.Scratch = flagAccount.Scratch
-
-	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
-=======
 	// Create a query request. We will be asking what, if anything, exists at
 	// the user-supplied token account URL.
 	queryRequest := new(api.GeneralQuery)
-	queryRequest.Url = tokenAccountURL.String()
+	queryRequest.Url = tokenAccountURL
 	queryResponse := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
 	queryResponse.Data = &token
@@ -349,14 +306,13 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 
 	// Assemble all the data we've gathered so far.
 	newAccount := protocol.CreateTokenAccount{}
-	newAccount.Url = newAccountURL.String()
-	newAccount.TokenUrl = tokenAccountURL.String()
+	newAccount.Url = newAccountURL
+	newAccount.TokenUrl = tokenAccountURL
 	newAccount.KeyBookUrl = keybook
 	newAccount.Scratch = flagAccount.Scratch
 
 	// Send the account creation request out to the Accumulate network.
 	res, err := dispatchTxRequest("create-token-account", &newAccount, nil, originURL, trxHeader, privKey)
->>>>>>> 7bdaa389 (Progress on commentaries.)
 	if err != nil {
 		return "", err
 	}
