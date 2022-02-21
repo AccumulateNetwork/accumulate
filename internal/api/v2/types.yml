@@ -40,8 +40,10 @@ TransactionQueryResponse:
       alternative: Txid
     - name: Signatures
       repeatable: true
-      type: transactions.ED25519Sig
-      pointer: true
+      type: protocol.Signature
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: protocol.UnmarshalSignature
     - name: Status
       type: protocol.TransactionStatus
       pointer: true

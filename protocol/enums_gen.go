@@ -85,6 +85,15 @@ const ObjectTypeAccount ObjectType = 1
 // ObjectTypeTransaction represents a transaction object.
 const ObjectTypeTransaction ObjectType = 2
 
+// SignatureTypeUnknown is used when the signature type is not known.
+const SignatureTypeUnknown SignatureType = 0
+
+// SignatureTypeLegacyED25519 represents a legacy ED25519 signature.
+const SignatureTypeLegacyED25519 SignatureType = 1
+
+// SignatureTypeED25519 represents an ED25519 signature.
+const SignatureTypeED25519 SignatureType = 2
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 47
 
@@ -575,6 +584,91 @@ func (v *ObjectType) UnmarshalBinary(data []byte) error {
 	}
 
 	*v = ObjectType(u)
+	return nil
+}
+
+// ID returns the ID of the Signature Type
+func (v SignatureType) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *SignatureType) Set(id uint64) bool {
+	u := SignatureType(id)
+	switch u {
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Signature Type
+func (v SignatureType) String() string {
+	switch v {
+	case SignatureTypeUnknown:
+		return "unknown"
+	case SignatureTypeLegacyED25519:
+		return "legacyED25519"
+	case SignatureTypeED25519:
+		return "eD25519"
+	default:
+		return fmt.Sprintf("SignatureType:%d", v)
+	}
+}
+
+// SignatureTypeByName returns the named Signature Type.
+func SignatureTypeByName(name string) (SignatureType, bool) {
+	switch name {
+	case "unknown":
+		return SignatureTypeUnknown, true
+	case "legacyED25519":
+		return SignatureTypeLegacyED25519, true
+	case "eD25519":
+		return SignatureTypeED25519, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Signature Type to JSON as a string.
+func (v SignatureType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Signature Type from JSON as a string.
+func (v *SignatureType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = SignatureTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Signature Type %q", s)
+	}
+	return nil
+}
+
+// BinarySize returns the number of bytes required to binary marshal the Signature Type.
+func (v SignatureType) BinarySize() int {
+	return encoding.UvarintBinarySize(v.ID())
+}
+
+// MarshalBinary marshals the Signature Type to bytes as a unsigned varint.
+func (v SignatureType) MarshalBinary() ([]byte, error) {
+	return encoding.UvarintMarshalBinary(v.ID()), nil
+}
+
+// UnmarshalBinary unmarshals the Signature Type from bytes as a unsigned varint.
+func (v *SignatureType) UnmarshalBinary(data []byte) error {
+	u, err := encoding.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	*v = SignatureType(u)
 	return nil
 }
 
