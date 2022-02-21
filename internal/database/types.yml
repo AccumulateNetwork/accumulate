@@ -2,9 +2,10 @@ txSignatures:
   fields:
     - name: Signatures
       repeatable: true
-      type: transactions.ED25519Sig
-      pointer: true
-      marshal-as: reference
+      type: protocol.Signature
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: protocol.UnmarshalSignature
 
 txSyntheticTxns:
   fields:
