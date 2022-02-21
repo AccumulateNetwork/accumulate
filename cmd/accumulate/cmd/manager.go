@@ -17,6 +17,8 @@ var managerCmd = &cobra.Command{
 		switch args[0] {
 		case "set":
 			out, err = SetManager(args[1], args[2:])
+		case "remove":
+			out, err = RemoveManager(args[1], args[2:])
 		default:
 			fmt.Println("Usage:")
 			PrintManagerSet()
@@ -27,6 +29,8 @@ var managerCmd = &cobra.Command{
 
 func PrintManagerSet() {
 	fmt.Println("  accumulate manager set [origin url] [signing key name] [key index (optional)] [key height (optional)] [manager keybook url]			Set manager keybook to the chain")
+	fmt.Println("  accumulate manager remove [origin url] [signing key name] [key index (optional)] [key height (optional)]			Removes manager keybook from the chain")
+
 }
 
 // SetManager sets manager to the chain
@@ -49,6 +53,26 @@ func SetManager(origin string, args []string) (string, error) {
 	req := protocol.UpdateManager{}
 	req.ManagerKeyBook = managerKeyBookUrl
 	res, err := dispatchTxRequest("update-manager", &req, nil, u, si, privKey)
+	if err != nil {
+		return "", err
+	}
+	return ActionResponseFrom(res).Print()
+}
+
+// RemoveManager removes manager to the chain
+func RemoveManager(origin string, args []string) (string, error) {
+	u, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, privKey, err := prepareSigner(u, args)
+	if err != nil {
+		return "", err
+	}
+
+	req := protocol.RemoveManager{}
+	res, err := dispatchTxRequest("remove-manager", &req, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
