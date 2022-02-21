@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type governor struct {
@@ -276,7 +275,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Sign it
-		ed := new(transactions.ED25519Sig)
+		ed := new(protocol.LegacyED25519Signature)
 		ed.PublicKey = g.Key[32:]
 		err = ed.Sign(tx.SigInfo.Nonce, g.Key, txid[:])
 		if err != nil {
@@ -469,7 +468,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Sign it
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
 	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())

@@ -1,12 +1,13 @@
 package protocol_test
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -18,28 +19,15 @@ func TestTransactionState(t *testing.T) {
 	nts1 := protocol.SendTokens{}
 	nts1.AddRecipient(&url.URL{Authority: "BlueWagon", Path: "/account"}, big.NewInt(int64(100*100000000)))
 
-	we := acctesting.NewWalletEntry()
-	u, err := url.Parse(we.Addr)
-	require.NoError(t, err)
-	trans := new(Envelope)
-	trans.Transaction = new(Transaction)
-	trans.Transaction.Origin = u
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	addr := acctesting.AcmeLiteAddressStdPriv(key)
 
-	trans.Transaction.Body = &nts1
-	if err != nil {
-		t.Fatal(err)
-	}
+	env := acctesting.NewTransaction().
+		WithOrigin(addr).
+		WithBody(&nts1).
+		SignLegacyED25519(key)
 
-	eSig := new(ED25519Sig)
-	transHash := trans.GetTxHash()
-
-	if err := eSig.Sign(we.Nonce, we.PrivateKey, transHash); err != nil {
-		t.Errorf("error signing tx %v", err)
-	}
-
-	trans.Signatures = append(trans.Signatures, eSig)
-
-	txPendingState := state.NewPendingTransaction(trans)
+	txPendingState := state.NewPendingTransaction(env)
 	txPendingState.Url = &url.URL{Authority: "RedWagon", Path: "/myAccount"}
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
