@@ -348,6 +348,6 @@ func (m *stateCache) AddDirectoryAnchor(anchor *protocol.SyntheticAnchor) {
 	})
 }
 
-func (op *addDirectoryAnchor) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *addDirectoryAnchor) Execute(st *stateCache) ([]protocol.Account, error) {
 	return nil, indexing.DirectoryAnchor(st.batch, st.nodeUrl.JoinPath(protocol.Ledger)).Add(op.anchor)
 }

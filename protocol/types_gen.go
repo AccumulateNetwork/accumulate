@@ -33,6 +33,11 @@ type AcmeFaucet struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 }
 
+type AcmeOracle struct {
+	fieldsSet []bool
+	Price     uint64 `json:"price,omitempty" form:"price" query:"price" validate:"required"`
+}
+
 type AddCredits struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
@@ -178,10 +183,12 @@ type InternalGenesis struct {
 type InternalLedger struct {
 	fieldsSet []bool
 	AccountHeader
-	Index     int64            `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Timestamp time.Time        `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	Synthetic SyntheticLedger  `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
-	Updates   []AnchorMetadata `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
+	Index         int64            `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp     time.Time        `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Synthetic     SyntheticLedger  `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
+	PendingOracle uint64           `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
+	ActiveOracle  uint64           `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
+	Updates       []AnchorMetadata `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 }
 
 type InternalSendTransactions struct {
@@ -351,15 +358,16 @@ type SignPending struct {
 }
 
 type SyntheticAnchor struct {
-	fieldsSet   []bool
-	Source      *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	Major       bool     `json:"major,omitempty" form:"major" query:"major" validate:"required"`
-	RootAnchor  [32]byte `json:"rootAnchor,omitempty" form:"rootAnchor" query:"rootAnchor" validate:"required"`
-	RootIndex   uint64   `json:"rootIndex,omitempty" form:"rootIndex" query:"rootIndex" validate:"required"`
-	Block       uint64   `json:"block,omitempty" form:"block" query:"block" validate:"required"`
-	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
-	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
-	Receipt     Receipt  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	fieldsSet       []bool
+	Source          *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Major           bool     `json:"major,omitempty" form:"major" query:"major" validate:"required"`
+	RootAnchor      [32]byte `json:"rootAnchor,omitempty" form:"rootAnchor" query:"rootAnchor" validate:"required"`
+	RootIndex       uint64   `json:"rootIndex,omitempty" form:"rootIndex" query:"rootIndex" validate:"required"`
+	Block           uint64   `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	SourceIndex     uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	SourceBlock     uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
+	AcmeOraclePrice uint64   `json:"acmeOraclePrice,omitempty" form:"acmeOraclePrice" query:"acmeOraclePrice" validate:"required"`
+	Receipt         Receipt  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 }
 
 type SyntheticBurnTokens struct {
@@ -778,6 +786,14 @@ func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
 	return true
 }
 
+func (v *AcmeOracle) Equal(u *AcmeOracle) bool {
+	if !(v.Price == u.Price) {
+		return false
+	}
+
+	return true
+}
+
 func (v *AddCredits) Equal(u *AddCredits) bool {
 	if !((v.Recipient).Equal(u.Recipient)) {
 		return false
@@ -1095,6 +1111,12 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 		return false
 	}
 	if !((&v.Synthetic).Equal(&u.Synthetic)) {
+		return false
+	}
+	if !(v.PendingOracle == u.PendingOracle) {
+		return false
+	}
+	if !(v.ActiveOracle == u.ActiveOracle) {
 		return false
 	}
 	if len(v.Updates) != len(u.Updates) {
@@ -1464,6 +1486,9 @@ func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
 		return false
 	}
 	if !(v.SourceBlock == u.SourceBlock) {
+		return false
+	}
+	if !(v.AcmeOraclePrice == u.AcmeOraclePrice) {
 		return false
 	}
 	if !((&v.Receipt).Equal(&u.Receipt)) {
@@ -1888,6 +1913,41 @@ func (v *AcmeFaucet) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AcmeOracle = []string{
+	1: "Price",
+}
+
+func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Price == 0) {
+		writer.WriteUint(1, v.Price)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AcmeOracle)
+	return buffer.Bytes(), err
+}
+
+func (v *AcmeOracle) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Price is missing")
+	} else if v.Price == 0 {
+		errs = append(errs, "field Price is not set")
 	}
 
 	switch len(errs) {
@@ -2871,7 +2931,9 @@ var fieldNames_InternalLedger = []string{
 	3: "Index",
 	4: "Timestamp",
 	5: "Synthetic",
-	6: "Updates",
+	6: "PendingOracle",
+	7: "ActiveOracle",
+	8: "Updates",
 }
 
 func (v *InternalLedger) MarshalBinary() ([]byte, error) {
@@ -2889,9 +2951,15 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	if !((v.Synthetic).Equal(new(SyntheticLedger))) {
 		writer.WriteValue(5, &v.Synthetic)
 	}
+	if !(v.PendingOracle == 0) {
+		writer.WriteUint(6, v.PendingOracle)
+	}
+	if !(v.ActiveOracle == 0) {
+		writer.WriteUint(7, v.ActiveOracle)
+	}
 	if !(len(v.Updates) == 0) {
 		for _, v := range v.Updates {
-			writer.WriteValue(6, &v)
+			writer.WriteValue(8, &v)
 		}
 	}
 
@@ -2921,6 +2989,16 @@ func (v *InternalLedger) IsValid() error {
 		errs = append(errs, "field Synthetic is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field PendingOracle is missing")
+	} else if v.PendingOracle == 0 {
+		errs = append(errs, "field PendingOracle is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field ActiveOracle is missing")
+	} else if v.ActiveOracle == 0 {
+		errs = append(errs, "field ActiveOracle is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
 		errs = append(errs, "field Updates is missing")
 	} else if len(v.Updates) == 0 {
 		errs = append(errs, "field Updates is not set")
@@ -4143,15 +4221,16 @@ func (v *SignPending) IsValid() error {
 }
 
 var fieldNames_SyntheticAnchor = []string{
-	1: "Type",
-	2: "Source",
-	3: "Major",
-	4: "RootAnchor",
-	5: "RootIndex",
-	6: "Block",
-	7: "SourceIndex",
-	8: "SourceBlock",
-	9: "Receipt",
+	1:  "Type",
+	2:  "Source",
+	3:  "Major",
+	4:  "RootAnchor",
+	5:  "RootIndex",
+	6:  "Block",
+	7:  "SourceIndex",
+	8:  "SourceBlock",
+	9:  "AcmeOraclePrice",
+	10: "Receipt",
 }
 
 func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
@@ -4180,8 +4259,11 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	if !(v.SourceBlock == 0) {
 		writer.WriteUint(8, v.SourceBlock)
 	}
+	if !(v.AcmeOraclePrice == 0) {
+		writer.WriteUint(9, v.AcmeOraclePrice)
+	}
 	if !((v.Receipt).Equal(new(Receipt))) {
-		writer.WriteValue(9, &v.Receipt)
+		writer.WriteValue(10, &v.Receipt)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticAnchor)
@@ -4227,6 +4309,11 @@ func (v *SyntheticAnchor) IsValid() error {
 		errs = append(errs, "field SourceBlock is not set")
 	}
 	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+		errs = append(errs, "field AcmeOraclePrice is missing")
+	} else if v.AcmeOraclePrice == 0 {
+		errs = append(errs, "field AcmeOraclePrice is not set")
+	}
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
 		errs = append(errs, "field Receipt is missing")
 	} else if (v.Receipt).Equal(new(Receipt)) {
 		errs = append(errs, "field Receipt is not set")
@@ -5354,6 +5441,22 @@ func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *AcmeOracle) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AcmeOracle) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Price = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AcmeOracle)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *AddCredits) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5937,8 +6040,14 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(SyntheticLedger); reader.ReadValue(5, x.UnmarshalBinary) {
 		v.Synthetic = *x
 	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.PendingOracle = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.ActiveOracle = x
+	}
 	for {
-		if x := new(AnchorMetadata); reader.ReadValue(6, x.UnmarshalBinary) {
+		if x := new(AnchorMetadata); reader.ReadValue(8, x.UnmarshalBinary) {
 			v.Updates = append(v.Updates, *x)
 		} else {
 			break
@@ -6641,7 +6750,10 @@ func (v *SyntheticAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(8); ok {
 		v.SourceBlock = x
 	}
-	if x := new(Receipt); reader.ReadValue(9, x.UnmarshalBinary) {
+	if x, ok := reader.ReadUint(9); ok {
+		v.AcmeOraclePrice = x
+	}
+	if x := new(Receipt); reader.ReadValue(10, x.UnmarshalBinary) {
 		v.Receipt = *x
 	}
 
@@ -7514,6 +7626,8 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 		Index          int64            `json:"index,omitempty"`
 		Timestamp      time.Time        `json:"timestamp,omitempty"`
 		Synthetic      SyntheticLedger  `json:"synthetic,omitempty"`
+		PendingOracle  uint64           `json:"pendingOracle,omitempty"`
+		ActiveOracle   uint64           `json:"activeOracle,omitempty"`
 		Updates        []AnchorMetadata `json:"updates,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -7523,6 +7637,8 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
 	u.Synthetic = v.Synthetic
+	u.PendingOracle = v.PendingOracle
+	u.ActiveOracle = v.ActiveOracle
 	u.Updates = v.Updates
 	return json.Marshal(&u)
 }
@@ -7840,15 +7956,16 @@ func (v *SignPending) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType `json:"type"`
-		Source      *url.URL        `json:"source,omitempty"`
-		Major       bool            `json:"major,omitempty"`
-		RootAnchor  string          `json:"rootAnchor,omitempty"`
-		RootIndex   uint64          `json:"rootIndex,omitempty"`
-		Block       uint64          `json:"block,omitempty"`
-		SourceIndex uint64          `json:"sourceIndex,omitempty"`
-		SourceBlock uint64          `json:"sourceBlock,omitempty"`
-		Receipt     Receipt         `json:"receipt,omitempty"`
+		Type            TransactionType `json:"type"`
+		Source          *url.URL        `json:"source,omitempty"`
+		Major           bool            `json:"major,omitempty"`
+		RootAnchor      string          `json:"rootAnchor,omitempty"`
+		RootIndex       uint64          `json:"rootIndex,omitempty"`
+		Block           uint64          `json:"block,omitempty"`
+		SourceIndex     uint64          `json:"sourceIndex,omitempty"`
+		SourceBlock     uint64          `json:"sourceBlock,omitempty"`
+		AcmeOraclePrice uint64          `json:"acmeOraclePrice,omitempty"`
+		Receipt         Receipt         `json:"receipt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
@@ -7858,6 +7975,7 @@ func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 	u.Block = v.Block
 	u.SourceIndex = v.SourceIndex
 	u.SourceBlock = v.SourceBlock
+	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.Receipt = v.Receipt
 	return json.Marshal(&u)
 }
@@ -8634,6 +8752,8 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 		Index          int64            `json:"index,omitempty"`
 		Timestamp      time.Time        `json:"timestamp,omitempty"`
 		Synthetic      SyntheticLedger  `json:"synthetic,omitempty"`
+		PendingOracle  uint64           `json:"pendingOracle,omitempty"`
+		ActiveOracle   uint64           `json:"activeOracle,omitempty"`
 		Updates        []AnchorMetadata `json:"updates,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -8643,6 +8763,8 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
 	u.Synthetic = v.Synthetic
+	u.PendingOracle = v.PendingOracle
+	u.ActiveOracle = v.ActiveOracle
 	u.Updates = v.Updates
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8653,6 +8775,8 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	v.Index = u.Index
 	v.Timestamp = u.Timestamp
 	v.Synthetic = u.Synthetic
+	v.PendingOracle = u.PendingOracle
+	v.ActiveOracle = u.ActiveOracle
 	v.Updates = u.Updates
 	return nil
 }
@@ -9205,15 +9329,16 @@ func (v *SignPending) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType `json:"type"`
-		Source      *url.URL        `json:"source,omitempty"`
-		Major       bool            `json:"major,omitempty"`
-		RootAnchor  string          `json:"rootAnchor,omitempty"`
-		RootIndex   uint64          `json:"rootIndex,omitempty"`
-		Block       uint64          `json:"block,omitempty"`
-		SourceIndex uint64          `json:"sourceIndex,omitempty"`
-		SourceBlock uint64          `json:"sourceBlock,omitempty"`
-		Receipt     Receipt         `json:"receipt,omitempty"`
+		Type            TransactionType `json:"type"`
+		Source          *url.URL        `json:"source,omitempty"`
+		Major           bool            `json:"major,omitempty"`
+		RootAnchor      string          `json:"rootAnchor,omitempty"`
+		RootIndex       uint64          `json:"rootIndex,omitempty"`
+		Block           uint64          `json:"block,omitempty"`
+		SourceIndex     uint64          `json:"sourceIndex,omitempty"`
+		SourceBlock     uint64          `json:"sourceBlock,omitempty"`
+		AcmeOraclePrice uint64          `json:"acmeOraclePrice,omitempty"`
+		Receipt         Receipt         `json:"receipt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
@@ -9223,6 +9348,7 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	u.Block = v.Block
 	u.SourceIndex = v.SourceIndex
 	u.SourceBlock = v.SourceBlock
+	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.Receipt = v.Receipt
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -9238,6 +9364,7 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	v.Block = u.Block
 	v.SourceIndex = u.SourceIndex
 	v.SourceBlock = u.SourceBlock
+	v.AcmeOraclePrice = u.AcmeOraclePrice
 	v.Receipt = u.Receipt
 	return nil
 }
