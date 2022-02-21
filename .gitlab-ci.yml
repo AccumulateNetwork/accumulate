@@ -211,7 +211,7 @@ validate docker:
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm tools /scripts/ci/validate.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT="${NODE_ROOT}" --rm tools /scripts/ci/validate.sh
   - docker-compose down
 
 validate:
