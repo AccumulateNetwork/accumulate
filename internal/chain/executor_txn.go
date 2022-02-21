@@ -357,7 +357,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 	}
 
 	for i, sig := range env.Signatures {
-		ks := page.FindKey(sig.PublicKey)
+		ks := page.FindKey(sig.GetPublicKey())
 		if ks == nil {
 			return false, fmt.Errorf("no key spec matches signature %d", i)
 		}
@@ -365,10 +365,10 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case ks.Nonce >= sig.Nonce:
-			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, sig.Nonce)
+		case ks.Nonce >= env.Transaction.Nonce:
+			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, env.Transaction.Nonce)
 		default:
-			ks.Nonce = sig.Nonce
+			ks.Nonce = env.Transaction.Nonce
 		}
 	}
 
@@ -403,7 +403,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 	}
 
 	for i, sig := range env.Signatures {
-		sigKH := sha256.Sum256(sig.PublicKey)
+		sigKH := sha256.Sum256(sig.GetPublicKey())
 		if !bytes.Equal(urlKH, sigKH[:20]) {
 			return fmt.Errorf("signature %d's public key does not match the origin record", i)
 		}
@@ -411,10 +411,10 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case account.Nonce >= sig.Nonce:
-			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, sig.Nonce)
+		case account.Nonce >= env.Transaction.Nonce:
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, env.Transaction.Nonce)
 		default:
-			account.Nonce = sig.Nonce
+			account.Nonce = env.Transaction.Nonce
 		}
 	}
 
@@ -531,7 +531,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	}
 
 	sig := env.Signatures[0]
-	err = st.Signator.SetNonce(sig.PublicKey, sig.Nonce)
+	err = st.Signator.SetNonce(sig.GetPublicKey(), env.Transaction.Nonce)
 	if err != nil {
 		return err
 	}
