@@ -83,9 +83,9 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	txrq := new(TxRequest)
 	txrq.Origin = tx.Transaction.Origin
 	txrq.Signer.Nonce = tx.Transaction.Nonce
-	txrq.Signer.PublicKey = tx.Signatures[0].PublicKey
+	txrq.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	txrq.KeyPage.Height = tx.Transaction.KeyPageHeight
-	txrq.Signature = tx.Signatures[0].Signature
+	txrq.Signature = tx.Signatures[0].GetSignature()
 
 	body, err := tx.Transaction.Body.MarshalBinary()
 	if err != nil {
@@ -126,7 +126,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		env.Transaction.KeyPageIndex = req.KeyPage.Index
 		envs = append(envs, env)
 
-		ed := new(transactions.ED25519Sig)
+		ed := new(protocol.LegacyED25519Signature)
 		ed.Nonce = req.Signer.Nonce
 		ed.PublicKey = req.Signer.PublicKey
 		ed.Signature = req.Signature
