@@ -24,6 +24,9 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			InternalTransactionsSigned{},
 			InternalTransactionsSent{},
 
+			// for data accounts
+			WriteData{},
+
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
