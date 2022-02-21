@@ -15,6 +15,10 @@ InternalLedger:
     - name: Synthetic
       type: SyntheticLedger
       marshal-as: reference
+    - name: PendingOracle
+      type: uvarint
+    - name: ActiveOracle
+      type: uvarint
     - name: Updates
       repeatable: true
       type: AnchorMetadata

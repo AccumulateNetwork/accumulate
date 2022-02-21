@@ -22,6 +22,7 @@ type DB = *database.Batch
 
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
+const TestTokenAmount = 5e5
 
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
@@ -43,7 +44,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
 	deposit.Token = protocol.AcmeUrl()
-	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
+	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
 
 	tx := new(transactions.Envelope)
 	tx.Transaction = new(transactions.Transaction)
@@ -102,7 +103,7 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
 	deposit.Token = protocol.AcmeUrl()
-	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
+	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
 	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
 	// amtToDeposit := int64(50000)                             //deposit 50k tokens
 	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places

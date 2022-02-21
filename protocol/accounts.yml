@@ -30,7 +30,7 @@ LiteTokenAccount:
 LiteDataAccount:
   kind: chain
   embeddings:
-  - AccountHeader
+    - AccountHeader
   fields:
     - name: Tail
       type: bytes
@@ -38,7 +38,7 @@ LiteDataAccount:
 ADI:
   kind: chain
   embeddings:
-  - AccountHeader
+    - AccountHeader
   chain-type: Identity
   fields: [ ]
 
