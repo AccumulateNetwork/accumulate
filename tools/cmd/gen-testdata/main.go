@@ -172,7 +172,7 @@ func txnTest1(origin string, body TransactionPayload) *TC {
 func txnTest(header *TransactionHeader, body TransactionPayload) *TC {
 	env := new(Envelope)
 	txn := new(Transaction)
-	sig := new(ED25519Sig)
+	sig := new(LegacyED25519Signature)
 
 	env.Transaction = txn
 	txn.TransactionHeader = *header

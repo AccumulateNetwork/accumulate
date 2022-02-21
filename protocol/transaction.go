@@ -1,142 +1,39 @@
 package protocol
 
 import (
-	"bytes"
-	"encoding"
-	"encoding/json"
-	"fmt"
-	"io"
 	"math/big"
 
-	accenc "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-func NewTransaction(typ TransactionType) (TransactionPayload, error) {
-	switch typ {
-	case TransactionTypeCreateIdentity:
-		return new(CreateIdentity), nil
-	case TransactionTypeCreateTokenAccount:
-		return new(CreateTokenAccount), nil
-	case TransactionTypeSendTokens:
-		return new(SendTokens), nil
-	case TransactionTypeCreateDataAccount:
-		return new(CreateDataAccount), nil
-	case TransactionTypeWriteData:
-		return new(WriteData), nil
-	case TransactionTypeWriteDataTo:
-		return new(WriteDataTo), nil
-	case TransactionTypeAcmeFaucet:
-		return new(AcmeFaucet), nil
-	case TransactionTypeCreateToken:
-		return new(CreateToken), nil
-	case TransactionTypeIssueTokens:
-		return new(IssueTokens), nil
-	case TransactionTypeBurnTokens:
-		return new(BurnTokens), nil
-	case TransactionTypeCreateKeyPage:
-		return new(CreateKeyPage), nil
-	case TransactionTypeCreateKeyBook:
-		return new(CreateKeyBook), nil
-	case TransactionTypeAddCredits:
-		return new(AddCredits), nil
-	case TransactionTypeUpdateKeyPage:
-		return new(UpdateKeyPage), nil
-	case TransactionTypeSignPending:
-		return new(SignPending), nil
-	case TransactionTypeUpdateManager:
-		return new(UpdateManager), nil
-	case TransactionTypeRemoveManager:
-		return new(RemoveManager), nil
+// Deprecated: use TransactionBody
+type TransactionPayload = TransactionBody
 
-	case TransactionTypeSyntheticCreateChain:
-		return new(SyntheticCreateChain), nil
-	case TransactionTypeSyntheticWriteData:
-		return new(SyntheticWriteData), nil
-	case TransactionTypeSyntheticDepositTokens:
-		return new(SyntheticDepositTokens), nil
-	case TransactionTypeSyntheticAnchor:
-		return new(SyntheticAnchor), nil
-	case TransactionTypeSyntheticDepositCredits:
-		return new(SyntheticDepositCredits), nil
-	case TransactionTypeSyntheticBurnTokens:
-		return new(SyntheticBurnTokens), nil
-	case TransactionTypeSyntheticMirror:
-		return new(SyntheticMirror), nil
-	case TransactionTypeSegWitDataEntry:
-		return new(SegWitDataEntry), nil
-
-	case TransactionTypeInternalGenesis:
-		return new(InternalGenesis), nil
-	case TransactionTypeInternalSendTransactions:
-		return new(InternalSendTransactions), nil
-	case TransactionTypeInternalTransactionsSigned:
-		return new(InternalTransactionsSigned), nil
-	case TransactionTypeInternalTransactionsSent:
-		return new(InternalTransactionsSent), nil
-
-	default:
-		return nil, fmt.Errorf("unknown transaction type %v", typ)
-	}
+func NewTransaction(typ TransactionType) (TransactionBody, error) {
+	return NewTransactionBody(typ)
 }
 
-func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
-	reader := accenc.NewReader(r)
-	typ, ok := reader.ReadUint(1)
-	_, err := reader.Reset([]string{"Type"})
-	if err != nil {
-		return TransactionTypeUnknown, err
-	}
-	if !ok {
-		return TransactionTypeUnknown, fmt.Errorf("field Type: missing")
-	}
-
-	return TransactionType(typ), nil
+func UnmarshalTransaction(data []byte) (TransactionBody, error) {
+	return UnmarshalTransactionBody(data)
 }
 
-func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
-	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	txn, err := NewTransaction(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = txn.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return txn, nil
+func UnmarshalTransactionJSON(data []byte) (TransactionBody, error) {
+	return UnmarshalTransactionBodyJSON(data)
 }
 
-func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
-	var typ struct{ Type TransactionType }
-	err := json.Unmarshal(data, &typ)
-	if err != nil {
-		return nil, err
-	}
-
-	txn, err := NewTransaction(typ.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(data, txn)
-	if err != nil {
-		return nil, err
-	}
-
-	return txn, nil
+// IsUser returns true if the transaction type is user.
+func (t TransactionType) IsUser() bool {
+	return TransactionTypeUnknown < t && t.ID() <= TransactionMaxUser.ID()
 }
 
-type TransactionPayload interface {
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
-	GetType() TransactionType
+// IsSynthetic returns true if the transaction type is synthetic.
+func (t TransactionType) IsSynthetic() bool {
+	return TransactionMaxUser.ID() < t.ID() && t.ID() <= TransactionMaxSynthetic.ID()
+}
+
+// IsInternal returns true if the transaction type is internal.
+func (t TransactionType) IsInternal() bool {
+	return TransactionMaxSynthetic.ID() < t.ID() && t.ID() <= TransactionMaxInternal.ID()
 }
 
 type SyntheticTransaction interface {

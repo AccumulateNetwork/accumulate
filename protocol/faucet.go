@@ -50,8 +50,12 @@ func (s faucetSigner) PublicKey() []byte {
 	return faucetKey[32:]
 }
 
-func (s faucetSigner) Sign(message []byte) (*ED25519Sig, error) {
-	sig := new(ED25519Sig)
-	err := sig.Sign(uint64(s), faucetKey, message)
+func SignWithFaucet(nonce uint64, message []byte) (Signature, error) {
+	sig := new(LegacyED25519Signature)
+	err := sig.Sign(nonce, faucetKey, message)
 	return sig, err
+}
+
+func (s faucetSigner) Sign(message []byte) (Signature, error) {
+	return SignWithFaucet(uint64(s), message)
 }
