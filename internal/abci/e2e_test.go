@@ -2,6 +2,7 @@ package abci_test
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -43,7 +45,7 @@ func TestCreateLiteAccount(t *testing.T) {
 
 	var count = 11
 	originAddr, balances := n.testLiteTx(count)
-	require.Equal(t, int64(5e4*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
+	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
@@ -120,10 +122,11 @@ func TestAnchorChain(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
+	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
 	batch := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, 5e4, 1e6))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*Tx)) {
@@ -168,6 +171,44 @@ func TestAnchorChain(t *testing.T) {
 		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	}
 
+	//set price of acme to $445.00 / token
+	price := 445.00
+	dn.Batch(func(send func(*Tx)) {
+		ao := new(protocol.AcmeOracle)
+		ao.Price = uint64(price * protocol.AcmeOraclePrecision)
+		wd := new(protocol.WriteData)
+		wd.Entry.Data, err = json.Marshal(&ao)
+		require.NoError(t, err)
+
+		originUrl := protocol.PriceOracleAuthority
+
+		tx, err := transactions.New(originUrl, 1, edSigner(dn.key.Bytes(), 1), wd)
+		require.NoError(t, err)
+
+		send(tx)
+	})
+
+	// Get the anchor chain manager for DN
+	batch = dn.db.Begin()
+	defer batch.Discard()
+	ledger = batch.Account(dn.network.NodeUrl(protocol.Ledger))
+	// Check each anchor
+	ledgerState = protocol.NewInternalLedger()
+	require.NoError(t, ledger.GetStateAs(ledgerState))
+	expected := uint64(price * protocol.AcmeOraclePrecision)
+	require.Equal(t, ledgerState.ActiveOracle, expected)
+
+	time.Sleep(2 * time.Second)
+	// Get the anchor chain manager for BVN
+	batch = n.db.Begin()
+	defer batch.Discard()
+	ledger = batch.Account(n.network.NodeUrl(protocol.Ledger))
+
+	// Check each anchor
+	ledgerState = protocol.NewInternalLedger()
+	require.NoError(t, ledger.GetStateAs(ledgerState))
+	require.Equal(t, ledgerState.ActiveOracle, expected)
+
 	// // TODO Once block indexing has been implemented, verify that the following chains got modified
 	// assert.Subset(t, accounts, []string{
 	// 	"acc://RoadRunner#chain/main",
@@ -186,7 +227,7 @@ func TestCreateADI(t *testing.T) {
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 	batch := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, 5e4, 1e6))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
 	require.NoError(t, batch.Commit())
 
 	wallet := new(acctesting.WalletEntry)
@@ -466,7 +507,7 @@ func TestLiteAccountTx(t *testing.T) {
 
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	batch := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, 5e4, 1e9))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, acctesting.TestTokenAmount, 1e9))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, bob, 0))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
 	require.NoError(t, batch.Commit())
@@ -485,7 +526,7 @@ func TestLiteAccountTx(t *testing.T) {
 		send(tx)
 	})
 
-	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
+	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-3000), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
 	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl).Balance.Int64())
 	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
 }
@@ -523,8 +564,9 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	fooKey := generateKey()
 	batch := n.db.Begin()
+	acmeAmount := 100.00
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
+	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -537,10 +579,25 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 		send(tx)
 	})
 
+	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
+
+	// Check each anchor
+	ledgerState := protocol.NewInternalLedger()
+	require.NoError(t, ledger.GetStateAs(ledgerState))
+	amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
+	amount.Mul(int64(55))
+	amount.Div(protocol.CreditsPerFiatUnit)
+	amount.Div(int64(ledgerState.ActiveOracle))
+	amount.Mul(protocol.AcmeOraclePrecision)
+
+	expected := uint64(acmeAmount*protocol.AcmePrecision) - amount.Uint64()
+
 	ks := n.GetKeyPage("foo/page0")
 	acct := n.GetTokenAccount("foo/tokens")
+	balance := acct.Balance.Int64()
+
 	require.Equal(t, int64(55), ks.CreditBalance.Int64())
-	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerFiatUnit*55), acct.Balance.Int64())
+	require.Equal(t, int64(expected), balance)
 }
 
 func TestCreateKeyPage(t *testing.T) {

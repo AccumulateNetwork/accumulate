@@ -83,6 +83,18 @@ function success {
     echo
 }
 
+NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+
+section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":10000}'
+    RESULT=$(accumulate -j data get dn/oracle)
+    RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
+    [ "$RESULT" == "10000" ] && success || die "cannot update price oracle"
+else
+    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+fi
+
 section "Setup"
 if ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate

@@ -373,6 +373,9 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 	txns := new(protocol.InternalSendTransactions)
 	switch g.Network.Type {
 	case config.Directory:
+		// If we are the dn, we need to include the ACME oracle price
+		body.AcmeOraclePrice = msg.ledger.PendingOracle
+
 		// Send anchors from DN to all BVNs
 		txns.Transactions = make([]protocol.SendTransaction, len(g.Network.BvnNames))
 		for i, bvn := range g.Network.BvnNames {
