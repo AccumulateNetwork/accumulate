@@ -131,6 +131,5 @@ LiteIdentity:
   kind: chain
   embeddings:
   - AccountHeader
-  chain-type: Identity
   fields: [ ]
 

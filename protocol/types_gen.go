@@ -603,7 +603,7 @@ func (*KeyPage) GetType() AccountType { return AccountTypeKeyPage }
 
 func (*LiteDataAccount) GetType() AccountType { return AccountTypeLiteDataAccount }
 
-func (*LiteIdentity) GetType() AccountType { return AccountTypeIdentity }
+func (*LiteIdentity) GetType() AccountType { return AccountTypeLiteIdentity }
 
 func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAccount }
 
@@ -3194,7 +3194,7 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteUint(1, AccountTypeIdentity.ID())
+	writer.WriteUint(1, AccountTypeLiteIdentity.ID())
 	writer.WriteValue(2, &v.AccountHeader)
 
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
@@ -5955,8 +5955,8 @@ func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadUint(1); !ok {
 		return fmt.Errorf("field Type: missing")
-	} else if x != AccountTypeIdentity.ID() {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeIdentity, AccountType(x))
+	} else if x != AccountTypeLiteIdentity.ID() {
+		return fmt.Errorf("field Type: want %v, got %v", AccountTypeLiteIdentity, AccountType(x))
 	}
 
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)

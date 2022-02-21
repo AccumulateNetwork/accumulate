@@ -51,6 +51,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteDataAccount), nil
 	case AccountTypeInternalLedger:
 		return new(InternalLedger), nil
+	case AccountTypeLiteIdentity:
+		return new(LiteIdentity), nil
 	default:
 		return nil, fmt.Errorf("unknown account type %v", typ)
 	}
