@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"bytes"
-	"encoding"
 	"encoding/json"
 	"io"
 )
@@ -96,11 +95,4 @@ func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
 	}
 
 	return tx, nil
-}
-
-type TransactionResult interface {
-	GetType() TransactionType
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
-	UnmarshalBinaryFrom(io.Reader) error
 }
