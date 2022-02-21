@@ -7,17 +7,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticAnchor struct {
 	Network *config.Network
 }
 
-func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
+func (SyntheticAnchor) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticAnchor
+}
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
 	if !ok {
@@ -50,6 +50,18 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 
 		if fromDirectory {
 			st.AddDirectoryAnchor(body)
+
+			ledgerState := protocol.NewInternalLedger()
+			err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), ledgerState)
+			if err != nil {
+				return nil, err
+			}
+			if body.AcmeOraclePrice == 0 {
+				return nil, fmt.Errorf("attempting to set oracle price to 0")
+			}
+			ledgerState.PendingOracle = body.AcmeOraclePrice
+
+			st.Update(ledgerState)
 		}
 	}
 

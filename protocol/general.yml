@@ -44,6 +44,11 @@ AnchorMetadata:
     - name: Entry
       type: bytes
 
+AcmeOracle:
+  fields:
+    - name: Price
+      type: uvarint
+
 DataEntry:
   fields:
     - name: ExtIds
