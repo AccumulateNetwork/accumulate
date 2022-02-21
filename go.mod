@@ -26,6 +26,7 @@ require (
 	github.com/spf13/viper v1.8.1
 	github.com/stretchr/testify v1.7.0
 	github.com/tendermint/tendermint v0.35.0-rc1
+	github.com/thediveo/enumflag v0.10.1
 	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
@@ -104,7 +105,6 @@ require (
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca // indirect
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/tendermint/tm-db v0.6.4 // indirect
-	github.com/thediveo/enumflag v0.10.1 // indirect
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/mod v0.5.1 // indirect
