@@ -345,7 +345,7 @@ RESULT=$(accumulate -j get keytest/page2 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
-wait-for cli-tx tx execute keytest/page3 keytest-2-0 '{"type": "removeManager"}'
+wait-for cli-tx manager remove keytest/page3 keytest-2-0
 accumulate -j get keytest/page3 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
 
 section "Create ADI Data Account with wait"
