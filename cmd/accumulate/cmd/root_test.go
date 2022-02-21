@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
@@ -26,6 +27,20 @@ type testMatrixTests []testCase
 
 var testMatrix testMatrixTests
 
+func bootstrap(t *testing.T, tc *testCmd) {
+	//add the DN private key to our key list.
+	_, err := tc.execute(t, fmt.Sprintf("key import private %x dnkey", tc.privKey.Bytes()))
+	require.NoError(t, err)
+
+	//set mnemonic for predictable addresses
+	_, err = tc.execute(t, "key import mnemonic yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow")
+	require.NoError(t, err)
+
+	//set the oracle price to $1.00
+	_, err = tc.executeTx(t, "data write dn/oracle dnkey {\"price\":10000}")
+	require.NoError(t, err)
+}
+
 func TestCli(t *testing.T) {
 	acctesting.SkipLong(t)
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
@@ -33,9 +48,7 @@ func TestCli(t *testing.T) {
 	tc := &testCmd{}
 	tc.initalize(t)
 
-	//set mnemonic for predictable addresses
-	_, err := tc.execute(t, "key import mnemonic yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow")
-	require.NoError(t, err)
+	bootstrap(t, tc)
 
 	testMatrix.execute(t, tc)
 
@@ -70,10 +83,11 @@ type testCmd struct {
 	validatorCmd   *exec.Cmd
 	defaultWorkDir string
 	jsonRpcAddr    string
+	privKey        crypto.PrivKey
 }
 
-//NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports
-func NewTestBVNN(t *testing.T) string {
+//NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
+func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 	t.Helper()
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
@@ -83,7 +97,8 @@ func NewTestBVNN(t *testing.T) string {
 
 	time.Sleep(time.Second)
 	c := daemons[subnets[1]][0].Config
-	return c.Accumulate.API.ListenAddress
+
+	return c.Accumulate.API.ListenAddress, daemons[subnets[0]][0].Key()
 }
 
 func (c *testCmd) initalize(t *testing.T) {
@@ -92,7 +107,7 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd = InitRootCmd(initDB(t.TempDir(), true))
 	c.rootCmd.PersistentPostRun = nil
 
-	c.jsonRpcAddr = NewTestBVNN(t)
+	c.jsonRpcAddr, c.privKey = NewTestBVNN(t)
 	time.Sleep(2 * time.Second)
 }
 
