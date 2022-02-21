@@ -52,7 +52,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	tx.Transaction.Origin = recipientAdi
 	tx.Transaction.KeyPageHeight = 1
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
 	err := ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
@@ -81,7 +81,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	gtx.Transaction.Body = &send
 	gtx.Transaction.Origin = from
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = sponsor[32:]
 	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
@@ -114,7 +114,7 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	gtx.Transaction.Body = deposit
 	gtx.Transaction.Origin = destAddress
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = privateKey[32:]
 	err := ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
@@ -345,14 +345,4 @@ func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {
 
 func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
 	return AcmeLiteAddress(key[32:])
-}
-
-func NewWalletEntry() *WalletEntry {
-	wallet := new(WalletEntry)
-
-	wallet.Nonce = 1 // Put the private key for the origin
-	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
-	wallet.Addr = AcmeLiteAddressStdPriv(wallet.PrivateKey).String() // Generate the origin address
-
-	return wallet
 }

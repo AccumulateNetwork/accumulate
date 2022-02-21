@@ -17,12 +17,20 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 			if typ.Kind == "tx-result" && strings.HasSuffix(name, "Result") {
 				typ.TxType = name[0 : len(name)-6]
 			} else {
-				typ.TxType = typ.Name
+				typ.TxType = name
 			}
 		}
 
 		if typ.ChainType == "" {
-			typ.ChainType = typ.Name
+			typ.ChainType = name
+		}
+
+		if typ.SignatureType == "" {
+			if strings.HasSuffix(typ.Name, "Signature") {
+				typ.SignatureType = name[0 : len(name)-9]
+			} else {
+				typ.SignatureType = name
+			}
 		}
 	}
 
@@ -34,15 +42,16 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 }
 
 type DataType struct {
-	Name         string `yaml:"-"`
-	Kind         string
-	TxType       string `yaml:"tx-type"`
-	ChainType    string `yaml:"chain-type"`
-	NonBinary    bool   `yaml:"non-binary"`
-	Incomparable bool   `yaml:"incomparable"`
-	OmitNewFunc  bool   `yaml:"omit-new-func"`
-	Fields       []*Field
-	Embeddings   []string `yaml:"embeddings"`
+	Name          string `yaml:"-"`
+	Kind          string
+	TxType        string `yaml:"tx-type"`
+	ChainType     string `yaml:"chain-type"`
+	SignatureType string `yaml:"signature-type"`
+	NonBinary     bool   `yaml:"non-binary"`
+	Incomparable  bool   `yaml:"incomparable"`
+	OmitNewFunc   bool   `yaml:"omit-new-func"`
+	Fields        []*Field
+	Embeddings    []string `yaml:"embeddings"`
 }
 
 func (typ *DataType) GoTxType() string {
