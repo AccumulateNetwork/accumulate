@@ -364,6 +364,8 @@ SyntheticAnchor:
       type: uvarint
     - name: SourceBlock
       type: uvarint
+    - name: AcmeOraclePrice
+      type: uvarint
     - name: Receipt
       type: Receipt
       marshal-as: reference
