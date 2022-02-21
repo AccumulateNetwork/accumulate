@@ -24,12 +24,12 @@ func TestED25519Sig(t *testing.T) {
 		t.Error("verify signature message failed")
 	}
 
-	sigData, err := es1.Marshal()
+	sigData, err := es1.MarshalBinary()
 	if err != nil {
 		t.Error(err)
 	}
 	es2 := new(ED25519Sig)
-	_, err = es2.Unmarshal(sigData)
+	err = es2.UnmarshalBinary(sigData)
 	if err != nil {
 		t.Error(err)
 	}

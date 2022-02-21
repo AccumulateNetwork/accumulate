@@ -20,6 +20,19 @@ const {{$typ}}{{.Name}} {{$typ}} = {{.Value}}
 // ID returns the ID of the {{natural .Name}}
 func (v {{.Name}}) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *{{.Name}}) Set(id uint64) bool {
+	u := {{.Name}}(id)
+	switch u {
+	{{- $typ := .Name}}
+	case {{range $i, $v := .Values}}{{if gt $i 0}}, {{end}}{{$typ}}{{.Name}}{{end}}:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the {{natural .Name}}
 func (v {{.Name}}) String() string {
 	switch v {
