@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"math"
-	"sort"
 	"strconv"
 	"testing"
 	"time"
 )
 
+type partitionCounter struct {
+	adiUrlMap map[string]bool
+}
+
 func TestPartitions1(t *testing.T) {
 	const numberOfBVNs = 256
 	partitionCount := uint32(math.Pow(2, 16))
 
-	var nodeCounters = make(map[string]uint)
+	var partitionCounters = make(map[uint64]partitionCounter)
 	var bvnUrls = make([]*url.URL, numberOfBVNs)
 	var err error
 	for i := 0; i < numberOfBVNs; i++ {
@@ -33,56 +36,57 @@ func TestPartitions1(t *testing.T) {
 	}
 
 	total := uint64(0)
-	start := time.Now()
-	for j := 0; j < 100; j++ {
-		for i := 0; i < len(accWords); i += 2 {
+	routingTime := uint64(0)
+	const loopCount = 4
+	for j := 0; j < loopCount; j++ {
+		for i := 0; i < (len(accWords)-1)*100; i++ {
+			wordIndex := (i / 100) + 1
 			accUrl := url.URL{
-				Authority: strconv.Itoa(i) + "_" + accWords[i] + "_" + accWords[i+1],
+				Authority: strconv.Itoa(i) + "_" + accWords[wordIndex-1] + "_" + accWords[wordIndex],
+				// Authority: strconv.Itoa(rand.Int()) + "_" + accWords[wordIndex-1] + "_" + accWords[wordIndex],
 			}
+			start := time.Now()
 			adiRoutingNr := accUrl.Routing()
 			selPartitionIdx := adiRoutingNr % uint64(partitionCount)
 			partition := partitions[selPartitionIdx]
 
+			// Read out BVN the URL, just include it in the time
 			u := bvnUrls[partition.bvnIdx]
-			if u == nil {
+			if u == nil || len(u.String()) == 0 {
 				t.Error("nil URL")
 			}
-			var selectedBvn = u.String()
-			if _, ok := nodeCounters[selectedBvn]; !ok {
-				nodeCounters[selectedBvn] = 0
+			end := time.Now()
+
+			if _, ok := partitionCounters[selPartitionIdx]; !ok {
+				partitionCounters[selPartitionIdx] = partitionCounter{
+					adiUrlMap: make(map[string]bool),
+				}
 			}
-			nodeCounters[selectedBvn]++
-			partition.size++
+			partitionCounters[selPartitionIdx].adiUrlMap[accUrl.String()] = true
+			partition.size = uint64(len(partitionCounters[selPartitionIdx].adiUrlMap))
 			total++
+			routingTime = routingTime + uint64(end.UnixMilli()-start.UnixMilli())
 		}
 	}
-	end := time.Now()
 
-	fmt.Printf("The total number of lookups is %d\n", total)
+	fmt.Printf("The total number of routing iterations was %d\n", total)
+	fmt.Printf("We have %d partitions in use from %d ADIs\n", len(partitionCounters), total/loopCount)
 
-	bvnNames := make([]string, 0, len(nodeCounters))
-	for name := range nodeCounters {
-		bvnNames = append(bvnNames, name)
-	}
-	sort.Slice(bvnNames, func(i, j int) bool {
-		return nodeCounters[bvnNames[i]] > nodeCounters[bvnNames[j]]
-	})
-	for _, bvnUrl := range bvnNames {
-		fmt.Printf("BVN URL %-7v got routed to %d times\n", bvnUrl, nodeCounters[bvnUrl])
-	}
-	fmt.Printf("We have %d nodes\n", len(nodeCounters))
-
-	sort.Slice(partitions, func(i, j int) bool {
-		return partitions[i].size > partitions[j].size
-	})
+	lowest := ^uint64(0)
+	highest := uint64(0)
 	for i := uint32(0); i < partitionCount; i++ {
 		p := partitions[i]
 		if p != nil && p.size > 0 {
-			fmt.Printf("Partition %d has size %d \n", p.partitionIdx, p.size)
+			if p.size > highest {
+				highest = p.size
+			}
+			if p.size < lowest {
+				lowest = p.size
+			}
 		}
 	}
-
-	prcTime := uint64(end.UnixMilli() - start.UnixMilli())
-	fmt.Printf("The processing time was %dms\n", prcTime)
-	fmt.Printf("The average routing time was %.2fµs\n", float64(prcTime)/float64(total)*1000)
+	fmt.Printf("The partition with the highest amount contains %d ADIs\n", highest)
+	fmt.Printf("The partition with the lowest amount contains %d ADIs\n", lowest)
+	fmt.Printf("The total routing time was %dms\n", routingTime)
+	fmt.Printf("The average routing time was %.2fµs\n", float64(routingTime)/float64(total)*1000)
 }
