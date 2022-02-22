@@ -353,5 +353,5 @@ accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && succe
 
 section "Query the lite identity directory"
 accumulate adi directory $(dirname $LITE) 0 10 1> /dev/null || die "Failed to get directory for $(dirname $LITE)"
-TOTAL=$(accumulate adi directory $(dirname $LITE) 0 10 | jq -re .total)
+TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
 [ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
