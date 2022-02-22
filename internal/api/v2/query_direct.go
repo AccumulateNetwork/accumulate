@@ -49,7 +49,7 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 	if res.Response.Code == 0 {
 		return string(res.Response.Key), res.Response.Value, nil
 	}
-	if res.Response.Code == protocol.CodeNotFound {
+	if res.Response.Code == uint32(protocol.ErrorCodeNotFound) {
 		return "", nil, storage.ErrNotFound
 	}
 
