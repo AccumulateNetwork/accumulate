@@ -18,7 +18,7 @@ type ObjectType uint64
 type KeyPageOperation uint8
 
 //go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml
-//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml
+//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
 
 ///intentionally disabled for now
 ///go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml --out ../export/sdk/c --language c
