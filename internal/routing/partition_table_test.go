@@ -27,7 +27,7 @@ func TestPartitions1(t *testing.T) {
 	for i := uint32(0); i < partitionCount; i++ {
 		partitions[i] = &partition{
 			partitionIdx: i,
-			bvnIdx:       uint16(i % numberOfBVNs),
+			bvnIdx:       uint16(i % numberOfBVNs), // This would be assigned later based on available capacity of the BVNs
 			size:         0,
 		}
 	}
