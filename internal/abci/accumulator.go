@@ -107,7 +107,7 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	app.fatal(err, setDidPanic)
 
 	if code != nil {
-		*code = protocol.CodeDidPanic
+		*code = uint32(protocol.ErrorCodeDidPanic)
 	}
 }
 
@@ -166,7 +166,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 
 	if app.didPanic {
 		return abci.ResponseQuery{
-			Code: protocol.CodeDidPanic,
+			Code: uint32(protocol.ErrorCodeDidPanic),
 			Info: "Node state is invalid",
 		}
 	}
@@ -178,7 +178,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		// sentry.CaptureException(err)
 		app.logger.Debug("Query failed", "error", err)
 		resQuery.Info = "request is not an Accumulate Query"
-		resQuery.Code = protocol.CodeEncodingError
+		resQuery.Code = uint32(protocol.ErrorCodeEncodingError)
 		return resQuery
 	}
 
@@ -189,7 +189,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 
 	case errors.Is(customErr.Unwrap(), storage.ErrNotFound):
 		resQuery.Info = customErr.Error()
-		resQuery.Code = protocol.CodeNotFound
+		resQuery.Code = uint32(protocol.ErrorCodeNotFound)
 		return resQuery
 
 	default:
@@ -201,7 +201,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	}
 
 	//if we get here, we have a valid state object, so let's return it.
-	resQuery.Code = protocol.CodeOK
+	resQuery.Code = uint32(protocol.ErrorCodeOK)
 	//return a generic state object for the chain and let the query deal with decoding it
 	resQuery.Key, resQuery.Value = k, v
 
@@ -291,7 +291,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseCheckTx{
-			Code: protocol.CodeDidPanic,
+			Code: uint32(protocol.ErrorCodeDidPanic),
 			Info: "Node state is invalid",
 		}
 	}
@@ -305,11 +305,11 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Check failed", "tx", tmHash, "error", err)
-		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
+		return abci.ResponseCheckTx{Code: uint32(protocol.ErrorCodeEncodingError), Log: "Unable to decode transaction"}
 	}
 
 	// Check all of the transactions
-	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
+	resp := abci.ResponseCheckTx{Code: uint32(protocol.ErrorCodeOK)}
 	for _, env := range envelopes {
 		txid := logging.AsHex(env.GetTxHash())
 		result, err := app.Chain.CheckTx(env)
@@ -348,7 +348,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseDeliverTx{
-			Code: protocol.CodeDidPanic,
+			Code: uint32(protocol.ErrorCodeDidPanic),
 			Info: "Node state is invalid",
 		}
 	}
@@ -361,11 +361,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Deliver failed", "tx", tmHash, "error", err)
-		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
+		return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeEncodingError), Log: "Unable to decode transaction"}
 	}
 
 	// Deliver all of the transactions
-	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
+	resp := abci.ResponseCheckTx{Code: uint32(protocol.ErrorCodeOK)}
 	for _, env := range envelopes {
 		txid := logging.AsHex(env.GetTxHash())
 		result, err := app.Chain.DeliverTx(env)
@@ -391,7 +391,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	app.txct += int64(len(envelopes))
-	return abci.ResponseDeliverTx{Code: protocol.CodeOK}
+	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK)}
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.

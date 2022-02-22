@@ -52,7 +52,7 @@ func (t AccountType) IsTransaction() bool {
 }
 
 //go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml
-//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml
+//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
 
 ///go:generate go run ../tools/cmd/gen-types general.yml -i AnchorMetadata,ChainMetadata
 
