@@ -27,7 +27,7 @@ func TestPartitions1(t *testing.T) {
 		partitions[i] = &partition{
 			partitionIdx: uint32(i),
 			bvnIdx:       uint16(rand.Uint32() & 0x00FF),
-			size:         rand.Uint64(),
+			size:         0,
 		}
 	}
 
@@ -71,20 +71,14 @@ func TestPartitions1(t *testing.T) {
 	}
 	fmt.Printf("We have %d nodes\n", len(nodeCounters))
 
-	sizes := make([]uint64, 0, dimension)
-	for i := uint32(0); i < dimension; i++ {
-		p := partitions[i]
-		if p != nil {
-			sizes[i] = p.size
-		} else {
-			sizes[i] = 0
-		}
-	}
-	sort.Slice(sizes, func(i, j int) bool {
-		return sizes[i] > sizes[j]
+	sort.Slice(partitions, func(i, j int) bool {
+		return partitions[i].size > partitions[j].size
 	})
 	for i := uint32(0); i < dimension; i++ {
-		fmt.Printf("Partition %d has size %d \n", i, sizes[i])
+		p := partitions[i]
+		if p != nil && p.size > 0 {
+			fmt.Printf("Partition %d has size %d \n", p.partitionIdx, p.size)
+		}
 	}
 
 	fmt.Printf("The processing time was %dms\n", end.UnixMilli()-start.UnixMilli())
