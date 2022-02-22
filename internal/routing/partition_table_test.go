@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"math"
-	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
@@ -12,21 +11,23 @@ import (
 )
 
 func TestPartitions1(t *testing.T) {
+	const numberOfBVNs = 256
+	partitionCount := uint32(math.Pow(2, 16))
+
 	var nodeCounters = make(map[string]uint)
-	var bvnUrls = make([]*url.URL, 256)
+	var bvnUrls = make([]*url.URL, numberOfBVNs)
 	var err error
-	for i := 0; i < 256; i++ {
+	for i := 0; i < numberOfBVNs; i++ {
 		bvnUrls[i], err = url.Parse(fmt.Sprintf("acc://bvn-%d", i))
 		if err != nil {
 			t.Fail()
 		}
 	}
-	dimension := uint32(math.Pow(2, 24)) // 16777216
-	var partitions = make([]*partition, dimension)
-	for i := uint32(0); i < dimension; i++ {
+	var partitions = make([]*partition, partitionCount)
+	for i := uint32(0); i < partitionCount; i++ {
 		partitions[i] = &partition{
-			partitionIdx: uint32(i),
-			bvnIdx:       uint16(rand.Uint32() & 0x00FF),
+			partitionIdx: i,
+			bvnIdx:       uint16(i % numberOfBVNs),
 			size:         0,
 		}
 	}
@@ -39,7 +40,7 @@ func TestPartitions1(t *testing.T) {
 				Authority: strconv.Itoa(i) + "_" + accWords[i] + "_" + accWords[i+1],
 			}
 			adiRoutingNr := accUrl.Routing()
-			selPartitionIdx := adiRoutingNr % uint64(dimension)
+			selPartitionIdx := adiRoutingNr % uint64(partitionCount)
 			partition := partitions[selPartitionIdx]
 
 			u := bvnUrls[partition.bvnIdx]
@@ -66,20 +67,22 @@ func TestPartitions1(t *testing.T) {
 	sort.Slice(bvnNames, func(i, j int) bool {
 		return nodeCounters[bvnNames[i]] > nodeCounters[bvnNames[j]]
 	})
-	for _, name := range bvnNames {
-		fmt.Printf("%-7v %v\n", name, nodeCounters[name])
+	for _, bvnUrl := range bvnNames {
+		fmt.Printf("BVN URL %-7v got routed to %d times\n", bvnUrl, nodeCounters[bvnUrl])
 	}
 	fmt.Printf("We have %d nodes\n", len(nodeCounters))
 
 	sort.Slice(partitions, func(i, j int) bool {
 		return partitions[i].size > partitions[j].size
 	})
-	for i := uint32(0); i < dimension; i++ {
+	for i := uint32(0); i < partitionCount; i++ {
 		p := partitions[i]
 		if p != nil && p.size > 0 {
 			fmt.Printf("Partition %d has size %d \n", p.partitionIdx, p.size)
 		}
 	}
 
-	fmt.Printf("The processing time was %dms\n", end.UnixMilli()-start.UnixMilli())
+	prcTime := uint64(end.UnixMilli() - start.UnixMilli())
+	fmt.Printf("The processing time was %dms\n", prcTime)
+	fmt.Printf("The average routing time was %.2fµs\n", float64(prcTime)/float64(total)*1000)
 }
