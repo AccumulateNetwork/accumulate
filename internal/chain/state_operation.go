@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -308,10 +307,10 @@ func (op *writeIndex) Execute(st *stateCache) ([]state.Chain, error) {
 
 type signTransaction struct {
 	txid      []byte
-	signature *transactions.ED25519Sig
+	signature protocol.Signature
 }
 
-func (m *stateCache) SignTransaction(txid []byte, signature *transactions.ED25519Sig) {
+func (m *stateCache) SignTransaction(txid []byte, signature protocol.Signature) {
 	m.operations = append(m.operations, &signTransaction{
 		txid:      txid,
 		signature: signature,
@@ -349,6 +348,6 @@ func (m *stateCache) AddDirectoryAnchor(anchor *protocol.SyntheticAnchor) {
 	})
 }
 
-func (op *addDirectoryAnchor) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *addDirectoryAnchor) Execute(st *stateCache) ([]protocol.Account, error) {
 	return nil, indexing.DirectoryAnchor(st.batch, st.nodeUrl.JoinPath(protocol.Ledger)).Add(op.anchor)
 }

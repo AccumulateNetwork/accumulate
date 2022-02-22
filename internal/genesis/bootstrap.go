@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -69,11 +70,17 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			page.Keys[i] = spec
 		}
 
+		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
+		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
+		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
+
 		// Create the ledger
 		ledger := protocol.NewInternalLedger()
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
 		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1
+		ledger.ActiveOracle = oraclePrice
+		ledger.PendingOracle = ledger.ActiveOracle
 		records = append(records, ledger)
 
 		// Create the anchor pool
@@ -95,8 +102,26 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		acme.Symbol = "ACME"
 		records = append(records, acme)
 
+		type DataRecord struct {
+			Account *protocol.DataAccount
+			Entry   *protocol.DataEntry
+		}
+		var dataRecords []DataRecord
 		switch opts.Network.Type {
 		case config.Directory:
+			oracle := new(protocol.AcmeOracle)
+			oracle.Price = oraclePrice
+			wd := new(protocol.WriteData)
+			wd.Entry.Data, err = json.Marshal(&oracle)
+
+			da := new(protocol.DataAccount)
+			da.Url = uAdi.JoinPath(protocol.Oracle)
+			da.KeyBook = uBook
+
+			records = append(records, da)
+			urls = append(urls, da.Url)
+			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+
 			// TODO Move ACME to DN
 
 		case config.BlockValidator:
@@ -114,6 +139,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		}
 
 		st.Update(records...)
+
+		for _, wd := range dataRecords {
+			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
+		}
+
 		return st.AddDirectoryEntry(urls...)
 	})
 }

@@ -20,11 +20,35 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
 	}
 
-	// tokens = credits / (credits per dollar) / (dollars per token)
+	ledgerState := protocol.NewInternalLedger()
+	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), ledgerState)
+	if err != nil {
+		return nil, err
+	}
+
+	if ledgerState.ActiveOracle == 0 {
+		return nil, fmt.Errorf("cannot purchase credits: acme oracle price has not been set")
+	}
+
+	// tokens = credits / (credits to dollars) / (dollars per token)
 	amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
-	amount.Mul(int64(body.Amount))                    // Amount in credits
-	amount.Div(protocol.CreditsPerFiatUnit)           // Amount in dollars
-	amount.Div(protocol.FiatUnitsPerAcmeToken)        // Amount in tokens
+
+	// credits wanted
+	amount.Mul(int64(body.Amount)) // Amount in credits
+	amount.Div(protocol.CreditsPerFiatUnit)
+
+	//dollars / token
+	amount.Mul(protocol.AcmeOraclePrecision)
+	amount.Div(int64(ledgerState.ActiveOracle)) // Amount in acme
+
+	// TODO: convert credit purchase from buying exact number of credits to
+	// specifying amount of acme to spend. body.Amount needs to be converted to bigint
+	// If specifying amount of acme to spend, do this instead of amount calculation above:
+	//credits := types.NewAmount(protocol.CreditsPerFiatUnit) // want to obtain credits
+	//credits.Mul(int64(ledgerState.ActiveOracle))            // fiat units / acme
+	//credits.Mul(body.Amount)                                // acme the user wants to spend
+	//credits.Div(protocol.AcmeOraclePrecision)               // adjust the precision of oracle to real units
+	//credits.Div(protocol.AcmePrecision)                     // adjust the precision of acme to spend to real units
 
 	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"time"
 
@@ -383,4 +384,21 @@ func AnyFromJSON(v interface{}) (interface{}, error) {
 
 	// There's not a lot we can do without metadata
 	return v, nil
+}
+
+func UnmarshalEnumType(r io.Reader, value interface{ Set(uint64) bool }) error {
+	reader := NewReader(r)
+	v, ok := reader.ReadUint(1)
+	_, err := reader.Reset([]string{"Type"})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("field Type: missing")
+	}
+
+	if !value.Set(v) {
+		return fmt.Errorf("field Type: invalid value %d", v)
+	}
+	return nil
 }
