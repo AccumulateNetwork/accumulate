@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,18 +14,23 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
+func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
+	u, err := url2.Parse(urlStr)
+	if err != nil {
+		return nil, err
+	}
+
 	params := api2.UrlQuery{
-		Url: url,
+		Url: u,
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
@@ -65,7 +69,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	if IsLiteAccount(origin.String()) {
 		privKey, err = LookupByLabel(origin.String())
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
+			return nil, nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
 		return args, &hdr, privKey, nil
 	}
@@ -88,7 +92,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	ms, err := getRecord(keyInfo.KeyPage, nil)
+	ms, err := getRecord(keyInfo.KeyPage.String(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
@@ -101,7 +105,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 
 func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	var typ struct {
-		Type types.AccountType
+		Type protocol.AccountType
 	}
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
@@ -121,16 +125,16 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (protocol.Signature, error) {
 	env := new(transactions.Envelope)
 	env.TxHash = txHash
 	env.Transaction = new(transactions.Transaction)
-	env.Transaction.Body = binaryPayload
+	env.Transaction.Body = payload
 
 	hdr.Nonce = nonce
 	env.Transaction.TransactionHeader = *hdr
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	err := ed.Sign(nonce, privKey, env.GetTxHash())
 	if err != nil {
 		return nil, err
@@ -138,8 +142,8 @@ func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions
 	return ed, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
+func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +198,7 @@ type QueryResponse struct {
 	Origin         string                      `json:"origin,omitempty"`
 	KeyPage        *api2.KeyPage               `json:"keyPage,omitempty"`
 	Txid           []byte                      `json:"txid,omitempty"`
-	Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
+	Signatures     []protocol.Signature        `json:"signatures,omitempty"`
 	Status         *protocol.TransactionStatus `json:"status,omitempty"`
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty"`
 }
@@ -204,7 +208,7 @@ func GetUrl(url string) (*QueryResponse, error) {
 
 	u, err := url2.Parse(url)
 	params := api2.UrlQuery{}
-	params.Url = u.String()
+	params.Url = u
 
 	err = queryAs("query", &params, &res)
 	if err != nil {
@@ -228,7 +232,7 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
 	if payload == nil && txHash != nil {
 		payload = new(protocol.SignPending)
 	}
@@ -249,7 +253,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash [
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, si, privKey, nonce)
+	params, err := prepareGenTxV2(payload, data, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -442,14 +446,14 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 }
 
 var (
-	ApiToString = map[types.AccountType]string{
-		types.AccountTypeLiteTokenAccount: "Lite Account",
-		types.AccountTypeTokenAccount:     "ADI Token Account",
-		types.AccountTypeIdentity:         "ADI",
-		types.AccountTypeKeyBook:          "Key Book",
-		types.AccountTypeKeyPage:          "Key Page",
-		types.AccountTypeDataAccount:      "Data Chain",
-		types.AccountTypeLiteDataAccount:  "Lite Data Chain",
+	ApiToString = map[protocol.AccountType]string{
+		protocol.AccountTypeLiteTokenAccount: "Lite Account",
+		protocol.AccountTypeTokenAccount:     "ADI Token Account",
+		protocol.AccountTypeIdentity:         "ADI",
+		protocol.AccountTypeKeyBook:          "Key Book",
+		protocol.AccountTypeKeyPage:          "Key Page",
+		protocol.AccountTypeDataAccount:      "Data Chain",
+		protocol.AccountTypeLiteDataAccount:  "Lite Data Chain",
 	}
 )
 
@@ -488,7 +492,7 @@ func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 		if err != nil {
 			return nil, err
 		}
-		if res.Type != types.AccountTypeTokenAccount.String() {
+		if res.Type != protocol.AccountTypeTokenAccount.String() {
 			return nil, fmt.Errorf("expecting token account but received %s", res.Type)
 		}
 		ta := protocol.TokenAccount{}
@@ -496,15 +500,21 @@ func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error remarshaling token account, %v", err)
 		}
-		tokenUrl, err = url2.Parse(ta.TokenUrl)
-		if err != nil {
-			return nil, err
-		}
+		tokenUrl = ta.TokenUrl
 	}
 	if tokenUrl == nil {
 		return nil, fmt.Errorf("invalid token url was obtained from %s", u.String())
 	}
 	return tokenUrl, nil
+}
+func amountToString(precision uint64, amount *big.Int) string {
+	bf := big.Float{}
+	bd := big.Float{}
+	bd.SetFloat64(math.Pow(10.0, float64(precision)))
+	bf.SetInt(amount)
+	bal := big.Float{}
+	bal.Quo(&bf, &bd)
+	return bal.Text('f', int(precision))
 }
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
@@ -514,22 +524,12 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
 	t := protocol.TokenIssuer{}
-	dataBytes, err := json.Marshal(tokenData.Data)
-	if err != nil {
-		return "", err
-	}
-	err = json.Unmarshal(dataBytes, &t)
+	err = Remarshal(tokenData.Data, &t)
 	if err != nil {
 		return "", err
 	}
 
-	bf := big.Float{}
-	bd := big.Float{}
-	bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
-	bf.SetInt(amount)
-	bal := big.Float{}
-	bal.Quo(&bf, &bd)
-	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
+	return fmt.Sprintf("%s %s", amountToString(t.Precision, amount), t.Symbol), nil
 }
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
@@ -538,7 +538,7 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %x (sig) / %x (key)\n", sig.Signature, sig.PublicKey)
+		out += fmt.Sprintf("  -                       : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
 	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
@@ -604,20 +604,25 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 
 		for _, s := range res.OtherItems {
 			qr := new(api2.ChainQueryResponse)
-			header := new(state.ChainHeader)
-			qr.Data = header
+			var data json.RawMessage
+			qr.Data = &data
 			err := Remarshal(s, qr)
 			if err != nil {
 				return "", err
 			}
 
-			chainDesc := header.Type.String()
+			account, err := protocol.UnmarshalAccountJSON(data)
+			if err != nil {
+				return "", err
+			}
+
+			chainDesc := account.GetType().String()
 			if err == nil {
-				if v, ok := ApiToString[header.Type]; ok {
+				if v, ok := ApiToString[account.GetType()]; ok {
 					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", header.Url, chainDesc)
+			out += fmt.Sprintf("\t%v (%s)\n", account.Header().Url, chainDesc)
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
@@ -647,37 +652,34 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 
 func outputForHumans(res *QueryResponse) (string, error) {
 	switch string(res.Type) {
-	case types.AccountTypeLiteTokenAccount.String():
+	case protocol.AccountTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
 		err := Remarshal(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
 
-		amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
+		amt, err := formatAmount(ata.TokenUrl.String(), &ata.Balance)
 		if err != nil {
 			amt = "unknown"
 		}
-
-		cred := big.NewFloat(0).SetInt(&ata.CreditBalance)
-		cred.Mul(cred, big.NewFloat(0.01))
 
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", cred.Text('f', 2))
+		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", amountToString(2, &ata.CreditBalance))
 		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
 		return out, nil
-	case types.AccountTypeTokenAccount.String():
+	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
 		err := Remarshal(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
 
-		amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
+		amt, err := formatAmount(ata.TokenUrl.String(), &ata.Balance)
 		if err != nil {
 			amt = "unknown"
 		}
@@ -689,7 +691,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
 
 		return out, nil
-	case types.AccountTypeIdentity.String():
+	case protocol.AccountTypeIdentity.String():
 		adi := protocol.ADI{}
 		err := Remarshal(res.Data, &adi)
 		if err != nil {
@@ -701,7 +703,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
 
 		return out, nil
-	case types.AccountTypeKeyBook.String():
+	case protocol.AccountTypeKeyBook.String():
 		book := protocol.KeyBook{}
 		err := Remarshal(res.Data, &book)
 		if err != nil {
@@ -714,17 +716,14 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
 		}
 		return out, nil
-	case types.AccountTypeKeyPage.String():
+	case protocol.AccountTypeKeyPage.String():
 		ss := protocol.KeyPage{}
 		err := Remarshal(res.Data, &ss)
 		if err != nil {
 			return "", err
 		}
 
-		cred := big.NewFloat(0).SetInt(&ss.CreditBalance)
-		cred.Mul(cred, big.NewFloat(0.01))
-
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", cred.Text('f', 2))
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", amountToString(2, &ss.CreditBalance))
 		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
@@ -735,8 +734,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 		}
 		return out, nil
-
-	case types.AccountTypeTokenIssuer.String():
+	case "token", protocol.AccountTypeTokenIssuer.String():
 		ti := protocol.TokenIssuer{}
 		err := Remarshal(res.Data, &ti)
 		if err != nil {
@@ -746,10 +744,11 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if ti.HasSupplyLimit {
 			hasSupplyLimit = "yes"
 		}
+
 		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.Url)
 		out += fmt.Sprintf("\n\tSymbol\t\t:\t%s", ti.Symbol)
 		out += fmt.Sprintf("\n\tPrecision\t:\t%d", ti.Precision)
-		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", ti.Supply.String())
+		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", amountToString(ti.Precision, &ti.Supply))
 		out += fmt.Sprintf("\n\tSupply Limit\t:\t%s", hasSupplyLimit)
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
@@ -767,20 +766,20 @@ func outputForHumans(res *QueryResponse) (string, error) {
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	switch string(res.Type) {
 	case types.TxTypeSendTokens.String():
-		tx := response.TokenTx{}
+		tx := new(api.TokenSend)
 		err := Remarshal(res.Data, &tx)
 		if err != nil {
 			return "", err
 		}
 
 		var out string
-		for i := range tx.ToAccount {
-			amt, err := formatAmount("acc://ACME", &tx.ToAccount[i].Amount)
+		for i := range tx.To {
+			amt, err := formatAmount("acc://ACME", &tx.To[i].Amount)
 			if err != nil {
 				amt = "unknown"
 			}
-			out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL)
-			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.ToAccount[i].SyntheticTxId)
+			out += fmt.Sprintf("Send %s from %s to %s\n", amt, res.Origin, tx.To[i].Url)
+			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.To[i].Txid)
 		}
 
 		out += printGeneralTransactionParameters(res)
@@ -793,7 +792,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		}
 
 		out := "\n"
-		amt, err := formatAmount(deposit.Token, &deposit.Amount)
+		amt, err := formatAmount(deposit.Token.String(), &deposit.Amount)
 		if err != nil {
 			amt = "unknown"
 		}
@@ -819,7 +818,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.Header().Type)
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
 		}
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
@@ -871,7 +870,7 @@ func resolveKeyBookUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return book.GetChainUrl(), nil
+	return book.Url.String(), nil
 }
 
 func resolveKeyPageUrl(chainId []byte) (string, error) {
@@ -884,7 +883,7 @@ func resolveKeyPageUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return kp.GetChainUrl(), nil
+	return kp.Url.String(), nil
 }
 
 func nonceFromTimeNow() uint64 {

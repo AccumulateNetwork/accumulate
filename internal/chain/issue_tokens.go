@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -14,20 +13,14 @@ type IssueTokens struct{}
 func (IssueTokens) Type() types.TxType { return types.TxTypeIssueTokens }
 
 func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	body := new(protocol.IssueTokens)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
-	}
-
-	accountUrl, err := url.Parse(body.Recipient)
-	if err != nil {
-		return nil, fmt.Errorf("invalid recipient account URL: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.IssueTokens)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.IssueTokens), tx.Transaction.Body)
 	}
 
 	issuer, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", types.AccountTypeTokenIssuer, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
 	}
 
 	if issuer.Supply.Cmp(&body.Amount) < 0 && issuer.HasSupplyLimit {
@@ -37,9 +30,9 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 
 	deposit := new(protocol.SyntheticDepositTokens)
 	copy(deposit.Cause[:], tx.GetTxHash())
-	deposit.Token = issuer.Header().GetChainUrl()
+	deposit.Token = issuer.Header().Url
 	deposit.Amount = body.Amount
-	st.Submit(accountUrl, deposit)
+	st.Submit(body.Recipient, deposit)
 
 	st.Update(issuer)
 

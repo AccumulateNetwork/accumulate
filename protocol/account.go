@@ -1,63 +1,20 @@
 package protocol
 
-import (
-	"encoding"
-	"fmt"
-)
+import "gitlab.com/accumulatenetwork/accumulate/internal/url"
 
-type Account interface {
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
-	Header() *AccountHeader
+// ParseUrl returns the parsed chain URL
+//
+// Deprecated: use Url field
+func (h *AccountHeader) ParseUrl() (*url.URL, error) {
+	return h.Url, nil
 }
 
-func NewAccount(typ AccountType) (Account, error) {
-	switch typ {
-	case AccountTypeAnchor:
-		return new(Anchor), nil
-	case AccountTypeIdentity:
-		return new(ADI), nil
-	case AccountTypeTokenIssuer:
-		return new(TokenIssuer), nil
-	case AccountTypeTokenAccount:
-		return new(TokenAccount), nil
-	case AccountTypeLiteTokenAccount:
-		return new(LiteTokenAccount), nil
-	case AccountTypeTransaction:
-		return new(TransactionState), nil
-	case AccountTypePendingTransaction:
-		return new(PendingTransactionState), nil
-	case AccountTypeKeyPage:
-		return new(KeyPage), nil
-	case AccountTypeKeyBook:
-		return new(KeyBook), nil
-	case AccountTypeDataAccount:
-		return new(DataAccount), nil
-	case AccountTypeLiteDataAccount:
-		return new(LiteDataAccount), nil
-	case AccountTypeInternalLedger:
-		return new(InternalLedger), nil
+// IsTransaction returns true if the account type is a transaction.
+func (t AccountType) IsTransaction() bool {
+	switch t {
+	case AccountTypeTransaction, AccountTypePendingTransaction:
+		return true
 	default:
-		return nil, fmt.Errorf("unknown account type %v", typ)
+		return false
 	}
-}
-
-func UnmarshalAccount(data []byte) (Account, error) {
-	var typ AccountType
-	err := typ.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	chain, err := NewAccount(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = chain.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return chain, nil
 }

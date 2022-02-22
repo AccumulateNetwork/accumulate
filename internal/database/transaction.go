@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -24,7 +23,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // Get loads the transaction state, status, and signatures.
 //
 // See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []*transactions.ED25519Sig, error) {
+func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	state, err := t.GetState()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, nil, err
@@ -51,7 +50,7 @@ func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []
 // Put appends signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *state.Transaction, status *protocol.TransactionStatus, sigs []*transactions.ED25519Sig) error {
+func (t *Transaction) Put(state *state.Transaction, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
 	// Ensure the object metadata is stored. Transactions don't have chains, so
 	// we don't need to add chain metadata.
 	if _, err := t.batch.store.Get(t.key.Object()); errors.Is(err, storage.ErrNotFound) {
@@ -136,7 +135,7 @@ func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
 }
 
 // GetSignatures loads the transaction's signatures.
-func (t *Transaction) GetSignatures() ([]*transactions.ED25519Sig, error) {
+func (t *Transaction) GetSignatures() ([]protocol.Signature, error) {
 	data, err := t.batch.store.Get(t.key.Signatures())
 	if err != nil {
 		return nil, err
@@ -152,7 +151,7 @@ func (t *Transaction) GetSignatures() ([]*transactions.ED25519Sig, error) {
 }
 
 // AddSignatures adds signatures the transaction's list of signatures.
-func (t *Transaction) AddSignatures(newSignatures ...*transactions.ED25519Sig) (count int, err error) {
+func (t *Transaction) AddSignatures(newSignatures ...protocol.Signature) (count int, err error) {
 	signatures, err := t.GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return 0, err
@@ -165,11 +164,11 @@ func (t *Transaction) AddSignatures(newSignatures ...*transactions.ED25519Sig) (
 	// Only keep one signature per public key
 	seen := map[[32]byte]bool{}
 	for _, sig := range signatures {
-		hash := sha256.Sum256(sig.PublicKey)
+		hash := sha256.Sum256(sig.GetPublicKey())
 		seen[hash] = true
 	}
 	for _, sig := range newSignatures {
-		hash := sha256.Sum256(sig.PublicKey)
+		hash := sha256.Sum256(sig.GetPublicKey())
 		if seen[hash] {
 			continue
 		}

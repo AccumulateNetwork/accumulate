@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	api2 "gitlab.com/accumulatenetwork/accumulate/types/api"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
@@ -27,8 +27,8 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 		if _, ok := out["name"]; !ok {
 			t.Fatalf("malformed json, expecting field \"name\"\n")
 		}
-
-		if out["name"] != liteAccounts[i] {
+		l, _ := LabelForLiteTokenAccount(liteAccounts[i])
+		if out["name"] != l {
 			t.Fatalf("account generate error, expected %s, but got %s", liteAccounts[i], out["name"])
 		}
 	}
@@ -82,16 +82,13 @@ func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error
 		return "", err
 	}
 
-	res := api2.APIDataResponse{}
+	res := new(api.ChainQueryResponse)
+	acc := new(protocol.LiteTokenAccount)
+	res.Data = acc
 	err = json.Unmarshal([]byte(r), &res)
 	if err != nil {
 		return "", err
 	}
 
-	acc := response.LiteTokenAccount{} //protocol.LiteTokenAccount{}
-	err = json.Unmarshal(*res.Data, &acc)
-	if err != nil {
-		return "", err
-	}
 	return acc.Balance.String(), nil
 }

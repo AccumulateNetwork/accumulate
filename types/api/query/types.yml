@@ -1,17 +1,19 @@
 RequestKeyPageIndex:
   fields:
     - name: Url
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Key
       type: bytes
 
 ResponseKeyPageIndex:
   fields:
     - name: KeyBook
-      type: string
+      type: url
+      pointer: true
     - name: KeyPage
-      type: string
+      type: url
+      pointer: true
     - name: Index
       type: uvarint
       keep-empty: true
@@ -28,10 +30,9 @@ ResponseTxHistory:
       type: varint
       keep-empty: true
     - name: Transactions
-      type: slice
-      slice:
-        type: ResponseByTxId
-        marshal-as: reference
+      repeatable: true
+      type: ResponseByTxId
+      marshal-as: reference
 
 ResponseChainRange:
   fields:
@@ -45,9 +46,8 @@ ResponseChainRange:
       type: varint
       keep-empty: true
     - name: Entries
-      type: slice
-      slice:
-        type: bytes
+      repeatable: true
+      type: bytes
 
 ResponseChainEntry:
   fields:
@@ -57,9 +57,8 @@ ResponseChainEntry:
     - name: Entry
       type: bytes
     - name: State
-      type: slice
-      slice:
-        type: bytes
+      repeatable: true
+      type: bytes
 
 ResponseByTxId:
   fields:
@@ -75,20 +74,18 @@ ResponseByTxId:
       type: varint
       keep-empty: true
     - name: ChainState
-      type: slice
-      slice:
-        type: bytes
+      repeatable: true
+      type: bytes
     - name: Receipts
-      type: slice
-      slice:
-        type: TxReceipt
-        marshal-as: reference
-        pointer: true
+      repeatable: true
+      type: TxReceipt
+      marshal-as: reference
+      pointer: true
 
 TxReceipt:
   fields:
     - name: Account
-      type: url.URL
+      type: url
       marshal-as: reference
       pointer: true
     - name: Chain
@@ -102,7 +99,8 @@ TxReceipt:
 ResponsePending:
   fields:
     - name: Transactions
-      type: chainSet
+      type: chain
+      repeatable: true
 
 MultiResponse:
   incomparable: true
@@ -110,9 +108,8 @@ MultiResponse:
     - name: Type
       type: string
     - name: Items
-      type: slice
-      slice:
-        type: string
+      repeatable: true
+      type: string
     - name: Start
       type: uvarint
       keep-empty: true

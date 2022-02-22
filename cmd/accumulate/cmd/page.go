@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var pageCmd = &cobra.Command{
@@ -88,7 +89,7 @@ func GetKeyPage(url string) (*QueryResponse, *protocol.KeyPage, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.AccountTypeKeyPage.String() {
+	if res.Type != protocol.AccountTypeKeyPage.String() {
 		return nil, nil, fmt.Errorf("expecting key page but received %v", res.Type)
 	}
 
@@ -124,7 +125,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 
 	ckp := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
-	ckp.Url = newUrl.String()
+	ckp.Url = newUrl
 	ckp.Keys = ksp
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
@@ -148,6 +149,16 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", err
 	}
 
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
 	return ActionResponseFrom(res).Print()
 
 }

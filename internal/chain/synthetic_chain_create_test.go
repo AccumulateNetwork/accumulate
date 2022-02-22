@@ -9,7 +9,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
@@ -25,19 +24,24 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, err)
 
 	account := protocol.NewTokenAccount()
-	account.Url = "foo/bar/baz"
-	account.TokenUrl = protocol.ACME
-	account.KeyBook = book.String()
+	account.Url, err = url.Parse("foo/bar/baz")
+	require.NoError(t, err)
+	account.TokenUrl = protocol.AcmeUrl()
+	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
 	body.Cause[0] = 1
 	require.NoError(t, body.Create(account))
 
-	tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), body)
+	env := acctesting.NewTransaction().
+		WithOriginStr("foo").
+		WithKeyPage(0, 1).
+		WithNonce(1).
+		WithBody(body).
+		SignLegacyED25519(fooKey)
+
+	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), env)
 	require.NoError(t, err)
 
-	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), tx)
-	require.NoError(t, err)
-
-	_, err = SyntheticCreateChain{}.Validate(st, tx)
+	_, err = SyntheticCreateChain{}.Validate(st, env)
 	require.EqualError(t, err, `account type tokenAccount cannot contain more than one slash in its URL`)
 }

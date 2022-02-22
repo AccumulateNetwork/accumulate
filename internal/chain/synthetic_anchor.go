@@ -5,43 +5,37 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticAnchor struct {
 	Network *config.Network
 }
 
-func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
+func (SyntheticAnchor) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticAnchor
+}
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body := new(protocol.SyntheticAnchor)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.GetType())
 	}
 
 	// Check the source URL
-	source, err := url.Parse(body.Source)
-	if err != nil {
-		return nil, fmt.Errorf("invalid source: %v", err)
-	}
-	name, ok := protocol.ParseBvnUrl(source)
+	name, ok := protocol.ParseBvnUrl(body.Source)
 	var fromDirectory bool
 	switch {
 	case ok:
 		name = "bvn-" + name
-	case protocol.IsDnUrl(source):
+	case protocol.IsDnUrl(body.Source):
 		name, fromDirectory = "dn", true
 	default:
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
@@ -49,18 +43,30 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (
 
 	if body.Receipt.Start != nil {
 		// If we got a receipt, verify it
-		err = x.verifyReceipt(st, body)
+		err := x.verifyReceipt(st, body)
 		if err != nil {
 			return nil, err
 		}
 
 		if fromDirectory {
 			st.AddDirectoryAnchor(body)
+
+			ledgerState := protocol.NewInternalLedger()
+			err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), ledgerState)
+			if err != nil {
+				return nil, err
+			}
+			if body.AcmeOraclePrice == 0 {
+				return nil, fmt.Errorf("attempting to set oracle price to 0")
+			}
+			ledgerState.PendingOracle = body.AcmeOraclePrice
+
+			st.Update(ledgerState)
 		}
 	}
 
 	// Add the anchor to the chain
-	err = st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}

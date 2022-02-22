@@ -11,23 +11,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type stateCache struct {
 	logger  logging.OptionalLogger
 	nodeUrl *url.URL
-	txType  types.TransactionType
+	txType  protocol.TransactionType
 	txHash  types.Bytes32
 
 	batch      *database.Batch
 	operations []stateOperation
-	chains     map[[32]byte]state.Chain
+	chains     map[[32]byte]protocol.Account
 	indices    map[[32]byte]*writeIndex
 }
 
-func newStateCache(nodeUrl *url.URL, txtype types.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
+func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
 	c := new(stateCache)
 	c.nodeUrl = nodeUrl
 	c.txType = txtype
@@ -40,12 +39,12 @@ func newStateCache(nodeUrl *url.URL, txtype types.TransactionType, txid [32]byte
 
 func (c *stateCache) Reset() {
 	c.operations = c.operations[:0]
-	c.chains = map[[32]byte]state.Chain{}
+	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
 }
 
-func (c *stateCache) Commit() ([]state.Chain, error) {
-	var create []state.Chain
+func (c *stateCache) Commit() ([]protocol.Account, error) {
+	var create []protocol.Account
 	for _, op := range c.operations {
 		records, err := op.Execute(c)
 		if err != nil {
@@ -69,7 +68,7 @@ func (c *stateCache) load(id [32]byte, r *database.Account) (state.Chain, error)
 	}
 
 	if c.chains == nil {
-		c.chains = map[[32]byte]state.Chain{}
+		c.chains = map[[32]byte]protocol.Account{}
 	}
 	c.chains[id] = st
 	return st, nil
@@ -123,7 +122,7 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 }
 
 // LoadTxn loads and unmarshals a saved transaction
-func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.TransactionStatus, []*transactions.ED25519Sig, error) {
+func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	return c.batch.Transaction(txid[:]).Get()
 }
 

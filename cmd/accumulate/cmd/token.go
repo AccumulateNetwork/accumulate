@@ -1,13 +1,14 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var tokenCmd = &cobra.Command{
@@ -106,19 +107,18 @@ func CreateToken(origin string, args []string) (string, error) {
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
-	var properties string
+	var properties *url2.URL
 	if len(args) > 3 {
-		u, err := url2.Parse(args[3])
+		properties, err = url2.Parse(args[3])
 		if err != nil {
 			return "", fmt.Errorf("invalid properties url, %v", err)
 		}
-		properties = u.String()
-		res, err := GetUrl(properties)
+		res, err := GetUrl(properties.String())
 		if err != nil {
 			return "", fmt.Errorf("cannot query properties url, %v", err)
 		}
 		//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
-		if res.Type != types.AccountTypeDataAccount.String() {
+		if res.Type != protocol.AccountTypeDataAccount.String() {
 			return "", fmt.Errorf("properties url is not a valid properties data account")
 		}
 	}
@@ -134,7 +134,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	}
 
 	params := protocol.CreateToken{}
-	params.Url = u.String()
+	params.Url = u
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
@@ -144,6 +144,16 @@ func CreateToken(origin string, args []string) (string, error) {
 		return "", err
 	}
 
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
 	return ActionResponseFrom(res).Print()
 }
 
@@ -173,7 +183,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	}
 
 	params := protocol.IssueTokens{}
-	params.Recipient = recipient.String()
+	params.Recipient = recipient
 	params.Amount.Set(amt)
 
 	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, si, privKey)
@@ -181,6 +191,16 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 		return "", err
 	}
 
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
 	return ActionResponseFrom(res).Print()
 }
 
@@ -218,5 +238,15 @@ func BurnTokens(origin string, args []string) (string, error) {
 		return "", err
 	}
 
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
 	return ActionResponseFrom(res).Print()
 }

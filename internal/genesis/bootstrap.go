@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -48,18 +48,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 
 		adi := protocol.NewADI()
-		adi.Url = uAdi.String()
-		adi.KeyBook = uBook.String()
+		adi.Url = uAdi
+		adi.KeyBook = uBook
 		records = append(records, adi)
 
 		book := protocol.NewKeyBook()
-		book.Url = uBook.String()
-		book.Pages = []string{uPage.String()}
+		book.Url = uBook
+		book.Pages = []*url.URL{uPage}
 		records = append(records, book)
 
 		page := protocol.NewKeyPage()
-		page.Url = uPage.String()
-		page.KeyBook = uBook.String()
+		page.Url = uPage
+		page.KeyBook = uBook
 		page.Threshold = 1
 		records = append(records, page)
 
@@ -70,17 +70,23 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			page.Keys[i] = spec
 		}
 
+		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
+		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
+		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
+
 		// Create the ledger
 		ledger := protocol.NewInternalLedger()
-		ledger.Url = uAdi.JoinPath(protocol.Ledger).String()
-		ledger.KeyBook = uBook.String()
+		ledger.Url = uAdi.JoinPath(protocol.Ledger)
+		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1
+		ledger.ActiveOracle = oraclePrice
+		ledger.PendingOracle = ledger.ActiveOracle
 		records = append(records, ledger)
 
 		// Create the anchor pool
 		anchors := protocol.NewAnchor()
-		anchors.Url = uAdi.JoinPath(protocol.AnchorPool).String()
-		anchors.KeyBook = uBook.String()
+		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
+		anchors.KeyBook = uBook
 		records = append(records, anchors)
 
 		// Create records and directory entries
@@ -90,15 +96,32 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		}
 
 		acme := new(protocol.TokenIssuer)
-		acme.Type = types.AccountTypeTokenIssuer
-		acme.KeyBook = uBook.String()
-		acme.Url = protocol.AcmeUrl().String()
+		acme.KeyBook = uBook
+		acme.Url = protocol.AcmeUrl()
 		acme.Precision = 8
 		acme.Symbol = "ACME"
 		records = append(records, acme)
 
+		type DataRecord struct {
+			Account *protocol.DataAccount
+			Entry   *protocol.DataEntry
+		}
+		var dataRecords []DataRecord
 		switch opts.Network.Type {
 		case config.Directory:
+			oracle := new(protocol.AcmeOracle)
+			oracle.Price = oraclePrice
+			wd := new(protocol.WriteData)
+			wd.Entry.Data, err = json.Marshal(&oracle)
+
+			da := new(protocol.DataAccount)
+			da.Url = uAdi.JoinPath(protocol.Oracle)
+			da.KeyBook = uBook
+
+			records = append(records, da)
+			urls = append(urls, da.Url)
+			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+
 			// TODO Move ACME to DN
 
 		case config.BlockValidator:
@@ -109,13 +132,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			}
 
 			lite := protocol.NewLiteTokenAccount()
-			lite.Url = protocol.FaucetUrl.String()
-			lite.TokenUrl = protocol.AcmeUrl().String()
+			lite.Url = protocol.FaucetUrl
+			lite.TokenUrl = protocol.AcmeUrl()
 			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
 			records = append(records, lite)
 		}
 
 		st.Update(records...)
+
+		for _, wd := range dataRecords {
+			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
+		}
+
 		return st.AddDirectoryEntry(urls...)
 	})
 }

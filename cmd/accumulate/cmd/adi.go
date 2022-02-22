@@ -3,14 +3,15 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -68,7 +69,7 @@ var adiCreateCmd = &cobra.Command{
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite token account")
 	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
@@ -89,7 +90,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	}
 
 	params := api2.DirectoryQuery{}
-	params.Url = u.String()
+	params.Url = u
 	params.Start = uint64(st)
 	params.Count = uint64(ct)
 	params.Expand = true
@@ -117,7 +118,7 @@ func GetADI(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.AccountTypeIdentity.String() {
+	if res.Type != protocol.AccountTypeIdentity.String() {
 		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
 	}
 
@@ -178,7 +179,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	idc := protocol.CreateIdentity{}
-	idc.Url = u.Authority
+	idc.Url = u
 	idc.PublicKey = pubKey
 	idc.KeyBookName = book
 	idc.KeyPageName = page
@@ -186,6 +187,17 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
 	}
 
 	ar := ActionResponseFrom(res)

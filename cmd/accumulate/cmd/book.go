@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // bookCmd are the commands associated with managing key books
@@ -75,7 +76,7 @@ func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.AccountTypeKeyBook.String() {
+	if res.Type != protocol.AccountTypeKeyBook.String() {
 		return nil, nil, fmt.Errorf("expecting key book but received %v", res.Type)
 	}
 
@@ -109,7 +110,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 	}
 
 	keyBook := protocol.CreateKeyBook{}
-	keyBook.Url = newUrl.String()
+	keyBook.Url = newUrl
 
 	pageUrls := args[1:]
 	for i := range pageUrls {
@@ -117,12 +118,23 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
-		keyBook.Pages = append(keyBook.Pages, u2.String())
+		keyBook.Pages = append(keyBook.Pages, u2)
 	}
 
 	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, bookUrl, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
 	}
 	return ActionResponseFrom(res).Print()
 }

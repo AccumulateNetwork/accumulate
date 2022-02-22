@@ -34,6 +34,7 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
@@ -60,35 +61,35 @@ func TestValidate(t *testing.T) {
 		const count = 3
 		for i := 0; i < count; i++ {
 			xr := new(api.TxResponse)
-			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
+			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl}, xr)
 			require.Zero(t, xr.Code, xr.Message)
 			txWait(t, japi, xr.TransactionHash)
 		}
 
 		account := NewLiteTokenAccount()
-		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
 		assert.Equal(t, int64(count*100*AcmePrecision), account.Balance.Int64())
 	})
 
-	t.Run("Lite Account Credits", func(t *testing.T) {
+	t.Run("Lite Token Account Credits", func(t *testing.T) {
 		executeTx(t, japi, "add-credits", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
 			Payload: &AddCredits{
-				Recipient: liteUrl.String(),
+				Recipient: liteUrl,
 				Amount:    1e5,
 			},
 		})
 
 		account := NewLiteTokenAccount()
-		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
 		assert.Equal(t, int64(1e5), account.CreditBalance.Int64())
 
 		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.AccountID()})
 	})
 
 	var adiKey ed25519.PrivateKey
-	var adiName = "acc://keytest"
+	var adiName = &url.URL{Authority: "keytest"}
 	t.Run("Create ADI", func(t *testing.T) {
 		adiKey = newKey([]byte(t.Name()))
 
@@ -105,23 +106,23 @@ func TestValidate(t *testing.T) {
 
 		adi := new(protocol.ADI)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
-		assert.Equal(t, adiName, string(adi.Url))
+		assert.Equal(t, adiName, adi.Url)
 
 		dir := new(api.MultiResponse)
 		callApi(t, japi, "query-directory", struct {
 			Url          string
 			Count        int
 			ExpandChains bool
-		}{adiName, 10, true}, dir)
+		}{adiName.String(), 10, true}, dir)
 		assert.ElementsMatch(t, []interface{}{
-			adiName,
-			adiName + "/book",
-			adiName + "/page",
+			adiName.String(),
+			adiName.JoinPath("/book").String(),
+			adiName.JoinPath("/page").String(),
 		}, dir.Items)
 	})
 
 	t.Run("Key page credits", func(t *testing.T) {
-		pageUrl := adiName + "/page"
+		pageUrl := adiName.JoinPath("/page")
 		executeTx(t, japi, "add-credits", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
@@ -145,10 +146,10 @@ func TestValidate(t *testing.T) {
 		require.Equal(t, 7, len(r.Items), "Expected 7 transactions for %s", liteUrl)
 	})
 
-	dataAccountUrl := adiName + "/dataAccount"
+	dataAccountUrl := adiName.JoinPath("/dataAccount")
 	t.Run("Create Data Account", func(t *testing.T) {
 		executeTx(t, japi, "create-data-account", true, execParams{
-			Origin: adiName,
+			Origin: adiName.String(),
 			Key:    adiKey,
 			Payload: &CreateDataAccount{
 				Url: dataAccountUrl,
@@ -156,10 +157,10 @@ func TestValidate(t *testing.T) {
 		})
 		dataAccount := NewDataAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
-		assert.Equal(t, dataAccountUrl, string(dataAccount.Url))
+		assert.Equal(t, dataAccountUrl, dataAccount.Url)
 	})
 
-	keyPageUrl := adiName + "/page1"
+	keyPageUrl := adiName.JoinPath("/page1")
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
@@ -167,7 +168,7 @@ func TestValidate(t *testing.T) {
 			PublicKey: adiKey[32:],
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
-			Origin: adiName,
+			Origin: adiName.String(),
 			Key:    adiKey,
 			Payload: &CreateKeyPage{
 				Url:  keyPageUrl,
@@ -176,25 +177,22 @@ func TestValidate(t *testing.T) {
 		})
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, keyPageUrl, string(keyPage.Url))
+		assert.Equal(t, keyPageUrl, keyPage.Url)
 	})
 
-	keyBookUrl := adiName + "/book1"
+	keyBookUrl := adiName.JoinPath("/book1")
 	t.Run("Create Key Book", func(t *testing.T) {
-		var page []string
-		pageUrl := makeUrl(t, keyPageUrl)
-		page = append(page, pageUrl.String())
 		executeTx(t, japi, "create-key-book", true, execParams{
-			Origin: adiName,
+			Origin: adiName.String(),
 			Key:    adiKey,
 			Payload: &CreateKeyBook{
 				Url:   keyBookUrl,
-				Pages: page,
+				Pages: []*url.URL{keyPageUrl},
 			},
 		})
 		keyBook := NewKeyBook()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
-		assert.Equal(t, keyBookUrl, string(keyBook.Url))
+		assert.Equal(t, keyBookUrl, keyBook.Url)
 	})
 
 	t.Run("Key page credits 2", func(t *testing.T) {
@@ -217,34 +215,33 @@ func TestValidate(t *testing.T) {
 		adiKey2 = newKey([]byte(t.Name()))
 
 		executeTx(t, japi, "update-key-page", true, execParams{
-			Origin: keyPageUrl,
+			Origin: keyPageUrl.String(),
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
 				Operation: protocol.KeyPageOperationAdd,
 				NewKey:    adiKey2[32:],
-				Owner:     "acc://foo/book1",
+				Owner:     makeUrl(t, "acc://foo/book1"),
 			},
 		})
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner)
+		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner.String())
 	})
 
-	tokenUrl := "acc://ACME"
-	tokenAccountUrl := adiName + "/account"
+	tokenAccountUrl := adiName.JoinPath("/account")
 	t.Run("Create Token Account", func(t *testing.T) {
 		executeTx(t, japi, "create-token-account", true, execParams{
-			Origin: adiName,
+			Origin: adiName.String(),
 			Key:    adiKey,
 			Payload: &CreateTokenAccount{
 				Url:        tokenAccountUrl,
-				TokenUrl:   tokenUrl,
+				TokenUrl:   protocol.AcmeUrl(),
 				KeyBookUrl: keyBookUrl,
 			},
 		})
 		tokenAccount := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
-		assert.Equal(t, tokenAccountUrl, string(tokenAccount.Url))
+		assert.Equal(t, tokenAccountUrl, tokenAccount.Url)
 	})
 
 	t.Run("Query Key Index", func(t *testing.T) {
@@ -279,7 +276,7 @@ func TestTokenTransfer(t *testing.T) {
 
 		var to []*protocol.TokenRecipient
 		to = append(to, &protocol.TokenRecipient{
-			Url:    aliceUrl.String(),
+			Url:    aliceUrl,
 			Amount: *big.NewInt(100),
 		})
 		txParams := execParams{
@@ -299,7 +296,7 @@ func TestTokenTransfer(t *testing.T) {
 			for i, daemon := range daemons {
 				japi := daemon.Jrpc_TESTONLY()
 				res := executeTxFail(t, japi, "send-tokens", 0, 1, txParams)
-				assert.Equal(t, uint64(protocol.CodeNotFound), res.Code, "Node %d (%s) returned the wrong error code", i, netName)
+				assert.Equal(t, uint64(protocol.ErrorCodeNotFound), res.Code, "Node %d (%s) returned the wrong error code", i, netName)
 			}
 		}
 	})

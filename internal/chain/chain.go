@@ -24,6 +24,9 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			InternalTransactionsSigned{},
 			InternalTransactionsSent{},
 
+			// for data accounts
+			WriteData{},
+
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
@@ -44,6 +47,8 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			UpdateKeyPage{},
 			WriteData{},
 			WriteDataTo{},
+			UpdateManager{},
+			RemoveManager{},
 
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},

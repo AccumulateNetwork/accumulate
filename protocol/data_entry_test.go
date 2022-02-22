@@ -37,9 +37,9 @@ func TestDataEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//the size is now 987 bytes so it should cost 40 credits
-	if cost != 4*FeeWriteData.AsInt() {
-		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
+	//the size is now 987 bytes so it should cost 50 credits
+	if cost != 5*FeeWriteData.AsInt() {
+		t.Fatalf("expected a cost of 50 credits, but computed %d", cost)
 	}
 
 	//now let's blow up the size of the entry to > 10kB to make sure it fails.

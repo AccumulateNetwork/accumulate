@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"time"
 
@@ -366,17 +367,38 @@ func AnyToJSON(v interface{}) interface{} {
 	}
 }
 
-func AnyFromJSON(v interface{}) interface{} {
+// AnyFromJSON converts v to a duration if it appears to be a duration.
+// AnyFromJSON never returns an error.
+func AnyFromJSON(v interface{}) (interface{}, error) {
+	// Include error in the return values so that the signature matches
+
 	switch v := v.(type) {
 	case map[string]interface{}:
 		// Does it look like a duration?
 		sec, ok1 := v["seconds"].(int)
 		ns, ok2 := v["nanoseconds"].(int)
 		if ok1 && ok2 && len(v) == 2 {
-			return time.Duration(sec)*time.Second + time.Duration(ns)
+			return time.Duration(sec)*time.Second + time.Duration(ns), nil
 		}
 	}
 
 	// There's not a lot we can do without metadata
-	return v
+	return v, nil
+}
+
+func UnmarshalEnumType(r io.Reader, value interface{ Set(uint64) bool }) error {
+	reader := NewReader(r)
+	v, ok := reader.ReadUint(1)
+	_, err := reader.Reset([]string{"Type"})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("field Type: missing")
+	}
+
+	if !value.Set(v) {
+		return fmt.Errorf("field Type: invalid value %d", v)
+	}
+	return nil
 }

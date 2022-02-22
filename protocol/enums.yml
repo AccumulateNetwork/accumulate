@@ -23,6 +23,17 @@ ObjectType:
     value: 0x02
     description: represents a transaction object
 
+SignatureType:
+  Unknown:
+    value: 0
+    description: is used when the signature type is not known
+  LegacyED25519:
+    value: 1
+    description: represents a legacy ED25519 signature
+  ED25519:
+    value: 2
+    description: represents an ED25519 signature
+
 KeyPageOperation:
   Unknown:
     value: 0
@@ -63,7 +74,7 @@ TransactionType:
     description: creates an ADI token account, which produces a synthetic chain create transaction
   SendTokens:
     value: 0x03
-    description:  transfers tokens between token accounts, which produces a synthetic deposit tokens transaction
+    description: transfers tokens between token accounts, which produces a synthetic deposit tokens transaction
   CreateDataAccount:
     value: 0x04
     description: creates an ADI Data Account, which produces a synthetic chain create transaction
@@ -97,6 +108,12 @@ TransactionType:
   UpdateKeyPage:
     value: 0x0F
     description: adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction
+  UpdateManager:
+    value: 0x10
+    description: updates manager for the existing chain
+  RemoveManager:
+    value: 0x11
+    description: remove manager from existing chain
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
@@ -150,6 +167,7 @@ AccountType:
   TokenIssuer:
     value: 3
     description: is a Token Issuer account
+    aliases: [ token ]
   TokenAccount:
     value: 4
     description: is an ADI Token Account
@@ -177,3 +195,4 @@ AccountType:
   InternalLedger:
     value: 14
     description: is a ledger that tracks the state of internal operations
+

@@ -9,7 +9,7 @@ import (
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = chain.Header().Type.String()
+	res.Type = chain.GetType().String()
 	res.MainChain = new(MerkleState)
 	res.MainChain.Height = obj.Height
 	res.MainChain.Roots = obj.Roots
@@ -56,9 +56,9 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
-		res.Origin = tx.SigInfo.Origin.String()
+		res.Origin = tx.SigInfo.Origin
 		data := new(TokenSend)
-		data.From = main.SigInfo.Origin.String()
+		data.From = main.SigInfo.Origin
 		data.To = make([]TokenDeposit, len(payload.To))
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
@@ -68,15 +68,15 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 			}
 		}
 
-		res.Origin = main.SigInfo.Origin.String()
+		res.Origin = main.SigInfo.Origin
 		res.Data = data
 
 	case *protocol.SyntheticDepositTokens:
-		res.Origin = main.SigInfo.Origin.String()
+		res.Origin = main.SigInfo.Origin
 		res.Data = payload
 
 	default:
-		res.Origin = tx.SigInfo.Origin.String()
+		res.Origin = tx.SigInfo.Origin
 		res.Data = payload
 	}
 

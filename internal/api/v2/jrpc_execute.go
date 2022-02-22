@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -71,10 +72,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	tx.Transaction.Origin = protocol.FaucetUrl
 	tx.Transaction.Nonce = faucet.Nonce()
 	tx.Transaction.KeyPageHeight = 1
-	tx.Transaction.Body, err = req.MarshalBinary()
-	if err != nil {
-		return accumulateError(err)
-	}
+	tx.Transaction.Body = req
 
 	ed, err := faucet.Sign(tx.GetTxHash())
 	if err != nil {
@@ -85,25 +83,15 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	txrq := new(TxRequest)
 	txrq.Origin = tx.Transaction.Origin
 	txrq.Signer.Nonce = tx.Transaction.Nonce
-	txrq.Signer.PublicKey = tx.Signatures[0].PublicKey
+	txrq.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	txrq.KeyPage.Height = tx.Transaction.KeyPageHeight
-	txrq.Signature = tx.Signatures[0].Signature
-	return m.execute(ctx, txrq, tx.Transaction.Body)
-}
+	txrq.Signature = tx.Signatures[0].GetSignature()
 
-// executeQueue manages queues for batching and dispatch of execute requests.
-type executeQueue struct {
-	leader  chan struct{}
-	enqueue chan *executeRequest
-}
-
-// executeRequest captures the state of an execute requests.
-type executeRequest struct {
-	subnet    string
-	checkOnly bool
-	payload   []byte
-	result    interface{}
-	done      chan struct{}
+	body, err := tx.Transaction.Body.MarshalBinary()
+	if err != nil {
+		return accumulateError(err)
+	}
+	return m.execute(ctx, txrq, body)
 }
 
 // execute either executes the request locally, or dispatches it to another BVC
@@ -122,18 +110,23 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 			return accumulateError(err)
 		}
 	} else {
+		body, err := protocol.UnmarshalTransaction(payload)
+		if err != nil {
+			return accumulateError(err)
+		}
+
 		// Build the envelope
 		env := new(transactions.Envelope)
 		env.TxHash = req.TxHash
 		env.Transaction = new(transactions.Transaction)
-		env.Transaction.Body = payload
+		env.Transaction.Body = body
 		env.Transaction.Origin = req.Origin
 		env.Transaction.Nonce = req.Signer.Nonce
 		env.Transaction.KeyPageHeight = req.KeyPage.Height
 		env.Transaction.KeyPageIndex = req.KeyPage.Index
 		envs = append(envs, env)
 
-		ed := new(transactions.ED25519Sig)
+		ed := new(protocol.LegacyED25519Signature)
 		ed.Nonce = req.Signer.Nonce
 		ed.PublicKey = req.Signer.PublicKey
 		ed.Signature = req.Signature
@@ -166,13 +159,13 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 
 	// Parse the results
 	var results []protocol.TransactionResult
-	for len(resp.Data) > 0 {
-		result, err := protocol.UnmarshalTransactionResult(resp.Data)
+	rd := bytes.NewReader(resp.Data)
+	for rd.Len() > 0 {
+		result, err := protocol.UnmarshalTransactionResultFrom(rd)
 		if err != nil {
 			m.logError("Failed to decode transaction results", "error", err)
 			break
 		}
-		resp.Data = resp.Data[result.BinarySize():]
 		if _, ok := result.(*protocol.EmptyResult); ok {
 			result = nil
 		}

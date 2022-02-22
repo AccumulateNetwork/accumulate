@@ -31,6 +31,9 @@ const (
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
 
+	// Oracle is the path to a node's anchor chain account.
+	Oracle = "oracle"
+
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
 
@@ -55,14 +58,18 @@ func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
 }
 
+// PriceOracle returns acc://dn/oracle
+func PriceOracle() *url.URL {
+	return DnUrl().JoinPath(Oracle)
+}
+
+var PriceOracleAuthority = PriceOracle().String()
+
 // AcmePrecision is the precision of ACME token amounts.
 const AcmePrecision = 1e8
 
-// FiatUnitsPerAcmeToken fixes the conversion between ACME tokens and fiat
-// currency to 1:1, as in $1 per 1 ACME token.
-//
-// As soon as we have an oracle, this must be removed.
-const FiatUnitsPerAcmeToken = 1
+// AcmeOraclePrecision is the precision of the oracle in 100 * USD of one ACME token.
+const AcmeOraclePrecision = 10000
 
 // CreditPrecision is the precision of credit balances.
 const CreditPrecision = 1e2
@@ -70,8 +77,8 @@ const CreditPrecision = 1e2
 // CreditsPerFiatUnit is the conversion rate from credit balances to fiat
 // currency. We expect to use USD indefinitely as the fiat currency.
 //
-// 100 credits converts to 1 dollar, but we charge down to 0.01 credits, so the
-// actual conversion rate of the credit balance field to dollars is is 10,000 to
+// 100 credits converts to 1 dollar, but we charge down to 0.01 credits. So the
+// actual conversion rate of the credit balance field to dollars is 10,000 to
 // 1.
 const CreditsPerFiatUnit = 1e2 * CreditPrecision
 
@@ -236,7 +243,7 @@ func IsValidAdiUrl(u *url.URL) error {
 		errs = append(errs, "identity is a number")
 	}
 	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
-		errs = append(errs, "identity could be a lite account key")
+		errs = append(errs, "identity could be a lite token account key")
 	}
 	if u.Path != "" {
 		errs = append(errs, "path is not empty")

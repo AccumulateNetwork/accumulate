@@ -10,7 +10,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 27)
+		m.methods = make(jsonrpc2.MethodMap, 30)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -25,8 +25,10 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-token"] = m.ExecuteCreateToken
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
 	m.methods["issue-tokens"] = m.ExecuteIssueTokens
+	m.methods["remove-manager"] = m.ExecuteRemoveManager
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
+	m.methods["update-manager"] = m.ExecuteUpdateManager
 	m.methods["write-data"] = m.ExecuteWriteData
 	m.methods["write-data-to"] = m.ExecuteWriteDataTo
 	m.methods["faucet"] = m.Faucet
@@ -39,6 +41,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
+	m.methods["status"] = m.Status
 	m.methods["version"] = m.Version
 
 	return m.methods
@@ -112,12 +115,20 @@ func (m *JrpcMethods) ExecuteIssueTokens(ctx context.Context, params json.RawMes
 	return m.executeWith(ctx, params, new(protocol.IssueTokens))
 }
 
+func (m *JrpcMethods) ExecuteRemoveManager(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.RemoveManager))
+}
+
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
 }
 
 func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateKeyPage))
+}
+
+func (m *JrpcMethods) ExecuteUpdateManager(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.UpdateManager))
 }
 
 func (m *JrpcMethods) ExecuteWriteData(ctx context.Context, params json.RawMessage) interface{} {

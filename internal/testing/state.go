@@ -22,6 +22,7 @@ type DB = *database.Batch
 
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
+const TestTokenAmount = 5e5
 
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
@@ -42,24 +43,19 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.ACME
-	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
-
-	depData, err := deposit.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	deposit.Token = protocol.AcmeUrl()
+	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
 
 	tx := new(transactions.Envelope)
 	tx.Transaction = new(transactions.Transaction)
-	tx.Transaction.Body = depData
+	tx.Transaction.Body = deposit
 	tx.Transaction.Origin = recipientAdi
 	tx.Transaction.KeyPageHeight = 1
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
+	err := ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
@@ -80,17 +76,12 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	txData, err := send.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal token tx: %v", err)
-	}
-
 	gtx := new(transactions.Envelope)
 	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = txData
+	gtx.Transaction.Body = &send
 	gtx.Transaction.Origin = from
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = sponsor[32:]
 	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
@@ -111,27 +102,22 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.ACME
-	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
+	deposit.Token = protocol.AcmeUrl()
+	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
 	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
 	// amtToDeposit := int64(50000)                             //deposit 50k tokens
 	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
 	// deposit.TokenUrl = tokenUrl
 
-	depData, err := deposit.MarshalBinary()
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("failed to marshal deposit: %v", err)
-	}
-
 	gtx := new(transactions.Envelope)
 	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = depData
+	gtx.Transaction.Body = deposit
 	gtx.Transaction.Origin = destAddress
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
+	err := ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
@@ -212,17 +198,17 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.Url = pageUrl.String()
+	mss.Url = pageUrl
 	mss.Keys = append(mss.Keys, ss)
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
-	book.Url = bookUrl.String() // TODO Allow override
-	book.Pages = append(book.Pages, pageUrl.String())
+	book.Url = bookUrl // TODO Allow override
+	book.Pages = append(book.Pages, pageUrl)
 
 	adi := protocol.NewADI()
-	adi.Url = identityUrl.String()
-	adi.KeyBook = bookUrl.String()
+	adi.Url = identityUrl
+	adi.KeyBook = bookUrl
 
 	return WriteStates(db, adi, book, mss)
 }
@@ -247,18 +233,23 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		return err
 	}
 
+	tu, err := url.Parse(tokenUrl)
+	if err != nil {
+		return err
+	}
+
 	var chain state.Chain
 	if lite {
 		account := new(protocol.LiteTokenAccount)
-		account.Url = u.String()
-		account.TokenUrl = tokenUrl
+		account.Url = u
+		account.TokenUrl = tu
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	} else {
 		account := protocol.NewTokenAccount()
-		account.Url = u.String()
-		account.TokenUrl = tokenUrl
-		account.KeyBook = u.Identity().JoinPath("book0").String()
+		account.Url = u
+		account.TokenUrl = tu
+		account.KeyBook = u.Identity().JoinPath("book0")
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -273,8 +264,8 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	}
 
 	issuer := new(protocol.TokenIssuer)
-	issuer.Url = u.String()
-	issuer.KeyBook = u.Identity().JoinPath("book0").String()
+	issuer.Url = u
+	issuer.KeyBook = u.Identity().JoinPath("book0")
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 
@@ -288,7 +279,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	}
 
 	mss := protocol.NewKeyPage()
-	mss.Url = u.String()
+	mss.Url = u
 	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
@@ -307,29 +298,28 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	}
 
 	group := protocol.NewKeyBook()
-	group.Url = groupUrl.String()
-	group.Pages = pageUrls
+	group.Url = groupUrl
 	states := []state.Chain{group}
 
+	group.Pages = make([]*url.URL, len(pageUrls))
 	for i, s := range pageUrls {
-		specUrl, err := url.Parse(s)
+		u, err := url.Parse(s)
 		if err != nil {
 			return err
 		}
-
-		group.Pages[i] = specUrl.String()
+		group.Pages[i] = u
 
 		spec := new(protocol.KeyPage)
-		err = db.Account(specUrl).GetStateAs(spec)
+		err = db.Account(u).GetStateAs(spec)
 		if err != nil {
 			return err
 		}
 
-		if spec.KeyBook != "" {
+		if spec.KeyBook != nil {
 			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
-		spec.KeyBook = groupUrl.String()
+		spec.KeyBook = groupUrl
 		states = append(states, spec)
 	}
 
@@ -355,14 +345,4 @@ func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {
 
 func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
 	return AcmeLiteAddress(key[32:])
-}
-
-func NewWalletEntry() *WalletEntry {
-	wallet := new(WalletEntry)
-
-	wallet.Nonce = 1 // Put the private key for the origin
-	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
-	wallet.Addr = AcmeLiteAddressStdPriv(wallet.PrivateKey).String() // Generate the origin address
-
-	return wallet
 }

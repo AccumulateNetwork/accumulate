@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"path"
 	"strings"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 // ErrMissingHost means that a URL did not include a hostname.
@@ -204,6 +202,12 @@ func (u *URL) Routing() uint64 {
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,
 // are equal under Unicode case-folding.
 func (u *URL) Equal(v *URL) bool {
+	if u == v {
+		return true
+	}
+	if u == nil || v == nil {
+		return false
+	}
 	return strings.EqualFold(u.String(), v.String())
 }
 
@@ -212,32 +216,6 @@ func (u *URL) JoinPath(s ...string) *URL {
 	v := *u
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
 	return &v
-}
-
-// BinarySize returns the number of bytes the URL will marshal to.
-func (u *URL) BinarySize() int {
-	return encoding.StringBinarySize(u.String())
-}
-
-// MarshalBinary marshals the URL to binary.
-func (u *URL) MarshalBinary() ([]byte, error) {
-	return encoding.StringMarshalBinary(u.String()), nil
-}
-
-// UnmarshalBinary unmarshals the URL from binary.
-func (u *URL) UnmarshalBinary(data []byte) error {
-	s, err := encoding.StringUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	v, err := Parse(s)
-	if err != nil {
-		return err
-	}
-
-	*u = *v
-	return nil
 }
 
 // MarshalJSON marshals the URL to JSON as a string.

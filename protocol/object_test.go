@@ -2,6 +2,8 @@ package protocol
 
 import (
 	"testing"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 func TestStateObject(t *testing.T) {
@@ -10,8 +12,7 @@ func TestStateObject(t *testing.T) {
 	so := Object{}
 
 	chain := new(AccountHeader)
-	chain.Url = "myadi"
-	chain.Type = AccountTypeLiteTokenAccount
+	chain.Url = &url.URL{Authority: "myadi"}
 	so.Entry, err = chain.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)

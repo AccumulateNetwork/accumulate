@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -21,26 +20,20 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	case *protocol.KeyBook:
 		group = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeIdentity, types.AccountTypeKeyBook, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook, origin.GetType())
 	}
 
-	body := new(protocol.CreateKeyPage)
-	err := tx.As(body)
-	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyPage), tx.Transaction.Body)
 	}
 
 	if len(body.Keys) == 0 {
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
-	msUrl, err := url.Parse(body.Url)
-	if err != nil {
-		return nil, fmt.Errorf("invalid target URL: %v", err)
-	}
-
-	if !msUrl.Identity().Equal(st.OriginUrl.Identity()) {
-		return nil, fmt.Errorf("%q does not belong to %q", msUrl, st.OriginUrl)
+	if !body.Url.Identity().Equal(st.OriginUrl.Identity()) {
+		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
@@ -48,8 +41,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()
-	page.Url = msUrl.String()
+	page.Url = body.Url
 	page.Threshold = 1 // Require one signature from the Key Page
+	page.ManagerKeyBook = body.Manager
 
 	if group != nil {
 		groupUrl, err := group.ParseUrl()
@@ -59,8 +53,8 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			return nil, fmt.Errorf("invalid origin record URL: %v", err)
 		}
 
-		group.Pages = append(group.Pages, msUrl.String())
-		page.KeyBook = groupUrl.String()
+		group.Pages = append(group.Pages, body.Url)
+		page.KeyBook = groupUrl
 
 		err = scc.Update(group)
 		if err != nil {
@@ -74,7 +68,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		page.Keys = append(page.Keys, ss)
 	}
 
-	err = scc.Create(page)
+	err := scc.Create(page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %v", err)
 	}

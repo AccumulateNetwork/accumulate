@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -77,6 +79,10 @@ func PrintDataAccountCreate() {
 	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
 	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
 	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
+
+	//scratch data account
+	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
+	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
 }
 
 func PrintDataWrite() {
@@ -108,7 +114,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 	}
 
 	params := api.DataEntryQuery{}
-	params.Url = u.String()
+	params.Url = u
 	if len(args) > 0 {
 		n, err := hex.Decode(params.EntryHash[:], []byte(args[0]))
 		if err != nil {
@@ -145,7 +151,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 	}
 
 	params := api.DataEntrySetQuery{}
-	params.Url = u.String()
+	params.Url = u
 
 	v, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
@@ -208,9 +214,9 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid lite data address created from name(s)")
 	}
-	wdt.Recipient = addr.String()
+	wdt.Recipient = addr
 
-	lite, err := GetUrl(wdt.Recipient)
+	lite, err := GetUrl(wdt.Recipient.String())
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
@@ -226,6 +232,17 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	res, err = dispatchTxRequest("write-data-to", &wdt, nil, u, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
 	}
 
 	return ActionResponseFromLiteData(res, addr.String(), accountId, entryHash).Print()
@@ -255,17 +272,16 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
 	}
 
-	var keybook string
-	if len(args) > 1 {
-		kbu, err := url.Parse(args[1])
+	var keybook *url.URL
+	if len(args) > 2 {
+		keybook, err = url.Parse(args[2])
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
-		keybook = kbu.String()
 	}
 
 	cda := protocol.CreateDataAccount{}
-	cda.Url = accountUrl.String()
+	cda.Url = accountUrl
 	cda.KeyBookUrl = keybook
 	cda.Scratch = flagAccount.Scratch
 
@@ -273,6 +289,18 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
+
 	return ActionResponseFrom(res).Print()
 }
 
@@ -347,7 +375,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteDataTo{}
 	r, err := url.Parse(args[0])
 	if err != nil {
-		return "", fmt.Errorf("unable to parse lite account url")
+		return "", fmt.Errorf("unable to parse lite token account url")
 	}
 
 	accountId, err := protocol.ParseLiteDataAddress(r)
@@ -355,7 +383,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid lite data account url")
 	}
 
-	wd.Recipient = r.String()
+	wd.Recipient = r
 
 	if len(args) < 2 {
 		return "", fmt.Errorf("expecting data")
@@ -369,7 +397,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	}
 
 	lda := protocol.LiteDataAccount{}
-	q, err := GetUrl(wd.Recipient)
+	q, err := GetUrl(wd.Recipient.String())
 	if err == nil {
 		Remarshal(q.Data, &lda)
 	}
@@ -377,5 +405,5 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	lde := protocol.LiteDataEntry{}
 	copy(lde.AccountId[:], append(accountId, lda.Tail...))
 	lde.DataEntry = &wd.Entry
-	return ActionResponseFromLiteData(res, wd.Recipient, lde.AccountId[:], wd.Entry.Hash()).Print()
+	return ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash()).Print()
 }

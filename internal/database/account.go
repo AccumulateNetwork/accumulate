@@ -49,7 +49,7 @@ func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.O
 			continue
 		}
 
-		if meta.Chains[i] == chain {
+		if meta.Chains[i].Equal(&chain) {
 			continue
 		}
 
@@ -114,7 +114,7 @@ func (r *Account) GetStateAs(state state.Chain) error {
 // PutState stores the record state and adds the record to the BPT (as a hash).
 func (r *Account) PutState(accountState state.Chain) error {
 	// Does the record state have a URL?
-	if accountState.Header().Url == "" {
+	if accountState.Header().Url == nil {
 		return errors.New("invalid URL: empty")
 	}
 
@@ -135,7 +135,7 @@ func (r *Account) PutState(accountState state.Chain) error {
 		*protocol.KeyBook, *protocol.KeyPage:
 		// Empty key book is OK
 	default:
-		if accountState.Header().KeyBook == "" {
+		if accountState.Header().KeyBook == nil {
 			return fmt.Errorf("missing key book")
 		}
 	}

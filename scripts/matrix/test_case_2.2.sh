@@ -2,7 +2,7 @@
 #
 # test case 2.2
 #
-# create an adi with a . in the name sponsored by a lite account
+# create an adi with a . in the name sponsored by a lite token account
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists

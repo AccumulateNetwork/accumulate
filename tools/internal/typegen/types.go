@@ -17,17 +17,19 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 			if typ.Kind == "tx-result" && strings.HasSuffix(name, "Result") {
 				typ.TxType = name[0 : len(name)-6]
 			} else {
-				typ.TxType = typ.Name
+				typ.TxType = name
 			}
 		}
 
 		if typ.ChainType == "" {
-			typ.ChainType = typ.Name
+			typ.ChainType = name
 		}
 
-		for _, f := range typ.Fields {
-			if f.Slice != nil {
-				f.Slice.Name = f.Name
+		if typ.SignatureType == "" {
+			if strings.HasSuffix(typ.Name, "Signature") {
+				typ.SignatureType = name[0 : len(name)-9]
+			} else {
+				typ.SignatureType = name
 			}
 		}
 	}
@@ -40,15 +42,16 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 }
 
 type DataType struct {
-	Name         string `yaml:"-"`
-	Kind         string
-	TxType       string `yaml:"tx-type"`
-	ChainType    string `yaml:"chain-type"`
-	NonBinary    bool   `yaml:"non-binary"`
-	Incomparable bool   `yaml:"incomparable"`
-	OmitNewFunc  bool   `yaml:"omit-new-func"`
-	Fields       []*Field
-	Embeddings   []string `yaml:"embeddings"`
+	Name          string `yaml:"-"`
+	Kind          string
+	TxType        string `yaml:"tx-type"`
+	ChainType     string `yaml:"chain-type"`
+	SignatureType string `yaml:"signature-type"`
+	NonBinary     bool   `yaml:"non-binary"`
+	Incomparable  bool   `yaml:"incomparable"`
+	OmitNewFunc   bool   `yaml:"omit-new-func"`
+	Fields        []*Field
+	Embeddings    []string `yaml:"embeddings"`
 }
 
 func (typ *DataType) GoTxType() string {
@@ -64,12 +67,12 @@ type Field struct {
 	Type          string
 	MarshalAs     string `yaml:"marshal-as"`
 	UnmarshalWith string `yaml:"unmarshal-with"`
-	Slice         *Field
+	Repeatable    bool
 	Pointer       bool
 	Optional      bool
-	IsUrl         bool `yaml:"is-url"`
 	KeepEmpty     bool `yaml:"keep-empty"`
 	Alternative   string
+	ZeroValue     interface{} `yaml:"zero-value"`
 }
 
 type API map[string]Method
@@ -89,4 +92,5 @@ type Type map[string]*TypeValue
 type TypeValue struct {
 	Value       interface{}
 	Description string
+	Aliases     []string
 }

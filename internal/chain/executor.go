@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -135,10 +136,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	env := new(transactions.Envelope)
 	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Origin = protocol.AcmeUrl()
-	env.Transaction.Body, err = new(protocol.InternalGenesis).MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	env.Transaction.Body = new(protocol.InternalGenesis)
 
 	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)
 	if err == nil {
@@ -307,6 +305,9 @@ func (m *Executor) Commit() ([]byte, error) {
 		return nil, err
 	}
 
+	//set active oracle from pending
+	ledgerState.ActiveOracle = ledgerState.PendingOracle
+
 	// Deduplicate the update list
 	updatedMap := make(map[string]bool, len(ledgerState.Updates))
 	updatedSlice := make([]protocol.AnchorMetadata, 0, len(ledgerState.Updates))
@@ -359,6 +360,29 @@ func (m *Executor) Commit() ([]byte, error) {
 	return batch.RootHash(), nil
 }
 
+func (m *Executor) updateOraclePrice(ledgerState *protocol.InternalLedger) error {
+	data, err := m.blockBatch.Account(protocol.PriceOracle()).Data()
+	if err != nil {
+		return fmt.Errorf("cannot retrieve oracle data entry: %v", err)
+	}
+	_, e, err := data.GetLatest()
+	if err != nil {
+		return fmt.Errorf("cannot retrieve latest oracle data entry: data batch at height %d: %v", data.Height(), err)
+	}
+
+	o := protocol.AcmeOracle{}
+	err = json.Unmarshal(e.Data, &o)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal oracle data entry %x", e.Data)
+	}
+
+	if o.Price == 0 {
+		return fmt.Errorf("invalid oracle price, must be > 0")
+	}
+
+	ledgerState.PendingOracle = o.Price
+	return nil
+}
 func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	// Load the main chain of the minor root
 	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
@@ -461,6 +485,14 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 
 		// Write the hash of the hashes to the BPT
 		record.PutBpt(sha256.Sum256(hashes))
+	}
+
+	if accountSeen[protocol.PriceOracleAuthority] {
+		//if things go south here, don't return and error, instead, just log one
+		err := m.updateOraclePrice(ledgerState)
+		if err != nil {
+			m.logError(fmt.Sprintf("%v", err))
+		}
 	}
 
 	// Add the synthetic transaction chain to the root chain

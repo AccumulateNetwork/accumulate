@@ -2,12 +2,13 @@ package e2e
 
 import (
 	"crypto/ed25519"
-	"encoding"
 	"sync"
 
 	"github.com/stretchr/testify/suite"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 	"golang.org/x/exp/rand"
@@ -57,16 +58,12 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(s.generateKey())
 }
 
-func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.Envelope {
+func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body protocol.TransactionPayload) *transactions.Envelope {
 	s.T().Helper()
-	tx, err := transactions.NewWith(&transactions.Header{
-		Origin:        sponsor,
-		KeyPageHeight: s.dut.GetRecordHeight(sponsor.String()),
-		Nonce:         nonce,
-	}, func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
-		return sig, sig.Sign(nonce, key, hash)
-	}, body)
-	s.Require().NoError(err)
-	return tx
+	return testing.NewTransaction().
+		WithOrigin(sponsor).
+		WithKeyPage(0, s.dut.GetRecordHeight(sponsor.String())).
+		WithNonce(nonce).
+		WithBody(body).
+		SignLegacyED25519(key)
 }

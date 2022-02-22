@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -25,10 +24,10 @@ func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResu
 
 	st, executor, hasEnoughSigs, err := m.validate(batch, env)
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil, &protocol.Error{Code: protocol.CodeNotFound, Message: err}
+		return nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: err}
 	}
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
+		return nil, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: err}
 	}
 
 	// Do not run transaction-specific validation for a synthetic transaction. A
@@ -52,7 +51,7 @@ func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResu
 
 	result, err := executor.Validate(st, env)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err}
+		return nil, &protocol.Error{Code: protocol.ErrorCodeValidateTxnError, Message: err}
 	}
 	if result == nil {
 		result = new(protocol.EmptyResult)
@@ -70,27 +69,27 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 	// Set up the state manager and validate the signatures
 	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
 	if err != nil {
-		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	if !hasEnoughSigs {
 		// Write out changes to the nonce and credit balance
 		_, err := st.Commit()
 		if err != nil {
-			return nil, m.recordTransactionError(st, env, nil, nil, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+			return nil, m.recordTransactionError(st, env, nil, nil, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 		}
 
 		status := &protocol.TransactionStatus{Pending: true}
 		err = m.putTransaction(st, env, nil, nil, status, false)
 		if err != nil {
-			return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
+			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
 		}
 		return new(protocol.EmptyResult), nil
 	}
 
 	result, err := executor.Validate(st, env)
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		return nil, m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.ErrorCodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 	if result == nil {
 		result = new(protocol.EmptyResult)
@@ -106,27 +105,27 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err})
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err})
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
 	submitted, err := st.Commit()
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 	}
 
 	// Store the tx state
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
 	err = m.putTransaction(st, env, txAccepted, txPending, status, false)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
+		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
 	}
 
 	m.newValidators = append(m.newValidators, st.newValidators...)
@@ -135,11 +134,11 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 	st.Reset()
 	err = m.addSynthTxns(&st.stateCache, submitted)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err}
+		return nil, &protocol.Error{Code: protocol.ErrorCodeSyntheticTxnError, Message: err}
 	}
 	_, err = st.Commit()
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 	}
 
 	m.blockMeta.Delivered++
@@ -209,14 +208,10 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 		return st, executor, true, m.validateAgainstLite(st, env, fee)
 
 	case *protocol.ADI, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount, *protocol.TokenIssuer:
-		if origin.Header().KeyBook == "" {
+		if origin.Header().KeyBook == nil {
 			return nil, nil, false, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
-		u, err := url.Parse(origin.Header().KeyBook)
-		if err != nil {
-			return nil, nil, false, fmt.Errorf("invalid keybook url %s", u.String())
-		}
-		err = st.LoadUrlAs(u, book)
+		err = st.LoadUrlAs(origin.Header().KeyBook, book)
 		if err != nil {
 			return nil, nil, false, fmt.Errorf("invalid KeyBook: %v", err)
 		}
@@ -227,7 +222,7 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 	default:
 		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
+		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.GetType())
 	}
 
 	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee)
@@ -282,16 +277,17 @@ func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelo
 		return fmt.Errorf("invalid signature(s)")
 	}
 
-	// Check the envelope
-	_, err := batch.Transaction(env.EnvHash()).GetState()
-	switch {
-	case err == nil:
-		return fmt.Errorf("duplicate envelope")
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return fmt.Errorf("error while checking envelope state: %v", err)
-	}
+	// // TODO Do we need this check? It appears to be causing issues.
+	// // Check the envelope
+	// _, err := batch.Transaction(env.EnvHash()).GetState()
+	// switch {
+	// case err == nil:
+	// 	return fmt.Errorf("duplicate envelope")
+	// case errors.Is(err, storage.ErrNotFound):
+	// 	// OK
+	// default:
+	// 	return fmt.Errorf("error while checking envelope state: %v", err)
+	// }
 
 	// Check the transaction
 	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
@@ -344,14 +340,10 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		return false, fmt.Errorf("invalid sig spec index")
 	}
 
-	var err error
-	st.SignatorUrl, err = url.Parse(book.Pages[env.Transaction.KeyPageIndex])
-	if err != nil {
-		return false, fmt.Errorf("invalid key page url : %s", book.Pages[env.Transaction.KeyPageIndex])
-	}
+	st.SignatorUrl = book.Pages[env.Transaction.KeyPageIndex]
 	page := new(protocol.KeyPage)
 	st.Signator = page
-	err = st.LoadUrlAs(st.SignatorUrl, page)
+	err := st.LoadUrlAs(st.SignatorUrl, page)
 	if err != nil {
 		return false, fmt.Errorf("invalid sig spec: %v", err)
 	}
@@ -365,7 +357,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 	}
 
 	for i, sig := range env.Signatures {
-		ks := page.FindKey(sig.PublicKey)
+		ks := page.FindKey(sig.GetPublicKey())
 		if ks == nil {
 			return false, fmt.Errorf("no key spec matches signature %d", i)
 		}
@@ -373,10 +365,10 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case ks.Nonce >= sig.Nonce:
-			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, sig.Nonce)
+		case ks.Nonce >= env.Transaction.Nonce:
+			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, env.Transaction.Nonce)
 		default:
-			ks.Nonce = sig.Nonce
+			ks.Nonce = env.Transaction.Nonce
 		}
 	}
 
@@ -411,7 +403,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 	}
 
 	for i, sig := range env.Signatures {
-		sigKH := sha256.Sum256(sig.PublicKey)
+		sigKH := sha256.Sum256(sig.GetPublicKey())
 		if !bytes.Equal(urlKH, sigKH[:20]) {
 			return fmt.Errorf("signature %d's public key does not match the origin record", i)
 		}
@@ -419,10 +411,10 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case account.Nonce >= sig.Nonce:
-			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, sig.Nonce)
+		case account.Nonce >= env.Transaction.Nonce:
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, env.Transaction.Nonce)
 		default:
-			account.Nonce = sig.Nonce
+			account.Nonce = env.Transaction.Nonce
 		}
 	}
 
@@ -525,7 +517,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		}
 	}
 
-	if status.Code == protocol.CodeOK {
+	if status.Code == protocol.ErrorCodeOK.ID() {
 		return nil
 	}
 
@@ -539,7 +531,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	}
 
 	sig := env.Signatures[0]
-	err = st.Signator.SetNonce(sig.PublicKey, sig.Nonce)
+	err = st.Signator.SetNonce(sig.GetPublicKey(), env.Transaction.Nonce)
 	if err != nil {
 		return err
 	}
