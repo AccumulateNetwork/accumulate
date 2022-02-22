@@ -21,7 +21,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -212,14 +211,14 @@ func initNode(cmd *cobra.Command, args []string) {
 	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
 	checkf(err, "failed to create Tendermint client for %s", args[0])
 
-	version := getVersion(accClient)
-	switch {
-	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-		// Hope for the best
+	// version := getVersion(accClient)
+	// switch {
+	// case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
+	// 	// Hope for the best
 
-	case accumulate.Commit != version.Commit:
-		fatalf("wrong version: network is %s, we are %s", version.Commit, accumulate.Commit)
-	}
+	// case accumulate.Commit != version.Commit:
+	// 	fatalf("wrong version: network is %s, we are %s", version.Commit, accumulate.Commit)
+	// }
 
 	description, err := accClient.Describe(context.Background())
 	checkf(err, "failed to get description from %s", args[0])
