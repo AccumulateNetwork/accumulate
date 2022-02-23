@@ -28,6 +28,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(KeyPage), nil
 	case AccountTypeLiteDataAccount:
 		return new(LiteDataAccount), nil
+	case AccountTypeLiteIdentity:
+		return new(LiteIdentity), nil
 	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
 	case AccountTypePendingTransaction:
