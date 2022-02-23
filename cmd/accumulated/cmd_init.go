@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	dc "github.com/docker/cli/cli/compose/types"
-	"github.com/fatih/color"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -29,7 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,9 +61,10 @@ var flagInit struct {
 }
 
 var flagInitNode struct {
-	GenesisDoc string
-	ListenIP   string
-	Follower   bool
+	GenesisDoc       string
+	ListenIP         string
+	Follower         bool
+	SkipVersionCheck bool
 }
 
 var flagInitDevnet struct {
@@ -96,6 +95,7 @@ func init() {
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
+	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
@@ -215,10 +215,14 @@ func initNode(cmd *cobra.Command, args []string) {
 	version := getVersion(accClient)
 	switch {
 	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-		// Hope for the best
+		warnf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.", args[0])
 
 	case accumulate.Commit != version.Commit:
-		fatalf("wrong version: network is %s, we are %s", version.Commit, accumulate.Commit)
+		if flagInitNode.SkipVersionCheck {
+			warnf("This executable is version %s but %s is %s. This may cause the node to fail.", formatVersion(accumulate.Version, accumulate.IsVersionKnown()), args[0], formatVersion(version.Version, version.VersionIsKnown))
+		} else {
+			fatalf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
+		}
 	}
 
 	description, err := accClient.Describe(context.Background())
@@ -229,12 +233,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
 		checkf(err, "failed to load genesis doc %q", flagInitNode.GenesisDoc)
 	} else {
-		msg := "WARNING!!! You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!\n"
-		if term.IsTerminal(int(os.Stderr.Fd())) {
-			fmt.Fprint(os.Stderr, color.RedString(msg, args[0]))
-		} else {
-			fmt.Fprintf(os.Stderr, msg, args[0])
-		}
+		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
 		rgen, err := tmClient.Genesis(context.Background())
 		checkf(err, "failed to get genesis from %s", args[0])
 		genDoc = rgen.Genesis
