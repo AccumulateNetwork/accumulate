@@ -207,13 +207,20 @@ func (b *BPT) LoadNext(node *BptNode, key [32]byte) *BptNode {
 // hash -- The current value of the key, as tracked by the BPT
 func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 
-	step := func() { //  In order to reduce redundant code, we step with a
-		bit >>= 1     // local function.         Inlining might provide some
-		if bit == 0 { //                         performance.  What we are doing is shifting the
-			bit = 0x80 //                        bit test up on each level of the Merkle tree.  If the bit
-			BIdx++     //                        shifts out of a BIdx, we increment the BIdx and start over
-		}
+	BIdx = byte(node.Height >> 3)
+	bitIdx := node.Height & 7
+	bit = byte(0x80) >> bitIdx
+
+	//fmt.Printf("height %d BIdx %02x bit %08b bIdx %0x2 mask %08b\n", node.Height, BIdx, bit, bIdx, bitMask)
+
+	/*
+	if bit != bitMask {
+		panic(fmt.Sprintf("height %d BIdx %02x bit %08b bIdx %0x2 mask %08b", node.Height, BIdx, bit, bIdx, bitMask))
 	}
+	if bIdx != BIdx {
+		panic("bIdx")
+	}
+	*/
 
 	if node.Left != nil && node.Left.T() == TNotLoaded ||
 		node.Right != nil && node.Right.T() == TNotLoaded {
@@ -221,14 +228,14 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 		n := b.manager.LoadNode(node)
 		node.Left = n.Left
 		node.Right = n.Right
-		if lNode, ok := n.Left.(*BptNode); ok{
+		if lNode, ok := n.Left.(*BptNode); ok {
 			lNode.Parent = node
 		}
-		if rNode, ok := n.Right.(*BptNode); ok{
+		if rNode, ok := n.Right.(*BptNode); ok {
 			rNode.Parent = node
 		}
 	}
-	
+
 	entry := &node.Left
 	if bit&key[BIdx] == 0 { //                                       Check if heading left (the assumption)
 		entry = &node.Right //                                       If wrong, heading
@@ -241,7 +248,6 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 		b.Dirty(node)                    //                          And changing the value of a node makes it dirty
 		return                           //                          we are done.
 	case (*entry).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
-		step()                                                    // If it is a node, then try and insert it on that node
 		b.insertAtNode(BIdx, bit, (*entry).(*BptNode), key, hash) // Recurse up the tree
 	default: //                                                      If not a node, not nil, it is a value.
 		v := (*entry).(*Value)             //                        A collision. Get the value that got here first
@@ -254,7 +260,6 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 		} //                                                         The idea is to create a node, to replace the value
 		nn := b.NewNode(node)                        //              that was here, and the old value and the new value
 		*entry = nn                                  //              and insert them at one height higher.
-		step()                                       //              This means we walk down the bits of both values
 		nn.BBKey = GetBBKey(BIdx, key)               //              Record the nn.BBKey
 		b.insertAtNode(BIdx, bit, nn, key, hash)     //              until they diverge.
 		b.insertAtNode(BIdx, bit, nn, v.Key, v.Hash) //              Because these are chainIDs, while they could be
