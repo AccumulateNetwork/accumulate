@@ -64,6 +64,87 @@ const ChainTypeAnchor ChainType = 2
 // ChainTypeData holds data entry hashes.
 const ChainTypeData ChainType = 3
 
+// ErrorCodeOK indicates the request succeeded.
+const ErrorCodeOK ErrorCode = 0
+
+// ErrorCodeEncodingError indicates the request could not be decoded.
+const ErrorCodeEncodingError ErrorCode = 1
+
+// ErrorCodeBadNonce indicates the transaction nonce was rejected.
+const ErrorCodeBadNonce ErrorCode = 2
+
+// ErrorCodeDidPanic indicates the request failed due to a fatal error.
+const ErrorCodeDidPanic ErrorCode = 3
+
+// ErrorCodeUnknownError indicates the request failed due to an unknown error.
+const ErrorCodeUnknownError ErrorCode = 4
+
+// ErrorCodeNotFound indicates the request specified a record that does not exist.
+const ErrorCodeNotFound ErrorCode = 5
+
+// ErrorCodeTxnRange is returned when txn range query fails.
+const ErrorCodeTxnRange ErrorCode = 6
+
+// ErrorCodeTxnHistory is returned when txn history query fails.
+const ErrorCodeTxnHistory ErrorCode = 7
+
+// ErrorCodeInvalidURL is returned when invalid URL is passed in query.
+const ErrorCodeInvalidURL ErrorCode = 8
+
+// ErrorCodeDirectoryURL is returned when invalid directory URL is passed in query.
+const ErrorCodeDirectoryURL ErrorCode = 9
+
+// ErrorCodeChainIdError is returned when query by in id fails.
+const ErrorCodeChainIdError ErrorCode = 10
+
+// ErrorCodeRoutingChainId is returned when setting routing chain id fails.
+const ErrorCodeRoutingChainId ErrorCode = 11
+
+// ErrorCodeCheckTxError is returned when txn validation check fails.
+const ErrorCodeCheckTxError ErrorCode = 12
+
+// ErrorCodeDeliverTxError is returned when txn deliver method fails.
+const ErrorCodeDeliverTxError ErrorCode = 13
+
+// ErrorCodeTxnStateError is returned when adding txn to state fails.
+const ErrorCodeTxnStateError ErrorCode = 14
+
+// ErrorCodeRecordTxnError is returned when storing pending state updates fail.
+const ErrorCodeRecordTxnError ErrorCode = 15
+
+// ErrorCodeSyntheticTxnError is returned when submit synthetic txn fails.
+const ErrorCodeSyntheticTxnError ErrorCode = 16
+
+// ErrorCodeMarshallingError is returned when marshaling  object or binary fails.
+const ErrorCodeMarshallingError ErrorCode = 17
+
+// ErrorCodeUnMarshallingError is returned when unmarshaling  object or binary fails.
+const ErrorCodeUnMarshallingError ErrorCode = 18
+
+// ErrorCodeInvalidQueryType is returned when query type in request is not matched with the available ones.
+const ErrorCodeInvalidQueryType ErrorCode = 19
+
+// ErrorCodeInvalidTxnType is returned when txn type passed is not available.
+const ErrorCodeInvalidTxnType ErrorCode = 20
+
+// ErrorCodeValidateTxnError is returned when execution validation of txn fails.
+const ErrorCodeValidateTxnError ErrorCode = 21
+
+// ErrorCodeInvalidTxnError is returned when txn doesn't contains proper data.
+const ErrorCodeInvalidTxnError ErrorCode = 22
+
+// ErrorCodeAddTxnError is returned when adding txn to state db fails.
+const ErrorCodeAddTxnError ErrorCode = 23
+
+// ErrorCodeDataUrlError is returned when a url passed to a data query fails.
+const ErrorCodeDataUrlError ErrorCode = 24
+
+// ErrorCodeDataEntryHashError is returned when an entry hash query fails on a data chain.
+const ErrorCodeDataEntryHashError ErrorCode = 25
+
+// ErrorCodeTxnQueryError is returned when txn is not found.
+const ErrorCodeTxnQueryError ErrorCode = 26
+
 // KeyPageOperationUnknown is used when the key page operation is not known.
 const KeyPageOperationUnknown KeyPageOperation = 0
 
@@ -87,6 +168,15 @@ const ObjectTypeAccount ObjectType = 1
 
 // ObjectTypeTransaction represents a transaction object.
 const ObjectTypeTransaction ObjectType = 2
+
+// SignatureTypeUnknown is used when the signature type is not known.
+const SignatureTypeUnknown SignatureType = 0
+
+// SignatureTypeLegacyED25519 represents a legacy ED25519 signature.
+const SignatureTypeLegacyED25519 SignatureType = 1
+
+// SignatureTypeED25519 represents an ED25519 signature.
+const SignatureTypeED25519 SignatureType = 2
 
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 47
@@ -189,6 +279,18 @@ const TransactionTypeInternalTransactionsSent TransactionType = 99
 
 // ID returns the ID of the Account Type
 func (v AccountType) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *AccountType) Set(id uint64) bool {
+	u := AccountType(id)
+	switch u {
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
 
 // String returns the name of the Account Type
 func (v AccountType) String() string {
@@ -309,6 +411,18 @@ func (v *AccountType) UnmarshalBinary(data []byte) error {
 // ID returns the ID of the Chain Type
 func (v ChainType) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *ChainType) Set(id uint64) bool {
+	u := ChainType(id)
+	switch u {
+	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the Chain Type
 func (v ChainType) String() string {
 	switch v {
@@ -383,8 +497,201 @@ func (v *ChainType) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+// ID returns the ID of the Error Code
+func (v ErrorCode) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *ErrorCode) Set(id uint64) bool {
+	u := ErrorCode(id)
+	switch u {
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Error Code
+func (v ErrorCode) String() string {
+	switch v {
+	case ErrorCodeOK:
+		return "oK"
+	case ErrorCodeEncodingError:
+		return "encodingError"
+	case ErrorCodeBadNonce:
+		return "badNonce"
+	case ErrorCodeDidPanic:
+		return "didPanic"
+	case ErrorCodeUnknownError:
+		return "unknownError"
+	case ErrorCodeNotFound:
+		return "notFound"
+	case ErrorCodeTxnRange:
+		return "txnRange"
+	case ErrorCodeTxnHistory:
+		return "txnHistory"
+	case ErrorCodeInvalidURL:
+		return "invalidURL"
+	case ErrorCodeDirectoryURL:
+		return "directoryURL"
+	case ErrorCodeChainIdError:
+		return "chainIdError"
+	case ErrorCodeRoutingChainId:
+		return "routingChainId"
+	case ErrorCodeCheckTxError:
+		return "checkTxError"
+	case ErrorCodeDeliverTxError:
+		return "deliverTxError"
+	case ErrorCodeTxnStateError:
+		return "txnStateError"
+	case ErrorCodeRecordTxnError:
+		return "recordTxnError"
+	case ErrorCodeSyntheticTxnError:
+		return "syntheticTxnError"
+	case ErrorCodeMarshallingError:
+		return "marshallingError"
+	case ErrorCodeUnMarshallingError:
+		return "unMarshallingError"
+	case ErrorCodeInvalidQueryType:
+		return "invalidQueryType"
+	case ErrorCodeInvalidTxnType:
+		return "invalidTxnType"
+	case ErrorCodeValidateTxnError:
+		return "validateTxnError"
+	case ErrorCodeInvalidTxnError:
+		return "invalidTxnError"
+	case ErrorCodeAddTxnError:
+		return "addTxnError"
+	case ErrorCodeDataUrlError:
+		return "dataUrlError"
+	case ErrorCodeDataEntryHashError:
+		return "dataEntryHashError"
+	case ErrorCodeTxnQueryError:
+		return "txnQueryError"
+	default:
+		return fmt.Sprintf("ErrorCode:%d", v)
+	}
+}
+
+// ErrorCodeByName returns the named Error Code.
+func ErrorCodeByName(name string) (ErrorCode, bool) {
+	switch name {
+	case "oK":
+		return ErrorCodeOK, true
+	case "encodingError":
+		return ErrorCodeEncodingError, true
+	case "badNonce":
+		return ErrorCodeBadNonce, true
+	case "didPanic":
+		return ErrorCodeDidPanic, true
+	case "unknownError":
+		return ErrorCodeUnknownError, true
+	case "notFound":
+		return ErrorCodeNotFound, true
+	case "txnRange":
+		return ErrorCodeTxnRange, true
+	case "txnHistory":
+		return ErrorCodeTxnHistory, true
+	case "invalidURL":
+		return ErrorCodeInvalidURL, true
+	case "directoryURL":
+		return ErrorCodeDirectoryURL, true
+	case "chainIdError":
+		return ErrorCodeChainIdError, true
+	case "routingChainId":
+		return ErrorCodeRoutingChainId, true
+	case "checkTxError":
+		return ErrorCodeCheckTxError, true
+	case "deliverTxError":
+		return ErrorCodeDeliverTxError, true
+	case "txnStateError":
+		return ErrorCodeTxnStateError, true
+	case "recordTxnError":
+		return ErrorCodeRecordTxnError, true
+	case "syntheticTxnError":
+		return ErrorCodeSyntheticTxnError, true
+	case "marshallingError":
+		return ErrorCodeMarshallingError, true
+	case "unMarshallingError":
+		return ErrorCodeUnMarshallingError, true
+	case "invalidQueryType":
+		return ErrorCodeInvalidQueryType, true
+	case "invalidTxnType":
+		return ErrorCodeInvalidTxnType, true
+	case "validateTxnError":
+		return ErrorCodeValidateTxnError, true
+	case "invalidTxnError":
+		return ErrorCodeInvalidTxnError, true
+	case "addTxnError":
+		return ErrorCodeAddTxnError, true
+	case "dataUrlError":
+		return ErrorCodeDataUrlError, true
+	case "dataEntryHashError":
+		return ErrorCodeDataEntryHashError, true
+	case "txnQueryError":
+		return ErrorCodeTxnQueryError, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Error Code to JSON as a string.
+func (v ErrorCode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Error Code from JSON as a string.
+func (v *ErrorCode) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = ErrorCodeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Error Code %q", s)
+	}
+	return nil
+}
+
+// BinarySize returns the number of bytes required to binary marshal the Error Code.
+func (v ErrorCode) BinarySize() int {
+	return encoding.UvarintBinarySize(v.ID())
+}
+
+// MarshalBinary marshals the Error Code to bytes as a unsigned varint.
+func (v ErrorCode) MarshalBinary() ([]byte, error) {
+	return encoding.UvarintMarshalBinary(v.ID()), nil
+}
+
+// UnmarshalBinary unmarshals the Error Code from bytes as a unsigned varint.
+func (v *ErrorCode) UnmarshalBinary(data []byte) error {
+	u, err := encoding.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	*v = ErrorCode(u)
+	return nil
+}
+
 // ID returns the ID of the Key PageOpe ration
 func (v KeyPageOperation) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *KeyPageOperation) Set(id uint64) bool {
+	u := KeyPageOperation(id)
+	switch u {
+	case KeyPageOperationUnknown, KeyPageOperationUpdate, KeyPageOperationRemove, KeyPageOperationAdd, KeyPageOperationSetThreshold:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
 
 // String returns the name of the Key PageOpe ration
 func (v KeyPageOperation) String() string {
@@ -467,6 +774,18 @@ func (v *KeyPageOperation) UnmarshalBinary(data []byte) error {
 // ID returns the ID of the Object Type
 func (v ObjectType) ID() uint64 { return uint64(v) }
 
+// Set sets the value. Set returns false if the value is invalid.
+func (v *ObjectType) Set(id uint64) bool {
+	u := ObjectType(id)
+	switch u {
+	case ObjectTypeUnknown, ObjectTypeAccount, ObjectTypeTransaction:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
 // String returns the name of the Object Type
 func (v ObjectType) String() string {
 	switch v {
@@ -537,8 +856,105 @@ func (v *ObjectType) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+// ID returns the ID of the Signature Type
+func (v SignatureType) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *SignatureType) Set(id uint64) bool {
+	u := SignatureType(id)
+	switch u {
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Signature Type
+func (v SignatureType) String() string {
+	switch v {
+	case SignatureTypeUnknown:
+		return "unknown"
+	case SignatureTypeLegacyED25519:
+		return "legacyED25519"
+	case SignatureTypeED25519:
+		return "eD25519"
+	default:
+		return fmt.Sprintf("SignatureType:%d", v)
+	}
+}
+
+// SignatureTypeByName returns the named Signature Type.
+func SignatureTypeByName(name string) (SignatureType, bool) {
+	switch name {
+	case "unknown":
+		return SignatureTypeUnknown, true
+	case "legacyED25519":
+		return SignatureTypeLegacyED25519, true
+	case "eD25519":
+		return SignatureTypeED25519, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Signature Type to JSON as a string.
+func (v SignatureType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Signature Type from JSON as a string.
+func (v *SignatureType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = SignatureTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Signature Type %q", s)
+	}
+	return nil
+}
+
+// BinarySize returns the number of bytes required to binary marshal the Signature Type.
+func (v SignatureType) BinarySize() int {
+	return encoding.UvarintBinarySize(v.ID())
+}
+
+// MarshalBinary marshals the Signature Type to bytes as a unsigned varint.
+func (v SignatureType) MarshalBinary() ([]byte, error) {
+	return encoding.UvarintMarshalBinary(v.ID()), nil
+}
+
+// UnmarshalBinary unmarshals the Signature Type from bytes as a unsigned varint.
+func (v *SignatureType) UnmarshalBinary(data []byte) error {
+	u, err := encoding.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	*v = SignatureType(u)
+	return nil
+}
+
 // ID returns the ID of the Transaction Max
 func (v TransactionMax) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *TransactionMax) Set(id uint64) bool {
+	u := TransactionMax(id)
+	switch u {
+	case TransactionMaxUser, TransactionMaxSynthetic, TransactionMaxInternal:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
 
 // String returns the name of the Transaction Max
 func (v TransactionMax) String() string {
@@ -612,6 +1028,18 @@ func (v *TransactionMax) UnmarshalBinary(data []byte) error {
 
 // ID returns the ID of the Transaction Type
 func (v TransactionType) ID() uint64 { return uint64(v) }
+
+// Set sets the value. Set returns false if the value is invalid.
+func (v *TransactionType) Set(id uint64) bool {
+	u := TransactionType(id)
+	switch u {
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
 
 // String returns the name of the Transaction Type
 func (v TransactionType) String() string {

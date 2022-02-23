@@ -165,14 +165,14 @@ func txnTest1(origin string, body TransactionPayload) *TC {
 	return txnTest(&TransactionHeader{
 		Origin:        parseUrl(origin),
 		KeyPageHeight: 1,
-		Nonce:         rand.Uint64(),
+		Nonce:         uint64(rand.Uint32()),
 	}, body)
 }
 
 func txnTest(header *TransactionHeader, body TransactionPayload) *TC {
 	env := new(Envelope)
 	txn := new(Transaction)
-	sig := new(ED25519Sig)
+	sig := new(LegacyED25519Signature)
 
 	env.Transaction = txn
 	txn.TransactionHeader = *header

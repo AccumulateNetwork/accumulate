@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type governor struct {
@@ -72,7 +71,7 @@ func (g *governor) Start() error {
 }
 
 func (g *governor) DidBeginBlock(isLeader bool, height int64, time time.Time) {
-	g.logger.Debug("Did begin block", "height", height, "time", time)
+	g.logger.Debug("Block event", "type", "didBegin", "height", height, "time", time)
 
 	if !isLeader {
 		// Nothing to do if we're not the leader
@@ -89,7 +88,7 @@ func (g *governor) DidBeginBlock(isLeader bool, height int64, time time.Time) {
 }
 
 func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, height int64, time time.Time) error {
-	g.logger.Debug("Did commit block", "height", height, "time", time)
+	g.logger.Debug("Block event", "type", "didCommit", "height", height, "time", time)
 
 	if !isLeader {
 		// Nothing to do if we're not the leader
@@ -213,13 +212,28 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	batch := g.DB.Begin()
 	defer batch.Discard()
 
+	// TODO This will hit the database with a lot of queries, maybe we shouldn't do this
+	produced := countExceptAnchors(batch, msg.ledger.Synthetic.Produced)
+	unsigned := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
+	unsent := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
+
+	g.logger.Info("Did commit",
+		"height", msg.height,
+		"time", msg.time,
+		"mirror", msg.mirrorAdi,
+		"updated", len(msg.ledger.Updates),
+		"produced", produced,
+		"unsigned", unsigned,
+		"unsent", unsent,
+	)
+
 	// Mirror the subnet's ADI
 	if msg.mirrorAdi {
 		g.sendMirror(batch)
 	}
 
 	// Create an anchor for the block
-	g.sendAnchor(batch, msg)
+	g.sendAnchor(batch, msg, produced)
 
 	// Sign and send produced synthetic transactions
 	g.signTransactions(batch, msg.ledger)
@@ -257,11 +271,11 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 
 		typ := tx.Transaction.GetType()
 		if typ != types.TxTypeSyntheticAnchor {
-			g.logger.Info("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
+			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
 
 		// Sign it
-		ed := new(transactions.ED25519Sig)
+		ed := new(protocol.LegacyED25519Signature)
 		ed.PublicKey = g.Key[32:]
 		err = ed.Sign(tx.SigInfo.Nonce, g.Key, txid[:])
 		if err != nil {
@@ -315,7 +329,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Send it
 		typ := env.Transaction.Type()
 		if typ != types.TxTypeSyntheticAnchor {
-			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
+			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
 		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
 		if err != nil {
@@ -328,10 +342,10 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 	g.sendInternal(batch, body)
 }
 
-func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
+func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced
-	if len(msg.ledger.Updates) == 0 && synthCountExceptAnchors(batch, msg.ledger) == 0 {
+	if len(msg.ledger.Updates) == 0 && synthCountExceptAnchors == 0 {
 		return
 	}
 
@@ -353,11 +367,14 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 			kv = append(kv, fmt.Sprintf("%s#chain/%s", c.Account, c.Name))
 		}
 	}
-	g.logger.Info("Creating anchor txn", kv...)
+	g.logger.Debug("Creating anchor txn", kv...)
 
 	txns := new(protocol.InternalSendTransactions)
 	switch g.Network.Type {
 	case config.Directory:
+		// If we are the dn, we need to include the ACME oracle price
+		body.AcmeOraclePrice = msg.ledger.PendingOracle
+
 		// Send anchors from DN to all BVNs
 		txns.Transactions = make([]protocol.SendTransaction, len(g.Network.BvnNames))
 		for i, bvn := range g.Network.BvnNames {
@@ -454,7 +471,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Sign it
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
 	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())

@@ -13,7 +13,7 @@ func TestED25519Sig(t *testing.T) {
 	message := []byte("this is a message of some import")
 	var nonce uint64 = 1
 
-	es1 := new(ED25519Sig)
+	es1 := new(LegacyED25519Signature)
 	es1.Nonce = nonce
 	es1.PublicKey = append(es1.PublicKey, privateKey[32:]...)
 	mh := sha256.Sum256(message)
@@ -24,12 +24,12 @@ func TestED25519Sig(t *testing.T) {
 		t.Error("verify signature message failed")
 	}
 
-	sigData, err := es1.Marshal()
+	sigData, err := es1.MarshalBinary()
 	if err != nil {
 		t.Error(err)
 	}
-	es2 := new(ED25519Sig)
-	_, err = es2.Unmarshal(sigData)
+	es2 := new(LegacyED25519Signature)
+	err = es2.UnmarshalBinary(sigData)
 	if err != nil {
 		t.Error(err)
 	}

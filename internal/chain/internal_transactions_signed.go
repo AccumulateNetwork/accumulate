@@ -24,7 +24,7 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.En
 		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.GetType())
 	}
 
-	signatures := map[[32]byte]*transactions.ED25519Sig{}
+	signatures := map[[32]byte]protocol.Signature{}
 	for _, tx := range body.Transactions {
 		signatures[tx.Transaction] = tx.Signature
 	}
@@ -51,7 +51,7 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.En
 
 		// Add the signature
 		gtx := txState.Restore()
-		gtx.Signatures = []*transactions.ED25519Sig{sig}
+		gtx.Signatures = []protocol.Signature{sig}
 
 		// Validate it
 		if !gtx.Verify() {

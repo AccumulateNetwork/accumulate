@@ -81,6 +81,7 @@ var txCmd = &cobra.Command{
 
 var (
 	TxWait      time.Duration
+	TxNoWait    bool
 	TxWaitSynth time.Duration
 )
 
@@ -356,7 +357,33 @@ func CreateTX(sender string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
 	return ActionResponseFrom(res).Print()
+}
+
+func waitForTxn(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
+	queryRes, err := getTX(hash, wait)
+	if err != nil {
+		return nil, err
+	}
+	if queryRes.SyntheticTxids != nil {
+		for _, txid := range queryRes.SyntheticTxids {
+			_, err := waitForTxn(txid[:], wait)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return queryRes, nil
 }
 
 func ExecuteTX(sender string, args []string) (string, error) {

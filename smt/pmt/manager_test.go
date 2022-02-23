@@ -21,7 +21,7 @@ func PrintNode(h int, e Entry) {
 	case e == nil:
 		println("nil")
 	case e.T() == TNode:
-		n := e.(*Node)
+		n := e.(*BptNode)
 		fmt.Printf("  %x...%x\n", n.BBKey[:3], n.BBKey[31:])
 		PrintNode(n.Height, n.Left)
 		PrintNode(n.Height, n.Right)

@@ -36,7 +36,6 @@ test:
   stage: test
   extends: .go
   needs: []
-  tags: [docker, linux]
   artifacts:
     when: always
     reports:
@@ -74,7 +73,6 @@ docker buildx:
 build images:
   stage: build
   needs: [ 'docker buildx' ]
-  tags: [ docker, linux ]
   image: docker:20
   services:
     - name: docker:20-dind
@@ -119,7 +117,6 @@ build:
   stage: build
   extends: .go
   needs: [ git describe ]
-  tags: [ docker, linux ]
   script:
     - build-daemon linux amd64
     - build-daemon linux arm64
@@ -135,7 +132,6 @@ configure:
   stage: build
   extends: .go
   needs: [git describe]
-  tags: [docker, linux]
   script:
   - |
     function init {
@@ -195,7 +191,6 @@ deploy 4/4:
   extends: .go
   only: [develop] # only run on the main branch
   needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
-  tags: [docker, linux]
   variables:
     ACC_API: https://devnet.accumulatenetwork.io/v2
     # set mnemonic for predictable addresses
@@ -204,19 +199,19 @@ deploy 4/4:
 validate docker:
   stage: validate
   needs: ['build images']
-  tags: [docker, linux]
   image: docker
   services: ['docker:dind']
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
+    NODE_ROOT: /nodes/dn/Node0
   script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} init devnet -w /nodes --docker --tag ${CI_COMMIT_REF_SLUG} --compose -b 3 -v 3
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm tools /scripts/ci/validate.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT="${NODE_ROOT}" --rm tools /scripts/ci/validate.sh
   - docker-compose down
 
 validate:

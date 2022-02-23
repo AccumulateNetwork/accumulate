@@ -14,12 +14,16 @@ import (
 // NewConsoleWriter parses the log format and creates an appropriate writer.
 // It is based on part of Tendermint's NewTendermintLogger.
 func NewConsoleWriter(format string) (io.Writer, error) {
+	return NewConsoleWriterWith(os.Stderr, format)
+}
+
+func NewConsoleWriterWith(w io.Writer, format string) (io.Writer, error) {
 	switch strings.ToLower(format) {
 	case log.LogFormatPlain, log.LogFormatText:
-		return newConsoleWriter(os.Stderr), nil
+		return newConsoleWriter(w), nil
 
 	case log.LogFormatJSON:
-		return os.Stderr, nil
+		return w, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported log format: %s", format)

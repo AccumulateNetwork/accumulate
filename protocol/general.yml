@@ -14,8 +14,7 @@ ObjectMetadata:
   fields:
     - name: Type
       type: ObjectType
-      marshal-as: value
-      zero-value: 0
+      marshal-as: enum
     - name: Chains
       repeatable: true
       type: ChainMetadata
@@ -27,8 +26,7 @@ ChainMetadata:
       type: string
     - name: Type
       type: ChainType
-      marshal-as: value
-      zero-value: 0
+      marshal-as: enum
 
 AnchorMetadata:
   embeddings:
@@ -45,6 +43,11 @@ AnchorMetadata:
       type: uvarint
     - name: Entry
       type: bytes
+
+AcmeOracle:
+  fields:
+    - name: Price
+      type: uvarint
 
 DataEntry:
   fields:

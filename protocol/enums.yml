@@ -23,6 +23,17 @@ ObjectType:
     value: 0x02
     description: represents a transaction object
 
+SignatureType:
+  Unknown:
+    value: 0
+    description: is used when the signature type is not known
+  LegacyED25519:
+    value: 1
+    description: represents a legacy ED25519 signature
+  ED25519:
+    value: 2
+    description: represents an ED25519 signature
+
 KeyPageOperation:
   Unknown:
     value: 0
@@ -187,3 +198,4 @@ AccountType:
   LiteIdentity:
     value: 15
     description: is a lite identity account
+
