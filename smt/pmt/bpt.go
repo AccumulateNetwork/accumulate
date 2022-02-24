@@ -172,56 +172,7 @@ func (b *BPT) GetDirtyList() (list []*BptNode) {
 //
 // Note if a Byte Block is loaded, then the node passed in is replaced by
 // the node loaded.
-func (b *BPT) LoadNext(node *BptNode, key [32]byte) *BptNode {
-	if node.Left != nil && node.Left.T() == TNotLoaded ||
-		node.Right != nil && node.Right.T() == TNotLoaded { //       If either path out of node isn't loaded, load the byte
-		ByteIdx := (node.Height + 1) >> 4 //Get the Byte Index at the next height that shows up every 8 bits
-
-		node.BBKey = GetBBKey(byte(ByteIdx), key) //                          The key to a Byte Block of the BPT is the key so far
-		n := b.manager.LoadNode(node)             //                          Load the Byte Block
-		n.Parent = node.Parent                    //                          Graft what we loaded into the BPT ... This is odd...
-		switch {                                  //                          We overlap the leaf Node in in one Byte Block with
-		case node.Parent.Left == node: //                              each of its children Byte Blocks.  So once we have
-			node.Parent.Left = n //                                    loaded a child, we graft the overlapping node
-		case node.Parent.Right == node: //                             into the parent, and let the garbage collector
-			node.Parent.Right = n //                                   reclaim the extra node.
-		default: //                                                  This must always work; we have no recourse if it
-			panic("Failed to load the BPT") //                       fails.
-		}
-		node = n
-	}
-	return node
-}
-
-// insertAtNode
-// A recursive routine that pushes collisions towards the leaves of the
-// binary patricia tree until the keys don't match any more.  Note that
-// this tree cannot handle duplicate keys, but that is an assumption of
-// patricia trees anyway
-//
-// Inputs:
-// BIdx -- byte index into the key
-// bit  -- index to the bit
-// node -- the node in the BPT where the value (key, hash) is being inserted
-// key  -- The key in the BPT which determines were in the BPT the hash goes
-// hash -- The current value of the key, as tracked by the BPT
-func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
-
-	BIdx = byte(node.Height >> 3)
-	bitIdx := node.Height & 7
-	bit = byte(0x80) >> bitIdx
-
-	//fmt.Printf("height %d BIdx %02x bit %08b bIdx %0x2 mask %08b\n", node.Height, BIdx, bit, bIdx, bitMask)
-
-	/*
-	if bit != bitMask {
-		panic(fmt.Sprintf("height %d BIdx %02x bit %08b bIdx %0x2 mask %08b", node.Height, BIdx, bit, bIdx, bitMask))
-	}
-	if bIdx != BIdx {
-		panic("bIdx")
-	}
-	*/
-
+func (b *BPT) LoadNext(BIdx, bit byte, node *BptNode, key [32]byte) *BptNode {
 	if node.Left != nil && node.Left.T() == TNotLoaded ||
 		node.Right != nil && node.Right.T() == TNotLoaded {
 		node.BBKey = GetBBKey(BIdx, key)
@@ -235,11 +186,31 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 			rNode.Parent = node
 		}
 	}
+	return node
+}
+
+// insertAtNode
+// A recursive routine that pushes collisions towards the leaves of the
+// binary patricia tree until the keys don't match any more.  Note that
+// this tree cannot handle duplicate keys, but that is an assumption of
+// patricia trees anyway
+//
+// Inputs:
+// node -- the node in the BPT where the value (key, hash) is being inserted
+// key  -- The key in the BPT which determines were in the BPT the hash goes
+// hash -- The current value of the key, as tracked by the BPT
+func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
+
+	BIdx := byte(node.Height >> 3) // Calculate the byte index based on the height of this node in the BPT
+	bitIdx := node.Height & 7      // The bit index is given by the lower 3 bits of the height
+	bit := byte(0x80) >> bitIdx    // The mask starts at the high end bit in the byte, shifted right by the bitIdx
 
 	entry := &node.Left
 	if bit&key[BIdx] == 0 { //                                       Check if heading left (the assumption)
 		entry = &node.Right //                                       If wrong, heading
 	}
+
+	b.LoadNext(BIdx, bit, node, key)
 
 	switch { //                                                      processing is done once here.
 	case *entry == nil: //                                           Sort if the Left/Right is nil.
@@ -248,7 +219,7 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 		b.Dirty(node)                    //                          And changing the value of a node makes it dirty
 		return                           //                          we are done.
 	case (*entry).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
-		b.insertAtNode(BIdx, bit, (*entry).(*BptNode), key, hash) // Recurse up the tree
+		b.insertAtNode((*entry).(*BptNode), key, hash) //           Recurse up the tree
 	default: //                                                      If not a node, not nil, it is a value.
 		v := (*entry).(*Value)             //                        A collision. Get the value that got here first
 		if bytes.Equal(key[:], v.Key[:]) { //                        If this value is the same as we are inserting
@@ -258,11 +229,11 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
 			}
 			return //                                                Changed or not, we are done.
 		} //                                                         The idea is to create a node, to replace the value
-		nn := b.NewNode(node)                        //              that was here, and the old value and the new value
-		*entry = nn                                  //              and insert them at one height higher.
-		nn.BBKey = GetBBKey(BIdx, key)               //              Record the nn.BBKey
-		b.insertAtNode(BIdx, bit, nn, key, hash)     //              until they diverge.
-		b.insertAtNode(BIdx, bit, nn, v.Key, v.Hash) //              Because these are chainIDs, while they could be
+		nn := b.NewNode(node)             //                         that was here, and the old value and the new value
+		*entry = nn                       //                         and insert them at one height higher.
+		nn.BBKey = GetBBKey(BIdx, key)    //                         Record the nn.BBKey
+		b.insertAtNode(nn, key, hash)     //                         until they diverge.
+		b.insertAtNode(nn, v.Key, v.Hash) //                         Because these are chainIDs, while they could be
 	} //                                                             mined to attack our BPT, we don't much care; it will
 
 }
@@ -273,7 +244,7 @@ func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value i
 	if debug {
 		fmt.Printf("BPT insert key=%v value=%X\n", storage.Key(key), hash)
 	}
-	b.insertAtNode(0, 0x80, b.Root, key, hash) //          in that location is the hash.  We start at byte 0, lowest
+	b.insertAtNode(b.Root, key, hash) //          in that location is the hash.  We start at byte 0, lowest
 } //                                                   significant bit. (which is masked with a 1)
 
 // GetHash

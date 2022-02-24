@@ -1,10 +1,7 @@
 package pmt
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // CollectReceipt
@@ -77,9 +74,6 @@ func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receip
 // GetReceipt
 // Returns the receipt for the current state for the given chainID
 func (b *BPT) GetReceipt(chainID [32]byte) *managed.Receipt { //          The location of a value is determined by the chainID (a key)
-	if debug {
-		fmt.Printf("BPT insert key=%v\n", storage.Key(chainID))
-	}
 	receipt := new(managed.Receipt)
 	receipt.MDRoot = b.CollectReceipt(0, 0x80, b.Root, chainID, receipt) //
 	if receipt.MDRoot == nil {
