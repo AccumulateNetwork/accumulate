@@ -66,7 +66,7 @@ func (b *BPT) WalkRange(found *bool, node *BptNode, count int, key [32]byte, val
 	bitIdx := node.Height & 7      //   The bit index is given by the lower 3 bits of the height
 	bit := byte(0x80) >> bitIdx    //   The mask starts at the high end bit in the byte, shifted right by the bitIdx
 
-	b.LoadNext(BIdx, bit, node, key) // We also need the BIdx and bit to make sure the BPT is loaded.
+	node = b.LoadNext(BIdx, bit, node, key) // We also need the BIdx and bit to make sure the BPT is loaded.
 
 	if len(values) >= count {
 		return values

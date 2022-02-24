@@ -210,7 +210,7 @@ func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
 		entry = &node.Right //                                       If wrong, heading
 	}
 
-	b.LoadNext(BIdx, bit, node, key)
+	node = b.LoadNext(BIdx, bit, node, key)
 
 	switch { //                                                      processing is done once here.
 	case *entry == nil: //                                           Sort if the Left/Right is nil.
