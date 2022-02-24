@@ -1,9 +1,11 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
@@ -43,6 +45,23 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		lite.Url = tx.Transaction.Origin
 		lite.TokenUrl = body.Token
 		account = lite
+
+		liteIdentity := protocol.NewLiteIdentity()
+		err := st.LoadUrlAs(tx.Transaction.Origin.Identity(), liteIdentity)
+		switch {
+		case err == nil:
+			// OK
+		case errors.Is(err, storage.ErrNotFound):
+			liteIdentity.Url = tx.Transaction.Origin.Identity()
+			liteIdentity.KeyBook = tx.Transaction.Origin.Identity()
+			st.Update(liteIdentity)
+		default:
+			return nil, err
+		}
+		err = st.AddDirectoryEntry(tx.Transaction.Origin)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add a directory entry for %s: %v", tx.Transaction.Origin, err)
+		}
 	}
 
 	if !account.CreditTokens(&body.Amount) {

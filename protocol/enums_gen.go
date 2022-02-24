@@ -49,6 +49,9 @@ const AccountTypeLiteDataAccount AccountType = 12
 // AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
 const AccountTypeInternalLedger AccountType = 14
 
+// AccountTypeLiteIdentity is a lite identity account.
+const AccountTypeLiteIdentity AccountType = 15
+
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
 
@@ -281,7 +284,7 @@ func (v AccountType) ID() uint64 { return uint64(v) }
 func (v *AccountType) Set(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity:
 		*v = u
 		return true
 	default:
@@ -318,6 +321,8 @@ func (v AccountType) String() string {
 		return "liteDataAccount"
 	case AccountTypeInternalLedger:
 		return "internalLedger"
+	case AccountTypeLiteIdentity:
+		return "liteIdentity"
 	default:
 		return fmt.Sprintf("AccountType:%d", v)
 	}
@@ -354,6 +359,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeLiteDataAccount, true
 	case "internalLedger":
 		return AccountTypeInternalLedger, true
+	case "liteIdentity":
+		return AccountTypeLiteIdentity, true
 	default:
 		return 0, false
 	}

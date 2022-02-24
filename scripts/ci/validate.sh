@@ -363,6 +363,14 @@ section "Remove manager from keypage"
 wait-for cli-tx manager remove keytest/page3 keytest-2-0
 accumulate -j get keytest/page3 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
 
+section "Query the lite identity"
+accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"
+
+section "Query the lite identity directory"
+accumulate adi directory $(dirname $LITE) 0 10 1> /dev/null || die "Failed to get directory for $(dirname $LITE)"
+TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
+[ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
+
 section "Create ADI Data Account with wait"
 cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data1
 accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/data1"
