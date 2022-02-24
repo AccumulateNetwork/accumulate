@@ -31,7 +31,7 @@ func TestPartitions1(t *testing.T) {
 		partitions[i] = &partition{
 			partitionIdx: i,
 			bvnIdx:       uint16(i % numberOfBVNs), // This would be assigned later based on available capacity of the BVNs
-			size:         0,
+			adiCnt:       0,
 		}
 	}
 
@@ -63,7 +63,7 @@ func TestPartitions1(t *testing.T) {
 				}
 			}
 			partitionCounters[selPartitionIdx].adiUrlMap[accUrl.String()] = true
-			partition.size = uint64(len(partitionCounters[selPartitionIdx].adiUrlMap))
+			partition.adiCnt = uint64(len(partitionCounters[selPartitionIdx].adiUrlMap))
 			total++
 			routingTime = routingTime + uint64(end.UnixMilli()-start.UnixMilli())
 		}
@@ -76,12 +76,12 @@ func TestPartitions1(t *testing.T) {
 	highest := uint64(0)
 	for i := uint32(0); i < partitionCount; i++ {
 		p := partitions[i]
-		if p != nil && p.size > 0 {
-			if p.size > highest {
-				highest = p.size
+		if p != nil && p.adiCnt > 0 {
+			if p.adiCnt > highest {
+				highest = p.adiCnt
 			}
-			if p.size < lowest {
-				lowest = p.size
+			if p.adiCnt < lowest {
+				lowest = p.adiCnt
 			}
 		}
 	}

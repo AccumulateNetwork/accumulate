@@ -39,7 +39,7 @@ type Client interface {
 type partition struct {
 	partitionIdx uint32
 	bvnIdx       uint16
-	size         uint64
+	adiCnt       uint64
 }
 
 // ResponseSubmit is the response from a call to Submit.
