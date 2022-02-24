@@ -15,6 +15,10 @@ InternalLedger:
     - name: Synthetic
       type: SyntheticLedger
       marshal-as: reference
+    - name: PendingOracle
+      type: uvarint
+    - name: ActiveOracle
+      type: uvarint
     - name: Updates
       repeatable: true
       type: AnchorMetadata
@@ -82,10 +86,7 @@ TransactionSignature:
     - name: Transaction
       type: chain
     - name: Signature
-      # type: Signature
-      # marshal-as: value
-      # zero-value: nil
-      # unmarshal-with: UnmarshalSignature
-      type: ED25519Sig
-      marshal-as: reference
-      pointer: true
+      type: Signature
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: UnmarshalSignature

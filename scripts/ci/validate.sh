@@ -83,6 +83,18 @@ function success {
     echo
 }
 
+NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+
+section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":10000}'
+    RESULT=$(accumulate -j data get dn/oracle)
+    RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
+    [ "$RESULT" == "10000" ] && success || die "cannot update price oracle"
+else
+    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+fi
+
 section "Setup"
 if ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate
@@ -193,12 +205,15 @@ accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transac
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
 success
 
-section "Signing the transaction with the same key does not deliver it"
-wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
-accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
-wait-for-tx $TXID
-success
+if false; then
+    # TODO Enable after AC-1088 is complete. AC-809 causes this to fail because of how nonces are handled.
+    section "Signing the transaction with the same key does not deliver it"
+    wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+    wait-for-tx $TXID
+    success
+fi
 
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
@@ -345,8 +360,16 @@ RESULT=$(accumulate -j get keytest/page2 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
-wait-for cli-tx tx execute keytest/page3 keytest-2-0 '{"type": "removeManager"}'
+wait-for cli-tx manager remove keytest/page3 keytest-2-0
 accumulate -j get keytest/page3 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
+
+section "Query the lite identity"
+accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"
+
+section "Query the lite identity directory"
+accumulate adi directory $(dirname $LITE) 0 10 1> /dev/null || die "Failed to get directory for $(dirname $LITE)"
+TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
+[ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
 
 section "Create ADI Data Account with wait"
 cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data1

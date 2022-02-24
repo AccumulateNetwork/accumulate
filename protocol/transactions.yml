@@ -4,13 +4,10 @@ Envelope:
   fields:
     - name: Signatures
       repeatable: true
-      # type: Signature
-      # marshal-as: value
-      # zero-value: nil
-      # unmarshal-with: UnmarshalSignature
-      type: ED25519Sig
-      marshal-as: reference
-      pointer: true
+      type: Signature
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: UnmarshalSignature
     - name: TxHash
       type: bytes
       optional: true
@@ -48,10 +45,19 @@ Transaction:
       type: bytes
       marshal-as: none
 
-ED25519Sig:
+LegacyED25519Signature:
+  kind: signature
   fields:
     - name: Nonce
       type: uint
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+
+ED25519Signature:
+  kind: signature
+  fields:
     - name: PublicKey
       type: bytes
     - name: Signature
@@ -89,13 +95,10 @@ PendingTransactionState:
   fields:
     - name: Signature
       repeatable: true
-      # type: Signature
-      # marshal-as: value
-      # zero-value: nil
-      # unmarshal-with: UnmarshalSignature
-      type: ED25519Sig
-      marshal-as: reference
-      pointer: true
+      type: Signature
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: UnmarshalSignature
     - name: TransactionState
       type: TxState
       marshal-as: reference
@@ -360,6 +363,8 @@ SyntheticAnchor:
     - name: SourceIndex
       type: uvarint
     - name: SourceBlock
+      type: uvarint
+    - name: AcmeOraclePrice
       type: uvarint
     - name: Receipt
       type: Receipt

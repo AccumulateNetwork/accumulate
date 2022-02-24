@@ -10,7 +10,30 @@ import (
 //go:embed go.go.tmpl
 var goSrc string
 
-var _ = Templates.Register(goSrc, "go", template.FuncMap{
+//go:embed union.go.tmpl
+var goUnionSrc string
+
+func init() {
+	Templates.Register(goSrc, "go", goFuncs, "Go")
+	Templates.Register(goUnionSrc, "go-union", goFuncs)
+}
+
+type goUnionTypeSpec struct {
+	Kind        string
+	Enumeration string
+	Interface   string
+	NaturalName string
+}
+
+var goFuncs = template.FuncMap{
+	"_unionTypes": func() []goUnionTypeSpec {
+		// TODO This should not be hard coded
+		return []goUnionTypeSpec{
+			{"chain", "AccountType", "Account", "account type"},
+			{"tx", "TransactionType", "TransactionBody", "transaction type"},
+			{"signature", "SignatureType", "Signature", "signature type"},
+		}
+	},
 	"isPkg": func(s string) bool {
 		return s == PackagePath
 	},
@@ -46,7 +69,7 @@ var _ = Templates.Register(goSrc, "go", template.FuncMap{
 	"isZero":               GoIsZero,
 
 	"needsCustomJSON": func(typ *Type) bool {
-		if typ.IsTxResult || typ.IsTransaction || typ.IsChain {
+		if typ.IsUnion() {
 			return true
 		}
 
@@ -80,10 +103,6 @@ var _ = Templates.Register(goSrc, "go", template.FuncMap{
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
-}, "Go")
-
-func GoMethodName(typ, name string) string {
-	return "encoding." + strings.Title(typ) + name
 }
 
 func GoFieldError(op, name string, args ...string) string {
@@ -375,14 +394,14 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 
 func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, errName string, errArgs ...string) (string, error) {
 	if field.UnmarshalWith != "" {
-		if field.Repeatable {
-			return "", fmt.Errorf("unsupported: field %s specifies unmarshal-with and repeatable", field.Name)
-		}
 		err := GoFieldError("encoding", errName, errArgs...)
 		if !forUnmarshal {
 			err = "nil, " + err
 		}
-		return fmt.Sprintf("\tif x, err := json.Marshal(%s); err != nil { return %s } else { %s = x }\n", srcName, err, tgtName), nil
+		if !field.Repeatable {
+			return fmt.Sprintf("\tif x, err := json.Marshal(%s); err != nil { return %s } else { %s = x }", srcName, err, tgtName), nil
+		}
+		return fmt.Sprintf("\t%s = make([]json.RawMessage, len(%s)); for i, x := range %[2]s { if y, err := json.Marshal(x); err != nil { return %s } else { %[1]s[i] = y } }", tgtName, srcName, err), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)
@@ -404,10 +423,10 @@ func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, err
 func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) (string, error) {
 	err := GoFieldError("decoding", errName, errArgs...)
 	if field.UnmarshalWith != "" {
-		if field.Repeatable {
-			return "", fmt.Errorf("unsupported: field %s specifies unmarshal-with and repeatable", field.Name)
+		if !field.Repeatable {
+			return fmt.Sprintf("\tif x, err := %sJSON(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName), nil
 		}
-		return fmt.Sprintf("\tif x, err := %sJSON(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName), nil
+		return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if y, err := %sJSON(x); err != nil { return %s } else { %[1]s[i] = y } }", tgtName, GoResolveType(field, false, false), srcName, field.UnmarshalWith, err), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)

@@ -17,17 +17,50 @@ type Types struct {
 }
 
 type Type struct {
-	Name            string
-	IsChain         bool
-	IsTransaction   bool
-	IsTxResult      bool
-	IsBinary        bool
-	IsComparable    bool
-	MakeConstructor bool
-	ChainType       string
-	TransactionType string
-	Embeddings      []Embedding
-	Fields          []*Field
+	typegen.DataType
+	Embeddings []Embedding
+	Fields     []*Field
+}
+
+func (t *Type) IsChain() bool           { return t.Kind == "chain" }
+func (t *Type) IsAccount() bool         { return t.Kind == "chain" }
+func (t *Type) IsTransaction() bool     { return t.Kind == "tx" }
+func (t *Type) IsSignature() bool       { return t.Kind == "signature" }
+func (t *Type) IsTxResult() bool        { return t.Kind == "tx-result" }
+func (t *Type) IsBinary() bool          { return !t.NonBinary }
+func (t *Type) IsComparable() bool      { return !t.Incomparable }
+func (t *Type) MakeConstructor() bool   { return !t.OmitNewFunc }
+func (t *Type) AccountType() string     { return t.ChainType }
+func (t *Type) TransactionType() string { return t.TxType }
+
+func (t *Type) IsUnion() bool {
+	return t.IsChain() || t.IsAccount() || t.IsTransaction() || t.IsTxResult() || t.IsSignature()
+}
+
+func (t *Type) UnionType() string {
+	switch t.Kind {
+	case "chain":
+		return "AccountType"
+	case "tx", "tx-result":
+		return "TransactionType"
+	case "signature":
+		return "SignatureType"
+	default:
+		return ""
+	}
+}
+
+func (t *Type) UnionValue() string {
+	switch t.Kind {
+	case "chain":
+		return t.ChainType
+	case "tx", "tx-result":
+		return t.TxType
+	case "signature":
+		return t.SignatureType
+	default:
+		return ""
+	}
 }
 
 type Embedding struct {
@@ -59,18 +92,10 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
 
 	for i, typ := range types {
 		ttyp := new(Type)
+		ttyp.DataType = *typ
 		ttypes.Types[i] = ttyp
 		lup[typ.Name] = ttyp
-		ttyp.Name = typ.Name
-		ttyp.IsChain = typ.Kind == "chain"
-		ttyp.IsTransaction = typ.Kind == "tx"
-		ttyp.IsTxResult = typ.Kind == "tx-result"
-		ttyp.IsBinary = !typ.NonBinary
-		ttyp.IsComparable = !typ.Incomparable
-		ttyp.ChainType = typ.ChainType
-		ttyp.TransactionType = typ.TxType
 		ttyp.Fields = make([]*Field, len(typ.Fields))
-		ttyp.MakeConstructor = !typ.OmitNewFunc
 		for i, field := range typ.Fields {
 			ttyp.Fields[i] = &Field{Field: *field}
 		}
@@ -90,7 +115,7 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
 
 	for _, typ := range ttypes.Types {
 		var num uint = 1
-		if typ.IsTransaction || typ.IsChain || typ.IsTxResult {
+		if typ.IsUnion() {
 			num += 1
 		}
 		for i := range typ.Embeddings {

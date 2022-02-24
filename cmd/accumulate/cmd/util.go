@@ -14,11 +14,11 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
@@ -125,7 +125,7 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (protocol.Signature, error) {
 	env := new(transactions.Envelope)
 	env.TxHash = txHash
 	env.Transaction = new(transactions.Transaction)
@@ -134,7 +134,7 @@ func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.
 	hdr.Nonce = nonce
 	env.Transaction.TransactionHeader = *hdr
 
-	ed := new(transactions.ED25519Sig)
+	ed := new(protocol.LegacyED25519Signature)
 	err := ed.Sign(nonce, privKey, env.GetTxHash())
 	if err != nil {
 		return nil, err
@@ -198,7 +198,7 @@ type QueryResponse struct {
 	Origin         string                      `json:"origin,omitempty"`
 	KeyPage        *api2.KeyPage               `json:"keyPage,omitempty"`
 	Txid           []byte                      `json:"txid,omitempty"`
-	Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
+	Signatures     []protocol.Signature        `json:"signatures,omitempty"`
 	Status         *protocol.TransactionStatus `json:"status,omitempty"`
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty"`
 }
@@ -538,7 +538,7 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %x (sig) / %x (key)\n", sig.Signature, sig.PublicKey)
+		out += fmt.Sprintf("  -                       : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
 	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
@@ -766,20 +766,20 @@ func outputForHumans(res *QueryResponse) (string, error) {
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	switch string(res.Type) {
 	case types.TxTypeSendTokens.String():
-		tx := response.TokenTx{}
+		tx := new(api.TokenSend)
 		err := Remarshal(res.Data, &tx)
 		if err != nil {
 			return "", err
 		}
 
 		var out string
-		for i := range tx.ToAccount {
-			amt, err := formatAmount("acc://ACME", &tx.ToAccount[i].Amount)
+		for i := range tx.To {
+			amt, err := formatAmount("acc://ACME", &tx.To[i].Amount)
 			if err != nil {
 				amt = "unknown"
 			}
-			out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL)
-			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.ToAccount[i].SyntheticTxId)
+			out += fmt.Sprintf("Send %s from %s to %s\n", amt, res.Origin, tx.To[i].Url)
+			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.To[i].Txid)
 		}
 
 		out += printGeneralTransactionParameters(res)

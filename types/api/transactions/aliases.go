@@ -10,9 +10,3 @@ type Transaction = protocol.Transaction
 
 // Deprecated: use protocol.Header
 type Header = protocol.TransactionHeader
-
-// Deprecated: use protocol.Signature
-type Signature = protocol.Signature
-
-// Deprecated: use protocol.ED25519Sig
-type ED25519Sig = protocol.ED25519Sig
