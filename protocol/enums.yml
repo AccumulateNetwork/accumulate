@@ -195,4 +195,7 @@ AccountType:
   InternalLedger:
     value: 14
     description: is a ledger that tracks the state of internal operations
+  LiteIdentity:
+    value: 15
+    description: is a lite identity account
 
