@@ -18,11 +18,11 @@ func (q *queryDispatch) direct(s string) *queryDirect {
 }
 
 func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) (interface{}, error) {
-	resCh := make(chan interface{})  // Result channel
-	errCh := make(chan error)        // Error channel
-	doneCh := make(chan struct{})    // Completion channel
-	wg := new(sync.WaitGroup)        // Wait for completion
-	wg.Add(len(q.Network.Addresses)) //
+	resCh := make(chan interface{}) // Result channel
+	errCh := make(chan error)       // Error channel
+	doneCh := make(chan struct{})   // Completion channel
+	wg := new(sync.WaitGroup)       // Wait for completion
+	wg.Add(len(q.Network.Subnets))  //
 
 	// Mark complete on return
 	defer close(doneCh)
@@ -40,12 +40,12 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) 
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for subnet := range q.Network.Addresses {
-		go func(subnet string) {
+	for _, subnet := range q.Network.Subnets {
+		go func(subnetId string) {
 			// Mark complete on return
 			defer wg.Done()
 
-			res, err := query(q.direct(subnet))
+			res, err := query(q.direct(subnetId))
 			switch {
 			case err == nil:
 				select {
@@ -62,7 +62,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) 
 					// A result or error has already been sent
 				}
 			}
-		}(subnet)
+		}(subnet.ID)
 	}
 
 	// Wait for an error or a result
@@ -113,8 +113,8 @@ func (q *queryDispatch) QueryDirectory(url *url.URL, pagination QueryPagination,
 }
 
 func (q *queryDispatch) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
-	res, err := q.queryAll(func(q *queryDirect) (interface{}, error) {
-		return q.QueryTx(id, wait, opts)
+	res, err := q.queryAll(func(qdr *queryDirect) (interface{}, error) {
+		return qdr.QueryTx(id, wait, opts)
 	})
 	if err != nil {
 		return nil, err
