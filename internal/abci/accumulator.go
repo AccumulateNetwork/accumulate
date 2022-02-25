@@ -54,7 +54,7 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Network.ID),
+		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Network.LocalSubnetID),
 	}
 
 	if app.Chain == nil {
