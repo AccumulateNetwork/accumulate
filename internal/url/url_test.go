@@ -15,9 +15,9 @@ func TestParse(t *testing.T) {
 	}{
 		{"foo", "acc://foo"},
 		{"acc://foo", "acc://foo"},
-		{"xxx://foo", ErrWrongScheme},
-		{"/foo", ErrMissingHost},
-		{"acc://:123", ErrMissingHost},
+		{"xxx://foo", wrongScheme("xxx://foo")},
+		{"/foo", missingHost("/foo")},
+		{"acc://:123", missingHost("acc://:123")},
 		{"acc://foo?", "acc://foo"},
 		{"acc://foo#", "acc://foo"},
 	}

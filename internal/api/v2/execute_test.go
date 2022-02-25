@@ -10,6 +10,7 @@ import (
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,13 +33,21 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := NewMockClient(ctrl)
+		local := connections.NewMockClient(ctrl)
+		clients := map[string]connections.Client{}
+		clients[""] = local
+		connectionManager := connections.NewFakeConnectionManager(clients)
 		j, err := NewJrpc(Options{
-			Router: &routing.Direct{
+			Router: &routing.RouterInstance{
 				Network: &config.Network{
-					BvnNames: []string{""},
+					Subnets: []config.Subnet{
+						{
+							ID:   "",
+							Type: config.BlockValidator,
+						},
+					},
 				},
-				Clients: map[string]routing.Client{"": local},
+				ConnectionManager: connectionManager,
 			},
 		})
 		require.NoError(t, err)
@@ -56,13 +65,21 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := NewMockClient(ctrl)
+		local := connections.NewMockClient(ctrl)
+		clients := map[string]connections.Client{}
+		clients[""] = local
+		connectionManager := connections.NewFakeConnectionManager(clients)
 		j, err := NewJrpc(Options{
-			Router: &routing.Direct{
+			Router: &routing.RouterInstance{
 				Network: &config.Network{
-					BvnNames: []string{""},
+					Subnets: []config.Subnet{
+						{
+							ID:   "",
+							Type: config.BlockValidator,
+						},
+					},
 				},
-				Clients: map[string]routing.Client{"": local},
+				ConnectionManager: connectionManager,
 			},
 		})
 		require.NoError(t, err)
