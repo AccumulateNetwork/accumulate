@@ -81,6 +81,10 @@ ResponseByTxId:
       type: TxReceipt
       marshal-as: reference
       pointer: true
+    - name: SignatureThreshold
+      type: uvarint
+    - name: Invalidated
+      type: bool
 
 TxReceipt:
   fields:
