@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"fmt"
 	"net"
 	neturl "net/url"
 	"strings"

@@ -329,7 +329,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Send it
 		typ := env.Transaction.Type()
 		if typ != types.TxTypeSyntheticAnchor {
-			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Origin, "txid", txHash, "env txid", hex.EncodeToString(env.GetTxHash()), "type", typ)
+			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
 		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
 		if err != nil {
