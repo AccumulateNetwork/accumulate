@@ -488,6 +488,11 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
+	err = getPendingStatus(batch, txState.SigInfo, status, &qr)
+	if err != nil {
+		return nil, err
+	}
+
 	if !prove {
 		return &qr, nil
 	}
@@ -500,42 +505,6 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	chainIndex, err := indexing.TransactionChain(batch, txid).Get()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load transaction chain index: %v", err)
-	}
-
-	account, err := batch.Account(txState.SigInfo.Origin).GetState()
-	if err != nil {
-		return nil, err
-	}
-	if account.GetType() != protocol.AccountTypeLiteTokenAccount {
-		obj, err := m.queryByChainId(batch, txState.KeyBook.AccountID())
-		if err != nil {
-			return nil, err
-		}
-		keyBook := new(protocol.KeyBook)
-		if err = obj.As(keyBook); err != nil {
-			return nil, err
-		}
-		obj, err = m.queryByChainId(batch, keyBook.Pages[txState.SigInfo.KeyPageIndex].AccountID())
-		if err != nil {
-			return nil, err
-		}
-		keyPage := new(protocol.KeyPage)
-		if err = obj.As(keyPage); err != nil {
-			return nil, err
-		}
-		chain, err := batch.Account(keyPage.Url).ReadChain(keyPage.Url.String())
-		if err != nil {
-			return nil, err
-		}
-		height, _, err := getChainEntry(chain, "")
-		if err != nil {
-			return nil, err
-		}
-		if txState.SigInfo.KeyPageHeight != uint64(height) {
-			qr.Invalidated = true
-		} else {
-			qr.SignatureThreshold = keyPage.Threshold
-		}
 	}
 
 	qr.Receipts = make([]*query.TxReceipt, len(chainIndex.Entries))
