@@ -127,8 +127,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		case config.BlockValidator:
 			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
 			// with "bvn-${ID} is reserved"
-			if err := protocol.IsValidAdiUrl(&url.URL{Authority: opts.Network.ID}); err != nil {
-				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.ID, err))
+			if err := protocol.IsValidAdiUrl(&url.URL{Authority: opts.Network.LocalSubnetID}); err != nil {
+				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
 			lite := protocol.NewLiteTokenAccount()
