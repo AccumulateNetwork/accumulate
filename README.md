@@ -5,11 +5,11 @@ security. [More details](docs/Accumulate.md)
 
 ## Command Line Interface (CLI)
 
-The CLI lives in `./cmd/accumulated`. It can be run directly via `go run ./cmd/accumulated ...`, which builds to a
-temporary directory and executes the binary in one go. It can be built via `go build ./cmd/accumualted`, which
-creates `accumulated` or `accumulated.exe` in the current directory. It can be installed to `$GOPATH/bin/accumulated` (
+The CLI lives in `./cmd/accumulate`. It can be run directly via `go run ./cmd/accumulate`, which builds to a
+temporary directory and executes the binary in one go. It can be built via `go build ./cmd/accumulate`, which
+creates `accumulate` or `accumulate.exe` in the current directory. It can be installed to `$GOPATH/bin/accumulate` (
 GOPATH defaults to `$HOME/go`) via
-`go install ./cmd/accumulated`.
+`go install ./cmd/accumulate`.
 
 ### Main TestNet
 
