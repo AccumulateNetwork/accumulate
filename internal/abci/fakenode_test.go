@@ -310,7 +310,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 
 	u := n.ParseUrl(adi)
 	record := batch.Account(u)
-	require.True(n.t, u.Identity().Equal(u))
+	require.True(n.t, u.RootIdentity().Equal(u))
 
 	md := new(protocol.DirectoryIndexMetadata)
 	err := record.Index("Directory", "Metadata").GetAs(md)

@@ -830,7 +830,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out := "\n"
 		out += fmt.Sprintf("ADI url \t\t:\tacc://%s\n", id.Url)
-		out += fmt.Sprintf("Key Book \t\t:\tacc://%s/%s\n", id.Url, id.KeyBookName)
+		out += fmt.Sprintf("Key Book \t\t:\tacc://%s\n", id.KeyBookUrl)
 		out += fmt.Sprintf("Key Page \t\t:\tacc://%s/%s\n", id.Url, id.KeyPageName)
 
 		keyName, err := FindLabelFromPubKey(id.PublicKey)

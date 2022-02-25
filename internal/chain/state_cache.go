@@ -138,7 +138,7 @@ type Value interface {
 }
 
 func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, u ...*url.URL) error {
-	identity := u[0].Identity()
+	identity := u[0].RootIdentity()
 	mdi := getIndex(identity, "Directory", "Metadata")
 	md := new(protocol.DirectoryIndexMetadata)
 	data, err := mdi.Get()

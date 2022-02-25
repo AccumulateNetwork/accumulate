@@ -90,7 +90,7 @@ func (m *StateManager) Commit() ([]*submission, error) {
 		}
 
 		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := u.Identity()
+		id := u.RootIdentity()
 		scc, ok := create[id.String()]
 		if ok {
 			scc.Chains = append(scc.Chains, params)

@@ -18,7 +18,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
 	}
 
-	if !body.Url.Identity().Equal(st.OriginUrl) {
+	if !body.Url.RootIdentity().Equal(st.OriginUrl) {
 		return nil, fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, body.Url)
 	}
 

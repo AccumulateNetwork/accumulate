@@ -65,7 +65,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
-	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so RootIdentity of the BVC is good)
 	from := AcmeLiteAddressStdPriv(sponsor)
 
 	u, err := url.Parse(destAddr)
@@ -249,7 +249,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account := protocol.NewTokenAccount()
 		account.Url = u
 		account.TokenUrl = tu
-		account.KeyBook = u.Identity().JoinPath("book0")
+		account.KeyBook = u.RootIdentity().JoinPath("book0")
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -265,7 +265,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 
 	issuer := new(protocol.TokenIssuer)
 	issuer.Url = u
-	issuer.KeyBook = u.Identity().JoinPath("book0")
+	issuer.KeyBook = u.RootIdentity().JoinPath("book0")
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 

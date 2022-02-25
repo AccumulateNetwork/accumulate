@@ -87,7 +87,7 @@ func TestParseLiteTokenAddress(t *testing.T) {
 	fakeHash := sha256.Sum256(fakeKey)
 	addr, err := LiteTokenAddress(fakeKey, "-/-")
 	require.NoError(t, err)
-	addr = addr.Identity()
+	addr = addr.RootIdentity()
 
 	tests := []string{
 		"ACME",

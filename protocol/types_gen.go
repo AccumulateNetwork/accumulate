@@ -93,8 +93,8 @@ type CreateDataAccount struct {
 type CreateIdentity struct {
 	fieldsSet   []bool
 	Url         *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	PublicKey   []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	KeyBookName string   `json:"keyBookName,omitempty" form:"keyBookName" query:"keyBookName"`
+	PublicKey   []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
+	KeyBookUrl  *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	KeyPageName string   `json:"keyPageName,omitempty" form:"keyPageName" query:"keyPageName"`
 	Manager     *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
@@ -915,7 +915,7 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
-	if !(v.KeyBookName == u.KeyBookName) {
+	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
 		return false
 	}
 	if !(v.KeyPageName == u.KeyPageName) {
@@ -2359,7 +2359,7 @@ var fieldNames_CreateIdentity = []string{
 	1: "Type",
 	2: "Url",
 	3: "PublicKey",
-	4: "KeyBookName",
+	4: "KeyBookUrl",
 	5: "KeyPageName",
 	6: "Manager",
 }
@@ -2375,8 +2375,8 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(3, v.PublicKey)
 	}
-	if !(len(v.KeyBookName) == 0) {
-		writer.WriteString(4, v.KeyBookName)
+	if !(v.KeyBookUrl == nil) {
+		writer.WriteUrl(4, v.KeyBookUrl)
 	}
 	if !(len(v.KeyPageName) == 0) {
 		writer.WriteString(5, v.KeyPageName)
@@ -2396,11 +2396,6 @@ func (v *CreateIdentity) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
 	}
 
 	switch len(errs) {
@@ -5721,8 +5716,8 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(3); ok {
 		v.PublicKey = x
 	}
-	if x, ok := reader.ReadString(4); ok {
-		v.KeyBookName = x
+	if x, ok := reader.ReadUrl(4); ok {
+		v.KeyBookUrl = x
 	}
 	if x, ok := reader.ReadString(5); ok {
 		v.KeyPageName = x
@@ -7534,14 +7529,14 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 		Type        TransactionType `json:"type"`
 		Url         *url.URL        `json:"url,omitempty"`
 		PublicKey   *string         `json:"publicKey,omitempty"`
-		KeyBookName string          `json:"keyBookName,omitempty"`
+		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
 		KeyPageName string          `json:"keyPageName,omitempty"`
 		Manager     *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.KeyBookName = v.KeyBookName
+	u.KeyBookUrl = v.KeyBookUrl
 	u.KeyPageName = v.KeyPageName
 	u.Manager = v.Manager
 	return json.Marshal(&u)
@@ -8568,14 +8563,14 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 		Type        TransactionType `json:"type"`
 		Url         *url.URL        `json:"url,omitempty"`
 		PublicKey   *string         `json:"publicKey,omitempty"`
-		KeyBookName string          `json:"keyBookName,omitempty"`
+		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
 		KeyPageName string          `json:"keyPageName,omitempty"`
 		Manager     *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.KeyBookName = v.KeyBookName
+	u.KeyBookUrl = v.KeyBookUrl
 	u.KeyPageName = v.KeyPageName
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -8587,7 +8582,7 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	v.KeyBookName = u.KeyBookName
+	v.KeyBookUrl = u.KeyBookUrl
 	v.KeyPageName = u.KeyPageName
 	v.Manager = u.Manager
 	return nil

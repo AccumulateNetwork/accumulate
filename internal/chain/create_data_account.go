@@ -19,7 +19,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) (
 	}
 
 	//only the ADI can create the data account associated with the ADI
-	if !body.Url.Identity().Equal(st.OriginUrl) {
+	if !body.Url.RootIdentity().Equal(st.OriginUrl) {
 		return nil, fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, body.Url)
 	}
 

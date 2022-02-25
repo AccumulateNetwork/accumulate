@@ -3,8 +3,6 @@ package chain
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -73,22 +71,10 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		// Check the identity
 		switch record.GetType() {
 		case protocol.AccountTypeIdentity:
-			// An ADI must be its own identity
-			if !u.Identity().Equal(u) {
-				return nil, fmt.Errorf("ADI is not its own identity")
-			}
 		default:
-			// Anything else must be a sub-path
-			if u.Identity().Equal(u) {
-				return nil, fmt.Errorf("account type %v cannot be its own identity", record.GetType())
-			}
-
-			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return nil, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.GetType())
-			}
-
 			// Make sure the ADI actually exists
-			_, err = st.LoadUrl(u.Identity())
+			_, err = st.LoadUrl(u.Identity()) // TODO debug if this works
+			//_, err = st.LoadUrl(u.RootIdentity())
 			if errors.Is(err, storage.ErrNotFound) {
 				return nil, fmt.Errorf("missing identity for %s", u.String())
 			} else if err != nil {

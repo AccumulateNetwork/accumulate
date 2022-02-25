@@ -32,7 +32,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
-	if !body.Url.Identity().Equal(st.OriginUrl.Identity()) {
+	if !body.Url.RootIdentity().Equal(st.OriginUrl.RootIdentity()) {
 		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
 	}
 

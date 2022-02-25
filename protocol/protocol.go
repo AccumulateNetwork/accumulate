@@ -145,7 +145,7 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	}
 
 	if !AcmeUrl().Equal(tokenUrl) {
-		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
+		if err := IsValidAdiUrl(tokenUrl.RootIdentity()); err != nil {
 			return nil, errors.New("invalid adi in token URL")
 		}
 		if tokenUrl.Path == "" {
@@ -245,10 +245,11 @@ func IsValidAdiUrl(u *url.URL) error {
 	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
 		errs = append(errs, "identity could be a lite token account key")
 	}
-	if u.Path != "" {
-		errs = append(errs, "path is not empty")
-	}
-	if u.Query != "" {
+	/*	TODO Add reserved keywords check, also for u.Host
+		if u.Path != "" {
+			errs = append(errs, "path is not empty")
+		}
+	*/if u.Query != "" {
 		errs = append(errs, "query is not empty")
 	}
 	if u.Fragment != "" {
@@ -302,7 +303,7 @@ func BvnUrl(subnet string) *url.URL {
 
 // IsDnUrl checks if the URL is the DN ADI URL.
 func IsDnUrl(u *url.URL) bool {
-	u = u.Identity()
+	u = u.RootIdentity()
 	return DnUrl().Equal(u)
 }
 
@@ -317,5 +318,5 @@ func ParseBvnUrl(u *url.URL) (string, bool) {
 
 // BelongsToDn checks if the give account belongs to the DN.
 func BelongsToDn(u *url.URL) bool {
-	return IsDnUrl(u) || u.Identity().Equal(AcmeUrl())
+	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
 }

@@ -156,10 +156,26 @@ func ensurePath(s string) string {
 	return "/" + s
 }
 
-// Identity returns a copy of the URL with an empty path.
-func (u *URL) Identity() *URL {
+// RootIdentity returns a copy of the URL with an empty path.
+func (u *URL) RootIdentity() *URL {
 	v := *u
 	v.Path = ""
+	return &v
+}
+
+// Identity returns a copy of the URL with the last section cut off the path.
+func (u *URL) Identity() *URL {
+	v := *u
+	if v.Path != "" { // TODO debug if this works
+		if v.Path[len(v.Path)-1:] == "/" {
+			v.Path = v.Path[:len(v.Path)-1]
+		}
+
+		lsi := strings.LastIndex(v.Path, "/")
+		if lsi > 0 {
+			v.Path = v.Path[0:lsi]
+		}
+	}
 	return &v
 }
 
