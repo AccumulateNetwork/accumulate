@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml"
@@ -36,7 +35,7 @@ const DefaultLogLevels = "error;accumulate=info" // main=info;state=info;statesy
 func Default(net NetworkType, node NodeType, netId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.Type = net
-	c.Accumulate.Network.ID = netId
+	c.Accumulate.Network.LocalSubnetID = netId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -68,10 +67,21 @@ type Accumulate struct {
 }
 
 type Network struct {
-	Type      NetworkType         `toml:"type" mapstructure:"type"`
-	ID        string              `toml:"id" mapstructure:"id"`
-	BvnNames  []string            `toml:"bvn-names" mapstructure:"bvn-names"`
-	Addresses map[string][]string `toml:"addresses" mapstructure:"addresses"`
+	Type          NetworkType `toml:"type" mapstructure:"type"`
+	LocalSubnetID string      `toml:"local-subnet" mapstructure:"local-subnet"`
+	LocalAddress  string      `toml:"local-address" mapstructure:"local-address"`
+	Subnets       []Subnet    `toml:"subnets" mapstructure:"subnets"`
+}
+
+type Subnet struct {
+	ID    string      `toml:"id" mapstructure:"id"`
+	Type  NetworkType `toml:"type" mapstructure:"type"`
+	Nodes []Node      `toml:"nodes" mapstructure:"nodes"`
+}
+
+type Node struct {
+	Address string
+	Type    NodeType `toml:"type" mapstructure:"type"`
 }
 
 type API struct {
@@ -87,23 +97,23 @@ type Website struct {
 	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
 }
 
-func OffsetPort(addr string, offset int) (string, error) {
+func OffsetPort(addr string, offset int) (*url.URL, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
-		return "", fmt.Errorf("invalid URL %q: %v", addr, err)
+		return nil, fmt.Errorf("invalid URL %q: %v", addr, err)
 	}
 	if u.Scheme == "" {
-		return "", fmt.Errorf("invalid URL %q: has no scheme, so this probably isn't a URL", addr)
+		return nil, fmt.Errorf("invalid URL %q: has no scheme, so this probably isn't a URL", addr)
 	}
 
 	port, err := strconv.ParseInt(u.Port(), 10, 17)
 	if err != nil {
-		return "", fmt.Errorf("invalid port %q: %v", u.Port(), err)
+		return nil, fmt.Errorf("invalid port %q: %v", u.Port(), err)
 	}
 
 	port += int64(offset)
 	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
-	return u.String(), nil
+	return u, nil
 }
 
 func (n *Network) NodeUrl(path ...string) *accurl.URL {
@@ -111,39 +121,26 @@ func (n *Network) NodeUrl(path ...string) *accurl.URL {
 		return protocol.DnUrl().JoinPath(path...)
 	}
 
-	return protocol.BvnUrl(n.ID).JoinPath(path...)
+	return protocol.BvnUrl(n.LocalSubnetID).JoinPath(path...)
 }
 
-// AddressWithPortOffset gets the first address of the given subnet and applies
-// an offset to the port number.
-func (n *Network) AddressWithPortOffset(subnet string, offset int) string {
-	// Viper always lower-cases map keys
-	subnet = strings.ToLower(subnet)
-
-	addrs := n.Addresses[subnet]
-	if len(addrs) == 0 {
-		panic(fmt.Errorf("invalid configuration: subnet %q has no addresses", subnet))
+func (n *Network) GetBvnNames() []string {
+	var names []string
+	for _, subnet := range n.Subnets {
+		if subnet.Type == BlockValidator {
+			names = append(names, subnet.ID)
+		}
 	}
-
-	if addrs[0] == "local" {
-		return "local"
-	}
-
-	addr, err := OffsetPort(addrs[0], offset)
-	if err != nil {
-		panic(fmt.Errorf("invalid configuration for subnet %q: %v", subnet, err))
-	}
-
-	return addr
+	return names
 }
 
-// BvnAddresses fetches addresses of all of the named BVNs and adjusts their port number.
-func (n *Network) BvnAddressesWithPortOffset(offset int) []string {
-	addrs := make([]string, len(n.BvnNames))
-	for i, bvn := range n.BvnNames {
-		addrs[i] = n.AddressWithPortOffset(bvn, offset)
+func (n *Network) GetSubnetByID(subnetID string) Subnet {
+	for _, subnet := range n.Subnets {
+		if subnet.ID == subnetID {
+			return subnet
+		}
 	}
-	return addrs
+	panic(fmt.Sprintf("Subnet ID %s does not exist", subnetID))
 }
 
 func Load(dir string) (*Config, error) {

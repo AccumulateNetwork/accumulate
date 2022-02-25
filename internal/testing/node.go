@@ -34,8 +34,13 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	cfg.Consensus.TimeoutCommit = time.Second / 5 // Increase block frequency
 	cfg.Accumulate.Website.Enabled = false        // No need for the website
 	cfg.Instrumentation.Prometheus = false        // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Accumulate.Network.BvnNames = []string{netId}
-	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
+	cfg.Accumulate.Network.Subnets = []config.Subnet{
+		{
+			ID:   "local",
+			Type: config.BlockValidator,
+		},
+	}
+
 	cfg.LogLevel = DefaultLogLevels
 	return cfg
 }
@@ -45,42 +50,54 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 	dir := t.TempDir()
 
 	count := numValidators + numFollowers
-	subnets := make([]string, numBvns+1)
+	subnets := make([]config.Subnet, numBvns+1)
+	subnetsMap := make(map[string]config.Subnet)
 	allAddresses := make(map[string][]string, numBvns+1)
 	allConfigs := make(map[string][]*cfg.Config, numBvns+1)
 	allRemotes := make(map[string][]string, numBvns+1)
 
 	// Create node configurations
-	for i := range subnets {
-		netType, netName := cfg.Directory, protocol.Directory
+	for i := 0; i < numBvns+1; i++ {
+		netType, subnetId := cfg.Directory, protocol.Directory
 		if i > 0 {
-			netType, netName = cfg.BlockValidator, fmt.Sprintf("BVN%d", i)
+			netType, subnetId = cfg.BlockValidator, fmt.Sprintf("BVN%d", i-1)
 		}
-		subnets[i] = netName
+
 		addresses := make([]string, count)
 		configs := make([]*cfg.Config, count)
 		remotes := make([]string, count)
-		allAddresses[netName], allConfigs[netName], allRemotes[netName] = addresses, configs, remotes
-
+		allAddresses[subnetId], allConfigs[subnetId], allRemotes[subnetId] = addresses, configs, remotes
+		nodes := make([]config.Node, count)
 		for i := 0; i < count; i++ {
 			nodeType := cfg.Validator
 			if i > numValidators {
 				nodeType = cfg.Follower
 			}
 
-			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), netName, i))
-			configs[i] = DefaultConfig(netType, nodeType, netName)
+			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), subnetId, i))
+			configs[i] = DefaultConfig(netType, nodeType, subnetId)
 			remotes[i] = getIP(hash).String()
-			addresses[i] = fmt.Sprintf("http://%s:%d", remotes[i], basePort)
+			nodes[i] = config.Node{
+				Type:    nodeType,
+				Address: fmt.Sprintf("http://%s:%d", remotes[i], basePort),
+			}
+			addresses[i] = nodes[i].Address
 		}
 
+		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
+		subnets[i] = config.Subnet{
+			ID:    subnetId,
+			Type:  netType,
+			Nodes: nodes,
+		}
+		subnetsMap[subnetId] = subnets[i]
 	}
 
 	// Add addresses and BVN names to node configurations
 	for _, configs := range allConfigs {
-		for _, config := range configs {
-			config.Accumulate.Network.BvnNames = subnets[1:]
-			config.Accumulate.Network.Addresses = allAddresses
+		for i, cfg := range configs {
+			cfg.Accumulate.Network.Subnets = subnets
+			cfg.Accumulate.Network.LocalAddress = allAddresses[cfg.Accumulate.Network.LocalSubnetID][i]
 		}
 	}
 
@@ -100,30 +117,39 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
-	for _, netName := range subnets {
-		dir := filepath.Join(dir, netName)
+	for _, subnet := range subnets {
+		subnetId := subnet.ID
+		dir := filepath.Join(dir, subnetId)
 		require.NoError(t, node.Init(node.InitOptions{
 			WorkDir:  dir,
 			Port:     basePort,
-			Config:   allConfigs[netName],
-			RemoteIP: allRemotes[netName],
-			ListenIP: allRemotes[netName],
-			Logger:   initLogger.With("subnet", netName),
+			Config:   allConfigs[subnetId],
+			RemoteIP: allRemotes[subnetId],
+			ListenIP: allRemotes[subnetId],
+			Logger:   initLogger.With("subnet", subnetId),
 		}))
 
 		daemons := make([]*accumulated.Daemon, count)
-		allDaemons[netName] = daemons
+		allDaemons[subnetId] = daemons
 
 		for i := 0; i < count; i++ {
 			dir := filepath.Join(dir, fmt.Sprintf("Node%d", i))
 			var err error
 			daemons[i], err = accumulated.Load(dir, logWriter)
 			require.NoError(t, err)
-			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", netName, "node", i)
+			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnetId, "node", i)
 		}
 	}
 
-	return subnets, allDaemons
+	return getSubnetNames(subnets), allDaemons
+}
+
+func getSubnetNames(subnets []cfg.Subnet) []string {
+	var res []string
+	for _, subnet := range subnets {
+		res = append(res, subnet.ID)
+	}
+	return res
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon) {
