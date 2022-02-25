@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
@@ -163,4 +164,62 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 		}
 	}
 	return count
+}
+
+func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, resp *query.ResponseByTxId) error {
+	// If it's not pending, don't bother
+	if !status.Pending {
+		return nil
+	}
+
+	origin, err := batch.Account(header.Origin).GetState()
+	if err != nil {
+		return err
+	}
+
+	// Find the origin's key book
+	keyBook, ok := origin.(*protocol.KeyBook)
+	switch {
+	case ok:
+		// Key books are their own key books
+	case origin.Header().KeyBook == nil:
+		// Lite token accounts don't have key books (and thus can't do multisig)
+		return nil
+	default:
+		// Load the origin's key book
+		keyBook = new(protocol.KeyBook)
+		err := batch.Account(origin.Header().KeyBook).GetStateAs(keyBook)
+		if err != nil {
+			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
+		}
+	}
+
+	// Sanity check
+	if header.KeyPageIndex >= uint64(len(keyBook.Pages)) {
+		return fmt.Errorf("invalid transaction: book has %d pages, transaction specifies page %d", len(keyBook.Pages), header.KeyPageIndex)
+	}
+
+	// Read the page's main chain
+	pageAcnt := batch.Account(keyBook.Pages[header.KeyPageIndex])
+	pageChain, err := pageAcnt.ReadChain(protocol.MainChain)
+	if err != nil {
+		return fmt.Errorf("failed to load main chain of key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
+	}
+
+	// If height no longer matches, the transaction is invalidated
+	if header.KeyPageHeight != uint64(pageChain.Height()) {
+		resp.Invalidated = true
+		return nil
+	}
+
+	// Load the page's state
+	keyPage := new(protocol.KeyPage)
+	err = pageAcnt.GetStateAs(keyPage)
+	if err != nil {
+		return fmt.Errorf("failed to load key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
+	}
+
+	// Set the threshold
+	resp.SignatureThreshold = keyPage.Threshold
+	return nil
 }
