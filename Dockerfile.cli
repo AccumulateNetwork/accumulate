@@ -4,7 +4,7 @@ FROM golang:1.17 as build
 WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
-RUN make && make accumulate
+RUN make -B && make -B accumulate
 
 FROM alpine:3
 

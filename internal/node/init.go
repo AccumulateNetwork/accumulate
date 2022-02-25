@@ -45,7 +45,7 @@ func Init(opts InitOptions) (err error) {
 	fmt.Println("Tendermint Initialize")
 
 	config := opts.Config
-	subnetID := config[0].Accumulate.Network.ID
+	subnetID := config[0].Accumulate.Network.LocalSubnetID
 	genVals := make([]types.GenesisValidator, 0, len(config))
 
 	var networkType cfg.NetworkType
@@ -174,7 +174,7 @@ func Init(opts InitOptions) (err error) {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
-		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.ID, i)
+		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
 		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
