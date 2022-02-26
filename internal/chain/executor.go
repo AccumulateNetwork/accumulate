@@ -77,7 +77,7 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		m.executors[x.Type()] = x
 	}
 
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
 	var height int64
@@ -131,7 +131,8 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 
 	m.blockIndex = 1
 	m.blockTime = time
-	m.blockBatch = m.DB.Begin()
+	m.blockBatch = m.DB.Begin(true)
+	defer m.blockBatch.Discard()
 
 	env := new(transactions.Envelope)
 	env.Transaction = new(transactions.Transaction)
@@ -184,22 +185,40 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	return m.Commit()
 }
 
-func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) error {
+func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]byte, error) {
 	if m.isGenesis {
 		panic("Cannot call InitChain on a genesis txn executor")
+	}
+
+	// Check if InitChain already happened
+	var rootHash []byte
+	err := m.DB.View(func(batch *database.Batch) error {
+		_, err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetState()
+		if err != nil {
+			return err
+		}
+
+		rootHash = batch.RootHash()
+		return nil
+	})
+	if err == nil {
+		return rootHash, nil
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
 	}
 
 	// Load the genesis state (JSON) into an in-memory key-value store
 	src := new(memory.DB)
 	_ = src.InitDB("", nil)
-	err := src.UnmarshalJSON(data)
+	err = src.UnmarshalJSON(data)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal app state: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
 	// Load the BPT root hash so we can verify the system state
 	var hash [32]byte
-	data, err = src.Begin().Get(storage.MakeKey("BPT", "Root"))
+	data, err = src.Begin(false).Get(storage.MakeKey("BPT", "Root"))
 	switch {
 	case err == nil:
 		bpt := pmt.NewBPT()
@@ -208,22 +227,22 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	case errors.Is(err, storage.ErrNotFound):
 		// OK
 	default:
-		return fmt.Errorf("failed to load BPT root hash from app state: %v", err)
+		return nil, fmt.Errorf("failed to load BPT root hash from app state: %v", err)
 	}
 
 	// Dump the genesis state into the key-value store
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(true)
 	defer batch.Discard()
 	batch.Import(src)
 
 	// Commit the database batch
 	err = batch.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to load app state into database: %v", err)
+		return nil, fmt.Errorf("failed to load app state into database: %v", err)
 	}
 
 	// Recreate the batch to reload the BPT
-	batch = m.DB.Begin()
+	batch = m.DB.Begin(true)
 	defer batch.Discard()
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
@@ -231,24 +250,35 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], batch.RootHash()))
 	}
 
-	return m.governor.DidCommit(batch, true, true, blockIndex, time)
+	err = m.governor.DidCommit(batch, true, true, blockIndex, time)
+	if err != nil {
+		return nil, err
+	}
+
+	return batch.RootHash(), nil
 }
 
 // BeginBlock implements ./abci.Chain
-func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
+func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockResponse, err error) {
 	m.logDebug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
 
 	m.blockLeader = req.IsLeader
 	m.blockIndex = req.Height
 	m.blockTime = req.Time
-	m.blockBatch = m.DB.Begin()
+	m.blockBatch = m.DB.Begin(true)
 	m.blockMeta = blockMetadata{}
 	m.newValidators = m.newValidators[:0]
+
+	defer func() {
+		if err != nil {
+			m.blockBatch.Discard()
+		}
+	}()
 
 	m.governor.DidBeginBlock(req.IsLeader, req.Height, req.Time)
 
 	// Reset the block state
-	err := indexing.BlockState(m.blockBatch, m.Network.NodeUrl(protocol.Ledger)).Clear()
+	err = indexing.BlockState(m.blockBatch, m.Network.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
 		return abci.BeginBlockResponse{}, nil
 	}
@@ -355,7 +385,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 
 	// Get BPT root from a clean batch
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(false)
 	defer batch.Discard()
 	return batch.RootHash(), nil
 }

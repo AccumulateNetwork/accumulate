@@ -26,7 +26,7 @@ func TestReceipt(t *testing.T) {
 	const testMerkleTreeSize = 7
 	// Create a memory based database
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	// Create a MerkleManager for the memory database
 	manager, err := NewMerkleManager(storeTx, 2)
@@ -81,7 +81,7 @@ func TestReceiptAll(t *testing.T) {
 	const testMerkleTreeSize = 150
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	manager, _ := NewMerkleManager(storeTx, 2) // MerkleManager
 
 	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
@@ -207,7 +207,7 @@ func TestBadgerReceipts(t *testing.T) {
 	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
 	defer badger.Close()
 
-	manager, err := NewMerkleManager(badger.Begin(), 2)
+	manager, err := NewMerkleManager(badger.Begin(true), 2)
 	require.NoError(t, err)
 
 	PopulateDatabase(manager, 700)
@@ -222,7 +222,7 @@ func TestReceipt_Combine(t *testing.T) {
 	var rh common.RandHash
 	var m1, m2 *MerkleManager
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	m1, err := NewMerkleManager(storeTx, 2)
 	require.NoError(t, err, "should be able to create a new merkle tree manager")
 	err = m1.SetKey(storage.MakeKey("m1"))

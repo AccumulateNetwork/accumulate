@@ -115,7 +115,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 	n.db, err = openDb(d)
 	require.NoError(t, err)
-	batch := n.db.Begin()
+	batch := n.db.Begin(false)
 	defer batch.Discard()
 
 	ledger := protocol.NewInternalLedger()
@@ -303,7 +303,7 @@ func (n *FakeNode) ParseUrl(s string) *url.URL {
 }
 
 func (n *FakeNode) GetDirectory(adi string) []string {
-	batch := n.db.Begin()
+	batch := n.db.Begin(false)
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)
