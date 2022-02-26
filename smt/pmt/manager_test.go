@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"math/rand"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
@@ -110,5 +113,77 @@ func TestManagerSeries(t *testing.T) {
 		if !bytes.Equal(previous[:], currentRoot[:]) { //
 			t.Error("loading the BPT should have the same root as previous root") //
 		}
+	}
+}
+
+func TestManagerPersist(t *testing.T) {
+
+	numberTest := 50
+
+	for i := 12; i < numberTest; i++ {
+
+		var keys, values common.RandHash   // Set up hash generation for keys and values
+		keys.SetSeed([]byte{1, 2, 3, 4})   // Seed keys differently than values, so they have
+		values.SetSeed([]byte{5, 6, 7, 8}) // a different set of hashes
+
+		store := memory.NewDB()              // Set up a memory DB
+		storeTx := store.Begin()             //
+		bptManager := NewBPTManager(storeTx) //
+
+		for j := 0; j < i; j++ {
+			k, v := keys.NextAList(), values.NextA()
+			bptManager.Bpt.Insert(k, v)
+		}
+
+		bptManager.Bpt.Update()
+		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
+
+		storeTx = store.Begin()
+		bptManager = NewBPTManager(storeTx)
+		for i, v := range keys.List {
+			k := keys.GetAElement(i)
+			_, entry := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
+			require.NotNilf(t, entry, "Must find all the keys we put into the BPT: node returned is nil %d", i)
+			value, ok := (*entry).(*Value)
+			require.Truef(t, ok, "Must find all the keys we put into the BPT: Key not found %d", i)
+			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %d", i)
+		}
+
+		for i := range keys.List {
+			bptManager.Bpt.Insert(keys.GetAElement(i), values.NextA())
+		}
+
+		bptManager.Bpt.Update()
+		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
+
+		storeTx = store.Begin()
+		bptManager = NewBPTManager(storeTx)
+		for i, v := range keys.List {
+			_, entry := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
+			value, ok := (*entry).(*Value)
+			require.Truef(t, ok, "Must find all the keys we put into the BPT: Key not found %i")
+			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %i", i)
+		}
+
+	}
+}
+
+func TestBptGet(t *testing.T) {
+	var keys, values common.RandHash
+	values.SetSeed([]byte{1, 3, 4}) // Let keys default the seed, make values different
+	bpt := NewBPT()
+	for i := 0; i < 5000; i++ {
+		bpt.Insert(keys.NextAList(), values.NextAList())
+	}
+
+	for i := 0; i < 2; i++ {
+		idx := rand.Intn(5000)
+		k := keys.GetAElement(idx)
+		v := values.List[idx]
+		node, entry := bpt.Get(bpt.Root, k)
+		require.NotNilf(t, node, "Should return a node. idx=%d", idx)
+		require.NotNilf(t, *entry, "Should return a value. idx=%d", idx)
+		value := (*entry).(*Value)
+		require.Truef(t, bytes.Equal(value.Key[:], v), "value not expected for idx=%d", idx)
 	}
 }

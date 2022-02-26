@@ -125,7 +125,6 @@ func (n *BptNode) UnMarshal(data []byte) []byte {
 }
 
 func GetBBKey(BIdx byte, key [32]byte) (BBKey [32]byte) {
-	copy(BBKey[:BIdx], key[:BIdx])
-	BBKey[31] = BIdx
+	copy(BBKey[1:BIdx+1], key[:BIdx])
 	return BBKey
 }

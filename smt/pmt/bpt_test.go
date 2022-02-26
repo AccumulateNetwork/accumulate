@@ -142,7 +142,7 @@ func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 // out hashes.  And that we can update the BPT
 func TestInsert(t *testing.T) {
 
-	const numElements = 1000 // Choose a number of transactions to process
+	const numElements = 100 // Choose a number of transactions to process
 
 	bpt := NewBPT()            //                 Allocate a BPT
 	var rh common.RandHash     //                 Provides a sequence of hashes
@@ -152,7 +152,6 @@ func TestInsert(t *testing.T) {
 		}
 		bpt.Update() //                             Update hashes so far
 	}
-
 	CheckOrder(t, bpt)
 
 }

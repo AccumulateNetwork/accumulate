@@ -19,10 +19,8 @@ import (
 func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receipt *managed.Receipt) (hash []byte) {
 	if node.Left != nil && node.Left.T() == TNotLoaded || // Check if either the Left or Right
 		node.Right != nil && node.Right.T() == TNotLoaded { // are pointing to not loaded.
-		node.BBKey = GetBBKey(BIdx, key) // If not loaded, load the nodes
-		n := b.manager.LoadNode(node)
-		node.Left = n.Left
-		node.Right = n.Right
+		b.manager.LoadNode(node)
+
 	}
 
 	var entry, other Entry // The node has a left or right entry that builds a tree.
