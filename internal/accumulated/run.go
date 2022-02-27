@@ -22,6 +22,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
@@ -133,13 +135,11 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	// Create a proxy local client which we will populate with the local client
-	// after the node has been created.
-	clientProxy := node.NewLocalClient()
+	connectionManager, connectionInitializer := connections.NewConnectionManager(d.Config, d.Logger)
 
-	router := routing.RPC{
-		Network: &d.Config.Accumulate.Network,
-		Local:   clientProxy,
+	router := routing.RouterInstance{
+		ConnectionManager: connectionManager,
+		Network:           &d.Config.Accumulate.Network,
 	}
 	execOpts := chain.ExecutorOptions{
 		DB:      d.db,
@@ -196,7 +196,6 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
-	clientProxy.Set(lclient)
 
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
@@ -212,6 +211,13 @@ func (d *Daemon) Start() (err error) {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
+	}
+
+	// Let the connection manager create and assign clients
+	statusChecker := statuschk.NewNodeStatusChecker()
+	err = connectionInitializer.InitClients(lclient, statusChecker)
+	if err != nil {
+		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
 
 	// Enable debug methods

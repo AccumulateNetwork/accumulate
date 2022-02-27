@@ -488,6 +488,11 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
+	err = getPendingStatus(batch, txState.SigInfo, status, &qr)
+	if err != nil {
+		return nil, err
+	}
+
 	if !prove {
 		return &qr, nil
 	}
