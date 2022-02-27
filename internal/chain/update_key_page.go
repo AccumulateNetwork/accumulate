@@ -78,6 +78,8 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		if tx.Transaction.KeyPageIndex > uint64(priority) {
 			return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 		}
+
+		bookUrl = book.Url
 	}
 
 	switch body.Operation {
