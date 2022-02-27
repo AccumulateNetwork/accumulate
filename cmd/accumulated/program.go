@@ -111,7 +111,7 @@ func (p *Program) Start(s service.Service) error {
 	if didStartSecondary {
 		errg.Go(p.secondary.Stop)
 	}
-	errg.Wait()
+	_ = errg.Wait()
 	return nil
 }
 
