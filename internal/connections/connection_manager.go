@@ -2,7 +2,9 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"net/url"
 	neturl "net/url"
 	"strings"
 	"time"
@@ -24,7 +26,9 @@ type ConnectionManager interface {
 }
 
 type ConnectionInitializer interface {
+	ConnectionManager
 	InitClients(*local.Local, StatusChecker) error
+	ConnectDirectly(other ConnectionManager) error
 }
 
 type connectionManager struct {
@@ -78,13 +82,13 @@ type NodeMetrics struct {
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
-func NewConnectionManager(config *config.Config, logger log.Logger) (ConnectionManager, ConnectionInitializer) {
+func NewConnectionManager(config *config.Config, logger log.Logger) ConnectionInitializer {
 	cm := new(connectionManager)
 	cm.accConfig = &config.Accumulate
 	cm.localHost = cm.reformatAddress(cm.accConfig.Network.LocalAddress)
 	cm.logger = logger
 	cm.buildNodeInventory()
-	return cm, cm
+	return cm
 }
 
 func (cm *connectionManager) SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error) {
@@ -298,6 +302,37 @@ func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker S
 		cc.statusChecker = statusChecker
 	}
 	return nil
+}
+
+func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
+	cm2, ok := other.(*connectionManager)
+	if !ok {
+		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
+	}
+
+	var list []ConnectionContext
+	if cm2.accConfig.Network.LocalSubnetID == protocol.Directory {
+		list = cm.dnCtxList
+	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.Network.LocalSubnetID)]; !ok {
+		return fmt.Errorf("unknown subnet %q", cm2.accConfig.Network.LocalSubnetID)
+	}
+
+	for _, connCtx := range list {
+		cc := connCtx.(*connectionContext)
+		url, err := url.Parse(cc.nodeConfig.Address)
+		if err != nil {
+			continue
+		}
+
+		if url.Host != cm2.accConfig.Network.LocalAddress {
+			continue
+		}
+
+		cc.setClient(cm2.localClient)
+		return nil
+	}
+
+	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.Network.LocalSubnetID, cm2.accConfig.Network.LocalAddress)
 }
 
 func (cm *connectionManager) createAbciClient(connCtx *connectionContext) error {
