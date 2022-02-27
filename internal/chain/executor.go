@@ -268,7 +268,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 		// OK
 
 	default:
-		return abci.BeginBlockResponse{}, err
+		return abci.BeginBlockResponse{}, fmt.Errorf("cannot load ledger: %w", err)
 	}
 
 	// Reset transient values
@@ -279,7 +279,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
-		return abci.BeginBlockResponse{}, err
+		return abci.BeginBlockResponse{}, fmt.Errorf("cannot write ledger: %w", err)
 	}
 
 	return abci.BeginBlockResponse{}, nil
@@ -383,6 +383,7 @@ func (m *Executor) updateOraclePrice(ledgerState *protocol.InternalLedger) error
 	ledgerState.PendingOracle = o.Price
 	return nil
 }
+
 func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	// Load the main chain of the minor root
 	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)

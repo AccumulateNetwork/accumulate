@@ -1,6 +1,7 @@
 package batch
 
 import (
+	"fmt"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -89,15 +90,19 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	defer b.mu.RUnlock()
 
 	v, ok := b.values[key]
-	if !ok {
-		return b.db.Get(key)
+	if ok {
+		// Return a copy. Otherwise the caller could change it, and that would
+		// change what's in the cache.
+		u := make([]byte, len(v))
+		copy(u, v)
+		return u, nil
 	}
 
-	// Return a copy. Otherwise the caller could change it, and that would
-	// change what's in the cache.
-	u := make([]byte, len(v))
-	copy(u, v)
-	return u, nil
+	v, err = b.db.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("get %v: %w", key, err)
+	}
+	return v, nil
 }
 
 func (b *Batch) Commit() error {
