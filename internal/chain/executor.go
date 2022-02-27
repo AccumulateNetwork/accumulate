@@ -487,8 +487,10 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		record.PutBpt(sha256.Sum256(hashes))
 	}
 
-	if accountSeen[protocol.PriceOracleAuthority] {
-		//if things go south here, don't return and error, instead, just log one
+	// If dn/oracle was updated, update the ledger's oracle value, but only if
+	// we're on the DN - mirroring can cause dn/oracle to be updated on the BVN
+	if accountSeen[protocol.PriceOracleAuthority] && m.Network.LocalSubnetID != protocol.Directory {
+		// If things go south here, don't return and error, instead, just log one
 		err := m.updateOraclePrice(ledgerState)
 		if err != nil {
 			m.logError(fmt.Sprintf("%v", err))
