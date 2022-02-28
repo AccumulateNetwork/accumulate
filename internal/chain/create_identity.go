@@ -2,11 +2,9 @@ package chain
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"strings"
 )
 
 type CreateIdentity struct{}
@@ -33,17 +31,17 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 
 	bookUrl := body.KeyBookUrl
 	if bookUrl == nil {
-		return nil, fmt.Errorf("missing key book URL")
+		return nil, fmt.Errorf("missing KeyBook URL")
 	}
 	err = protocol.IsValidAdiUrl(bookUrl)
 	if err != nil {
-		return nil, fmt.Errorf("invalid key book URL %q: %v", bookUrl.String(), err)
+		return nil, fmt.Errorf("invalid KeyBook URL %q: %v", bookUrl.String(), err)
 	}
 
 	keySpec := new(protocol.KeySpec)
 	keySpec.PublicKey = body.PublicKey
 
-	pageUrl, err := ci.selectPageUrl(st, body, err, bookUrl)
+	pageUrl, err := protocol.ValidateKeyPageUrl(bookUrl, body.KeyPageUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -65,33 +63,4 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 
 	st.Create(identity, book, page)
 	return nil, nil
-}
-
-func (ci CreateIdentity) selectPageUrl(st *StateManager, body *protocol.CreateIdentity, err error, bookUrl *url.URL) (*url.URL, error) {
-	pageUrl := body.KeyPageUrl
-	if pageUrl == nil {
-		// KeyPageUrl not specified, lookup default/first key page
-		book := new(protocol.KeyBook)
-		err = st.LoadUrlAs(bookUrl, book)
-		if err != nil {
-			// Book does not exist yet
-			return buildDefaultPageUrl(bookUrl)
-		}
-		if len(book.Pages) == 0 {
-			// Book exists, but does not have a key page somehow
-			return buildDefaultPageUrl(bookUrl)
-		}
-		pageUrl = book.Pages[0]
-	}
-	return pageUrl, nil
-}
-
-func buildDefaultPageUrl(bookUrl *url.URL) (*url.URL, error) {
-	parentUrl := bookUrl.String()
-	parentUrl = parentUrl[:strings.LastIndex(parentUrl, "/")]
-	pageUrl, err := url.Parse(parentUrl)
-	if err != nil {
-		return nil, fmt.Errorf("invalid key book parent URL %q: %v", pageUrl.String(), err)
-	}
-	return pageUrl.JoinPath(protocol.DefaultKeyPage), nil
 }

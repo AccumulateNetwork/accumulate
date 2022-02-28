@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -177,6 +178,21 @@ func (u *URL) Identity() *URL {
 		}
 	}
 	return &v
+}
+
+// Parent gets the URL's parent path. When the path is empty it returns an error
+func (u *URL) Parent() (*URL, error) {
+	v := *u
+	if len(v.Path) == 0 {
+		return nil, fmt.Errorf("URL %q does not have a parent ADI", u.String())
+	}
+	slashIdx := strings.LastIndex(v.Path, "/")
+	if slashIdx == -1 {
+		v.Path = ""
+	} else {
+		v.Path = v.Path[:slashIdx]
+	}
+	return &v, nil
 }
 
 // IdentityAccountID constructs an account identifier from the lower case
