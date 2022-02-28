@@ -120,9 +120,9 @@ CreateIdentity:
     - name: KeyBookUrl
       type: url
       pointer: true
-      optional: true
-    - name: KeyPageName
-      type: string
+    - name: KeyPageUrl
+      type: url
+      pointer: true
       optional: true
     - name: Manager
       type: url

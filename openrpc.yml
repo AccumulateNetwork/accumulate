@@ -122,9 +122,10 @@ methods:
                 keyBookUrl:
                   description: Requested key book URL
                   $ref: '#/components/schemas/url'
-                keyPageName:
-                  description: Override the default key page name
-                  type: string
+                keyPageUrl:
+                  description: Override the default key page URL
+                  $ref: '#/components/schemas/url'
+
     result:
       name: ADI
       schema:

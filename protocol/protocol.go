@@ -51,6 +51,8 @@ const (
 
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
+
+	DefaultKeyPage = "page0"
 )
 
 // AcmeUrl returns `acc://ACME`.
@@ -288,7 +290,7 @@ func IsValidAdiUrl(u *url.URL) error {
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
 	_, ok := ParseBvnUrl(u)
-	return ok || IsDnUrl(u)
+	return ok || BelongsToDn(u)
 }
 
 // DnUrl returns `acc://dn`.

@@ -137,7 +137,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 
 	var adiUrl string
 	var bookUrl string
-	var page string
+	var pageUrl string
 
 	//at this point :
 	//args[0] should be the new adi you are creating
@@ -167,26 +167,29 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		bookUrl = "book0"
 	}
 
-	if len(args) > 3 {
-		page = args[3]
-	} else {
-		page = "page0"
-	}
-
 	u, err := url2.Parse(adiUrl)
 	if err != nil {
 		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
 	}
 	ku, err := url2.Parse(bookUrl)
 	if err != nil {
-		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
+		return "", fmt.Errorf("invalid book url %s, %v", bookUrl, err)
+	}
+
+	var pu *url2.URL
+	if len(args) > 3 {
+		pageUrl = args[3]
+		pu, err = url2.Parse(pageUrl)
+		if err != nil {
+			return "", fmt.Errorf("invalid page url %s, %v", pageUrl, err)
+		}
 	}
 
 	idc := protocol.CreateIdentity{}
 	idc.Url = u
 	idc.PublicKey = pubKey
 	idc.KeyBookUrl = ku
-	idc.KeyPageName = page
+	idc.KeyPageUrl = pu
 
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {

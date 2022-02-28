@@ -91,12 +91,12 @@ type CreateDataAccount struct {
 }
 
 type CreateIdentity struct {
-	fieldsSet   []bool
-	Url         *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	PublicKey   []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
-	KeyBookUrl  *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
-	KeyPageName string   `json:"keyPageName,omitempty" form:"keyPageName" query:"keyPageName"`
-	Manager     *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	fieldsSet  []bool
+	Url        *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
+	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required"`
+	KeyPageUrl *url.URL `json:"keyPageUrl,omitempty" form:"keyPageUrl" query:"keyPageUrl"`
+	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateKeyBook struct {
@@ -918,7 +918,7 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
 		return false
 	}
-	if !(v.KeyPageName == u.KeyPageName) {
+	if !((v.KeyPageUrl).Equal(u.KeyPageUrl)) {
 		return false
 	}
 	if !((v.Manager).Equal(u.Manager)) {
@@ -2360,7 +2360,7 @@ var fieldNames_CreateIdentity = []string{
 	2: "Url",
 	3: "PublicKey",
 	4: "KeyBookUrl",
-	5: "KeyPageName",
+	5: "KeyPageUrl",
 	6: "Manager",
 }
 
@@ -2378,8 +2378,8 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(4, v.KeyBookUrl)
 	}
-	if !(len(v.KeyPageName) == 0) {
-		writer.WriteString(5, v.KeyPageName)
+	if !(v.KeyPageUrl == nil) {
+		writer.WriteUrl(5, v.KeyPageUrl)
 	}
 	if !(v.Manager == nil) {
 		writer.WriteUrl(6, v.Manager)
@@ -2396,6 +2396,11 @@ func (v *CreateIdentity) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field KeyBookUrl is missing")
+	} else if v.KeyBookUrl == nil {
+		errs = append(errs, "field KeyBookUrl is not set")
 	}
 
 	switch len(errs) {
@@ -5719,8 +5724,8 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(4); ok {
 		v.KeyBookUrl = x
 	}
-	if x, ok := reader.ReadString(5); ok {
-		v.KeyPageName = x
+	if x, ok := reader.ReadUrl(5); ok {
+		v.KeyPageUrl = x
 	}
 	if x, ok := reader.ReadUrl(6); ok {
 		v.Manager = x
@@ -7526,18 +7531,18 @@ func (v *CreateDataAccount) MarshalJSON() ([]byte, error) {
 
 func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType `json:"type"`
-		Url         *url.URL        `json:"url,omitempty"`
-		PublicKey   *string         `json:"publicKey,omitempty"`
-		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
-		KeyPageName string          `json:"keyPageName,omitempty"`
-		Manager     *url.URL        `json:"manager,omitempty"`
+		Type       TransactionType `json:"type"`
+		Url        *url.URL        `json:"url,omitempty"`
+		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
+		KeyPageUrl *url.URL        `json:"keyPageUrl,omitempty"`
+		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookUrl = v.KeyBookUrl
-	u.KeyPageName = v.KeyPageName
+	u.KeyPageUrl = v.KeyPageUrl
 	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
@@ -8560,18 +8565,18 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 
 func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType `json:"type"`
-		Url         *url.URL        `json:"url,omitempty"`
-		PublicKey   *string         `json:"publicKey,omitempty"`
-		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
-		KeyPageName string          `json:"keyPageName,omitempty"`
-		Manager     *url.URL        `json:"manager,omitempty"`
+		Type       TransactionType `json:"type"`
+		Url        *url.URL        `json:"url,omitempty"`
+		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
+		KeyPageUrl *url.URL        `json:"keyPageUrl,omitempty"`
+		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookUrl = v.KeyBookUrl
-	u.KeyPageName = v.KeyPageName
+	u.KeyPageUrl = v.KeyPageUrl
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8583,7 +8588,7 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 		v.PublicKey = x
 	}
 	v.KeyBookUrl = u.KeyBookUrl
-	v.KeyPageName = u.KeyPageName
+	v.KeyPageUrl = u.KeyPageUrl
 	v.Manager = u.Manager
 	return nil
 }
