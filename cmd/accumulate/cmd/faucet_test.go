@@ -47,7 +47,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		waitForTxns(t, tc, r)
 	}
 
-	var faucetAmount = fmt.Sprint(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
+	var faucetAmount = strconv.FormatInt(protocol.AcmeFaucetAmount*protocol.AcmePrecision, 10)
 	for i := range liteAccounts {
 		//now query the account to make sure each account has 10 acme.
 		commandLine := fmt.Sprintf("account get %s", liteAccounts[i])
