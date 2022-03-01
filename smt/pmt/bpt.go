@@ -205,7 +205,7 @@ func (b *BPT) Get(node *BptNode, key [32]byte) (highest *BptNode, entry *Entry, 
 	case (*entry).T() == TNode: //
 		return b.Get((*entry).(*BptNode), key) //
 	case (*entry).T() == TValue: //                           Look for value
-		value := (*entry).(*Value)    
+		value := (*entry).(*Value)
 		return node, entry, bytes.Equal(value.Key[:], key[:]) // Return true or false if value is found
 	}
 	panic("Should never reach this point")

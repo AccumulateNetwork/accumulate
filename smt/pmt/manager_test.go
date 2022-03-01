@@ -141,9 +141,9 @@ func TestManagerPersist(t *testing.T) {
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
 			k := keys.GetAElement(i)
-			_, entry,found := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
+			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
 			require.NotNilf(t, entry, "Must find all the keys we put into the BPT: node returned is nil %d", i)
-			require.Truef(t,found,"Must find all keys in BPT: key index = %d",i)
+			require.Truef(t, found, "Must find all keys in BPT: key index = %d", i)
 			value, ok := (*entry).(*Value)
 			require.Truef(t, ok, "Must find all the keys we put into the BPT: Key not found %d", i)
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %d", i)
@@ -161,7 +161,7 @@ func TestManagerPersist(t *testing.T) {
 		for i, v := range keys.List {
 			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
 			value, ok := (*entry).(*Value)
-			require.Truef(t, ok&& found, "Must find all the keys we put into the BPT: Key not found %i")
+			require.Truef(t, ok && found, "Must find all the keys we put into the BPT: Key not found %i")
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %i", i)
 		}
 
@@ -192,7 +192,7 @@ func TestBptGet(t *testing.T) {
 		k := keys.GetAElement(idx)
 		v := values.List[idx]
 		node, entry, found := bpt.Get(bpt.Root, k)
-		require.Truef(t,found,"Should find all keys added. idx=%d",idx)
+		require.Truef(t, found, "Should find all keys added. idx=%d", idx)
 		require.NotNilf(t, node, "Should return a node. idx=%d", idx)
 		require.NotNilf(t, *entry, "Should return a value. idx=%d", idx)
 		value := (*entry).(*Value)
@@ -202,8 +202,8 @@ func TestBptGet(t *testing.T) {
 
 	for i := 0; i < numberTests/10; i++ {
 		k := keys.NextA()
-		node, _,found := bpt.Get(bpt.Root, k)
-		require.Falsef(t,found, "Should not find a value for a random key idx:=%d", i)
+		node, _, found := bpt.Get(bpt.Root, k)
+		require.Falsef(t, found, "Should not find a value for a random key idx:=%d", i)
 		BIdx := node.Height >> 3 // Get the Byte Index
 		require.Truef(t, bytes.Equal(k[:BIdx], node.BBKey[1:BIdx+1]),
 			"Key %x should lead to BBKey %x", k[:BIdx], node.BBKey[:BIdx])
