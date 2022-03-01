@@ -408,6 +408,11 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 			return fmt.Errorf("signature %d's public key does not match the origin record", i)
 		}
 
+		// Don't bother with nonces for the faucet
+		if st.txType == protocol.TransactionTypeAcmeFaucet {
+			continue
+		}
+
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
