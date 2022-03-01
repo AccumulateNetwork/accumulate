@@ -2,12 +2,14 @@ package badger
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type Batch struct {
+	db  *DB
 	txn *badger.Txn
 }
 
@@ -15,6 +17,7 @@ var _ storage.KeyValueTxn = (*Batch)(nil)
 
 func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	b := new(Batch)
+	b.db = db
 	b.txn = db.badgerDB.NewTransaction(writable)
 	if db.logger == nil {
 		return b
@@ -22,11 +25,33 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	return &storage.DebugBatch{Batch: b, Logger: db.logger}
 }
 
+func (b *Batch) lock() (sync.Locker, error) {
+	l, err := b.db.lock(false)
+	if err != nil {
+		return l, nil
+	}
+
+	b.Discard() // Is this a good idea?
+	return nil, err
+}
+
 func (b *Batch) Put(key storage.Key, value []byte) error {
+	if l, err := b.lock(); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
+	}
+
 	return b.txn.Set(key[:], value)
 }
 
 func (b *Batch) PutAll(values map[storage.Key][]byte) error {
+	if l, err := b.lock(); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
+	}
+
 	for k, v := range values {
 		// The statement below takes a copy of K. This is necessary because K is
 		// `var k [32]byte`, a fixed-length array, and arrays in go are
@@ -43,7 +68,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 		// copy instead of the original. See also:
 		// https://github.com/golang/go/wiki/CommonMistakes#using-reference-to-loop-iterator-variable
 		k := k
-		err := b.Put(k, v)
+		err := b.txn.Set(k[:], v)
 		if err != nil {
 			return err
 		}
@@ -53,6 +78,12 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 }
 
 func (b *Batch) Get(key storage.Key) (v []byte, err error) {
+	if l, err := b.db.lock(false); err != nil {
+		return nil, err
+	} else {
+		defer l.Unlock()
+	}
+
 	item, err := b.txn.Get(key[:])
 	if err != nil {
 		// If we didn't find the value, return ErrNotFound
@@ -72,6 +103,12 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 }
 
 func (b *Batch) Commit() error {
+	if l, err := b.lock(); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
+	}
+
 	return b.txn.Commit()
 }
 
