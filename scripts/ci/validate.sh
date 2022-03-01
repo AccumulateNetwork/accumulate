@@ -107,7 +107,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..200}
+for i in {1..10}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
@@ -250,7 +250,7 @@ BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
 AFTER=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
-[ $DIFF -eq 10000000000 ] && success || die "Faucet did not work, want +10000000000, got ${DIFF}"
+[ $DIFF -eq 200000000000 ] && success || die "Faucet did not work, want +200000000000, got ${DIFF}"
 
 section "Parse acme faucet TXNs (API v2, AC-603)"
 api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "url": "7117c50f04f1254d56b704dc05298912deeb25dbc1d26ef6/ACME", "count": 10 } }' | jq -r '.result.items | map(.type)[]' | grep -q acmeFaucet
