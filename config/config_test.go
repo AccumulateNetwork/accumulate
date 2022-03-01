@@ -20,7 +20,6 @@ func TestPersistence(t *testing.T) {
 	// Slice values are unmarshalled as empty. This avoids issues with empty
 	// slice != nil.
 	cfg.StateSync.RPCServers = []string{}
-	cfg.Accumulate.Network.BvnNames = []string{}
 
 	// Store
 	require.NoError(t, Store(cfg))

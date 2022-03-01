@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -59,7 +59,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]routing.Client{}
+	clients := map[string]connections.Client{}
 	for _, netName := range subnets {
 		daemons := daemons[netName]
 		nodes := make([]*FakeNode, len(daemons))
@@ -70,16 +70,14 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
-		clients[strings.ToLower(netName)] = nodes[0].client
 	}
-
+	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
-			nodes[i].Start(chans[i], clients, doGenesis)
+			nodes[i].Start(chans[i], connectionManager, doGenesis)
 		}
 	}
-
 	return allNodes
 }
 
@@ -128,7 +126,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := logger.With("module", "fake-tendermint", "subnet", n.network.ID)
+	fakeTmLogger := logger.With("module", "fake-tendermint", "subnet", n.network.LocalSubnetID)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -140,10 +138,10 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	return n, appChan
 }
 
-func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[string]routing.Client, doGenesis bool) *FakeNode {
-	n.router = &routing.Direct{
-		Network: n.network,
-		Clients: clients,
+func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
+	n.router = &routing.RouterInstance{
+		Network:           n.network,
+		ConnectionManager: connMgr,
 	}
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		DB:      n.db,
@@ -201,7 +199,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[strin
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       n.network.ID,
+		ChainId:       n.network.LocalSubnetID,
 		AppStateBytes: state,
 	})
 
@@ -329,7 +327,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.ID, api2.Options{
+	q := api2.NewQueryDirect(n.network.LocalSubnetID, api2.Options{
 		Logger:  n.logger,
 		Network: n.network,
 		Router:  n.router,

@@ -170,7 +170,14 @@ func parseKey(s string) (pubKey, privKey []byte, err error) {
 
 	var pvkey privval.FilePVKey
 	if tmjson.Unmarshal(b, &pvkey) == nil {
-		return pvkey.PubKey.Bytes(), pvkey.PrivKey.Bytes(), nil
+		var pub, priv []byte
+		if pvkey.PubKey != nil {
+			pub = pvkey.PubKey.Bytes()
+		}
+		if pvkey.PrivKey != nil {
+			priv = pvkey.PrivKey.Bytes()
+		}
+		return pub, priv, nil
 	}
 
 	return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)

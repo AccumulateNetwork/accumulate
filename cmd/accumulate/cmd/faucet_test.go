@@ -47,6 +47,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		waitForTxns(t, tc, r)
 	}
 
+	var faucetAmount = strconv.FormatInt(protocol.AcmeFaucetAmount*protocol.AcmePrecision, 10)
 	for i := range liteAccounts {
 		//now query the account to make sure each account has 10 acme.
 		commandLine := fmt.Sprintf("account get %s", liteAccounts[i])
@@ -59,7 +60,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		require.NoError(t, json.Unmarshal([]byte(r), &res))
 
 		if !beenFauceted[i] {
-			require.Equal(t, "10000000000", acc.Balance.String(),
+			require.Equal(t, faucetAmount, acc.Balance.String(),
 				"balance does not match not expected for account %s", liteAccounts[i])
 		}
 	}
