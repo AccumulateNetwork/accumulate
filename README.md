@@ -21,14 +21,25 @@ For example, "Arches" has two nodes, index 0 and index 1.
 
 ### Local TestNet
 
-To set up a testnet on your PC, using localhost addresses, run `accumulated testnet -w <config-dir>`,
-e.g. `accumulated testnet -w ./nodes`.
+Before a local testnet can be run, you need to initialize some devnet configuration files for a few nodes. 
+
 
 - `-v/--validators` sets the number of nodes created, default 3.
 - `--ip` sets the IP address of the first node, default `127.0.1.1`. Nodes after the first will increment the IP,
   e.g. `127.0.1.2`.
 - `--port` sets the base port, default `26656`. Tendermint P2P will run on the base port, Tendermint RPC on base port +
   1, Tendermint GRPC on +2, Accumulate RPC on +3, Accumulate JSONRPC API on +4, and Accumulate REST API on +5.
+
+```bash
+# The config files will be placed in $HOME/.accumulate/dn
+accumulated init devnet -v 3 --ip 127.0.0.1 --port 26656
+```
+
+From here you can launch the devnet. Optionall change the config directory with `-w <config-dir>`
+
+```bash
+accumulated run devnet
+```
 
 To run a node in the testnet, run `accumulated run -w <dir>/Node<n>`, e.g.
 `accumulated run -w ./nodes/Node0`.
