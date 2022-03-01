@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -17,8 +16,7 @@ import (
 
 func TestLiteTokenTransactions(t *testing.T) {
 	tokenUrl := types.String(protocol.AcmeUrl().String())
-	db, err := database.Open("", &config.Storage{Type: config.MemoryStorage}, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)

@@ -113,7 +113,7 @@ func (d *Daemon) Start() (err error) {
 		defer sentry.Flush(2 * time.Second)
 	}
 
-	d.db, err = database.Open(d.Config.RootDir, &d.Config.Accumulate.Storage, d.Logger)
+	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}

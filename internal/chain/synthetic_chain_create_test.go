@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -13,8 +12,7 @@ import (
 )
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
-	db, err := database.Open("", &config.Storage{Type: config.MemoryStorage}, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
 	fooKey := generateKey()
 	batch := db.Begin(true)

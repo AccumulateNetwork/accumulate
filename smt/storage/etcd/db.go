@@ -11,11 +11,12 @@ import (
 )
 
 type DB struct {
+	prefix string
 	client *etcd.Client
 	logger storage.Logger
 }
 
-func New(config *etcd.Config, logger storage.Logger) (*DB, error) {
+func New(prefix string, config *etcd.Config, logger storage.Logger) (*DB, error) {
 	// TODO Pass on the logger
 	client, err := etcd.New(*config)
 	if err != nil {
@@ -23,6 +24,7 @@ func New(config *etcd.Config, logger storage.Logger) (*DB, error) {
 	}
 
 	db := new(DB)
+	db.prefix = prefix
 	db.client = client
 	db.logger = logger
 	return db, nil
@@ -43,7 +45,7 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 }
 
 func (db *DB) key(key storage.Key) string {
-	return fmt.Sprintf("acc://%s", key)
+	return fmt.Sprintf("%s.%x", db.prefix, key)
 }
 
 func (db *DB) get(key storage.Key) ([]byte, error) {
