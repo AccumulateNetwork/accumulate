@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -142,8 +141,9 @@ func TestManagerPersist(t *testing.T) {
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
 			k := keys.GetAElement(i)
-			_, entry := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
+			_, entry,found := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
 			require.NotNilf(t, entry, "Must find all the keys we put into the BPT: node returned is nil %d", i)
+			require.Truef(t,found,"Must find all keys in BPT: key index = %d",i)
 			value, ok := (*entry).(*Value)
 			require.Truef(t, ok, "Must find all the keys we put into the BPT: Key not found %d", i)
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %d", i)
@@ -159,9 +159,9 @@ func TestManagerPersist(t *testing.T) {
 		storeTx = store.Begin()
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
-			_, entry := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
+			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
 			value, ok := (*entry).(*Value)
-			require.Truef(t, ok, "Must find all the keys we put into the BPT: Key not found %i")
+			require.Truef(t, ok&& found, "Must find all the keys we put into the BPT: Key not found %i")
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %i", i)
 		}
 
@@ -169,21 +169,44 @@ func TestManagerPersist(t *testing.T) {
 }
 
 func TestBptGet(t *testing.T) {
+	numberTests := 50000
 	var keys, values common.RandHash
 	values.SetSeed([]byte{1, 3, 4}) // Let keys default the seed, make values different
 	bpt := NewBPT()
-	for i := 0; i < 5000; i++ {
-		bpt.Insert(keys.NextAList(), values.NextAList())
+	for i := 0; i < numberTests; i++ {
+		k := keys.NextAList()
+		v := values.NextA()
+		//fmt.Printf("Add  k,v =%x : %x\n",k[:3],v[:3])
+		bpt.Insert(k, v)
 	}
 
-	for i := 0; i < 2; i++ {
-		idx := rand.Intn(5000)
+	// Update all elements in the BPT
+	for i := 0; i < numberTests; i++ {
+		bpt.Insert(keys.GetAElement(i), values.NextAList())
+	}
+
+	bpt.Update()
+
+	for i := 0; i < numberTests; i++ {
+		idx := i
 		k := keys.GetAElement(idx)
 		v := values.List[idx]
-		node, entry := bpt.Get(bpt.Root, k)
+		node, entry, found := bpt.Get(bpt.Root, k)
+		require.Truef(t,found,"Should find all keys added. idx=%d",idx)
 		require.NotNilf(t, node, "Should return a node. idx=%d", idx)
 		require.NotNilf(t, *entry, "Should return a value. idx=%d", idx)
 		value := (*entry).(*Value)
-		require.Truef(t, bytes.Equal(value.Key[:], v), "value not expected for idx=%d", idx)
+		//fmt.Printf("Find k,v =%x : %x got %x \n",k[:3],v[:3],value.Key[:3])
+		require.Truef(t, bytes.Equal(value.Hash[:], v), "value not expected for idx=%d", idx)
+	}
+
+	for i := 0; i < numberTests/10; i++ {
+		k := keys.NextA()
+		node, _,found := bpt.Get(bpt.Root, k)
+		require.Falsef(t,found, "Should not find a value for a random key idx:=%d", i)
+		BIdx := node.Height >> 3 // Get the Byte Index
+		require.Truef(t, bytes.Equal(k[:BIdx], node.BBKey[1:BIdx+1]),
+			"Key %x should lead to BBKey %x", k[:BIdx], node.BBKey[:BIdx])
+
 	}
 }

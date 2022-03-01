@@ -186,7 +186,7 @@ func (b *BPT) LoadNext(BIdx, bit byte, node *BptNode, key [32]byte) {
 // Get
 // Return the highest node that exists on the path to a particular node,
 // and the entry along the path
-func (b *BPT) Get(node *BptNode, key [32]byte) (highest *BptNode, entry *Entry) {
+func (b *BPT) Get(node *BptNode, key [32]byte) (highest *BptNode, entry *Entry, found bool) {
 
 	BIdx := byte(node.Height >> 3) //          Calculate the byte index based on the height of this node in the BPT
 	bitIdx := node.Height & 7      //          The bit index is given by the lower 3 bits of the height
@@ -201,12 +201,14 @@ func (b *BPT) Get(node *BptNode, key [32]byte) (highest *BptNode, entry *Entry) 
 
 	switch { //                                Recurse down all the nodes
 	case *entry == nil:
-		return node, nil
+		return node, nil, false
 	case (*entry).T() == TNode: //
 		return b.Get((*entry).(*BptNode), key) //
-	default: //
-		return node, entry //                  When a non-node is encountered, return node
+	case (*entry).T() == TValue: //                           Look for value
+		value := (*entry).(*Value)    
+		return node, entry, bytes.Equal(value.Key[:], key[:]) // Return true or false if value is found
 	}
+	panic("Should never reach this point")
 }
 
 // insertAtNode
