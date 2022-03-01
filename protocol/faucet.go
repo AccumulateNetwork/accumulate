@@ -8,6 +8,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
+const AcmeFaucetAmount = 2000
+
 var FaucetUrl *url.URL
 var Faucet faucet
 
