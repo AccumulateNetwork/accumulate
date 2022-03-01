@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -30,7 +31,7 @@ var creditsCmd = &cobra.Command{
 
 func PrintCredits() {
 	fmt.Println("  accumulate credits [origin lite token account] [lite token account or key page url] [amount] 		Send credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		acme to credits to another lite token account or adi key page")
 }
 
 func AddCredits(origin string, args []string) (string, error) {
@@ -61,7 +62,7 @@ func AddCredits(origin string, args []string) (string, error) {
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
-	credits.Amount = uint64(amt * protocol.CreditPrecision)
+	credits.Amount = *new(big.Int).SetUint64(uint64(amt * protocol.CreditPrecision))
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {

@@ -3,6 +3,7 @@ package chain
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -30,25 +31,20 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("cannot purchase credits: acme oracle price has not been set")
 	}
 
+	// If specifying amount of credit to send
 	// tokens = credits / (credits to dollars) / (dollars per token)
-	amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
+	amount := big.NewInt(protocol.AcmePrecision)                        // Do everything with ACME precision
+	amount.Mul(amount, &body.Amount)                                    // credits wanted
+	amount.Div(amount, big.NewInt(int64(protocol.CreditsPerFiatUnit)))  // Amount in credits
+	amount.Mul(amount, big.NewInt(int64(protocol.AcmeOraclePrecision))) //dollars / token
+	amount.Div(amount, big.NewInt(int64(ledgerState.ActiveOracle)))     // Amount in acme
 
-	// credits wanted
-	amount.Mul(int64(body.Amount)) // Amount in credits
-	amount.Div(protocol.CreditsPerFiatUnit)
-
-	//dollars / token
-	amount.Mul(protocol.AcmeOraclePrecision)
-	amount.Div(int64(ledgerState.ActiveOracle)) // Amount in acme
-
-	// TODO: convert credit purchase from buying exact number of credits to
-	// specifying amount of acme to spend. body.Amount needs to be converted to bigint
-	// If specifying amount of acme to spend, do this instead of amount calculation above:
-	credits := types.NewAmount(protocol.CreditsPerFiatUnit) // want to obtain credits
-	credits.Mul(int64(ledgerState.ActiveOracle))            // fiat units / acme
-	credits.Mul(int64(body.Amount))                         // acme the user wants to spend
-	credits.Div(protocol.AcmeOraclePrecision)               // adjust the precision of oracle to real units
-	credits.Div(protocol.AcmePrecision)                     // adjust the precision of acme to spend to real units
+	// If specifying amount of acme to spend
+	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
+	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
+	credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend
+	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
+	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
 
 	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {
@@ -92,11 +88,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
 	}
 
-	if !account.CanDebitTokens(&amount.Int) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &amount.Int)
+	if !account.CanDebitTokens(&body.Amount) {
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
 	}
 
-	if !account.DebitTokens(&amount.Int) {
+	if !account.DebitTokens(&body.Amount) {
 		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
 	}
 	st.Update(account)
@@ -104,13 +100,13 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
 	copy(sdc.Cause[:], tx.GetTxHash())
-	sdc.Amount = body.Amount
+	sdc.Amount = uint64(credits.Int64())
 	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token
 	burnAcme := new(protocol.SyntheticBurnTokens)
 	copy(sdc.Cause[:], tx.GetTxHash())
-	burnAcme.Amount = amount.Int
+	burnAcme.Amount = body.Amount
 	st.Submit(tokenUrl, burnAcme)
 
 	return nil, nil
