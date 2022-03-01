@@ -108,7 +108,7 @@ func TestFaucet(t *testing.T) {
 			Sign(protocol.SignWithFaucet))
 	})
 
-	require.Equal(t, int64(100*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 }
 
 func TestAnchorChain(t *testing.T) {
