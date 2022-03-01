@@ -45,11 +45,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 			return nil, fmt.Errorf("error fetching %q: %v", u, err)
 		case cc.IsUpdate && errors.Is(err, storage.ErrNotFound):
 			return nil, fmt.Errorf("cannot update %q: does not exist", u)
-		case !cc.IsUpdate && err == nil:
-			return nil, fmt.Errorf("cannot create %q: already exists", u)
 		case !cc.IsUpdate:
-
-			_, err := st.LoadUrl(u)
 			if err == nil {
 				return nil, fmt.Errorf("cannot create %q: already exists", u)
 			}
