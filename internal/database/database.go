@@ -2,12 +2,15 @@ package database
 
 import (
 	"encoding"
+	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/etcd"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
@@ -32,23 +35,34 @@ func New(store storage.KeyValueStore, logger log.Logger) *Database {
 }
 
 // Open opens a key-value store and creates a new database with it.
-func Open(file string, useMemDB bool, logger log.Logger) (*Database, error) {
-	var store storage.KeyValueStore = new(badger.DB)
-	if useMemDB {
-		store = new(memory.DB)
-	}
-
+func Open(rootDir string, cfg *config.Storage, logger log.Logger) (*Database, error) {
 	var storeLogger log.Logger
 	if logger != nil {
 		storeLogger = logger.With("module", "storage")
 	}
 
-	err := store.InitDB(file, storeLogger)
-	if err != nil {
-		return nil, err
-	}
+	switch cfg.Type {
+	case config.MemoryStorage:
+		store := memory.New(storeLogger)
+		return New(store, logger), nil
 
-	return New(store, logger), nil
+	case config.BadgerStorage:
+		store, err := badger.New(config.MakeAbsolute(rootDir, cfg.Path), storeLogger)
+		if err != nil {
+			return nil, err
+		}
+		return New(store, logger), nil
+
+	case config.EtcdStorage:
+		store, err := etcd.New(cfg.Etcd, logger)
+		if err != nil {
+			return nil, err
+		}
+		return New(store, logger), nil
+
+	default:
+		return nil, fmt.Errorf("unknown storage format %q", cfg.Type)
+	}
 }
 
 // Close closes the database and the key-value store.

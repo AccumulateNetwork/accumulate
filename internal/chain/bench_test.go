@@ -29,8 +29,8 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			return memory.NewDB()
 		}},
 		"Badger": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
-			db := new(badger.DB)
-			require.NoError(b, db.InitDB(filepath.Join(b.TempDir(), "valacc.db"), logger))
+			db, err := badger.New(filepath.Join(b.TempDir(), "badger.db"), nil)
+			require.NoError(b, err)
 			return db
 		}},
 	}

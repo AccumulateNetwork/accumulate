@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -114,10 +113,9 @@ func (d *Daemon) Start() (err error) {
 		defer sentry.Flush(2 * time.Second)
 	}
 
-	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
-	d.db, err = database.Open(dbPath, d.UseMemDB, d.Logger)
+	d.db, err = database.Open(d.Config.RootDir, &d.Config.Accumulate.Storage, d.Logger)
 	if err != nil {
-		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
+		return fmt.Errorf("failed to open database: %v", err)
 	}
 
 	// Close the database if start fails (mostly for tests)
@@ -244,7 +242,7 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	// Shut down the node if the disk space gets too low
-	go d.ensureSufficientDiskSpace(dbPath)
+	go d.ensureSufficientDiskSpace(d.Config.RootDir)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {

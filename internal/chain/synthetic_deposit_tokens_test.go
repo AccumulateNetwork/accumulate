@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -17,7 +18,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
-	db, err := database.Open("", true, nil)
+	db, err := database.Open("", &config.Storage{Type: config.MemoryStorage}, nil)
 	require.NoError(t, err)
 
 	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), gtx)

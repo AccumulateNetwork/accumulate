@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -30,7 +31,7 @@ func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (protocol.S
 }
 
 func TestUpdateKeyPage_Priority(t *testing.T) {
-	db, err := database.Open("", true, nil)
+	db, err := database.Open("", &config.Storage{Type: config.MemoryStorage}, nil)
 	require.NoError(t, err)
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
