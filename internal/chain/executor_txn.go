@@ -409,7 +409,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 		}
 
 		// Don't bother with nonces for the faucet
-		if protocol.FaucetUrl.Equal(st.OriginUrl) {
+		if st.txType == protocol.TransactionTypeAcmeFaucet {
 			continue
 		}
 
