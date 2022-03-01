@@ -46,7 +46,7 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 		return nil, err
 	}
 	page := protocol.NewKeyPage()
-	var pageExists = st.LoadUrlAs(bookUrl, page) != nil
+	var pageExists = st.LoadUrlAs(pageUrl, page) == nil
 	if !pageExists {
 		page.Url = pageUrl
 		page.Keys = append(page.Keys, keySpec)
