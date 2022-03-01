@@ -38,8 +38,6 @@ func GetRangeFor(t *testing.T, numberEntries, rangeNum int) {
 	// The BPT will sort the keys, so we take the list of keys we used, and sort them
 	sort.Slice(keys.List, func(i, j int) bool { return bytes.Compare(keys.List[i], keys.List[j]) > 0 })
 
-	
-
 	// We ask for a range of rangeNum entries at a time.
 	for i := 0; i < numberEntries; i += rangeNum {
 		bptValues, searchKey = bpt.GetRange(searchKey, rangeNum)
