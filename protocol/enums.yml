@@ -153,6 +153,9 @@ TransactionType:
   InternalTransactionsSent:
     value: 0x63
     description: notifies the executor of synthetic transactions that have been sent
+  CreateDirectory:
+    value: 0x64
+    description: creates an ADI directory, which produces a synthetic chain create transaction
 
 AccountType:
   Unknown:

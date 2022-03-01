@@ -183,6 +183,13 @@ CreateDataAccount:
       type: bool
       optional: true
 
+CreateDirectory:
+  kind: tx
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+
 WriteData:
   kind: tx
   fields:

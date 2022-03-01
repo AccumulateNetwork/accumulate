@@ -139,6 +139,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
 		return new(CreateDataAccount), nil
+	case TransactionTypeCreateDirectory:
+		return new(CreateDirectory), nil
 	case TransactionTypeCreateIdentity:
 		return new(CreateIdentity), nil
 	case TransactionTypeCreateKeyBook:

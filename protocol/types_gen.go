@@ -90,6 +90,11 @@ type CreateDataAccount struct {
 	Scratch           bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
+type CreateDirectory struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+}
+
 type CreateIdentity struct {
 	fieldsSet  []bool
 	Url        *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -598,6 +603,10 @@ func (*CreateDataAccount) Type() TransactionType { return TransactionTypeCreateD
 
 func (*CreateDataAccount) GetType() TransactionType { return TransactionTypeCreateDataAccount }
 
+func (*CreateDirectory) Type() TransactionType { return TransactionTypeCreateDirectory }
+
+func (*CreateDirectory) GetType() TransactionType { return TransactionTypeCreateDirectory }
+
 func (*CreateIdentity) Type() TransactionType { return TransactionTypeCreateIdentity }
 
 func (*CreateIdentity) GetType() TransactionType { return TransactionTypeCreateIdentity }
@@ -902,6 +911,14 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CreateDirectory) Equal(u *CreateDirectory) bool {
+	if !((v.Url).Equal(u.Url)) {
 		return false
 	}
 
@@ -2337,6 +2354,43 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 }
 
 func (v *CreateDataAccount) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_CreateDirectory = []string{
+	1: "Type",
+	2: "Url",
+}
+
+func (v *CreateDirectory) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, TransactionTypeCreateDirectory.ID())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+
+	_, _, err := writer.Reset(fieldNames_CreateDirectory)
+	return buffer.Bytes(), err
+}
+
+func (v *CreateDirectory) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -5701,6 +5755,29 @@ func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *CreateDirectory) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *CreateDirectory) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeCreateDirectory {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateDirectory, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+
+	seen, err := reader.Reset(fieldNames_CreateDirectory)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *CreateIdentity) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7529,6 +7606,16 @@ func (v *CreateDataAccount) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreateDirectory) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type TransactionType `json:"type"`
+		Url  *url.URL        `json:"url,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	return json.Marshal(&u)
+}
+
 func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       TransactionType `json:"type"`
@@ -8560,6 +8647,20 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 	v.KeyBookUrl = u.KeyBookUrl
 	v.ManagerKeyBookUrl = u.ManagerKeyBookUrl
 	v.Scratch = u.Scratch
+	return nil
+}
+
+func (v *CreateDirectory) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type TransactionType `json:"type"`
+		Url  *url.URL        `json:"url,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
 	return nil
 }
 
