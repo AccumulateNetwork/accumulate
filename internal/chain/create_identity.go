@@ -46,21 +46,32 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 		return nil, err
 	}
 	page := protocol.NewKeyPage()
-	page.Url = pageUrl
-	page.Keys = append(page.Keys, keySpec)
-	page.KeyBook = bookUrl
-	page.Threshold = 1 // Require one signature from the Key Page
+	var pageExists = st.LoadUrlAs(bookUrl, page) != nil
+	if !pageExists {
+		page.Url = pageUrl
+		page.Keys = append(page.Keys, keySpec)
+		page.KeyBook = bookUrl
+		page.Threshold = 1 // Require one signature from the Key Page
+	}
 
 	book := protocol.NewKeyBook()
-	book.Url = bookUrl
-	book.Pages = append(book.Pages, pageUrl)
+	bookExists := st.LoadUrlAs(bookUrl, book) == nil
+	if !bookExists {
+		book.Url = bookUrl
+		book.Pages = append(book.Pages, pageUrl)
+	}
 
 	identity := protocol.NewADI()
-
 	identity.Url = body.Url
 	identity.KeyBook = bookUrl
 	identity.ManagerKeyBook = body.Manager
 
-	st.Create(identity, book, page)
+	if !bookExists {
+		st.Create(book)
+	}
+	if !pageExists {
+		st.Create(page)
+	}
+	st.Create(identity)
 	return nil, nil
 }
