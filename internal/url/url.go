@@ -11,13 +11,6 @@ import (
 	"strings"
 )
 
-// ErrMissingHost means that a URL did not include a hostname.
-var ErrMissingHost = errors.New("missing host")
-
-// ErrWrongScheme means that a URL included a scheme other than the Accumulate
-// scheme.
-var ErrWrongScheme = errors.New("wrong scheme")
-
 // URL is an Accumulate URL.
 type URL struct {
 	UserInfo  string
@@ -43,11 +36,11 @@ func Parse(s string) (*URL, error) {
 	}
 
 	if u.Scheme != "acc" {
-		return nil, ErrWrongScheme
+		return nil, wrongScheme(s)
 	}
 
 	if u.Host == "" || u.Host[0] == ':' {
-		return nil, ErrMissingHost
+		return nil, missingHost(s)
 	}
 
 	v := new(URL)

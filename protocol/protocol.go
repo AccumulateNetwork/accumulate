@@ -320,3 +320,8 @@ func ParseBvnUrl(u *url.URL) (string, bool) {
 func BelongsToDn(u *url.URL) bool {
 	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
 }
+
+// BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.
+func BvnNameFromSubnetId(subnetId string) string {
+	return "bvn-" + strings.ToLower(subnetId)
+}
