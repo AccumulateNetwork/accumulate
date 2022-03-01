@@ -239,7 +239,7 @@ func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
 		b.Dirty(node)                    //                          And changing the value of a node makes it dirty
 		return                           //                          we are done.
 	case (*entry).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
-		b.insertAtNode((*entry).(*BptNode), key, hash) //            Recurse up the tree
+		b.insertAtNode((*entry).(*BptNode), key, hash) //           Recurse up the tree
 	default: //                                                      If not a node, not nil, it is a value.
 		v := (*entry).(*Value)             //                        A collision. Get the value that got here first
 		if bytes.Equal(key[:], v.Key[:]) { //                        If this value is the same as we are inserting
