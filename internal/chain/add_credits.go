@@ -31,15 +31,15 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 
 	// tokens = credits / (credits to dollars) / (dollars per token)
-	amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
+	// amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
 
 	// credits wanted
-	amount.Mul(int64(body.Amount)) // Amount in credits
-	amount.Div(protocol.CreditsPerFiatUnit)
+	// amount.Mul(int64(body.Amount)) // Amount in credits
+	// amount.Div(protocol.CreditsPerFiatUnit)
 
 	//dollars / token
-	amount.Mul(protocol.AcmeOraclePrecision)
-	amount.Div(int64(ledgerState.ActiveOracle)) // Amount in acme
+	// amount.Mul(protocol.AcmeOraclePrecision)
+	// amount.Div(int64(ledgerState.ActiveOracle)) // Amount in acme
 
 	// TODO: convert credit purchase from buying exact number of credits to
 	// specifying amount of acme to spend. body.Amount needs to be converted to bigint
