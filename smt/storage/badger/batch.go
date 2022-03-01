@@ -13,6 +13,15 @@ type Batch struct {
 
 var _ storage.KeyValueTxn = (*Batch)(nil)
 
+func (db *DB) Begin(writable bool) storage.KeyValueTxn {
+	b := new(Batch)
+	b.txn = db.badgerDB.NewTransaction(writable)
+	if db.logger == nil {
+		return b
+	}
+	return &storage.DebugBatch{Batch: b, Logger: db.logger}
+}
+
 func (b *Batch) Put(key storage.Key, value []byte) error {
 	return b.txn.Set(key[:], value)
 }
@@ -45,9 +54,12 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 
 func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	item, err := b.txn.Get(key[:])
-	// If we didn't find the value, return ErrNotFound
-	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, storage.ErrNotFound
+	if err != nil {
+		// If we didn't find the value, return ErrNotFound
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			err = storage.ErrNotFound
+		}
+		return nil, err
 	}
 
 	v, err = item.ValueCopy(nil)

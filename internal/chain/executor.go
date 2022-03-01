@@ -354,6 +354,7 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	if m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
 		m.logInfo("Committed empty transaction")
+		m.blockBatch.Discard()
 	} else {
 		m.logInfo("Committing", "height", m.blockIndex, "delivered", m.blockMeta.Delivered, "signed", m.blockMeta.SynthSigned, "sent", m.blockMeta.SynthSent, "updated", len(updatedSlice), "submitted", len(ledgerState.Synthetic.Produced))
 		t := time.Now()
@@ -377,16 +378,17 @@ func (m *Executor) Commit() ([]byte, error) {
 		m.logInfo("Committed", "height", m.blockIndex, "duration", time.Since(t))
 	}
 
+	// Get a clean batch
+	batch := m.DB.Begin(false)
+	defer batch.Discard()
+
 	if !m.isGenesis {
-		err := m.governor.DidCommit(m.blockBatch, m.blockLeader, false, m.blockIndex, m.blockTime)
+		err := m.governor.DidCommit(batch, m.blockLeader, false, m.blockIndex, m.blockTime)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// Get BPT root from a clean batch
-	batch := m.DB.Begin(false)
-	defer batch.Discard()
 	return batch.RootHash(), nil
 }
 

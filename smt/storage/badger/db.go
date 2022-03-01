@@ -121,15 +121,6 @@ func (d *DB) lock(closing bool) (sync.Locker, error) {
 	return l, nil
 }
 
-func (db *DB) Begin(writable bool) storage.KeyValueTxn {
-	b := new(Batch)
-	b.txn = db.badgerDB.NewTransaction(writable)
-	if db.logger == nil {
-		return b
-	}
-	return &storage.DebugBatch{Batch: b, Logger: db.logger}
-}
-
 type badgerLogger struct {
 	storage.Logger
 }
