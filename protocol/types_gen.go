@@ -41,7 +41,7 @@ type AcmeOracle struct {
 type AddCredits struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
-	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
 type Anchor struct {
@@ -812,7 +812,7 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 	if !((v.Recipient).Equal(u.Recipient)) {
 		return false
 	}
-	if !(v.Amount == u.Amount) {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
 	}
 
@@ -1996,8 +1996,8 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
-	if !(v.Amount == 0) {
-		writer.WriteUint(3, v.Amount)
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(3, &v.Amount)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddCredits)
@@ -2014,7 +2014,7 @@ func (v *AddCredits) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Amount is missing")
-	} else if v.Amount == 0 {
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
 	}
 
@@ -5529,8 +5529,8 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Amount = x
+	if x, ok := reader.ReadBigInt(3); ok {
+		v.Amount = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_AddCredits)
@@ -7441,11 +7441,11 @@ func (v *AddCredits) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
 		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    uint64          `json:"amount,omitempty"`
+		Amount    *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -8413,16 +8413,20 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType `json:"type"`
 		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    uint64          `json:"amount,omitempty"`
+		Amount    *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Recipient = u.Recipient
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 
