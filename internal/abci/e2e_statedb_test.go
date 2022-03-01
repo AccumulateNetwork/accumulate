@@ -20,7 +20,7 @@ func TestStateDBConsistency(t *testing.T) {
 	stores := map[*accumulated.Daemon]*badger.DB{}
 	for _, netName := range subnets {
 		for _, daemon := range daemons[netName] {
-			store, err := badger.New(filepath.Join(t.TempDir(), "badger.db"), nil)
+			store, err := badger.New(filepath.Join(daemon.Config.RootDir, "badger.db"), nil)
 			require.NoError(t, err)
 			stores[daemon] = store
 

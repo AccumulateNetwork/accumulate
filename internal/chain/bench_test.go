@@ -25,11 +25,11 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 	testCases := map[string]struct {
 		NewStorage func(log.Logger) storage.KeyValueStore
 	}{
-		"Memory": {NewStorage: func(log.Logger) storage.KeyValueStore {
-			return memory.NewDB()
+		"Memory": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
+			return memory.New(logger)
 		}},
 		"Badger": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
-			db, err := badger.New(filepath.Join(b.TempDir(), "badger.db"), nil)
+			db, err := badger.New(filepath.Join(b.TempDir(), "badger.db"), logger)
 			require.NoError(b, err)
 			return db
 		}},
