@@ -32,7 +32,7 @@ Before a local testnet can be run, you need to initialize some devnet configurat
 
 ```bash
 # The config files will be placed in $HOME/.accumulate/dn
-accumulated init devnet -v 3 --ip 127.0.0.1 --port 26656
+accumulated init devnet -v 3 --port 26656
 ```
 
 From here you can launch the devnet. Optionall change the config directory with `-w <config-dir>`
