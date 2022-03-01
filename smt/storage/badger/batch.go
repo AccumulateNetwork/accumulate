@@ -27,7 +27,7 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 
 func (b *Batch) lock() (sync.Locker, error) {
 	l, err := b.db.lock(false)
-	if err != nil {
+	if err == nil {
 		return l, nil
 	}
 
