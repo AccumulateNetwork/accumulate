@@ -658,7 +658,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 }
 
 func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(true)
 	defer batch.Discard()
 
 	switch q.Type {
