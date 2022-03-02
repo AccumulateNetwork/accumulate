@@ -30,28 +30,11 @@ type DB struct {
 
 var _ storage.KeyValueStore = (*DB)(nil)
 
-// Close
-// Close the underlying database
-func (d *DB) Close() error {
-	if l, err := d.lock(true); err != nil {
-		return err
-	} else {
-		defer l.Unlock()
-	}
-
-	d.ready = false
-	return d.badgerDB.Close()
-}
-
-// InitDB
-// Initialize the database by the given filename (includes directory path).
-// This will certainly open an existing database, but will also initialize
-// an new, empty database.
-func (d *DB) InitDB(filepath string, logger storage.Logger) error {
+func New(filepath string, logger storage.Logger) (*DB, error) {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
-		return errors.New("failed to create home directory")
+		return nil, errors.New("failed to create home directory")
 	}
 
 	opts := badger.DefaultOptions(filepath)
@@ -67,9 +50,10 @@ func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	}
 
 	// Open Badger
+	d := new(DB)
 	d.badgerDB, err = badger.Open(opts)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	d.logger = logger
@@ -79,7 +63,20 @@ func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	// Run GC every hour
 	go d.gc()
 
-	return nil
+	return d, nil
+}
+
+// Close
+// Close the underlying database
+func (d *DB) Close() error {
+	if l, err := d.lock(true); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
+	}
+
+	d.ready = false
+	return d.badgerDB.Close()
 }
 
 func (d *DB) gc() {

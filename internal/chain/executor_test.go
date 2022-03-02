@@ -24,8 +24,7 @@ import (
 )
 
 func BenchmarkHighTps(b *testing.B) {
-	store := new(memory.DB)
-	_ = store.InitDB("", nil)
+	store := memory.New(nil)
 	db := database.New(store, nil)
 
 	network := config.Network{
@@ -45,8 +44,7 @@ func BenchmarkHighTps(b *testing.B) {
 	require.NoError(b, err)
 	require.NoError(b, exec.Start())
 
-	kv := new(memory.DB)
-	_ = kv.InitDB("", nil)
+	kv := memory.New(nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
 		Network:     network,
 		GenesisTime: time.Now(),

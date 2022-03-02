@@ -203,8 +203,8 @@ func TestBadgerReceipts(t *testing.T) {
 		t.Skip("Skipping test: running CI: flaky")
 	}
 
-	badger := new(badger.DB)
-	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
+	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"), nil)
+	require.NoError(t, err)
 	defer badger.Close()
 
 	manager, err := NewMerkleManager(badger.Begin(true), 2)
