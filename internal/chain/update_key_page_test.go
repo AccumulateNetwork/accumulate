@@ -34,7 +34,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, err)
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
-	batch := db.Begin()
+	batch := db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page0", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
@@ -58,7 +58,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				WithBody(body).
 				SignLegacyED25519(testKey)
 
-			st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), env)
+			st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
 			require.NoError(t, err)
 
 			_, err = UpdateKeyPage{}.Validate(st, env)
