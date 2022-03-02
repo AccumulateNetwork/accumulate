@@ -106,8 +106,7 @@ func Init(opts InitOptions) (err error) {
 	if genDoc == nil {
 		genTime := tmtime.Now()
 
-		db := new(memory.DB)
-		_ = db.InitDB("", opts.Logger.With("module", "storage"))
+		db := memory.New(opts.Logger.With("module", "storage"))
 		root, err := genesis.Init(db, genesis.InitOpts{
 			Network:     config[0].Accumulate.Network,
 			GenesisTime: genTime,

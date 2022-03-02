@@ -30,8 +30,7 @@ func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (protocol.S
 }
 
 func TestUpdateKeyPage_Priority(t *testing.T) {
-	db, err := database.Open("", true, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	batch := db.Begin(true)
