@@ -154,6 +154,9 @@ func (cc *connectionContext) ReportErrorStatus(status NodeStatus) {
 }
 
 func (cc *connectionContext) setClient(client Client) {
+	shouldClose := cc.tmClient == nil
 	cc.tmClient = client
-	close(cc.hasClient)
+	if shouldClose {
+		close(cc.hasClient)
+	}
 }
