@@ -39,6 +39,19 @@
       ]
     },
     {
+      "name": "Run Dual",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "run-dual",
+        "--truncate",
+        "${workspaceFolder}/.nodes/dn/Node0",
+        "${workspaceFolder}/.nodes/bvn0/Node0",
+      ]
+    },
+    {
       "name": "Run Node",
       "type": "go",
       "request": "launch",
