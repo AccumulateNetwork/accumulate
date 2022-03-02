@@ -17,7 +17,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash common.RandHash
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	m, e2 := NewMerkleManager(storeTx, 8)
 	require.NoError(t, e2, "should be able to open a database")
 	err := m.SetKey(storage.MakeKey("try"))
@@ -48,7 +48,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	const testnum = 100
 	var randHash common.RandHash
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	m, e2 := NewMerkleManager(storeTx, 2)
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
@@ -76,7 +76,7 @@ func TestIndexing2(t *testing.T) {
 	const testlen = 1024
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	Chain := sha256.Sum256([]byte("RedWagon/ACME_tokens"))
 	BlkIdx := Chain
@@ -116,7 +116,7 @@ func TestMerkleManager(t *testing.T) {
 	const testLen = 1024
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	MarkPower := int64(2)
 	MarkFreq := int64(math.Pow(2, float64(MarkPower)))
@@ -236,7 +236,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 
 func TestMerkleManager_GetIntermediate(t *testing.T) {
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	m, _ := NewMerkleManager(storeTx, 4)
 	m.MS.InitSha256()
 
@@ -272,7 +272,7 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 
 	t.Run("true", func(t *testing.T) {
 		store := memory.NewDB()
-		storeTx := store.Begin()
+		storeTx := store.Begin(true)
 		m, _ := NewMerkleManager(storeTx, 4)
 		m.MS.InitSha256()
 
@@ -283,7 +283,7 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 
 	t.Run("false", func(t *testing.T) {
 		store := memory.NewDB()
-		storeTx := store.Begin()
+		storeTx := store.Begin(true)
 		m, _ := NewMerkleManager(storeTx, 4)
 		m.MS.InitSha256()
 

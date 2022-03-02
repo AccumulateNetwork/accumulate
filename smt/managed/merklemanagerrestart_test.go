@@ -11,7 +11,7 @@ import (
 
 func TestRestart(t *testing.T) {
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	MarkPower := int64(2)
 
@@ -39,7 +39,7 @@ func TestRestartCache(t *testing.T) {
 	rand.Seed(12344)
 	var rh common.RandHash
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	MarkPower := int64(2)
 
@@ -64,15 +64,15 @@ func TestRestartCache(t *testing.T) {
 			ended := rand.Int()%30 > 0 && len(cached) > 0 // Every so often we are going to write to disk
 			if ended {                                    //   so what is cached is going away too.
 				require.NoError(t, storeTx.Commit())
-				storeTx = store.Begin()
+				storeTx = store.Begin(true)
 				cached = cached[:0] //  Clear the cache
 				MM1, err = NewMerkleManager(storeTx, MarkPower)
 				require.NoError(t, err)
 			}
 
 			if j == i {
-				ndb := store.Copy()                                  // This simulates opening a new database later (MM2)
-				MM2, err := NewMerkleManager(ndb.Begin(), MarkPower) // Then get the highest state stored
+				ndb := store.Copy()                                      // This simulates opening a new database later (MM2)
+				MM2, err := NewMerkleManager(ndb.Begin(true), MarkPower) // Then get the highest state stored
 
 				if err != nil {
 					t.Fatalf("failed to create MM2 properly")

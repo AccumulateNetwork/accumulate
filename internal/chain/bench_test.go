@@ -92,7 +92,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			toKey0 := acctesting.GenerateKey(b.Name(), "to", 0)
 			toUrl0 := acctesting.AcmeLiteAddressStdPriv(toKey0)
 
-			batch := db.Begin()
+			batch := db.Begin(true)
 			require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(fromKey), 1e9, 1e9))
 			require.NoError(b, batch.Commit())
 
