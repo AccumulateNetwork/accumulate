@@ -23,16 +23,16 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Enve
 		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.GetType())
 	}
 
-	sent := map[[32]byte]bool{}
+	confirmed := map[[32]byte]bool{}
 	for _, id := range body.Transactions {
-		sent[id] = true
+		confirmed[id] = true
 	}
 
 	unsent := ledger.Synthetic.Unsent
 	ledger.Synthetic.Unsent = make([][32]byte, 0, len(unsent))
 
 	for _, id := range unsent {
-		if !sent[id] {
+		if !confirmed[id] {
 			ledger.Synthetic.Unsent = append(ledger.Synthetic.Unsent, id)
 			continue
 		}

@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -170,36 +169,41 @@ func listNamedNetworkConfig(_ *cobra.Command, args []string) {
 
 func initNamedNetwork(*cobra.Command, []string) {
 
-	subnet, err := networks.Resolve(flagInit.Net)
+	lclSubnet, err := networks.Resolve(flagInit.Net)
 	checkf(err, "--network")
 
-	bvnNames := make([]string, 0, len(subnet.Network))
-	addresses := map[string][]string{}
-	index := map[string]int{}
-	for _, s := range subnet.Network {
-		if s.Type == cfg.BlockValidator {
-			bvnNames = append(bvnNames, s.Name)
-			index[s.Name] = s.Index
+	subnets := make([]config.Subnet, len(lclSubnet.Network))
+	i := uint(0)
+	for _, s := range lclSubnet.Network {
+		bvnNodes := make([]config.Node, len(s.Nodes))
+		for i, n := range s.Nodes {
+			bvnNodes[i] = config.Node{
+				Type:    n.Type,
+				Address: fmt.Sprintf("http://%s:%d", n.IP, s.Port),
+			}
 		}
 
-		for _, n := range s.Nodes {
-			addresses[s.Name] = append(addresses[s.Name], fmt.Sprintf("http://%s:%d", n.IP, s.Port))
+		subnets[i] = config.Subnet{
+			ID:    s.Name,
+			Type:  s.Type,
+			Nodes: bvnNodes,
 		}
+		i++
 	}
-	sort.Slice(bvnNames, func(i, j int) bool {
-		return index[bvnNames[i]] < index[bvnNames[j]]
-	})
 
-	fmt.Printf("Building config for %s (%s)\n", subnet.Name, subnet.NetworkName)
+	fmt.Printf("Building config for %s (%s)\n", lclSubnet.Name, lclSubnet.NetworkName)
 
-	listenIP := make([]string, len(subnet.Nodes))
-	remoteIP := make([]string, len(subnet.Nodes))
-	config := make([]*cfg.Config, len(subnet.Nodes))
+	listenIP := make([]string, len(lclSubnet.Nodes))
+	remoteIP := make([]string, len(lclSubnet.Nodes))
+	config := make([]*cfg.Config, len(lclSubnet.Nodes))
 
-	for i, node := range subnet.Nodes {
+	for i, node := range lclSubnet.Nodes {
 		listenIP[i] = "0.0.0.0"
 		remoteIP[i] = node.IP
-		config[i] = cfg.Default(subnet.Type, node.Type, subnet.Name)
+		config[i] = cfg.Default(lclSubnet.Type, node.Type, lclSubnet.Name)
+		config[i].Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", node.IP, lclSubnet.Port)
+		config[i].Accumulate.Network.Subnets = subnets
+
 		if flagInit.LogLevels != "" {
 			_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 			checkf(err, "--log-level")
@@ -213,9 +217,6 @@ func initNamedNetwork(*cobra.Command, []string) {
 		if flagInit.NoWebsite {
 			config[i].Accumulate.Website.Enabled = false
 		}
-
-		config[i].Accumulate.Network.BvnNames = bvnNames
-		config[i].Accumulate.Network.Addresses = addresses
 	}
 
 	if flagInit.Reset {
@@ -224,7 +225,7 @@ func initNamedNetwork(*cobra.Command, []string) {
 
 	check(node.Init(node.InitOptions{
 		WorkDir:  flagMain.WorkDir,
-		Port:     subnet.Port,
+		Port:     lclSubnet.Port,
 		Config:   config,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
@@ -304,7 +305,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.ID)
+	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.LocalSubnetID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Subnet
 	if flagInit.LogLevels != "" {
@@ -358,6 +359,39 @@ func nextIP() string {
 }
 
 func initDevNet(cmd *cobra.Command, _ []string) {
+	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
+	verifyInitFlags(cmd, count)
+
+	compose := new(dc.Config)
+	compose.Version = "3"
+	compose.Services = make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
+	compose.Volumes = make(map[string]dc.VolumeConfig, 1+count*(flagInitDevnet.NumBvns+1))
+
+	subnets := make([]config.Subnet, flagInitDevnet.NumBvns+1)
+	dnConfig := make([]*cfg.Config, count)
+	dnRemote := make([]string, count)
+	dnListen := make([]string, count)
+	initDNs(count, dnConfig, dnRemote, dnListen, compose, subnets)
+
+	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
+	bvnRemote := make([][]string, flagInitDevnet.NumBvns)
+	bvnListen := make([][]string, flagInitDevnet.NumBvns)
+	initBVNs(bvnConfig, count, bvnRemote, bvnListen, compose, subnets)
+
+	handleDNSSuffix(dnRemote, bvnRemote)
+
+	if flagInit.Reset {
+		nodeReset()
+	}
+
+	if !flagInitDevnet.Compose {
+		createInLocalFS(dnConfig, dnRemote, dnListen, bvnConfig, bvnRemote, bvnListen)
+		return
+	}
+	createDockerCompose(cmd, dnRemote, compose)
+}
+
+func verifyInitFlags(cmd *cobra.Command, count int) {
 	if cmd.Flag("network").Changed {
 		fatalf("--network is not applicable to devnet")
 	}
@@ -378,12 +412,6 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 		fatalf("Must have at least one block validator node")
 	}
 
-	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
-	compose := new(dc.Config)
-	compose.Version = "3"
-	compose.Services = make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
-	compose.Volumes = make(map[string]dc.VolumeConfig, 1+count*(flagInitDevnet.NumBvns+1))
-
 	switch len(flagInitDevnet.IPs) {
 	case 1:
 		// Generate a sequence from the base IP
@@ -392,37 +420,61 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 	default:
 		fatalf("not enough IPs - you must specify one base IP or one IP for each node")
 	}
+}
 
-	addresses := make(map[string][]string, flagInitDevnet.NumBvns+1)
-	dnConfig := make([]*cfg.Config, count)
-	dnRemote := make([]string, count)
-	dnListen := make([]string, count)
+func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []string, compose *dc.Config, subnets []cfg.Subnet) {
+	dnNodes := make([]config.Node, count)
 	for i := 0; i < count; i++ {
 		nodeType := cfg.Validator
-		if i > flagInitDevnet.NumValidators {
+		if i >= flagInitDevnet.NumValidators {
 			nodeType = cfg.Follower
 		}
 		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(cfg.Directory, nodeType, 0, i, compose)
+		dnNodes[i] = config.Node{
+			Type:    nodeType,
+			Address: fmt.Sprintf(fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort)),
+		}
+		dnConfig[i].Accumulate.Network.Subnets = subnets
+		dnConfig[i].Accumulate.Network.LocalAddress = parseHost(dnNodes[i].Address)
 	}
 
-	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
-	bvnRemote := make([][]string, flagInitDevnet.NumBvns)
-	bvnListen := make([][]string, flagInitDevnet.NumBvns)
-	bvns := make([]string, flagInitDevnet.NumBvns)
-	for bvn := range bvnConfig {
-		bvns[bvn] = fmt.Sprintf("BVN%d", bvn)
-		bvnConfig[bvn] = make([]*cfg.Config, count)
-		bvnRemote[bvn] = make([]string, count)
+	subnets[0] = config.Subnet{
+		ID:    protocol.Directory,
+		Type:  config.Directory,
+		Nodes: dnNodes,
+	}
+}
+
+func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnListen [][]string, compose *dc.Config, subnets []cfg.Subnet) {
+	for bvn := range bvnConfigs {
+		subnetID := fmt.Sprintf("BVN%d", bvn)
+		bvnConfigs[bvn] = make([]*cfg.Config, count)
+		bvnRemotes[bvn] = make([]string, count)
 		bvnListen[bvn] = make([]string, count)
+		bvnNodes := make([]config.Node, count)
+
 		for i := 0; i < count; i++ {
 			nodeType := cfg.Validator
-			if i > flagInitDevnet.NumValidators {
+			if i >= flagInitDevnet.NumValidators {
 				nodeType = cfg.Follower
 			}
-			bvnConfig[bvn][i], bvnRemote[bvn][i], bvnListen[bvn][i] = initDevNetNode(cfg.BlockValidator, nodeType, bvn, i, compose)
+			bvnConfigs[bvn][i], bvnRemotes[bvn][i], bvnListen[bvn][i] = initDevNetNode(cfg.BlockValidator, nodeType, bvn, i, compose)
+			bvnNodes[i] = config.Node{
+				Type:    nodeType,
+				Address: fmt.Sprintf("http://%s:%d", bvnRemotes[bvn][i], flagInitDevnet.BasePort),
+			}
+			bvnConfigs[bvn][i].Accumulate.Network.Subnets = subnets
+			bvnConfigs[bvn][i].Accumulate.Network.LocalAddress = parseHost(bvnNodes[i].Address)
+		}
+		subnets[bvn+1] = config.Subnet{
+			ID:    subnetID,
+			Type:  config.BlockValidator,
+			Nodes: bvnNodes,
 		}
 	}
+}
 
+func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 	if flagInitDevnet.Docker && flagInitDevnet.DnsSuffix != "" {
 		for i := range dnRemote {
 			dnRemote[i] += flagInitDevnet.DnsSuffix
@@ -433,55 +485,32 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 			}
 		}
 	}
+}
 
-	for i := 0; i < count; i++ {
-		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort))
-	}
+func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
+	logger := newLogger()
+	check(node.Init(node.InitOptions{
+		WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
+		Port:     flagInitDevnet.BasePort,
+		Config:   dnConfig,
+		RemoteIP: dnRemote,
+		ListenIP: dnListen,
+		Logger:   logger.With("subnet", protocol.Directory),
+	}))
 	for bvn := range bvnConfig {
-		for i := 0; i < count; i++ {
-			addresses[bvns[bvn]] = append(addresses[bvns[bvn]], fmt.Sprintf("http://%s:%d", bvnRemote[bvn][i], flagInitDevnet.BasePort))
-		}
-	}
-
-	for _, c := range dnConfig {
-		c.Accumulate.Network.BvnNames = bvns
-		c.Accumulate.Network.Addresses = addresses
-	}
-	for _, c := range bvnConfig {
-		for _, c := range c {
-			c.Accumulate.Network.BvnNames = bvns
-			c.Accumulate.Network.Addresses = addresses
-		}
-	}
-
-	if flagInit.Reset {
-		nodeReset()
-	}
-
-	if !flagInitDevnet.Compose {
-		logger := newLogger()
+		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
 		check(node.Init(node.InitOptions{
-			WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
+			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
 			Port:     flagInitDevnet.BasePort,
-			Config:   dnConfig,
-			RemoteIP: dnRemote,
-			ListenIP: dnListen,
-			Logger:   logger.With("subnet", protocol.Directory),
+			Config:   bvnConfig,
+			RemoteIP: bvnRemote,
+			ListenIP: bvnListen,
+			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 		}))
-		for bvn := range bvnConfig {
-			bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-			check(node.Init(node.InitOptions{
-				WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-				Port:     flagInitDevnet.BasePort,
-				Config:   bvnConfig,
-				RemoteIP: bvnRemote,
-				ListenIP: bvnListen,
-				Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
-			}))
-		}
-		return
 	}
+}
 
+func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {
 	var svc dc.ServiceConfig
 	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
 	svc.Name = "tools"
@@ -581,6 +610,14 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 
 	compose.Services = append(compose.Services, svc)
 	return config, svc.Name, "0.0.0.0"
+}
+
+func parseHost(address string) string {
+	nodeUrl, err := url.Parse(address)
+	if err == nil {
+		return nodeUrl.Host
+	}
+	return address
 }
 
 func newLogger() log.Logger {

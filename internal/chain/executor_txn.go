@@ -277,7 +277,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelo
 		return fmt.Errorf("invalid signature(s)")
 	}
 
-	// // TODO Do we need this check? It appears to be causing issues.
+	// // TODO Do we need this check? It appears to be causing issues and we can't guarantee that the governor sends transactions only once.
 	// // Check the envelope
 	// _, err := batch.Transaction(env.EnvHash()).GetState()
 	// switch {
@@ -406,6 +406,11 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 		sigKH := sha256.Sum256(sig.GetPublicKey())
 		if !bytes.Equal(urlKH, sigKH[:20]) {
 			return fmt.Errorf("signature %d's public key does not match the origin record", i)
+		}
+
+		// Don't bother with nonces for the faucet
+		if st.txType == protocol.TransactionTypeAcmeFaucet {
+			continue
 		}
 
 		switch {

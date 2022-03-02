@@ -103,6 +103,8 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		if err != nil {
 			return nil, err
 		}
+		packed.Invalidated = res.Invalidated
+		packed.SignatureThreshold = res.SignatureThreshold
 
 		packed.Receipts = res.Receipts
 		return packed, nil
@@ -126,10 +128,14 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 				return nil, err
 			}
 
-			res.Items[i], err = packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
 			if err != nil {
 				return nil, err
 			}
+			queryRes.Invalidated = tx.Invalidated
+			queryRes.SignatureThreshold = tx.SignatureThreshold
+
+			res.Items[i] = queryRes
 		}
 
 		return res, nil
@@ -340,6 +346,8 @@ query:
 	if err != nil {
 		return nil, err
 	}
+	packed.Invalidated = res.Invalidated
+	packed.SignatureThreshold = res.SignatureThreshold
 
 	packed.Receipts = res.Receipts
 	return packed, nil
@@ -389,10 +397,14 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 			return nil, err
 		}
 
-		res.Items[i], err = packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
 		if err != nil {
 			return nil, err
 		}
+		queryRes.Invalidated = tx.Invalidated
+		queryRes.SignatureThreshold = tx.SignatureThreshold
+
+		res.Items[i] = queryRes
 	}
 
 	return res, nil
