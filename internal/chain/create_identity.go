@@ -69,12 +69,12 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	identity.KeyBook = bookUrl
 	identity.ManagerKeyBook = body.Manager
 
+	st.Create(identity)
 	if !bookExists {
 		st.Create(book)
 	}
 	if !pageExists {
 		st.Create(page)
 	}
-	st.Create(identity)
 	return nil, nil
 }

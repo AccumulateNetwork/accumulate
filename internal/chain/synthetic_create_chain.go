@@ -69,8 +69,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		case protocol.AccountTypeIdentity:
 		default:
 			// Make sure the ADI actually exists
-			_, err = st.LoadUrl(u.Identity()) // TODO debug if this works
-			//_, err = st.LoadUrl(u.RootIdentity())
+			_, err = st.LoadUrl(u.Identity())
 			if errors.Is(err, storage.ErrNotFound) {
 				return nil, fmt.Errorf("missing identity for %s", u.String())
 			} else if err != nil {
