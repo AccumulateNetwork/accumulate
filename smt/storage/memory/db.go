@@ -22,10 +22,27 @@ type DB struct {
 	logger  storage.Logger
 }
 
+func New(logger storage.Logger) *DB {
+	m := new(DB)
+	m.logger = logger
+
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Either allocate a new map, or clear an existing one.
+	if m.entries == nil {
+		m.entries = make(map[storage.Key][]byte)
+	} else {
+		for k := range m.entries {
+			delete(m.entries, k)
+		}
+	}
+	m.DBOpen.Store(true)
+	return m
+}
+
 func NewDB() *DB {
-	db := new(DB)
-	_ = db.InitDB("", nil)
-	return db
+	return New(nil)
 }
 
 var _ storage.KeyValueStore = (*DB)(nil)
@@ -36,11 +53,11 @@ func (m *DB) Ready() bool {
 	return m.DBOpen.Load()
 }
 
-// EndBatch
+// commit
 // Takes all the key value pairs collected in a cache of mapped values and
 // adds them to the database.  The assumption here is that the order in which
 // the cache is applied to a key value store does not matter.
-func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
+func (m *DB) commit(txCache map[storage.Key][]byte) error {
 	m.mutex.Lock()
 	if !m.Ready() {
 		return storage.ErrNotOpen
@@ -50,23 +67,6 @@ func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 		m.entries[k] = v
 	}
 	return nil
-}
-
-// GetKeys
-// Return the keys in the DB.
-func (m *DB) GetKeys() [][32]byte {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	if !m.Ready() {
-		return nil
-	}
-	keys := make([][32]byte, len(m.entries))
-	idx := 0
-	for k := range m.entries {
-		keys[idx] = k
-		idx++
-	}
-	return keys
 }
 
 // Export writes the database to a map
@@ -111,33 +111,7 @@ func (m *DB) Close() error {
 	return nil
 }
 
-// InitDB
-// Initialize a database; a memory database has no existing state, so this
-// routine does nothing with the filename.  We could save and restore
-// a memory database from a file in the future.
-//
-// An existing memory database will be cleared by calling InitDB
-func (m *DB) InitDB(_ string, logger storage.Logger) error {
-	m.logger = logger
-
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	// Either allocate a new map, or clear an existing one.
-	if m.entries == nil {
-		m.entries = make(map[storage.Key][]byte)
-	} else {
-		for k := range m.entries {
-			delete(m.entries, k)
-		}
-	}
-	m.DBOpen.Store(true)
-	return nil
-}
-
-// Get
-// Returns the value for a key from the database
-func (m *DB) Get(key storage.Key) (value []byte, err error) {
+func (m *DB) get(key storage.Key) (value []byte, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.Ready() {
@@ -149,30 +123,6 @@ func (m *DB) Get(key storage.Key) (value []byte, err error) {
 		return nil, storage.ErrNotFound
 	}
 	return append([]byte{}, v...), nil
-}
-
-// Put
-// Takes a key and a value, and puts the pair into the database
-func (m *DB) Put(key storage.Key, value []byte) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-	if !m.Ready() {
-		return storage.ErrNotOpen
-	}
-	m.entries[key] = append([]byte{}, value...)
-	return nil
-}
-
-func (db *DB) Begin(writable bool) storage.KeyValueTxn {
-	b := &Batch{
-		db:     db,
-		mu:     new(sync.RWMutex),
-		values: map[storage.Key][]byte{},
-	}
-	if db.logger == nil {
-		return b
-	}
-	return &storage.DebugBatch{Batch: b, Logger: db.logger}
 }
 
 type jsonDB []jsonEntry

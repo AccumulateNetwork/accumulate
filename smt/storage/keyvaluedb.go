@@ -20,8 +20,7 @@ type KeyValueTxn interface {
 }
 
 type KeyValueStore interface {
-	Close() error                                // Returns an error if the close fails
-	InitDB(filepath string, logger Logger) error // Sets up the database, returns error if it fails
+	Close() error // Returns an error if the close fails
 	Begin(writable bool) KeyValueTxn
 }
 
