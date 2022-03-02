@@ -19,7 +19,7 @@ import (
 
 // CheckTx implements ./abci.Chain
 func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
 	st, executor, hasEnoughSigs, err := m.validate(batch, env)

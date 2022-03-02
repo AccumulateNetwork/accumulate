@@ -34,7 +34,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 
 		var rh common.RandHash
 		store := memory.NewDB()
-		storeTx := store.Begin()
+		storeTx := store.Begin(true)
 
 		mm, err := NewMerkleManager(storeTx, 2)
 		require.NoError(t, err, "should create MerkleManager")
