@@ -3,11 +3,11 @@ package abci_test
 import (
 	"crypto/sha256"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )

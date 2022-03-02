@@ -3,6 +3,7 @@ package chain
 import (
 	"errors"
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"

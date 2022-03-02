@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 

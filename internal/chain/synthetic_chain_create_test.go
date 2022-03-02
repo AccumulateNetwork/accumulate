@@ -51,7 +51,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	require.NoError(t, err)
 
 	fooKey := generateKey()
-	batch := db.Begin()
+	batch := db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSubADI(batch, "foo", "foo/bar"))
 	require.NoError(t, batch.Commit())
@@ -75,7 +75,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 		WithBody(body).
 		SignLegacyED25519(fooKey)
 
-	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), env)
+	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
 	require.NoError(t, err)
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
