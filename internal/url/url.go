@@ -159,13 +159,13 @@ func (u *URL) RootIdentity() *URL {
 // Identity returns a copy of the URL with the last section cut off the path.
 func (u *URL) Identity() *URL {
 	v := *u
-	if v.Path != "" { // TODO debug if this works
+	if v.Path != "" {
 		if v.Path[len(v.Path)-1:] == "/" {
 			v.Path = v.Path[:len(v.Path)-1]
 		}
 
 		lsi := strings.LastIndex(v.Path, "/")
-		if lsi > 0 {
+		if lsi > -1 {
 			v.Path = v.Path[0:lsi]
 		}
 	}

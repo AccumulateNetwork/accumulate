@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -93,14 +94,19 @@ func TestValidate(t *testing.T) {
 	t.Run("Create ADI", func(t *testing.T) {
 		adiKey = newKey([]byte(t.Name()))
 
+		bookUrl, err := url.Parse(fmt.Sprintf("%s/book", adiName))
+		require.NoError(t, err)
+		pageUrl, err := url.Parse(fmt.Sprintf("%s/page", adiName))
+		require.NoError(t, err)
+
 		executeTx(t, japi, "create-adi", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
 			Payload: &CreateIdentity{
-				Url:         adiName,
-				PublicKey:   adiKey[32:],
-				KeyBookName: "book",
-				KeyPageName: "page",
+				Url:        adiName,
+				PublicKey:  adiKey[32:],
+				KeyBookUrl: bookUrl,
+				KeyPageUrl: pageUrl,
 			},
 		})
 

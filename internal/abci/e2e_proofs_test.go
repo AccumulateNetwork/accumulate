@@ -2,6 +2,8 @@ package abci_test
 
 import (
 	"crypto/sha256"
+	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,8 +31,11 @@ func TestProofADI(t *testing.T) {
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
-		adi.KeyBookName = "book0"
-		adi.KeyPageName = "page0"
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
+		require.NoError(t, err)
+		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page0", adi.Url))
+		require.NoError(t, err)
 		adi.PublicKey = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
