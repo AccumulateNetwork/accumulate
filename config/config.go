@@ -14,6 +14,7 @@ import (
 	tm "github.com/tendermint/tendermint/config"
 	accurl "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	etcd "go.etcd.io/etcd/client/v3"
 )
 
 type NetworkType string
@@ -30,6 +31,14 @@ const (
 	Follower  NodeType = "follower"
 )
 
+type StorageType string
+
+const (
+	MemoryStorage StorageType = "memory"
+	BadgerStorage StorageType = "badger"
+	EtcdStorage   StorageType = "etcd"
+)
+
 const DefaultLogLevels = "error;accumulate=info" // main=info;state=info;statesync=info;accumulate=debug;executor=info;disk-monitor=info;init=info
 
 func Default(net NetworkType, node NodeType, netId string) *Config {
@@ -41,6 +50,8 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Second
 	c.Accumulate.API.EnableDebugMethods = true
+	c.Accumulate.Storage.Type = BadgerStorage
+	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
@@ -62,6 +73,7 @@ type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 
 	Network Network `toml:"network" mapstructure:"network"`
+	Storage Storage `toml:"storage" mapstructure:"storage"`
 	API     API     `toml:"api" mapstructure:"api"`
 	Website Website `toml:"website" mapstructure:"website"`
 }
@@ -84,6 +96,12 @@ type Node struct {
 	Type    NodeType `toml:"type" mapstructure:"type"`
 }
 
+type Storage struct {
+	Type StorageType  `toml:"type" mapstructure:"type"`
+	Path string       `toml:"path" mapstructure:"path"`
+	Etcd *etcd.Config `toml:"etcd" mapstructure:"etcd"`
+}
+
 type API struct {
 	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
 	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
@@ -95,6 +113,13 @@ type API struct {
 type Website struct {
 	Enabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
 	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
+}
+
+func MakeAbsolute(root, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(root, path)
 }
 
 func OffsetPort(addr string, offset int) (*url.URL, error) {

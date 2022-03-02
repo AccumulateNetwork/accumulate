@@ -93,7 +93,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
-			return database.Open("", true, d.Logger)
+			return database.OpenInMemory(d.Logger), nil
 		}
 	}
 
@@ -166,8 +166,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.height++
 
-	kv := new(memory.DB)
-	_ = kv.InitDB("", nil)
+	kv := memory.New(nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
 		Network:     *n.network,
 		GenesisTime: time.Now(),

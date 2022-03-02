@@ -7,15 +7,31 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-type Batchable interface {
-	Get(storage.Key) ([]byte, error)
-	EndBatch(map[storage.Key][]byte) error
-}
+type GetFunc func(storage.Key) ([]byte, error)
+type CommitFunc func(map[storage.Key][]byte) error
 
 type Batch struct {
-	db     Batchable
+	get    GetFunc
+	commit CommitFunc
 	mu     *sync.RWMutex
 	values map[storage.Key][]byte
+}
+
+func NewBatch(get GetFunc, commit CommitFunc) storage.KeyValueTxn {
+	return &Batch{
+		get:    get,
+		commit: commit,
+		mu:     new(sync.RWMutex),
+		values: map[storage.Key][]byte{},
+	}
+}
+
+func (db *DB) Begin(writable bool) storage.KeyValueTxn {
+	b := NewBatch(db.get, db.commit)
+	if db.logger == nil {
+		return b
+	}
+	return &storage.DebugBatch{Batch: b, Logger: db.logger}
 }
 
 var _ storage.KeyValueTxn = (*Batch)(nil)
@@ -49,7 +65,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 		return u, nil
 	}
 
-	v, err = b.db.Get(key)
+	v, err = b.get(key)
 	if err != nil {
 		return nil, fmt.Errorf("get %v: %w", key, err)
 	}
@@ -62,7 +78,7 @@ func (b *Batch) Commit() error {
 	b.values = nil // Prevent reuse
 	b.mu.Unlock()
 
-	return b.db.EndBatch(values)
+	return b.commit(values)
 }
 
 func (b *Batch) Discard() {
@@ -73,7 +89,8 @@ func (b *Batch) Discard() {
 
 func (b *Batch) Copy() *Batch {
 	c := new(Batch)
-	c.db = b.db
+	c.get = b.get
+	c.commit = b.commit
 	c.mu = new(sync.RWMutex)
 	c.values = make(map[storage.Key][]byte, len(b.values))
 
