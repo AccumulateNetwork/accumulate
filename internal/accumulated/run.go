@@ -34,12 +34,13 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done chan struct{}
-	db   *database.Database
-	node *node.Node
-	api  *http.Server
-	pv   *privval.FilePV
-	jrpc *api.JrpcMethods
+	done              chan struct{}
+	db                *database.Database
+	node              *node.Node
+	api               *http.Server
+	pv                *privval.FilePV
+	jrpc              *api.JrpcMethods
+	connectionManager connections.ConnectionInitializer
 
 	// knobs for tests
 	// IsTest   bool
@@ -135,10 +136,10 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	connectionManager, connectionInitializer := connections.NewConnectionManager(d.Config, d.Logger)
+	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger)
 
 	router := routing.RouterInstance{
-		ConnectionManager: connectionManager,
+		ConnectionManager: d.connectionManager,
 		Network:           &d.Config.Accumulate.Network,
 	}
 	execOpts := chain.ExecutorOptions{
@@ -215,7 +216,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
-	err = connectionInitializer.InitClients(lclient, statusChecker)
+	err = d.connectionManager.InitClients(lclient, statusChecker)
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
@@ -275,6 +276,15 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	return nil
+}
+
+func (d *Daemon) ConnectDirectly(e *Daemon) error {
+	err := d.connectionManager.ConnectDirectly(e.connectionManager)
+	if err != nil {
+		return err
+	}
+
+	return e.connectionManager.ConnectDirectly(d.connectionManager)
 }
 
 func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {

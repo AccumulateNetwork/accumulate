@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Data manages a data chain.
@@ -55,6 +56,9 @@ func (d *Data) Get(hash []byte) (*protocol.DataEntry, error) {
 // GetLatest looks up the latest entry.
 func (d *Data) GetLatest() ([]byte, *protocol.DataEntry, error) {
 	height := d.chain.Height()
+	if height == 0 {
+		return nil, nil, storage.ErrNotFound
+	}
 	hash, err := d.chain.Entry(height - 1)
 	if err != nil {
 		return nil, nil, err

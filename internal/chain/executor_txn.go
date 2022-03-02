@@ -19,7 +19,7 @@ import (
 
 // CheckTx implements ./abci.Chain
 func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
 	st, executor, hasEnoughSigs, err := m.validate(batch, env)
@@ -406,6 +406,11 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 		sigKH := sha256.Sum256(sig.GetPublicKey())
 		if !bytes.Equal(urlKH, sigKH[:20]) {
 			return fmt.Errorf("signature %d's public key does not match the origin record", i)
+		}
+
+		// Don't bother with nonces for the faucet
+		if st.txType == protocol.TransactionTypeAcmeFaucet {
+			continue
 		}
 
 		switch {

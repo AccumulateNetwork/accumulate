@@ -22,19 +22,19 @@ func TestLiteTokenTransactions(t *testing.T) {
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
 
-	batch := db.Begin()
+	batch := db.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(privKey), acctesting.TestTokenAmount))
 	require.NoError(t, batch.Commit())
 
 	sponsorUrl := acctesting.AcmeLiteAddressStdPriv(privKey)
 	liteAcct := new(protocol.LiteTokenAccount)
-	require.NoError(t, db.Begin().Account(sponsorUrl).GetStateAs(liteAcct))
+	require.NoError(t, db.Begin(true).Account(sponsorUrl).GetStateAs(liteAcct))
 
 	//now move some tokens around
 	destAddr := testing2.AcmeLiteAddressStdPriv(destPrivKey).String()
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 
-	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), gtx)
+	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), gtx)
 	require.NoError(t, err)
 
 	_, err = SendTokens{}.Validate(st, gtx)
