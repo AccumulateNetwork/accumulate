@@ -140,10 +140,11 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	env.Transaction.Body = new(protocol.InternalGenesis)
 
 	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)
-	if err == nil {
-		return nil, errors.New("already initialized")
-	} else if !errors.Is(err, storage.ErrNotFound) {
+	if err != nil {
 		return nil, err
+	}
+	if st.Origin != nil {
+		return nil, errors.New("already initialized")
 	}
 	st.logger.L = m.logger
 
