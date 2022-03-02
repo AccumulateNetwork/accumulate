@@ -38,9 +38,6 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 		return nil, fmt.Errorf("invalid KeyBook URL %q: %v", bookUrl.String(), err)
 	}
 
-	keySpec := new(protocol.KeySpec)
-	keySpec.PublicKey = body.PublicKey
-
 	pageUrl, err := protocol.ValidateKeyPageUrl(bookUrl, body.KeyPageUrl)
 	if err != nil {
 		return nil, err
@@ -49,9 +46,15 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	var pageExists = st.LoadUrlAs(pageUrl, page) == nil
 	if !pageExists {
 		page.Url = pageUrl
-		page.Keys = append(page.Keys, keySpec)
 		page.KeyBook = bookUrl
 		page.Threshold = 1 // Require one signature from the Key Page
+
+		if len(body.PublicKey) == 0 {
+			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyPage")
+		}
+		keySpec := new(protocol.KeySpec)
+		keySpec.PublicKey = body.PublicKey
+		page.Keys = append(page.Keys, keySpec)
 	}
 
 	book := protocol.NewKeyBook()

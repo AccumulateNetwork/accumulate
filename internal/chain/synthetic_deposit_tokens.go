@@ -47,13 +47,13 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		account = lite
 
 		liteIdentity := protocol.NewLiteIdentity()
-		err := st.LoadUrlAs(tx.Transaction.Origin.RootIdentity(), liteIdentity)
+		err := st.LoadUrlAs(tx.Transaction.Origin.Identity(), liteIdentity)
 		switch {
 		case err == nil:
 			// OK
 		case errors.Is(err, storage.ErrNotFound):
-			liteIdentity.Url = tx.Transaction.Origin.RootIdentity()
-			liteIdentity.KeyBook = tx.Transaction.Origin.RootIdentity()
+			liteIdentity.Url = tx.Transaction.Origin.Identity()
+			liteIdentity.KeyBook = tx.Transaction.Origin.Identity()
 			st.Update(liteIdentity)
 		default:
 			return nil, err
