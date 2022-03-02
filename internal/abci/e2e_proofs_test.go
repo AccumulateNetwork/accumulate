@@ -20,7 +20,7 @@ func TestProofADI(t *testing.T) {
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
-	batch := n.db.Begin()
+	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, acctesting.TestTokenAmount, initialCredits))
 	require.NoError(t, batch.Commit())
 	liteAddr := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
@@ -40,7 +40,7 @@ func TestProofADI(t *testing.T) {
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
 
-	batch = n.db.Begin()
+	batch = n.db.Begin(true)
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/page0"), initialCredits))
 	require.NoError(t, batch.Commit())
 
