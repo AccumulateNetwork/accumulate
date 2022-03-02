@@ -354,10 +354,13 @@ func (m *Executor) Commit() ([]byte, error) {
 		}
 	}
 
-	// Get BPT root from a clean batch
-	batch := m.DB.Begin()
-	defer batch.Discard()
-	return batch.RootHash(), nil
+	//return anchor from minor root anchor chain
+	chain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
+	if err != nil {
+		return nil, err
+	}
+
+	return chain.Anchor(), nil
 }
 
 func (m *Executor) updateOraclePrice(ledgerState *protocol.InternalLedger) error {
