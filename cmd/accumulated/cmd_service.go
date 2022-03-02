@@ -51,7 +51,7 @@ func manageService(cmd *cobra.Command, args []string) {
 		serviceConfig.Option["UserService"] = true
 	}
 
-	prog := NewProgram(cmd)
+	prog := NewProgram(cmd, singleNodeWorkDir, nil)
 	svc, err := service.New(prog, serviceConfig)
 	check(err)
 
@@ -75,7 +75,7 @@ func manageService(cmd *cobra.Command, args []string) {
 
 	switch args[0] {
 	case ServiceInstall, ServiceReinstall:
-		wd, err := prog.workDir()
+		wd, err := singleNodeWorkDir(cmd)
 		check(err)
 
 		// TODO Better way of doing this?
