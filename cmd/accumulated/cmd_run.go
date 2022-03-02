@@ -55,7 +55,7 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 }
 
 func runNode(cmd *cobra.Command, _ []string) {
-	prog := NewProgram(cmd)
+	prog := NewProgram(cmd, singleNodeWorkDir, nil)
 	svc, err := service.New(prog, serviceConfig)
 	check(err)
 
