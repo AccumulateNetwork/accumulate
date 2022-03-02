@@ -32,13 +32,8 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
-	pageUrl, err := protocol.ValidateKeyPageUrl(st.OriginUrl, body.Url)
-	if err != nil {
-		return nil, err
-	}
-
-	if !pageUrl.Identity().Equal(st.OriginUrl.Identity()) {
-		return nil, fmt.Errorf("%q does not belong to %q", pageUrl, st.OriginUrl)
+	if !body.Url.Identity().Equal(st.OriginUrl.Identity()) {
+		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
@@ -46,7 +41,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()
-	page.Url = pageUrl
+	page.Url = body.Url
 	page.Threshold = 1 // Require one signature from the Key Page
 	page.ManagerKeyBook = body.Manager
 
@@ -58,7 +53,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			return nil, fmt.Errorf("invalid origin record URL: %v", err)
 		}
 
-		group.Pages = append(group.Pages, pageUrl)
+		group.Pages = append(group.Pages, body.Url)
 		page.KeyBook = groupUrl
 
 		err = scc.Update(group)
@@ -73,7 +68,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		page.Keys = append(page.Keys, ss)
 	}
 
-	err = scc.Create(page)
+	err := scc.Create(page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state: %v", err)
 	}

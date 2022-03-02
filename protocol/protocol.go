@@ -51,6 +51,9 @@ const (
 
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
+
+	// DefaultKeyPage is the default key page name when not specified
+	DefaultKeyPage = "page0"
 )
 
 // AcmeUrl returns `acc://ACME`.

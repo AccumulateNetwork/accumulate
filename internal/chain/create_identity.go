@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -39,7 +40,7 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 		return nil, fmt.Errorf("invalid KeyBook URL %q: %v", bookUrl.String(), err)
 	}
 
-	pageUrl, err := protocol.ValidateKeyPageUrl(bookUrl, body.KeyPageUrl)
+	pageUrl, err := validateKeyPageUrl(bookUrl, body.KeyPageUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -78,4 +79,26 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 		st.Create(page)
 	}
 	return nil, nil
+}
+
+func validateKeyPageUrl(keyBookUrl *url.URL, keyPageUrl *url.URL) (*url.URL, error) {
+	var err error
+	bkParentUrl, err := keyBookUrl.Parent()
+	if err != nil {
+		return nil, fmt.Errorf("invalid KeyBook URL: %w\nthe KeyBook URL should be \"adi_path/<KeyBook>\"", err)
+	}
+	if keyPageUrl == nil {
+		return bkParentUrl.JoinPath(protocol.DefaultKeyPage), nil
+	} else {
+		kpParentUrl, err := keyPageUrl.Parent()
+		if err != nil {
+			return nil, fmt.Errorf("invalid KeyPage URL: %w\nthe KeyPage URL should be \"adi_path/<KeyPage>\"", err)
+		}
+
+		if !bkParentUrl.Equal(kpParentUrl) {
+			return nil, fmt.Errorf("KeyPage %q should have the same ADI parent path as its KeyBook %q", keyPageUrl, keyBookUrl)
+		}
+	}
+
+	return keyPageUrl, nil
 }
