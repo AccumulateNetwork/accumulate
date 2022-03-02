@@ -45,7 +45,7 @@ func singleNodeWorkDir(cmd *cobra.Command) (string, error) {
 	}
 }
 
-func (p *Program) Start(s service.Service) error {
+func (p *Program) Start(s service.Service) (err error) {
 	logWriter := newLogWriter(s)
 
 	primaryDir, err := p.primaryDir(p.cmd)
@@ -99,20 +99,25 @@ func (p *Program) Start(s service.Service) error {
 		return err
 	})
 
+	defer func() {
+		if err != nil {
+			errg = new(errgroup.Group)
+			if didStartPrimary {
+				errg.Go(p.primary.Stop)
+			}
+			if didStartSecondary {
+				errg.Go(p.secondary.Stop)
+			}
+			_ = errg.Wait()
+		}
+	}()
+
 	err = errg.Wait()
-	if err == nil {
+	if err != nil {
 		return err
 	}
 
-	errg = new(errgroup.Group)
-	if didStartPrimary {
-		errg.Go(p.primary.Stop)
-	}
-	if didStartSecondary {
-		errg.Go(p.secondary.Stop)
-	}
-	_ = errg.Wait()
-	return nil
+	return p.primary.ConnectDirectly(p.secondary)
 }
 
 func (p *Program) Stop(service.Service) error {
