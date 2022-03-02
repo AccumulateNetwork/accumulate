@@ -209,7 +209,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	// The governor must be read-only, so we must not commit the
 	// database transaction or the state cache. If the governor makes
 	// ANY changes, the system will no longer be deterministic.
-	batch := g.DB.Begin()
+	batch := g.DB.Begin(false)
 	defer batch.Discard()
 
 	// TODO This will hit the database with a lot of queries, maybe we shouldn't do this
