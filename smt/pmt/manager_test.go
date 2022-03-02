@@ -45,7 +45,7 @@ func TestManager(t *testing.T) {
 	d := 100000
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	bptManager := NewBPTManager(storeTx)
 	for i := 0; i < d; i++ {
 		key := sha256.Sum256([]byte(fmt.Sprintf("0 key %d", i)))
@@ -71,7 +71,7 @@ func TestManagerSeries(t *testing.T) {
 	d := 100                                   // Add 100 entries each pass.
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	var previous [32]byte    // Previous final root
 	for h := 0; h < 3; h++ { // Run our test 3 times, each time killing one manager, building another which must
