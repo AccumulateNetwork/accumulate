@@ -323,6 +323,10 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) abci.EndBlockResponse {
 
 // Commit implements ./abci.Chain
 func (m *Executor) Commit() ([]byte, error) {
+	return m.commit(false)
+}
+
+func (m *Executor) commit(force bool) ([]byte, error) {
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 
@@ -351,7 +355,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 	ledgerState.Updates = updatedSlice
 
-	if m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
+	if !force && m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
 		m.logInfo("Committed empty transaction")
 		m.blockBatch.Discard()
 	} else {
