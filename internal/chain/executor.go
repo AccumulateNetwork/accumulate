@@ -209,8 +209,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 	}
 
 	// Load the genesis state (JSON) into an in-memory key-value store
-	src := new(memory.DB)
-	_ = src.InitDB("", nil)
+	src := memory.New(nil)
 	err = src.UnmarshalJSON(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal app state: %v", err)

@@ -16,8 +16,7 @@ import (
 
 func TestLiteTokenTransactions(t *testing.T) {
 	tokenUrl := types.String(protocol.AcmeUrl().String())
-	db, err := database.Open("", true, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
