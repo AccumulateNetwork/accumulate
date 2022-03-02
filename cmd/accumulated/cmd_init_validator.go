@@ -166,13 +166,45 @@ func initValidator(cmd *cobra.Command, args []string) {
 	}
 
 	for _, c := range dnConfig {
-		c.Accumulate.Network.BvnNames = bvns
-		c.Accumulate.Network.Addresses = addresses
+		c.Accumulate.Network.Type = config.Directory
+		c.Accumulate.Network.LocalSubnetID = directory.Name
+		c.Accumulate.Network.LocalAddress = fmt.Sprintf("http://%s:%d", dnListen[0], directory.Port)
+		for _, v := range network.Subnet {
+			s := config.Subnet{}
+			s.ID = v.Name
+			s.Type = v.Type
+			for _, a := range v.Nodes {
+				address := fmt.Sprintf("http://%s:%d", a.IP, v.Port)
+				n := config.Node{}
+				n.Address = address
+				n.Type = a.Type
+				s.Nodes = append(s.Nodes, n)
+			}
+
+			c.Accumulate.Network.Subnets = append(c.Accumulate.Network.Subnets, s)
+		}
 	}
 	for _, c := range bvnConfig {
 
-		c.Accumulate.Network.BvnNames = bvns
-		c.Accumulate.Network.Addresses = addresses
+		c.Accumulate.Network.LocalAddress = addresses[subnet.Name][0]
+		c.Accumulate.Network.Type = config.BlockValidator
+		c.Accumulate.Network.LocalSubnetID = subnet.Name
+		c.Accumulate.Network.LocalAddress = fmt.Sprintf("http://%s:%d", bvnListen[0], subnet.Port)
+		for _, v := range network.Subnet {
+			s := config.Subnet{}
+			s.ID = v.Name
+			s.Type = v.Type
+
+			for _, a := range v.Nodes {
+				address := fmt.Sprintf("http://%s:%d", a.IP, v.Port)
+				n := config.Node{}
+				n.Type = a.Type
+				n.Address = address
+				s.Nodes = append(s.Nodes, n)
+			}
+
+			c.Accumulate.Network.Subnets = append(c.Accumulate.Network.Subnets, s)
+		}
 	}
 
 	if flagInit.Reset {
