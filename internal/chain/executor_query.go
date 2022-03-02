@@ -488,6 +488,11 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
+	err = getPendingStatus(batch, txState.SigInfo, status, &qr)
+	if err != nil {
+		return nil, err
+	}
+
 	if !prove {
 		return &qr, nil
 	}
@@ -653,7 +658,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 }
 
 func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
-	batch := m.DB.Begin()
+	batch := m.DB.Begin(true)
 	defer batch.Discard()
 
 	switch q.Type {

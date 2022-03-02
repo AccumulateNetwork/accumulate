@@ -3,7 +3,6 @@ package chain_test
 import (
 	"math/big"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,12 +42,30 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			db := database.New(store, logger)
 
 			network := config.Network{
-				Type:     config.BlockValidator,
-				ID:       "BVN0",
-				BvnNames: []string{"BVN0"},
-				Addresses: map[string][]string{
-					strings.ToLower(protocol.Directory): {"http://0.dn:12345"},
-					"bvn0":                              {"http://0.0.bvn:12345"},
+				Type:          config.BlockValidator,
+				LocalSubnetID: "BVN0",
+				LocalAddress:  "http://0.0.bvn:12345",
+				Subnets: []config.Subnet{
+					{
+						ID:   protocol.Directory,
+						Type: config.Directory,
+						Nodes: []config.Node{
+							{
+								Address: "http://0.dn:12345",
+								Type:    config.Validator,
+							},
+						},
+					},
+					{
+						ID:   "BVN0",
+						Type: config.BlockValidator,
+						Nodes: []config.Node{
+							{
+								Address: "http://0.0.bvn:12345",
+								Type:    config.Validator,
+							},
+						},
+					},
 				},
 			}
 
@@ -75,7 +92,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			toKey0 := acctesting.GenerateKey(b.Name(), "to", 0)
 			toUrl0 := acctesting.AcmeLiteAddressStdPriv(toKey0)
 
-			batch := db.Begin()
+			batch := db.Begin(true)
 			require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(fromKey), 1e9, 1e9))
 			require.NoError(b, batch.Commit())
 

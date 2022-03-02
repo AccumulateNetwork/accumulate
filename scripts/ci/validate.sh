@@ -87,10 +87,10 @@ NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.js
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":10000}'
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
-    [ "$RESULT" == "10000" ] && success || die "cannot update price oracle"
+    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
     echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
 fi
@@ -218,6 +218,7 @@ fi
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
 
+
 section "Query pending chain at height 0 by URL"
 TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
 
@@ -249,7 +250,7 @@ BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
 AFTER=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
-[ $DIFF -eq 10000000000 ] && success || die "Faucet did not work, want +10000000000, got ${DIFF}"
+[ $DIFF -eq 200000000000 ] && success || die "Faucet did not work, want +200000000000, got ${DIFF}"
 
 section "Parse acme faucet TXNs (API v2, AC-603)"
 api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "url": "7117c50f04f1254d56b704dc05298912deeb25dbc1d26ef6/ACME", "count": 10 } }' | jq -r '.result.items | map(.type)[]' | grep -q acmeFaucet
@@ -318,6 +319,31 @@ wait-for-tx $TXID
 echo $JSON | jq -re .result.entryHash 1> /dev/null || die "Deliver response does not include the entry hash"
 accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die "Transaction query response does not include the entry hash"
 success
+
+section "Create a sub ADI"
+wait-for cli-tx adi create keytest keytest-0-0 keytest/sub1/sub2 keytest/sub1/sub2/book keytest/sub1/sub2/page0
+accumulate adi get keytest 1> /dev/null && success || die "Cannot find keytest"
+
+section "Add credits to the sub ADI's key page 0"
+wait-for cli-tx credits ${LITE} keytest/sub1/sub2/page0 60000
+BALANCE=$(accumulate -j page get keytest/sub1/sub2/page0 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/sub2/page0 should have 60000 credits but has ${BALANCE}"
+
+section "Create Data Account for sub ADI"
+wait-for cli-tx account create data --scratch keytest/sub1/sub2 keytest-0-0 keytest/sub1/sub2/data
+accumulate account get keytest/sub1/sub2/data 1> /dev/null || die "Cannot find keytest/sub1/sub2/data"
+accumulate -j account get keytest/sub1/sub2/data | jq -re .data.scratch 1> /dev/null || die "keytest/sub1/sub2/data is not a scratch account"
+success
+
+section "Write data to sub ADI Data Account"
+JSON=$(accumulate -j data write keytest/sub1/sub2/data keytest-0-0 "foo" "bar")
+TXID=$(echo $JSON | jq -re .transactionHash)
+echo $JSON | jq -C --indent 0
+wait-for-tx $TXID
+echo $JSON | jq -re .result.entryHash 1> /dev/null || die "Deliver response does not include the entry hash"
+accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die "Transaction query response does not include the entry hash"
+success
+
 
 section "Issue a new token"
 JSON=$(accumulate -j token create keytest keytest-0-0 keytest/foocoin bar 8)

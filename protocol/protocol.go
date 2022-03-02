@@ -145,7 +145,7 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	}
 
 	if !AcmeUrl().Equal(tokenUrl) {
-		if err := IsValidAdiUrl(tokenUrl.RootIdentity()); err != nil {
+		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
 			return nil, errors.New("invalid adi in token URL")
 		}
 		if tokenUrl.Path == "" {
@@ -245,11 +245,7 @@ func IsValidAdiUrl(u *url.URL) error {
 	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
 		errs = append(errs, "identity could be a lite token account key")
 	}
-	/*	TODO Add reserved keywords check, also for u.Host
-		if u.Path != "" {
-			errs = append(errs, "path is not empty")
-		}
-	*/if u.Query != "" {
+	if u.Query != "" {
 		errs = append(errs, "query is not empty")
 	}
 	if u.Fragment != "" {
@@ -319,4 +315,9 @@ func ParseBvnUrl(u *url.URL) (string, bool) {
 // BelongsToDn checks if the give account belongs to the DN.
 func BelongsToDn(u *url.URL) bool {
 	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
+}
+
+// BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.
+func BvnNameFromSubnetId(subnetId string) string {
+	return "bvn-" + strings.ToLower(subnetId)
 }

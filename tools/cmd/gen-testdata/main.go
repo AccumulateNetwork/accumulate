@@ -59,8 +59,8 @@ type TC = testdata.TestCase
 var txnTests = []*TCG{
 	{Name: "CreateIdentity", Cases: []*TC{
 		txnTest1("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:]}),
-		txnTest1("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:], KeyPageName: "page"}),
-		txnTest1("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:], KeyBookName: "book", KeyPageName: "page"}),
+		txnTest1("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:], KeyBookUrl: parseUrl("adi/page")}),
+		txnTest1("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:], KeyBookUrl: parseUrl("adi/book"), KeyPageUrl: parseUrl("adi/page")}),
 	}},
 	{Name: "CreateTokenAccount", Cases: []*TC{
 		txnTest1("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME")}),

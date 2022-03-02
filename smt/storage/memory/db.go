@@ -9,7 +9,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/batch"
 )
 
 // DB
@@ -164,8 +163,16 @@ func (m *DB) Put(key storage.Key, value []byte) error {
 	return nil
 }
 
-func (db *DB) Begin() storage.KeyValueTxn {
-	return batch.New(db, db.logger)
+func (db *DB) Begin(writable bool) storage.KeyValueTxn {
+	b := &Batch{
+		db:     db,
+		mu:     new(sync.RWMutex),
+		values: map[storage.Key][]byte{},
+	}
+	if db.logger == nil {
+		return b
+	}
+	return &storage.DebugBatch{Batch: b, Logger: db.logger}
 }
 
 type jsonDB []jsonEntry

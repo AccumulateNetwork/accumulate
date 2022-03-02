@@ -203,7 +203,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
-	book.Url = bookUrl // TODO Allow override
+	book.Url = bookUrl
 	book.Pages = append(book.Pages, pageUrl)
 
 	adi := protocol.NewADI()
@@ -211,6 +211,23 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	adi.KeyBook = bookUrl
 
 	return WriteStates(db, adi, book, mss)
+}
+
+func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
+	originUrl, err := url.Parse(*originUrlStr.AsString())
+	if err != nil {
+		return err
+	}
+	identityUrl, err := url.Parse(*urlStr.AsString())
+	if err != nil {
+		return err
+	}
+
+	adi := protocol.NewADI()
+	adi.Url = identityUrl
+	adi.KeyBook = originUrl.JoinPath("book0")
+
+	return WriteStates(db, adi)
 }
 
 func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, credits float64) error {
@@ -249,7 +266,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account := protocol.NewTokenAccount()
 		account.Url = u
 		account.TokenUrl = tu
-		account.KeyBook = u.RootIdentity().JoinPath("book0")
+		account.KeyBook = u.Identity().JoinPath("book0")
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -265,7 +282,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 
 	issuer := new(protocol.TokenIssuer)
 	issuer.Url = u
-	issuer.KeyBook = u.RootIdentity().JoinPath("book0")
+	issuer.KeyBook = u.Identity().JoinPath("book0")
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 

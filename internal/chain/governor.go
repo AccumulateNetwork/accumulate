@@ -209,7 +209,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	// The governor must be read-only, so we must not commit the
 	// database transaction or the state cache. If the governor makes
 	// ANY changes, the system will no longer be deterministic.
-	batch := g.DB.Begin()
+	batch := g.DB.Begin(false)
 	defer batch.Discard()
 
 	// TODO This will hit the database with a lot of queries, maybe we shouldn't do this
@@ -376,8 +376,9 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		body.AcmeOraclePrice = msg.ledger.PendingOracle
 
 		// Send anchors from DN to all BVNs
-		txns.Transactions = make([]protocol.SendTransaction, len(g.Network.BvnNames))
-		for i, bvn := range g.Network.BvnNames {
+		bvnNames := g.Network.GetBvnNames()
+		txns.Transactions = make([]protocol.SendTransaction, len(bvnNames))
+		for i, bvn := range bvnNames {
 			body := *body
 			if r := msg.receipts[bvn]; r != nil {
 				body.Receipt = r.Receipt
@@ -443,8 +444,9 @@ func (g *governor) sendMirror(batch *database.Batch) {
 	txns := new(protocol.InternalSendTransactions)
 	switch g.Network.Type {
 	case config.Directory:
-		txns.Transactions = make([]protocol.SendTransaction, len(g.Network.BvnNames))
-		for i, bvn := range g.Network.BvnNames {
+		bvnNames := g.Network.GetBvnNames()
+		txns.Transactions = make([]protocol.SendTransaction, len(bvnNames))
+		for i, bvn := range bvnNames {
 			txns.Transactions[i] = protocol.SendTransaction{
 				Recipient: protocol.BvnUrl(bvn),
 				Payload:   mirror,

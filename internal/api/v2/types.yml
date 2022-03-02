@@ -55,6 +55,10 @@ TransactionQueryResponse:
       type: query.TxReceipt
       marshal-as: reference
       pointer: true
+    - name: SignatureThreshold
+      type: uvarint
+    - name: Invalidated
+      type: bool
 
 MerkleState:
   non-binary: true

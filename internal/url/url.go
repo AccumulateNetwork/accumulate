@@ -4,19 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"path"
 	"strings"
 )
-
-// ErrMissingHost means that a URL did not include a hostname.
-var ErrMissingHost = errors.New("missing host")
-
-// ErrWrongScheme means that a URL included a scheme other than the Accumulate
-// scheme.
-var ErrWrongScheme = errors.New("wrong scheme")
 
 // URL is an Accumulate URL.
 type URL struct {
@@ -43,11 +35,11 @@ func Parse(s string) (*URL, error) {
 	}
 
 	if u.Scheme != "acc" {
-		return nil, ErrWrongScheme
+		return nil, wrongScheme(s)
 	}
 
 	if u.Host == "" || u.Host[0] == ':' {
-		return nil, ErrMissingHost
+		return nil, missingHost(s)
 	}
 
 	v := new(URL)
@@ -167,13 +159,13 @@ func (u *URL) RootIdentity() *URL {
 // Identity returns a copy of the URL with the last section cut off the path.
 func (u *URL) Identity() *URL {
 	v := *u
-	if v.Path != "" { // TODO debug if this works
+	if v.Path != "" {
 		if v.Path[len(v.Path)-1:] == "/" {
 			v.Path = v.Path[:len(v.Path)-1]
 		}
 
 		lsi := strings.LastIndex(v.Path, "/")
-		if lsi > 0 {
+		if lsi > -1 {
 			v.Path = v.Path[0:lsi]
 		}
 	}

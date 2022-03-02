@@ -37,7 +37,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, err
 	}
 
-	if !pageUrl.RootIdentity().Equal(st.OriginUrl.RootIdentity()) {
+	if !pageUrl.Identity().Equal(st.OriginUrl.Identity()) {
 		return nil, fmt.Errorf("%q does not belong to %q", pageUrl, st.OriginUrl)
 	}
 

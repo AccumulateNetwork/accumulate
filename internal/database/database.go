@@ -51,29 +51,36 @@ func Open(file string, useMemDB bool, logger log.Logger) (*Database, error) {
 	return New(store, logger), nil
 }
 
-func (d *Database) logDebug(msg string, keyVals ...interface{}) {
-	if d.logger != nil {
-		d.logger.Debug(msg, keyVals...)
-	}
-}
-
-func (d *Database) logInfo(msg string, keyVals ...interface{}) {
-	if d.logger != nil {
-		d.logger.Info(msg, keyVals...)
-	}
-}
-
 // Close closes the database and the key-value store.
 func (d *Database) Close() error {
 	return d.store.Close()
 }
 
 // Begin starts a new batch.
-func (d *Database) Begin() *Batch {
+func (d *Database) Begin(writable bool) *Batch {
 	tx := new(Batch)
-	tx.store = d.store.Begin()
+	tx.store = d.store.Begin(writable)
 	tx.bpt = pmt.NewBPTManager(tx.store)
 	return tx
+}
+
+// View runs the function with a read-only transaction.
+func (d *Database) View(fn func(*Batch) error) error {
+	batch := d.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
+}
+
+// Update runs the function with a writable transaction and commits if the
+// function succeeds.
+func (d *Database) Update(fn func(*Batch) error) error {
+	batch := d.Begin(true)
+	defer batch.Discard()
+	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	return batch.Commit()
 }
 
 // Batch batches database writes.
