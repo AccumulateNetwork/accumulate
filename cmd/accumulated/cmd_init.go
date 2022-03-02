@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -38,10 +39,24 @@ var cmdInit = &cobra.Command{
 	Args:  cobra.NoArgs,
 }
 
+var cmdListNamedNetworkConfig = &cobra.Command{
+	Use:   "list <network-name>",
+	Short: "Initialize a named network",
+	Run:   listNamedNetworkConfig,
+	Args:  cobra.ExactArgs(1),
+}
+
 var cmdInitNode = &cobra.Command{
 	Use:   "node <network-name|url>",
 	Short: "Initialize a node",
 	Run:   initNode,
+	Args:  cobra.ExactArgs(1),
+}
+
+var cmdInitValidator = &cobra.Command{
+	Use:   "network <subnet name>",
+	Short: "Initialize a network",
+	Run:   initValidator,
 	Args:  cobra.ExactArgs(1),
 }
 
@@ -81,9 +96,32 @@ var flagInitDevnet struct {
 	DnsSuffix     string
 }
 
+var flagInitNetwork struct {
+	NetworksFileName string
+	Subnet           string
+	GenesisDoc       string
+	Docker           bool
+	DockerTag        string
+	UseVolumes       bool
+	Compose          bool
+	DnsSuffix        string
+}
+
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitValidator, cmdListNamedNetworkConfig)
+
+	cmdInitValidator.Flags().StringVar(&flagInitNetwork.NetworksFileName, "networks", "networks.json", "Networks file name")
+	cmdInitValidator.MarkFlagRequired("networks")
+
+	cmdInitValidator.Flags().StringVar(&flagInitNetwork.Subnet, "subnet", "BVN0", "Specify the subnet to configure within the network")
+	//cmdInitValidator.MarkFlagRequired("subnet")
+	cmdInitValidator.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitValidator.Flags().BoolVar(&flagInitNetwork.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
+	cmdInitValidator.Flags().StringVar(&flagInitNetwork.DockerTag, "tag", "latest", "Tag to use on the docker images")
+	cmdInitValidator.Flags().BoolVar(&flagInitNetwork.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
+	cmdInitValidator.Flags().BoolVar(&flagInitNetwork.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
+	cmdInitValidator.Flags().StringVar(&flagInitNetwork.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
@@ -111,7 +149,27 @@ func init() {
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 }
 
+func listNamedNetworkConfig(_ *cobra.Command, args []string) {
+	n := Network{}
+	n.Network = "TestNet"
+	for _, subnet := range networks.TestNet {
+		s := Subnet{}
+
+		s.Name = subnet.Name
+		for i := range subnet.Nodes {
+			s.Nodes = append(s.Nodes, Node{subnet.Nodes[i].IP, subnet.Nodes[i].Type})
+		}
+		s.Port = subnet.Port
+		s.Type = subnet.Type
+		n.Subnet = append(n.Subnet, s)
+	}
+	data, err := json.Marshal(&n)
+	check(err)
+	fmt.Printf("%s", data)
+}
+
 func initNamedNetwork(*cobra.Command, []string) {
+
 	subnet, err := networks.Resolve(flagInit.Net)
 	checkf(err, "--network")
 
