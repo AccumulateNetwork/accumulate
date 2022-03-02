@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -18,8 +17,8 @@ var oracleCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
-		if len(args) == 1 {
-			out, err = GetCreditValue(args[0])
+		if len(args) == 0 {
+			out, err = GetCreditValue()
 		} else {
 			fmt.Println("Usage:")
 			PrintOracles()
@@ -32,28 +31,27 @@ func PrintOracles() {
 	fmt.Println("  accumulate oracle [DataAccountURL] 		Get Credits per ACME")
 }
 
-func GetCreditValue(accountUrl string) (string, error) {
-	u, err := url.Parse(accountUrl)
-	if err != nil {
-		return "", err
-	}
-
+func GetCreditValue() (string, error) {
 	params := api.DataEntryQuery{}
-	params.Url = u
+	params.Url = protocol.PriceOracle()
 
-	var res protocol.AcmeOracle
+	res := new(api.ChainQueryResponse)
+	entry := new(api.DataEntryQueryResponse)
+	res.Data = entry
 
-	data, err := json.Marshal(&params)
+	err := Client.RequestAPIv2(context.Background(), "query-data", &params, &res)
 	if err != nil {
 		return "", err
 	}
 
-	err = Client.RequestAPIv2(context.Background(), "query-data", json.RawMessage(data), &res)
-	if err != nil {
+	var acmeOracle protocol.AcmeOracle
+	if err = json.Unmarshal(entry.Entry.Data, &acmeOracle); err != nil {
 		return "", err
 	}
 
-	credits := res.Price * uint64(protocol.AcmeOraclePrecision)
-	out := "credits per ACME : " + strconv.Itoa(int(credits))
+	usd := float64(acmeOracle.Price) / protocol.AcmeOraclePrecision
+	credits := (float64(acmeOracle.Price) * protocol.CreditsPerFiatUnit) / protocol.CreditPrecision
+	out := "USD per ACME : " + strconv.FormatFloat(usd, 'f', 4, 64)
+	out += "\nCredits per ACME : " + strconv.FormatFloat(credits, 'f', 2, 64)
 	return out, nil
 }
