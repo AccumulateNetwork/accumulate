@@ -32,9 +32,9 @@ func (CreateDirectory) Validate(st *StateManager, tx *protocol.Envelope) (protoc
 	default:
 		return nil, fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.GetType())
 	}
-	identity := protocol.NewADI()
 
-	identity.Url = body.Url
+	identity := protocol.NewADI()
+	identity.Url = body.Url.JoinPath("/directory")
 
 	st.Create(identity)
 	return nil, nil
