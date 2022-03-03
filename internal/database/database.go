@@ -2,13 +2,17 @@ package database
 
 import (
 	"encoding"
+	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/etcd"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const markPower = 8
@@ -31,24 +35,57 @@ func New(store storage.KeyValueStore, logger log.Logger) *Database {
 	return d
 }
 
-// Open opens a key-value store and creates a new database with it.
-func Open(file string, useMemDB bool, logger log.Logger) (*Database, error) {
-	var store storage.KeyValueStore = new(badger.DB)
-	if useMemDB {
-		store = new(memory.DB)
-	}
-
+func OpenInMemory(logger log.Logger) *Database {
 	var storeLogger log.Logger
 	if logger != nil {
 		storeLogger = logger.With("module", "storage")
 	}
 
-	err := store.InitDB(file, storeLogger)
+	store := memory.New(storeLogger)
+	return New(store, logger)
+}
+
+func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
+	var storeLogger log.Logger
+	if logger != nil {
+		storeLogger = logger.With("module", "storage")
+	}
+
+	store, err := badger.New(filepath, storeLogger)
 	if err != nil {
 		return nil, err
 	}
-
 	return New(store, logger), nil
+}
+
+func OpenEtcd(prefix string, config *clientv3.Config, logger log.Logger) (*Database, error) {
+	var storeLogger log.Logger
+	if logger != nil {
+		storeLogger = logger.With("module", "storage")
+	}
+
+	store, err := etcd.New(prefix, config, storeLogger)
+	if err != nil {
+		return nil, err
+	}
+	return New(store, logger), nil
+}
+
+// Open opens a key-value store and creates a new database with it.
+func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
+	switch cfg.Accumulate.Storage.Type {
+	case config.MemoryStorage:
+		return OpenInMemory(logger), nil
+
+	case config.BadgerStorage:
+		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
+
+	case config.EtcdStorage:
+		return OpenEtcd(cfg.Accumulate.Network.LocalSubnetID, cfg.Accumulate.Storage.Etcd, logger)
+
+	default:
+		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
+	}
 }
 
 // Close closes the database and the key-value store.
