@@ -31,11 +31,14 @@ type PendingTransactionsIndex struct {
 }
 
 type TransactionChainEntry struct {
-	fieldsSet   []bool
-	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Chain       string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
-	ChainIndex  uint64   `json:"chainIndex,omitempty" form:"chainIndex" query:"chainIndex" validate:"required"`
-	AnchorIndex uint64   `json:"anchorIndex,omitempty" form:"anchorIndex" query:"anchorIndex" validate:"required"`
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	// Chain is the name of the chain.
+	Chain string `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	// ChainIndex is the index of the entry in the chain's index chain.
+	ChainIndex uint64 `json:"chainIndex,omitempty" form:"chainIndex" query:"chainIndex" validate:"required"`
+	// AnchorIndex is the index of the entry in the anchor chain's index chain.
+	AnchorIndex uint64 `json:"anchorIndex,omitempty" form:"anchorIndex" query:"anchorIndex" validate:"required"`
 }
 
 type TransactionChainIndex struct {
