@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/rs/zerolog"
@@ -28,6 +29,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	etcd "go.etcd.io/etcd/client/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -72,6 +74,7 @@ var flagInit struct {
 	NoWebsite     bool
 	Reset         bool
 	LogLevels     string
+	Etcd          []string
 }
 
 var flagInitNode struct {
@@ -127,6 +130,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
+	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -312,6 +316,13 @@ func initNode(cmd *cobra.Command, args []string) {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
 		config.LogLevel = flagInit.LogLevels
+	}
+
+	if len(flagInit.Etcd) > 0 {
+		config.Accumulate.Storage.Type = cfg.EtcdStorage
+		config.Accumulate.Storage.Etcd = new(etcd.Config)
+		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
+		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 	}
 
 	if flagInit.Reset {
@@ -577,6 +588,13 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 	}
 	if flagInit.NoWebsite {
 		config.Accumulate.Website.Enabled = false
+	}
+
+	if len(flagInit.Etcd) > 0 {
+		config.Accumulate.Storage.Type = cfg.EtcdStorage
+		config.Accumulate.Storage.Etcd = new(etcd.Config)
+		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
+		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 	}
 
 	if !flagInitDevnet.Docker {
