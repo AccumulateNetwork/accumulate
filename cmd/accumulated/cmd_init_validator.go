@@ -150,7 +150,7 @@ func initValidator(cmd *cobra.Command, args []string) {
 
 	addresses := make(map[string][]string, len(directory.Nodes))
 	dnConfig := make([]*cfg.Config, len(directory.Nodes))
-	dnRemote := make([][]string, len(directory.Nodes))
+	var dnRemote []string
 	dnListen := make([]string, len(directory.Nodes))
 
 	var accSub []config.Subnet
@@ -170,12 +170,14 @@ func initValidator(cmd *cobra.Command, args []string) {
 
 	//need to configure the dn for each BVN assuming 1 bvn
 	for i, _ := range directory.Nodes {
-		dnConfig[i], dnRemote[i], dnListen[i] = initNetworkNode(network.Network, directory.Name, directory.Nodes, bvns[i].Nodes, cfg.Directory,
+		var remotes []string
+		dnConfig[i], remotes, dnListen[i] = initNetworkNode(network.Network, directory.Name, directory.Nodes, cfg.Directory,
 			cfg.Validator, i, i, compose)
 
+		dnRemote = append(dnRemote, remotes...)
 		if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
-			for j := range dnRemote[i] {
-				dnRemote[i][j] += flagInitNetwork.DnsSuffix
+			for j := range dnRemote {
+				dnRemote[j] += flagInitNetwork.DnsSuffix
 			}
 		}
 		c := dnConfig[i]
@@ -186,7 +188,7 @@ func initValidator(cmd *cobra.Command, args []string) {
 		if flagInit.NoWebsite {
 			c.Accumulate.Website.Enabled = false
 		}
-
+		dnListen[i] = "0.0.0.0"
 		c.Accumulate.Network.LocalSubnetID = directory.Name
 		c.Accumulate.Network.Type = directory.Type
 		c.Accumulate.Network.Subnets = accSub
@@ -203,7 +205,7 @@ func initValidator(cmd *cobra.Command, args []string) {
 	bvnRemote := make([][]string, numBvns)
 
 	for i, v := range bvns {
-		bvnConfig[i][0], bvnRemote[i], bvnListen[i][0] = initNetworkNode(network.Network, v.Name, v.Nodes, v.Nodes, cfg.BlockValidator,
+		bvnConfig[i][0], bvnRemote[i], bvnListen[i][0] = initNetworkNode(network.Network, v.Name, v.Nodes, cfg.BlockValidator,
 			cfg.Validator, i, i, compose)
 		if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
 			for j := range bvnRemote[i] {
@@ -229,7 +231,6 @@ func initValidator(cmd *cobra.Command, args []string) {
 			if flagInit.NoWebsite {
 				c.Accumulate.Website.Enabled = false
 			}
-			c.Accumulate.Network.LocalAddress = addresses[v.Name][0]
 			c.Accumulate.Network.Type = config.BlockValidator
 			c.Accumulate.Network.LocalSubnetID = v.Name
 			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[0].IP, v.Port)
@@ -290,7 +291,7 @@ func initValidator(cmd *cobra.Command, args []string) {
 			WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
 			Port:     directory.Port,
 			Config:   dnConfig,
-			RemoteIP: dnRemote[0],
+			RemoteIP: dnRemote,
 			ListenIP: dnListen,
 			Logger:   logger.With("subnet", protocol.Directory),
 		}))
@@ -360,7 +361,7 @@ func initValidator(cmd *cobra.Command, args []string) {
 	//	initValidatorNode("dn", dnBasePort, cmd, args)
 }
 
-func initNetworkNode(networkName string, subnetName string, nodes []Node, local []Node, netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote []string, listen string) {
+func initNetworkNode(networkName string, subnetName string, nodes []Node, netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote []string, listen string) {
 	if netType == cfg.Directory {
 		config = cfg.Default(netType, nodeType, protocol.Directory)
 	} else {
@@ -385,7 +386,7 @@ func initNetworkNode(networkName string, subnetName string, nodes []Node, local 
 			remotes = append(remotes, v.IP)
 		}
 		//need to find the bvn that mates the current
-		return config, remotes, local[0].IP
+		return config, remotes, "0.0.0.0"
 	}
 
 	var name, dir string
