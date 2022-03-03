@@ -149,12 +149,18 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	chainLedger := batch.Account(app.Network.NodeUrl(protocol.Ledger))
+	anchor, err := chainLedger.GetMinorRootChainAnchor()
+	if err != nil {
+		sentry.CaptureException(err)
+	}
+
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: batch.RootHash(),
+		LastBlockAppHash: anchor,
 	}
 }
 
@@ -217,11 +223,16 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	batch := app.DB.Begin()
-	_, err := batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetState()
+	chainLedger := batch.Account(app.Network.NodeUrl(protocol.Ledger))
+	anchor, err := chainLedger.GetMinorRootChainAnchor()
+	if err != nil {
+		panic(fmt.Errorf("failed to get ledger: %v", err))
+	}
+	_, err = batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetState()
 	switch {
 	case err == nil:
 		// InitChain already happened
-		return abci.ResponseInitChain{AppHash: batch.RootHash()}
+		return abci.ResponseInitChain{AppHash: anchor}
 	case !errors.Is(err, storage.ErrNotFound):
 		panic(fmt.Errorf("failed to check block index: %v", err))
 	}
@@ -232,7 +243,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: batch.RootHash()}
+	return abci.ResponseInitChain{AppHash: anchor}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.

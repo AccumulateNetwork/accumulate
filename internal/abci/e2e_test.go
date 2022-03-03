@@ -152,8 +152,12 @@ func TestAnchorChain(t *testing.T) {
 		root, err := rootChain.Entry(first + int64(i))
 		require.NoError(t, err)
 
+		anchor, err := ledger.GetMinorRootChainAnchor()
+		if err != nil {
+			panic(fmt.Errorf("failed to get ledger: %v", err))
+		}
 		if meta.Name == "bpt" {
-			assert.Equal(t, root, batch.RootHash(), "wrong anchor for BPT")
+			assert.Equal(t, root, anchor, "wrong anchor for BPT")
 			continue
 		}
 
