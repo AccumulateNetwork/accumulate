@@ -377,5 +377,5 @@ cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data
 accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/data1"
 
 section "Query credits"
-RESULT=$(accumulate -j oracle)
-echo $RESULT
+RESULT=$(accumulate -j oracle  | jq -re .price)
+[ "$RESULT" -eq 500 ] && success || die "Expected 500, got $RESULT"

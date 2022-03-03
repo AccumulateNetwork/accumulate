@@ -44,14 +44,19 @@ func GetCreditValue() (string, error) {
 		return "", err
 	}
 
+	if WantJsonOutput {
+		return string(entry.Entry.Data), nil
+	}
+
 	var acmeOracle protocol.AcmeOracle
 	if err = json.Unmarshal(entry.Entry.Data, &acmeOracle); err != nil {
 		return "", err
 	}
 
 	usd := float64(acmeOracle.Price) / protocol.AcmeOraclePrecision
-	credits := (float64(acmeOracle.Price) * protocol.CreditsPerFiatUnit) / protocol.CreditPrecision
-	out := "USD per ACME : " + strconv.FormatFloat(usd, 'f', 4, 64)
+	credits := (usd * protocol.CreditsPerFiatUnit) / protocol.CreditPrecision
+	out := "USD per ACME : $" + strconv.FormatFloat(usd, 'f', 4, 64)
 	out += "\nCredits per ACME : " + strconv.FormatFloat(credits, 'f', 2, 64)
+
 	return out, nil
 }
