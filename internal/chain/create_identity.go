@@ -85,14 +85,14 @@ func validateKeyPageUrl(keyBookUrl *url.URL, keyPageUrl *url.URL) (*url.URL, err
 	var err error
 	bkParentUrl, err := keyBookUrl.Parent()
 	if err != nil {
-		return nil, fmt.Errorf("invalid KeyBook URL: %w\nthe KeyBook URL should be \"adi_path/KeyBook\"", err)
+		return nil, fmt.Errorf("invalid KeyBook URL: %w, the KeyBook URL should be adi_path/KeyBook", err)
 	}
 	if keyPageUrl == nil {
 		return bkParentUrl.JoinPath(protocol.DefaultKeyPage), nil
 	} else {
 		kpParentUrl, err := keyPageUrl.Parent()
 		if err != nil {
-			return nil, fmt.Errorf("invalid KeyPage URL: %w\nthe KeyPage URL should be \"adi_path/KeyPage\"", err)
+			return nil, fmt.Errorf("invalid KeyPage URL: %w\nthe KeyPage URL should be adi_path/KeyPage", err)
 		}
 
 		if !bkParentUrl.Equal(kpParentUrl) {

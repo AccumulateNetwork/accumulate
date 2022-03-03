@@ -164,7 +164,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	if len(args) > 2 {
 		bookUrl = args[2]
 	} else {
-		bookUrl = "book0"
+		bookUrl = adiUrl + "/book0"
 	}
 
 	u, err := url2.Parse(adiUrl)
