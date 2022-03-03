@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -25,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -92,30 +89,17 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.t = t
 	n.key = pv.Key.PrivKey
 	n.network = &d.Config.Accumulate.Network
-
-	var logWriter io.Writer
-	if acctesting.LogConsole {
-		logWriter, err = logging.NewConsoleWriter(d.Config.LogFormat)
-	} else {
-		logWriter, err = logging.TestLogWriter(t)(d.Config.LogFormat)
-	}
-	require.NoError(t, err)
-	logLevel, logWriter, err := logging.ParseLogLevel(d.Config.LogLevel+";fake-tendermint=debug", logWriter)
-	require.NoError(t, err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
-	require.NoError(t, err)
-	d.Logger = logger
-	n.logger = logger
+	n.logger = d.Logger
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
-			return database.Open("", true, d.Logger)
+			return database.OpenInMemory(d.Logger), nil
 		}
 	}
 
 	n.db, err = openDb(d)
 	require.NoError(t, err)
-	batch := n.db.Begin()
+	batch := n.db.Begin(false)
 	defer batch.Discard()
 
 	ledger := protocol.NewInternalLedger()
@@ -126,7 +110,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := logger.With("module", "fake-tendermint", "subnet", n.network.LocalSubnetID)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.LocalSubnetID)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -182,8 +166,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.height++
 
-	kv := new(memory.DB)
-	_ = kv.InitDB("", nil)
+	kv := memory.New(nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
 		Network:     *n.network,
 		GenesisTime: time.Now(),
@@ -303,7 +286,7 @@ func (n *FakeNode) ParseUrl(s string) *url.URL {
 }
 
 func (n *FakeNode) GetDirectory(adi string) []string {
-	batch := n.db.Begin()
+	batch := n.db.Begin(false)
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)

@@ -2,13 +2,17 @@ package database
 
 import (
 	"encoding"
+	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/etcd"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 const markPower = 8
@@ -31,35 +35,56 @@ func New(store storage.KeyValueStore, logger log.Logger) *Database {
 	return d
 }
 
-// Open opens a key-value store and creates a new database with it.
-func Open(file string, useMemDB bool, logger log.Logger) (*Database, error) {
-	var store storage.KeyValueStore = new(badger.DB)
-	if useMemDB {
-		store = new(memory.DB)
-	}
-
+func OpenInMemory(logger log.Logger) *Database {
 	var storeLogger log.Logger
 	if logger != nil {
 		storeLogger = logger.With("module", "storage")
 	}
 
-	err := store.InitDB(file, storeLogger)
+	store := memory.New(storeLogger)
+	return New(store, logger)
+}
+
+func OpenBadger(filepath string, logger log.Logger) (*Database, error) {
+	var storeLogger log.Logger
+	if logger != nil {
+		storeLogger = logger.With("module", "storage")
+	}
+
+	store, err := badger.New(filepath, storeLogger)
 	if err != nil {
 		return nil, err
 	}
-
 	return New(store, logger), nil
 }
 
-func (d *Database) logDebug(msg string, keyVals ...interface{}) {
-	if d.logger != nil {
-		d.logger.Debug(msg, keyVals...)
+func OpenEtcd(prefix string, config *clientv3.Config, logger log.Logger) (*Database, error) {
+	var storeLogger log.Logger
+	if logger != nil {
+		storeLogger = logger.With("module", "storage")
 	}
+
+	store, err := etcd.New(prefix, config, storeLogger)
+	if err != nil {
+		return nil, err
+	}
+	return New(store, logger), nil
 }
 
-func (d *Database) logInfo(msg string, keyVals ...interface{}) {
-	if d.logger != nil {
-		d.logger.Info(msg, keyVals...)
+// Open opens a key-value store and creates a new database with it.
+func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
+	switch cfg.Accumulate.Storage.Type {
+	case config.MemoryStorage:
+		return OpenInMemory(logger), nil
+
+	case config.BadgerStorage:
+		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
+
+	case config.EtcdStorage:
+		return OpenEtcd(cfg.Accumulate.Network.LocalSubnetID, cfg.Accumulate.Storage.Etcd, logger)
+
+	default:
+		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
 	}
 }
 
@@ -69,11 +94,30 @@ func (d *Database) Close() error {
 }
 
 // Begin starts a new batch.
-func (d *Database) Begin() *Batch {
+func (d *Database) Begin(writable bool) *Batch {
 	tx := new(Batch)
-	tx.store = d.store.Begin()
+	tx.store = d.store.Begin(writable)
 	tx.bpt = pmt.NewBPTManager(tx.store)
 	return tx
+}
+
+// View runs the function with a read-only transaction.
+func (d *Database) View(fn func(*Batch) error) error {
+	batch := d.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
+}
+
+// Update runs the function with a writable transaction and commits if the
+// function succeeds.
+func (d *Database) Update(fn func(*Batch) error) error {
+	batch := d.Begin(true)
+	defer batch.Discard()
+	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	return batch.Commit()
 }
 
 // Batch batches database writes.

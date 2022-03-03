@@ -20,8 +20,7 @@ func TestStateDBConsistency(t *testing.T) {
 	stores := map[*accumulated.Daemon]*badger.DB{}
 	for _, netName := range subnets {
 		for _, daemon := range daemons[netName] {
-			store := new(badger.DB)
-			err := store.InitDB(filepath.Join(daemon.Config.RootDir, "valacc.db"), nil)
+			store, err := badger.New(filepath.Join(daemon.Config.RootDir, "badger.db"), nil)
 			require.NoError(t, err)
 			stores[daemon] = store
 
@@ -45,7 +44,7 @@ func TestStateDBConsistency(t *testing.T) {
 
 	ledger := n.network.NodeUrl(protocol.Ledger)
 	ledger1 := protocol.NewInternalLedger()
-	batch := n.db.Begin()
+	batch := n.db.Begin(false)
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
 	rootHash := batch.RootHash()
 	batch.Discard()
@@ -54,7 +53,7 @@ func TestStateDBConsistency(t *testing.T) {
 	db := database.New(stores[daemons[subnets[1]][0]], nil)
 
 	// Block 6 does not make changes so is not saved
-	batch = db.Begin()
+	batch = db.Begin(false)
 	ledger2 := protocol.NewInternalLedger()
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger2))
 	require.Equal(t, ledger1, ledger2, "Ledger does not match after load from disk")

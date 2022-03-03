@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -34,12 +33,13 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done chan struct{}
-	db   *database.Database
-	node *node.Node
-	api  *http.Server
-	pv   *privval.FilePV
-	jrpc *api.JrpcMethods
+	done              chan struct{}
+	db                *database.Database
+	node              *node.Node
+	api               *http.Server
+	pv                *privval.FilePV
+	jrpc              *api.JrpcMethods
+	connectionManager connections.ConnectionInitializer
 
 	// knobs for tests
 	// IsTest   bool
@@ -113,10 +113,9 @@ func (d *Daemon) Start() (err error) {
 		defer sentry.Flush(2 * time.Second)
 	}
 
-	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
-	d.db, err = database.Open(dbPath, d.UseMemDB, d.Logger)
+	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
-		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
+		return fmt.Errorf("failed to open database: %v", err)
 	}
 
 	// Close the database if start fails (mostly for tests)
@@ -135,10 +134,10 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	connectionManager, connectionInitializer := connections.NewConnectionManager(d.Config, d.Logger)
+	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger)
 
 	router := routing.RouterInstance{
-		ConnectionManager: connectionManager,
+		ConnectionManager: d.connectionManager,
 		Network:           &d.Config.Accumulate.Network,
 	}
 	execOpts := chain.ExecutorOptions{
@@ -215,7 +214,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
-	err = connectionInitializer.InitClients(lclient, statusChecker)
+	err = d.connectionManager.InitClients(lclient, statusChecker)
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
@@ -243,7 +242,7 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	// Shut down the node if the disk space gets too low
-	go d.ensureSufficientDiskSpace(dbPath)
+	go d.ensureSufficientDiskSpace(d.Config.RootDir)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
@@ -275,6 +274,15 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	return nil
+}
+
+func (d *Daemon) ConnectDirectly(e *Daemon) error {
+	err := d.connectionManager.ConnectDirectly(e.connectionManager)
+	if err != nil {
+		return err
+	}
+
+	return e.connectionManager.ConnectDirectly(d.connectionManager)
 }
 
 func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {

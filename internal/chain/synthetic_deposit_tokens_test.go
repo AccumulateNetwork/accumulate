@@ -17,10 +17,9 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
-	db, err := database.Open("", true, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
-	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), gtx)
+	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), gtx)
 	require.ErrorIs(t, err, storage.ErrNotFound)
 
 	_, err = SyntheticDepositTokens{}.Validate(st, gtx)
