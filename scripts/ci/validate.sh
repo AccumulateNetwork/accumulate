@@ -107,7 +107,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..10}
+for i in {1..20}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
@@ -120,10 +120,10 @@ done
 accumulate account get ${LITE} 1> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE} ${LITE} 1100)
+TXID=$(cli-tx credits ${LITE} ${LITE} 2200)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 1100 ] || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
+[ "$BALANCE" -ge 2200 ] || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
 TXID=$(accumulate -j tx get ${TXID} | jq -re .syntheticTxids[1]) # this depends on the burn coming last
 TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
 [ "$TYPE" == "syntheticBurnTokens" ] || die "Expected a syntheticBurnTokens, got ${TYPE}"
