@@ -161,19 +161,19 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) > 2 {
-		bookUrl = args[2]
-	} else {
-		bookUrl = adiUrl + "/book0"
-	}
-
 	u, err := url2.Parse(adiUrl)
 	if err != nil {
 		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
 	}
-	ku, err := url2.Parse(bookUrl)
-	if err != nil {
-		return "", fmt.Errorf("invalid book url %s, %v", bookUrl, err)
+
+	var ku *url2.URL
+	if len(args) > 2 {
+		bookUrl = args[2]
+
+		ku, err = url2.Parse(bookUrl)
+		if err != nil {
+			return "", fmt.Errorf("invalid book url %s, %v", bookUrl, err)
+		}
 	}
 
 	var pu *url2.URL
