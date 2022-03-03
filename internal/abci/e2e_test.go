@@ -118,6 +118,9 @@ func TestAnchorChain(t *testing.T) {
 	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+
 	batch := n.db.Begin(true)
 	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
 	require.NoError(t, batch.Commit())
@@ -130,6 +133,7 @@ func TestAnchorChain(t *testing.T) {
 		require.NoError(t, err)
 		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page", adi.Url))
 		require.NoError(t, err)
+		adi.PublicKey = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).

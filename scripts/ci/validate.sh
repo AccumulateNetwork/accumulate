@@ -139,7 +139,7 @@ ensure-key keytest-2-1
 echo
 
 section "Create an ADI"
-wait-for cli-tx adi create ${LITE} keytest keytest-0-0 book page0
+wait-for cli-tx adi create ${LITE} keytest keytest-0-0 keytest/book keytest/page0
 accumulate adi get keytest 1> /dev/null && success || die "Cannot find keytest"
 
 section "Verify fee charge"
@@ -147,7 +147,7 @@ BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
 
 section "Recreating an ADI fails and the synthetic transaction is recorded"
-TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 book page1` || return 1
+TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book keytest/page1` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
