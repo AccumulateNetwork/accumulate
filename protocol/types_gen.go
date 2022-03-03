@@ -183,8 +183,10 @@ type IndexEntry struct {
 	Source uint64 `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	// Anchor is the index of the chain into which the anchor was added. Omit when indexing the root anchor chain.
 	Anchor uint64 `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	// Block is the index of the block. Only include when indexing the root anchor chain.
-	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
+	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
+	// BlockTime is the start time of the block. Only include when indexing the root anchor chain.
+	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
 }
 
 type InternalGenesis struct {
@@ -1127,7 +1129,10 @@ func (v *IndexEntry) Equal(u *IndexEntry) bool {
 	if !(v.Anchor == u.Anchor) {
 		return false
 	}
-	if !(v.Block == u.Block) {
+	if !(v.BlockIndex == u.BlockIndex) {
+		return false
+	}
+	if !(*v.BlockTime == *u.BlockTime) {
 		return false
 	}
 
@@ -2948,7 +2953,8 @@ func (v *Envelope) IsValid() error {
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
-	3: "Block",
+	3: "BlockIndex",
+	4: "BlockTime",
 }
 
 func (v *IndexEntry) MarshalBinary() ([]byte, error) {
@@ -2961,8 +2967,11 @@ func (v *IndexEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Anchor == 0) {
 		writer.WriteUint(2, v.Anchor)
 	}
-	if !(v.Block == 0) {
-		writer.WriteUint(3, v.Block)
+	if !(v.BlockIndex == 0) {
+		writer.WriteUint(3, v.BlockIndex)
+	}
+	if !(v.BlockTime == nil) {
+		writer.WriteTime(4, *v.BlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_IndexEntry)
@@ -2983,9 +2992,14 @@ func (v *IndexEntry) IsValid() error {
 		errs = append(errs, "field Anchor is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Block is missing")
-	} else if v.Block == 0 {
-		errs = append(errs, "field Block is not set")
+		errs = append(errs, "field BlockIndex is missing")
+	} else if v.BlockIndex == 0 {
+		errs = append(errs, "field BlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field BlockTime is missing")
+	} else if v.BlockTime == nil {
+		errs = append(errs, "field BlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -6143,7 +6157,10 @@ func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Anchor = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
-		v.Block = x
+		v.BlockIndex = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.BlockTime = &x
 	}
 
 	seen, err := reader.Reset(fieldNames_IndexEntry)

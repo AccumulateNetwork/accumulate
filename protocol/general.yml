@@ -58,9 +58,13 @@ IndexEntry:
     - name: Anchor
       description: is the index of the chain into which the anchor was added. Omit when indexing the root anchor chain
       type: uint
-    - name: Block
+    - name: BlockIndex
       description: is the index of the block. Only include when indexing the root anchor chain
       type: uint
+    - name: BlockTime
+      description: is the start time of the block. Only include when indexing the root anchor chain
+      type: time
+      pointer: true
 
 DataEntry:
   fields:

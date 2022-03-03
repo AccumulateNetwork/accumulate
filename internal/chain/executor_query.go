@@ -878,7 +878,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.C
 	}
 
 	// Finalize the receipt
-	dnBlock, r, err := m.getFullReceipt(batch, accountReceipt, rootReceipt, rootIndex.Block)
+	dnBlock, r, err := m.getFullReceipt(batch, accountReceipt, rootReceipt, rootIndex.BlockIndex)
 	if err != nil {
 		return receipt, err
 	}

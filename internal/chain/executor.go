@@ -492,8 +492,9 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 
 	// Index the root chain
 	rootIndexIndex, err := addIndexChainEntry(ledger, protocol.MinorRootIndexChain, &protocol.IndexEntry{
-		Source: uint64(rootChain.Height() - 1),
-		Block:  uint64(m.blockIndex),
+		Source:     uint64(rootChain.Height() - 1),
+		BlockIndex: uint64(m.blockIndex),
+		BlockTime:  &m.blockTime,
 	})
 	if err != nil {
 		return err
