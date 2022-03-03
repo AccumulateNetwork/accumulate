@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -184,7 +183,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	return m.Commit()
 }
 
-func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) error {
+func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]byte, error) {
 	if m.isGenesis {
 		panic("Cannot call InitChain on a genesis txn executor")
 	}
@@ -194,7 +193,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	_ = src.InitDB("", nil)
 	err := src.UnmarshalJSON(data)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal app state: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
 	// Load the root anchor chain so we can verify the system state
@@ -203,7 +202,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	srcLedger := srcBatch.Account(m.Network.NodeUrl(protocol.Ledger))
 	srcAnchor, err := srcLedger.GetMinorRootChainAnchor()
 	if err != nil {
-		return fmt.Errorf("failed to load root anchor chain from app state: %v", err)
+		return nil, fmt.Errorf("failed to load root anchor chain from app state: %v", err)
 	}
 
 	// Dump the genesis state into the key-value store
@@ -214,7 +213,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	// Commit the database batch
 	err = batch.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to load app state into database: %v", err)
+		return nil, fmt.Errorf("failed to load app state into database: %v", err)
 	}
 
 	// Recreate the batch to reload the BPT
@@ -224,7 +223,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
 	anchor, err := ledger.GetMinorRootChainAnchor()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
@@ -232,7 +231,12 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcAnchor, anchor))
 	}
 
-	return m.governor.DidCommit(batch, true, true, blockIndex, time)
+	err = m.governor.DidCommit(batch, true, true, blockIndex, time)
+	if err != nil {
+		return nil, err
+	}
+
+	return anchor, nil
 }
 
 // BeginBlock implements ./abci.Chain

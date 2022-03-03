@@ -223,22 +223,23 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	batch := app.DB.Begin()
-	chainLedger := batch.Account(app.Network.NodeUrl(protocol.Ledger))
-	anchor, err := chainLedger.GetMinorRootChainAnchor()
-	if err != nil {
-		panic(fmt.Errorf("failed to get ledger: %v", err))
-	}
-	_, err = batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetState()
+	defer batch.Discard()
+	ledger := batch.Account(app.Network.NodeUrl(protocol.Ledger))
+	_, err := ledger.GetState()
 	switch {
 	case err == nil:
 		// InitChain already happened
+		anchor, err := ledger.GetMinorRootChainAnchor()
+		if err != nil {
+			panic(fmt.Errorf("failed to get ledger: %v", err))
+		}
 		return abci.ResponseInitChain{AppHash: anchor}
 	case !errors.Is(err, storage.ErrNotFound):
 		panic(fmt.Errorf("failed to check block index: %v", err))
 	}
 
 	app.logger.Info("Initializing")
-	err = app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
+	anchor, err := app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
