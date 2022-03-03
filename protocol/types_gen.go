@@ -176,6 +176,17 @@ type Envelope struct {
 	hash        []byte
 }
 
+// IndexEntry represents an entry in an index chain.
+type IndexEntry struct {
+	fieldsSet []bool
+	// Source is the index of the chain from which an anchor was taken.
+	Source uint64 `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// Anchor is the index of the chain into which the anchor was added. Omit when indexing the root anchor chain.
+	Anchor uint64 `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// Block is the index of the block. Only include when indexing the root anchor chain.
+	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
+}
+
 type InternalGenesis struct {
 	fieldsSet []bool
 }
@@ -1103,6 +1114,20 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		return false
 	}
 	if !((v.Transaction).Equal(u.Transaction)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *IndexEntry) Equal(u *IndexEntry) bool {
+	if !(v.Source == u.Source) {
+		return false
+	}
+	if !(v.Anchor == u.Anchor) {
+		return false
+	}
+	if !(v.Block == u.Block) {
 		return false
 	}
 
@@ -2908,6 +2933,59 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_IndexEntry = []string{
+	1: "Source",
+	2: "Anchor",
+	3: "Block",
+}
+
+func (v *IndexEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Source == 0) {
+		writer.WriteUint(1, v.Source)
+	}
+	if !(v.Anchor == 0) {
+		writer.WriteUint(2, v.Anchor)
+	}
+	if !(v.Block == 0) {
+		writer.WriteUint(3, v.Block)
+	}
+
+	_, _, err := writer.Reset(fieldNames_IndexEntry)
+	return buffer.Bytes(), err
+}
+
+func (v *IndexEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == 0 {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == 0 {
+		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Block is missing")
+	} else if v.Block == 0 {
+		errs = append(errs, "field Block is not set")
 	}
 
 	switch len(errs) {
@@ -6047,6 +6125,28 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *IndexEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Anchor = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Block = x
+	}
+
+	seen, err := reader.Reset(fieldNames_IndexEntry)
 	v.fieldsSet = seen
 	return err
 }
