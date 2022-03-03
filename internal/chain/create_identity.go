@@ -2,12 +2,12 @@ package chain
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type CreateIdentity struct{}
