@@ -153,7 +153,7 @@ func TestAnchorChain(t *testing.T) {
 		require.NoError(t, err)
 
 		if meta.Name == "bpt" {
-			assert.Equal(t, root, batch.RootHash(), "wrong anchor for BPT")
+			assert.Equal(t, root, batch.BptRootHash(), "wrong anchor for BPT")
 			continue
 		}
 

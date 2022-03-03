@@ -80,18 +80,23 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 	defer batch.Discard()
 
 	var height int64
-	ledger := protocol.NewInternalLedger()
-	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	switch {
 	case err == nil:
-		height = ledger.Index
+		height = ledgerState.Index
 	case errors.Is(err, storage.ErrNotFound):
 		height = 0
 	default:
 		return nil, err
 	}
 
-	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(batch.RootHash()))
+	anchor, err := ledger.GetMinorRootChainAnchor()
+	if err != nil {
+		return nil, err
+	}
+	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(anchor))
 	return m, nil
 }
 
@@ -538,7 +543,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		Index:   uint64(m.blockIndex - 1),
 	})
 
-	err = rootChain.AddEntry(m.blockBatch.RootHash(), false)
+	err = rootChain.AddEntry(m.blockBatch.BptRootHash(), false)
 	if err != nil {
 		return err
 	}

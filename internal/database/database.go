@@ -107,8 +107,8 @@ func (b *Batch) UpdateBpt() {
 	b.bpt.Bpt.Update()
 }
 
-// RootHash returns the root hash of the BPT.
-func (b *Batch) RootHash() []byte {
+// BptRootHash returns the root hash of the BPT.
+func (b *Batch) BptRootHash() []byte {
 	// Make a copy
 	h := b.bpt.Bpt.Root.Hash
 	return h[:]
