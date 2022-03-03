@@ -321,22 +321,22 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Create a sub ADI"
-wait-for cli-tx adi create keytest keytest-0-0 keytest/sub1/sub2 keytest/sub1/sub2/book keytest/sub1/sub2/page0
+wait-for cli-tx adi create keytest keytest-0-0 keytest/sub1 keytest-1-0 keytest/sub1/book keytest/sub1/page0
 accumulate adi get keytest 1> /dev/null && success || die "Cannot find keytest"
 
 section "Add credits to the sub ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/sub1/sub2/page0 60000
-BALANCE=$(accumulate -j page get keytest/sub1/sub2/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/sub2/page0 should have 60000 credits but has ${BALANCE}"
+wait-for cli-tx credits ${LITE} keytest/sub1/page0 60000
+BALANCE=$(accumulate -j page get keytest/sub1/page0 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/page0 should have 60000 credits but has ${BALANCE}"
 
 section "Create Data Account for sub ADI"
-wait-for cli-tx account create data --scratch keytest/sub1/sub2 keytest-0-0 keytest/sub1/sub2/data
-accumulate account get keytest/sub1/sub2/data 1> /dev/null || die "Cannot find keytest/sub1/sub2/data"
-accumulate -j account get keytest/sub1/sub2/data | jq -re .data.scratch 1> /dev/null || die "keytest/sub1/sub2/data is not a scratch account"
+wait-for cli-tx account create data --scratch keytest/sub1 keytest-0-0 keytest/sub1/data
+accumulate account get keytest/sub1/data 1> /dev/null || die "Cannot find keytest/sub1/data"
+accumulate -j account get keytest/sub1/data | jq -re .data.scratch 1> /dev/null || die "keytest/sub1/data is not a scratch account"
 success
 
 section "Write data to sub ADI Data Account"
-JSON=$(accumulate -j data write keytest/sub1/sub2/data keytest-0-0 "foo" "bar")
+JSON=$(accumulate -j data write keytest/sub1/data keytest-0-0 "foo" "bar")
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
