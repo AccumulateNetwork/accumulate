@@ -57,7 +57,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		case !cc.IsUpdate:
 			// Creating a record, add it to the directory
 			err = st.AddDirectoryEntry(u)
-			if err == nil {
+			if err != nil {
 				return nil, fmt.Errorf("failed to add a directory entry for %q: %v", u, err)
 			}
 		}
