@@ -90,9 +90,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		records = append(records, anchors)
 
 		// Create records and directory entries
-		urls := make([]*url.URL, len(records))
+		urls := make([]*url.URL, len(records)-1)
 		for i, r := range records {
-			urls[i], _ = r.Header().ParseUrl()
+			if i > 0 {
+				urls[i-1], _ = r.Header().ParseUrl()
+			}
 		}
 
 		acme := new(protocol.TokenIssuer)
@@ -144,6 +146,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
 		}
 
-		return st.AddDirectoryEntry(urls...)
+		adiUrl, _ := adi.Header().ParseUrl()
+		return st.AddDirectoryEntry(adiUrl, urls...)
 	})
 }

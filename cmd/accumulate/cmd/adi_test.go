@@ -22,7 +22,7 @@ func init() {
 }
 
 //testCase2_1
-//Create an ADI "RedWagon" sponsored by a Lite Account, then a sub ADI "RedWagon/sub1"
+//Create an ADI "RedWagon" sponsored by a Lite Account
 func testCase2_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
