@@ -15,12 +15,14 @@ func init() {
 	testMatrix.addTest(testCase2_3)
 	testMatrix.addTest(testCase2_4)
 	testMatrix.addTest(testCase2_5)
-	testMatrix.addTest(testCase2_6)
-	testMatrix.addTest(testCase2_7)
+	testMatrix.addTest(testCase2_6a)
+	testMatrix.addTest(testCase2_6b)
+	testMatrix.addTest(testCase2_7a)
+	testMatrix.addTest(testCase2_7b)
 }
 
 //testCase2_1
-//Create an ADI "RedWagon" sponsored by a Lite Account
+//Create an ADI "RedWagon" sponsored by a Lite Account, then a sub ADI "RedWagon/sub1"
 func testCase2_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
@@ -98,9 +100,9 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 	//t.Log(r)
 }
 
-//testCase2_6
+//testCase2_6a
 //Create an ADI from another ADI
-func testCase2_6(t *testing.T, tc *testCmd) {
+func testCase2_6a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
@@ -118,9 +120,9 @@ func testCase2_6(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 }
 
-//testCase2_7
+//testCase2_6b
 //Create an ADI with the same encoding as Lite address, should fail
-func testCase2_7(t *testing.T, tc *testCmd) {
+func testCase2_6b(t *testing.T, tc *testCmd) {
 	t.Helper()
 	k, err := tc.execute(t, "key export private red2")
 	require.NoError(t, err)
@@ -134,5 +136,48 @@ func testCase2_7(t *testing.T, tc *testCmd) {
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 %s red2", u.String())
 	_, err = tc.execute(t, commandLine)
+	require.Error(t, err)
+}
+
+//testCase2_7a
+//Create sub-ADIs
+func testCase2_7a(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
+	require.NoError(t, err)
+
+	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://RedWagon/sub1 red2")
+	r, err := tc.executeTx(t, commandLine)
+	t.Log(r)
+	require.NoError(t, err)
+
+	//if this doesn't fail, then adi is created
+	r, err = tc.execute(t, "adi directory acc://RedWagon/sub1 0 10")
+	require.NoError(t, err)
+	t.Log(r)
+
+	/*	commandLine = fmt.Sprintf("adi create acc://RedWagon/sub1 red2 acc://RedWagon/sub1/sub2 red3")
+		r, err = tc.executeTx(t, commandLine)
+		require.NoError(t, err)
+		t.Log(r)
+
+		//if this doesn't fail, then adi is created
+		r, err = tc.execute(t, "adi directory acc://RedWagon/sub1/sub2 0 10")
+		require.NoError(t, err)
+		t.Log(r)
+	*/
+}
+
+//testCase2_7a
+//Create sub-ADIs with the wrong parents, should fail
+func testCase2_7b(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
+	require.NoError(t, err)
+
+	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://RedWagon/sub1/sub2 red2")
+	_, err = tc.executeTx(t, commandLine)
 	require.Error(t, err)
 }

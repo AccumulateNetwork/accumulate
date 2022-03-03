@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -19,41 +20,32 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
 	}
-	switch st.Origin.(type) {
-	case *protocol.LiteTokenAccount, *protocol.ADI:
-		// OK
-	default:
-		return nil, fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.GetType())
-	}
 
-	err := protocol.IsValidAdiUrl(body.Url)
+	err := validateAdiUrl(body, st.Origin)
 	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %v", err)
+		return nil, err
 	}
 
-	bookUrl := body.KeyBookUrl
-	if bookUrl == nil {
-		return nil, fmt.Errorf("missing KeyBook URL")
-	}
-	err = protocol.IsValidAdiUrl(bookUrl)
+	bookUrl := selectBookUrl(body)
+	err = validateKeyBookUrl(bookUrl, body.Url)
 	if err != nil {
-		return nil, fmt.Errorf("invalid KeyBook URL %q: %v", bookUrl.String(), err)
+		return nil, err
 	}
 
-	pageUrl, err := validateKeyPageUrl(bookUrl, body.KeyPageUrl)
+	pageUrl := selectPageUrl(body)
+	validateKeyPageUrl(pageUrl, bookUrl)
 	if err != nil {
 		return nil, err
 	}
 	page := protocol.NewKeyPage()
 	var pageExists = st.LoadUrlAs(pageUrl, page) == nil
 	if !pageExists {
-		page.Url = pageUrl
-		page.KeyBook = bookUrl
-		page.Threshold = 1 // Require one signature from the Key Page
-
 		if len(body.PublicKey) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyPage")
 		}
+		page.Url = pageUrl
+		page.KeyBook = bookUrl
+		page.Threshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
 		keySpec.PublicKey = body.PublicKey
 		page.Keys = append(page.Keys, keySpec)
@@ -71,34 +63,79 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	identity.KeyBook = bookUrl
 	identity.ManagerKeyBook = body.Manager
 
-	st.Create(identity)
+	accounts := []protocol.Account{identity}
 	if !bookExists {
-		st.Create(book)
+		accounts = append(accounts, book)
 	}
 	if !pageExists {
-		st.Create(page)
+		accounts = append(accounts, page)
 	}
+	st.Create(accounts...)
 	return nil, nil
 }
 
-func validateKeyPageUrl(keyBookUrl *url.URL, keyPageUrl *url.URL) (*url.URL, error) {
-	var err error
-	bkParentUrl, err := keyBookUrl.Parent()
+func validateAdiUrl(body *protocol.CreateIdentity, origin state.Chain) error {
+	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
-		return nil, fmt.Errorf("invalid KeyBook URL: %w, the KeyBook URL should be adi_path/KeyBook", err)
-	}
-	if keyPageUrl == nil {
-		return bkParentUrl.JoinPath(protocol.DefaultKeyPage), nil
-	} else {
-		kpParentUrl, err := keyPageUrl.Parent()
-		if err != nil {
-			return nil, fmt.Errorf("invalid KeyPage URL: %w\nthe KeyPage URL should be adi_path/KeyPage", err)
-		}
-
-		if !bkParentUrl.Equal(kpParentUrl) {
-			return nil, fmt.Errorf("KeyPage %q should have the same ADI parent path as its KeyBook %q", keyPageUrl, keyBookUrl)
-		}
+		return fmt.Errorf("invalid URL: %v", err)
 	}
 
-	return keyPageUrl, nil
+	switch v := origin.(type) {
+	case *protocol.LiteTokenAccount:
+	// OK
+	case *protocol.ADI:
+		if len(body.Url.Path) > 0 {
+			parent, _ := body.Url.Parent()
+			if !parent.Equal(v.Url) {
+				return fmt.Errorf("a sub ADI %q must be a direct child of its origin ADI %q", body.Url.String(), v.Url.String())
+			}
+		}
+	default:
+		return fmt.Errorf("account type %d cannot be the origininator of ADIs", origin.GetType())
+	}
+
+	return nil
+}
+
+func selectBookUrl(body *protocol.CreateIdentity) *url.URL {
+	if body.KeyBookUrl == nil {
+		return body.Url.JoinPath(protocol.DefaultKeyBook)
+	}
+	return body.KeyBookUrl
+}
+
+func selectPageUrl(body *protocol.CreateIdentity) *url.URL {
+	if body.KeyPageUrl == nil {
+		return body.Url.JoinPath(protocol.DefaultKeyPage)
+	}
+	return body.KeyPageUrl
+}
+
+func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
+	err := protocol.IsValidAdiUrl(bookUrl)
+	if err != nil {
+		return fmt.Errorf("invalid KeyBook URL %q: %v", bookUrl.String(), err)
+	}
+	parent, err := bookUrl.Parent()
+	if err != nil {
+		return fmt.Errorf("invalid KeyBook URL: %v", err)
+	}
+	if !parent.Equal(adiUrl) {
+		return fmt.Errorf("KeyBook %q must be a direct child of its ADI %q", bookUrl.String(), adiUrl.String())
+	}
+	return nil
+}
+
+func validateKeyPageUrl(pageUrl *url.URL, bookUrl *url.URL) error {
+	kpParentUrl, err := pageUrl.Parent()
+	if err != nil {
+		return fmt.Errorf("invalid KeyPage URL: %w\nthe KeyPage URL must be adi_path/KeyPage", err)
+	}
+
+	bkParentUrl, _ := bookUrl.Parent()
+	if !bkParentUrl.Equal(kpParentUrl) {
+		return fmt.Errorf("KeyPage %q must be in the same path as its KeyBook %q", pageUrl, bookUrl)
+	}
+
+	return nil
 }

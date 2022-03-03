@@ -94,7 +94,7 @@ type CreateIdentity struct {
 	fieldsSet  []bool
 	Url        *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
-	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required"`
+	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	KeyPageUrl *url.URL `json:"keyPageUrl,omitempty" form:"keyPageUrl" query:"keyPageUrl"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
@@ -2396,11 +2396,6 @@ func (v *CreateIdentity) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field KeyBookUrl is missing")
-	} else if v.KeyBookUrl == nil {
-		errs = append(errs, "field KeyBookUrl is not set")
 	}
 
 	switch len(errs) {

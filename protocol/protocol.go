@@ -52,6 +52,9 @@ const (
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
 
+	// DefaultKeyBook is the default key book name when not specified
+	DefaultKeyBook = "book0"
+
 	// DefaultKeyPage is the default key page name when not specified
 	DefaultKeyPage = "page0"
 )
