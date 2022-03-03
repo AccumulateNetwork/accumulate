@@ -226,15 +226,15 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	batch = m.DB.Begin()
 	defer batch.Discard()
 
-	// ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	// anchor, err := ledger.GetMinorRootChainAnchor()
-	// if err != nil {
-	// 	return err
-	// }
+	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	anchor, err := ledger.GetMinorRootChainAnchor()
+	if err != nil {
+		return err
+	}
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(hash[:], batch.RootHash()) {
-		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], batch.RootHash()))
+	if !bytes.Equal(hash[:], anchor) {
+		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], anchor))
 	}
 
 	return m.governor.DidCommit(batch, true, true, blockIndex, time)
