@@ -12,19 +12,19 @@ func GetKey(key []byte) (dbKey [32]byte) {
 }
 
 func TestDatabase(t *testing.T) {
-
-	db := new(DB)
-	_ = db.InitDB("test", nil)
+	db := New(nil)
+	batch := db.Begin(true)
+	defer batch.Discard()
 
 	for i := 0; i < 10000; i++ {
-		err := db.Put(GetKey([]byte(fmt.Sprintf("answer %d", i))), []byte(fmt.Sprintf("%x this much data ", i)))
+		err := batch.Put(GetKey([]byte(fmt.Sprintf("answer %d", i))), []byte(fmt.Sprintf("%x this much data ", i)))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 	for i := 0; i < 10000; i++ {
 
-		val, e := db.Get(GetKey([]byte(fmt.Sprintf("answer %d", i))))
+		val, e := batch.Get(GetKey([]byte(fmt.Sprintf("answer %d", i))))
 		if e != nil {
 			t.Fatalf("no value found for %d", i)
 		}
