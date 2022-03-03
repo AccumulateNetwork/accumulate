@@ -197,18 +197,13 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 		return fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
-	// Load the BPT root hash so we can verify the system state
-	var hash [32]byte
-	data, err = src.Begin().Get(storage.MakeKey("BPT", "Root"))
-	switch {
-	case err == nil:
-		bpt := pmt.NewBPT()
-		bpt.UnMarshal(data)
-		hash = bpt.Root.Hash
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return fmt.Errorf("failed to load BPT root hash from app state: %v", err)
+	// Load the root anchor chain so we can verify the system state
+	srcBatch := database.New(src, nil).Begin()
+	defer srcBatch.Discard()
+	srcLedger := srcBatch.Account(m.Network.NodeUrl(protocol.Ledger))
+	srcAnchor, err := srcLedger.GetMinorRootChainAnchor()
+	if err != nil {
+		return fmt.Errorf("failed to load root anchor chain from app state: %v", err)
 	}
 
 	// Dump the genesis state into the key-value store
@@ -233,8 +228,8 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 	}
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(hash[:], anchor) {
-		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], anchor))
+	if !bytes.Equal(srcAnchor, anchor) {
+		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcAnchor, anchor))
 	}
 
 	return m.governor.DidCommit(batch, true, true, blockIndex, time)
