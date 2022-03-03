@@ -87,7 +87,7 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin state.Chain) error {
 		if len(body.Url.Path) > 0 {
 			parent, _ := body.Url.Parent()
 			if !parent.Equal(v.Url) {
-				return fmt.Errorf("a sub ADI %q must be a direct child of its origin ADI %q", body.Url.String(), v.Url.String())
+				return fmt.Errorf("a sub ADI %s must be a direct child of its origin ADI %s", body.Url.String(), v.Url.String())
 			}
 		}
 	default:
@@ -114,14 +114,14 @@ func selectPageUrl(body *protocol.CreateIdentity) *url.URL {
 func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 	err := protocol.IsValidAdiUrl(bookUrl)
 	if err != nil {
-		return fmt.Errorf("invalid KeyBook URL %q: %v", bookUrl.String(), err)
+		return fmt.Errorf("invalid KeyBook URL %s: %v", bookUrl.String(), err)
 	}
 	parent, err := bookUrl.Parent()
 	if err != nil {
 		return fmt.Errorf("invalid KeyBook URL: %v", err)
 	}
 	if !parent.Equal(adiUrl) {
-		return fmt.Errorf("KeyBook %q must be a direct child of its ADI %q", bookUrl.String(), adiUrl.String())
+		return fmt.Errorf("KeyBook %s must be a direct child of its ADI %s", bookUrl.String(), adiUrl.String())
 	}
 	return nil
 }
@@ -134,7 +134,7 @@ func validateKeyPageUrl(pageUrl *url.URL, bookUrl *url.URL) error {
 
 	bkParentUrl, _ := bookUrl.Parent()
 	if !bkParentUrl.Equal(kpParentUrl) {
-		return fmt.Errorf("KeyPage %q must be in the same path as its KeyBook %q", pageUrl, bookUrl)
+		return fmt.Errorf("KeyPage %s must be in the same path as its KeyBook %s", pageUrl, bookUrl)
 	}
 
 	return nil

@@ -176,7 +176,7 @@ func (u *URL) Identity() *URL {
 func (u *URL) Parent() (*URL, error) {
 	v := *u
 	if len(v.Path) == 0 {
-		return nil, fmt.Errorf("URL %q does not have a parent ADI", u.String())
+		return nil, fmt.Errorf("URL %s does not have a parent ADI", u.String())
 	}
 	slashIdx := strings.LastIndex(v.Path, "/")
 	if slashIdx == -1 {
