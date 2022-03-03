@@ -126,7 +126,7 @@ var txnTests = []*TCG{
 }
 
 var acntTests = []*TCG{
-	{Name: "RootIdentity", Cases: []*TC{
+	{Name: "Identity", Cases: []*TC{
 		testdata.NewAcntTest(&ADI{AccountHeader: AccountHeader{Url: parseUrl("adi"), KeyBook: parseUrl("adi/book")}}),
 		testdata.NewAcntTest(&ADI{AccountHeader: AccountHeader{Url: parseUrl("adi"), KeyBook: parseUrl("adi/book"), ManagerKeyBook: parseUrl("adi/mgr")}}),
 	}},

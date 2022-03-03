@@ -65,7 +65,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
-	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so RootIdentity of the BVC is good)
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	from := AcmeLiteAddressStdPriv(sponsor)
 
 	u, err := url.Parse(destAddr)
