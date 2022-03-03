@@ -136,6 +136,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			page.Threshold = uint64(len(page.Keys))
 		}
 
+		if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+			st.DisableValidator(page.Keys[indexKey].PublicKey)
+		}
+
 		// SetThreshold sets the signature threshold for the Key Page
 	case protocol.KeyPageOperationSetThreshold:
 		// Don't care what values are provided by keys....

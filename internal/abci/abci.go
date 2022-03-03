@@ -47,7 +47,8 @@ type SynthTxnReference struct {
 type EndBlockRequest struct{}
 
 type EndBlockResponse struct {
-	NewValidators []ed25519.PubKey
+	NewValidators     []ed25519.PubKey
+	DisableValidators []ed25519.PubKey
 }
 
 // Chain is the interface for the Accumulate transaction (chain) validator.

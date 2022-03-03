@@ -16,8 +16,9 @@ import (
 
 type StateManager struct {
 	stateCache
-	submissions   []*submission
-	newValidators []ed25519.PubKey
+	submissions       []*submission
+	newValidators     []ed25519.PubKey
+	disableValidators []ed25519.PubKey
 
 	Origin        state.Chain
 	OriginUrl     *url.URL
@@ -117,6 +118,11 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 	m.newValidators = append(m.newValidators, pubKey)
+}
+
+func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
+	// You can't really remove validators as far as I can see, but you can set the voting power to 0
+	m.disableValidators = append(m.disableValidators, pubKey)
 }
 
 func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {

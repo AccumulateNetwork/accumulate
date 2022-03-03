@@ -42,7 +42,8 @@ type Executor struct {
 	blockBatch  *database.Batch
 	blockMeta   blockMetadata
 
-	newValidators []tmed25519.PubKey
+	newValidators     []tmed25519.PubKey
+	disableValidators []tmed25519.PubKey
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -267,6 +268,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 	m.blockBatch = m.DB.Begin(true)
 	m.blockMeta = blockMetadata{}
 	m.newValidators = m.newValidators[:0]
+	m.disableValidators = m.disableValidators[:0]
 
 	defer func() {
 		if err != nil {
@@ -317,7 +319,8 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 // EndBlock implements ./abci.Chain
 func (m *Executor) EndBlock(req abci.EndBlockRequest) abci.EndBlockResponse {
 	return abci.EndBlockResponse{
-		NewValidators: m.newValidators,
+		NewValidators:     m.newValidators,
+		DisableValidators: m.disableValidators,
 	}
 }
 
