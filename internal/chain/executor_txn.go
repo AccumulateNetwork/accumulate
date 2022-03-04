@@ -13,35 +13,43 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // CheckTx implements ./abci.Chain
-func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
+func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
 	st, executor, hasEnoughSigs, err := m.validate(batch, env)
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: err}
-	}
-	if err != nil {
+	var notFound bool
+	switch {
+	case err == nil:
+		// OK
+	case errors.Is(err, storage.ErrNotFound):
+		notFound = true
+	default:
 		return nil, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: err}
 	}
 
 	// Do not run transaction-specific validation for a synthetic transaction. A
-	// synthetic transaction will be rejected by `m.check` unless it is signed
-	// by a BVN and can be proved to have been included in a DN block. If
-	// `m.check` succeeeds, we know the transaction came from a BVN, thus it is
-	// safe and reasonable to allow the transaction to be delivered.
+	// synthetic transaction will be rejected by `m.validate` unless it is
+	// signed by a BVN and can be proved to have been included in a DN block. If
+	// `m.validate` succeeeds, we know the transaction came from a BVN, thus it
+	// is safe and reasonable to allow the transaction to be delivered.
 	//
 	// This is important because if a synthetic transaction is rejected during
 	// CheckTx, it does not get recorded. If the synthetic transaction is not
 	// recorded, the BVN that sent it and the client that sent the original
 	// transaction cannot verify that the synthetic transaction was received.
-	if env.Transaction.Type().IsSynthetic() {
+	if st.txType.IsSynthetic() {
 		return new(protocol.EmptyResult), nil
+	}
+
+	// Synthetic transactions with a missing origin should still be recorded.
+	// Thus this check only happens if the transaction is not synthetic.
+	if notFound {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: err}
 	}
 
 	// Do not validate if we don't have enough signatures
@@ -60,7 +68,7 @@ func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResu
 }
 
 // DeliverTx implements ./abci.Chain
-func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
+func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	// if txt.IsInternal() && tx.Transaction.Nonce != uint64(m.blockIndex) {
 	// 	err := fmt.Errorf("nonce does not match block index, want %d, got %d", m.blockIndex, tx.Transaction.Nonce)
 	// 	return nil, m.recordTransactionError(tx, nil, nil, &chainId, tx.GetTxHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
@@ -147,7 +155,7 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
-func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
+func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
 	// Basic validation
 	err = m.validateBasic(batch, env)
 	if err != nil {
@@ -181,55 +189,37 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 
 	// Set up the state manager
 	st, err = NewStateManager(batch, m.Network.NodeUrl(), env)
-	if errors.Is(err, storage.ErrNotFound) {
-		switch txt {
-		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens, types.TxTypeSyntheticWriteData:
-			// TX does not require the origin record to exist
-		default:
-			return nil, nil, false, fmt.Errorf("origin record not found: %w", err)
-		}
-	} else if err != nil {
+	if err != nil {
 		return nil, nil, false, err
 	}
 	st.logger.L = m.logger
 
 	// Validate the transaction
-	if txt.IsSynthetic() {
-		return st, executor, true, m.validateSynthetic(st, env)
-	}
+	switch {
+	case txt.IsUser():
+		hasEnoughSigs, err = m.validateUser(st, env, fee)
 
-	if txt.IsInternal() {
-		return st, executor, true, m.validateInternal(st, env)
-	}
+	case txt.IsSynthetic():
+		hasEnoughSigs, err = true, m.validateSynthetic(st, env)
 
-	book := new(protocol.KeyBook)
-	switch origin := st.Origin.(type) {
-	case *protocol.LiteTokenAccount:
-		return st, executor, true, m.validateAgainstLite(st, env, fee)
-
-	case *protocol.ADI, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount, *protocol.TokenIssuer:
-		if origin.Header().KeyBook == nil {
-			return nil, nil, false, fmt.Errorf("sponsor has not been assigned to a key book")
-		}
-		err = st.LoadUrlAs(origin.Header().KeyBook, book)
-		if err != nil {
-			return nil, nil, false, fmt.Errorf("invalid KeyBook: %v", err)
-		}
-
-	case *protocol.KeyBook:
-		book = origin
+	case txt.IsInternal():
+		hasEnoughSigs, err = true, m.validateInternal(st, env)
 
 	default:
-		// The TX origin cannot be a transaction
-		// Token issue chains are not implemented
-		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.GetType())
+		return nil, nil, false, fmt.Errorf("invalid transaction type %v", txt)
 	}
 
-	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee)
-	return st, executor, hasEnoughSigs, err
+	switch {
+	case err == nil:
+		return st, executor, hasEnoughSigs, err
+	case errors.Is(err, storage.ErrNotFound):
+		return st, executor, hasEnoughSigs, err
+	default:
+		return nil, nil, false, err
+	}
 }
 
-func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelope) error {
+func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) error {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
@@ -307,7 +297,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelo
 	return nil
 }
 
-func (m *Executor) validateSynthetic(st *StateManager, env *transactions.Envelope) error {
+func (m *Executor) validateSynthetic(st *StateManager, env *protocol.Envelope) error {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
@@ -326,16 +316,65 @@ func (m *Executor) validateSynthetic(st *StateManager, env *transactions.Envelop
 		return err
 	}
 
-	return nil
+	// Does the origin exist?
+	if st.Origin != nil {
+		return nil
+	}
+
+	// Is it OK for the origin to be missing?
+	switch st.txType {
+	case types.TxTypeSyntheticCreateChain,
+		types.TxTypeSyntheticDepositTokens,
+		types.TxTypeSyntheticWriteData:
+		// These transactions allow for a missing origin
+		return nil
+
+	default:
+		return fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
+	}
 }
 
-func (m *Executor) validateInternal(st *StateManager, env *transactions.Envelope) error {
+func (m *Executor) validateInternal(st *StateManager, env *protocol.Envelope) error {
+	if st.Origin == nil {
+		return fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
+	}
+
 	//placeholder for special validation rules for internal transactions.
 	//need to verify that the transaction came from one of the node's governors.
 	return nil
 }
 
-func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envelope, book *protocol.KeyBook, fee protocol.Fee) (bool, error) {
+func (m *Executor) validateUser(st *StateManager, env *protocol.Envelope, fee protocol.Fee) (bool, error) {
+	switch origin := st.Origin.(type) {
+	case *protocol.LiteTokenAccount:
+		return true, m.validateAgainstLite(st, env, fee)
+
+	case *protocol.ADI, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount, *protocol.TokenIssuer:
+		if origin.Header().KeyBook == nil {
+			return false, fmt.Errorf("sponsor has not been assigned to a key book")
+		}
+
+		book := new(protocol.KeyBook)
+		err := st.LoadUrlAs(origin.Header().KeyBook, book)
+		if err != nil {
+			return false, fmt.Errorf("invalid KeyBook: %v", err)
+		}
+		return m.validateAgainstBook(st, env, book, fee)
+
+	case *protocol.KeyBook:
+		return m.validateAgainstBook(st, env, origin, fee)
+
+	case nil:
+		return false, fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
+
+	default:
+		// The TX origin cannot be a transaction
+		// Token issue chains are not implemented
+		return false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.GetType())
+	}
+}
+
+func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope, book *protocol.KeyBook, fee protocol.Fee) (bool, error) {
 	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
 		return false, fmt.Errorf("invalid sig spec index")
 	}
@@ -390,7 +429,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 	return sigCount >= int(page.Threshold), nil
 }
 
-func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envelope, fee protocol.Fee) error {
+func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope, fee protocol.Fee) error {
 	account := st.Origin.(*protocol.LiteTokenAccount)
 	st.Signator = account
 	st.SignatorUrl = st.OriginUrl
@@ -430,7 +469,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 	return st.UpdateSignator(account)
 }
 
-func (m *Executor) recordTransactionError(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
+func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
 	status := &protocol.TransactionStatus{
 		Delivered: true,
 		Code:      uint64(failure.Code),
@@ -443,7 +482,7 @@ func (m *Executor) recordTransactionError(st *StateManager, env *transactions.En
 	return failure
 }
 
-func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus, postCommit bool) error {
+func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus, postCommit bool) error {
 	if txPending == nil {
 		txPending = state.NewPendingTransaction(env)
 	}
