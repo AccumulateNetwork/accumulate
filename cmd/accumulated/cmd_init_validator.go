@@ -20,20 +20,6 @@ import (
 	"strings"
 )
 
-type Ports struct {
-	api  int
-	p2p  int
-	rpc  int
-	grpc int
-	acc  int
-}
-
-var dnBasePort = 16691
-var bvnBasePort = 16651
-
-var dnPorts = Ports{16691, 16692, 16693, 16694, 16695}
-var bvnPorts = Ports{16651, 16652, 16653, 16654, 16655}
-
 type Node struct {
 	IP   string          `json:"ip"`
 	Type config.NodeType `json:"type"`
