@@ -46,15 +46,21 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.
 	// Find the origin
 	var err error
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
-	if err == nil {
+	switch {
+	case err == nil:
+		// Found the origin
 		return m, nil
-	}
 
-	// If the origin doesn't exist, that might be OK
-	if errors.Is(err, storage.ErrNotFound) {
-		return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
+	case errors.Is(err, storage.ErrNotFound):
+		// Origin is missing
+		m.Origin = nil
+		return m, nil
+		// return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
+
+	default:
+		// Unknown error
+		return nil, err
 	}
-	return nil, err
 }
 
 func (m *StateManager) Reset() {

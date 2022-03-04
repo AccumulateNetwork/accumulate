@@ -140,10 +140,11 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	env.Transaction.Body = new(protocol.InternalGenesis)
 
 	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)
-	if err == nil {
-		return nil, errors.New("already initialized")
-	} else if !errors.Is(err, storage.ErrNotFound) {
+	if err != nil {
 		return nil, err
+	}
+	if st.Origin != nil {
+		return nil, errors.New("already initialized")
 	}
 	st.logger.L = m.logger
 
@@ -323,6 +324,10 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) abci.EndBlockResponse {
 
 // Commit implements ./abci.Chain
 func (m *Executor) Commit() ([]byte, error) {
+	return m.commit(false)
+}
+
+func (m *Executor) commit(force bool) ([]byte, error) {
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 
@@ -351,7 +356,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 	ledgerState.Updates = updatedSlice
 
-	if m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
+	if !force && m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
 		m.logInfo("Committed empty transaction")
 		m.blockBatch.Discard()
 	} else {
