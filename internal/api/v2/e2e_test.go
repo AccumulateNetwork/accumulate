@@ -77,7 +77,7 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: liteUrl,
-				Amount:    1e5,
+				Amount:    *new(big.Int).SetUint64(uint64(1e5)),
 			},
 		})
 
@@ -128,7 +128,7 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: pageUrl,
-				Amount:    1e5,
+				Amount:    *new(big.Int).SetUint64(uint64(1e5)),
 			},
 		})
 
@@ -201,7 +201,7 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: keyPageUrl,
-				Amount:    1e5,
+				Amount:    *new(big.Int).SetUint64(uint64(1e5)),
 			},
 		})
 

@@ -3,8 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"math/big"
-	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
@@ -15,7 +13,7 @@ import (
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
 	Use:   "credits",
-	Short: "Send credits to a recipient",
+	Short: "Purchase credits with acme and send to recipient.",
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
@@ -55,14 +53,15 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	amt, err := strconv.ParseFloat(args[1], 64)
+	//amt, err := strconv.ParseFloat(args[1], 64)
+	amt, err := amountToBigInt(protocol.ACME, args[1])
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
-	credits.Amount = *new(big.Int).SetUint64(uint64(amt * protocol.CreditPrecision))
+	credits.Amount = *amt
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {

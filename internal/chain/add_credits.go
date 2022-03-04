@@ -38,6 +38,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	amount.Div(amount, big.NewInt(int64(protocol.CreditsPerFiatUnit)))  // Amount in credits
 	amount.Mul(amount, big.NewInt(int64(protocol.AcmeOraclePrecision))) //dollars / token
 	amount.Div(amount, big.NewInt(int64(ledgerState.ActiveOracle)))     // Amount in acme
+	fmt.Println(amount, "last amount")
 
 	// If specifying amount of acme to spend
 	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
@@ -45,6 +46,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
 	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
+	fmt.Println(credits, "lastcredits")
 
 	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {

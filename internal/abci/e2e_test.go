@@ -555,7 +555,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		ac := new(protocol.AddCredits)
-		ac.Amount = 55
+		ac.Amount = *big.NewInt(55)
 		ac.Recipient = n.ParseUrl("foo/page0")
 
 		send(newTxn("foo/tokens").
