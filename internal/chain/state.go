@@ -3,6 +3,7 @@ package chain
 import (
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -16,9 +17,8 @@ import (
 
 type StateManager struct {
 	stateCache
-	submissions       []*submission
-	newValidators     []ed25519.PubKey
-	disableValidators []ed25519.PubKey
+	submissions      []*submission
+	validatorUpdates []abci.ValidatorUpdate
 
 	Origin        state.Chain
 	OriginUrl     *url.URL
@@ -117,12 +117,18 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.newValidators = append(m.newValidators, pubKey)
+	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
+		PubKey: pubKey,
+		Power:  1,
+	})
 }
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.disableValidators = append(m.disableValidators, pubKey)
+	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
+		PubKey: pubKey,
+		Power:  0,
+	})
 }
 
 func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {

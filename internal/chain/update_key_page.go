@@ -120,6 +120,11 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			bodyKey.Owner = body.Owner
 		}
 
+		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+			st.DisableValidator(page.Keys[indexKey].PublicKey)
+			st.AddValidator(body.NewKey)
+		}
+
 	case protocol.KeyPageOperationRemove:
 		// Make sure the key to be removed is on the Key Page
 		if indexKey < 0 {

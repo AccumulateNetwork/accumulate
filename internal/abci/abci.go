@@ -43,12 +43,16 @@ type SynthTxnReference struct {
 	TxRef [32]byte `json:"txRef,omitempty" form:"txRef" query:"txRef" validate:"required"`
 }
 
+type ValidatorUpdate struct {
+	PubKey ed25519.PubKey
+	Power  int64
+}
+
 // EndBlockRequest is the input parameter to Chain.EndBlock
 type EndBlockRequest struct{}
 
 type EndBlockResponse struct {
-	NewValidators     []ed25519.PubKey
-	DisableValidators []ed25519.PubKey
+	ValidatorsUpdates []ValidatorUpdate
 }
 
 // Chain is the interface for the Accumulate transaction (chain) validator.

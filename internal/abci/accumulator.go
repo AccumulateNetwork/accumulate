@@ -389,31 +389,23 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 	defer app.recover(nil, true)
 
 	r := app.Chain.EndBlock(EndBlockRequest{})
-	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.NewValidators)+len(r.DisableValidators))
-	for i := 0; i < len(resp.ValidatorUpdates); i++ {
-		for _, key := range r.NewValidators {
-			resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
-				PubKey: protocrypto.PublicKey{
-					Sum: &protocrypto.PublicKey_Ed25519{
-						Ed25519: key,
-					},
+	updateValidators(resp, r)
+	return resp
+}
+
+// updateValidators adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
+func updateValidators(resp abci.ResponseEndBlock, r EndBlockResponse) {
+	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.ValidatorsUpdates))
+	for i, u := range r.ValidatorsUpdates {
+		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{
+				Sum: &protocrypto.PublicKey_Ed25519{
+					Ed25519: u.PubKey,
 				},
-				Power: 1,
-			}
-		}
-		for _, key := range r.DisableValidators {
-			resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
-				PubKey: protocrypto.PublicKey{
-					Sum: &protocrypto.PublicKey_Ed25519{
-						Ed25519: key,
-					},
-				},
-				Power: 0,
-			}
+			},
+			Power: u.Power,
 		}
 	}
-
-	return resp
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
