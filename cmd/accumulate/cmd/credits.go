@@ -15,7 +15,7 @@ import (
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
 	Use:   "credits",
-	Short: "Send credits to a recipient",
+	Short: "Purchase credits with acme and send to recipient.",
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error

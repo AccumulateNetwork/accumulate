@@ -100,7 +100,7 @@ var txnTests = []*TCG{
 		txnTest1("adi", &CreateKeyBook{Url: parseUrl("adi/book"), Pages: []*url.URL{parseUrl("adi/page")}}),
 	}},
 	{Name: "AddCredits", Cases: []*TC{
-		txnTest1("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: 100}),
+		txnTest1("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: *new(big.Int).SetUint64(uint64(100))}),
 	}},
 	{Name: "UpdateKeyPage", Cases: []*TC{
 		txnTest1("adi", &UpdateKeyPage{Operation: KeyPageOperationAdd, NewKey: key[32:]}),
