@@ -3,9 +3,9 @@ package chain
 import (
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
