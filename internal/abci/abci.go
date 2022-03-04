@@ -44,8 +44,8 @@ type SynthTxnReference struct {
 }
 
 type ValidatorUpdate struct {
-	PubKey ed25519.PubKey
-	Power  int64
+	PubKey  ed25519.PubKey
+	Enabled bool
 }
 
 // EndBlockRequest is the input parameter to Chain.EndBlock

@@ -118,16 +118,16 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
-		PubKey: pubKey,
-		Power:  1,
+		PubKey:  pubKey,
+		Enabled: true,
 	})
 }
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
 	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
-		PubKey: pubKey,
-		Power:  0,
+		PubKey:  pubKey,
+		Enabled: false,
 	})
 }
 

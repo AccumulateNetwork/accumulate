@@ -397,13 +397,18 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 func updateValidators(resp abci.ResponseEndBlock, r EndBlockResponse) {
 	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.ValidatorsUpdates))
 	for i, u := range r.ValidatorsUpdates {
+		var pwr int64
+		if u.Enabled {
+			pwr = 1
+		}
+
 		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
 			PubKey: protocrypto.PublicKey{
 				Sum: &protocrypto.PublicKey_Ed25519{
 					Ed25519: u.PubKey,
 				},
 			},
-			Power: u.Power,
+			Power: pwr,
 		}
 	}
 }
