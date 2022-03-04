@@ -254,6 +254,41 @@ func initNode(cmd *cobra.Command, args []string) {
 	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.LocalSubnetID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Subnet
+
+	if flagInit.Net != "" {
+		config.Accumulate.Network.LocalAddress = parseHost(flagInit.Net)
+		//need to find the subnet and add the local address to it as well.
+		localNode := cfg.Node{Address: flagInit.Net, Type: nodeType}
+		for i, s := range config.Accumulate.Network.Subnets {
+			if s.ID == config.Accumulate.Network.LocalSubnetID {
+				//loop through all the nodes and add persistent peers
+				for _, n := range s.Nodes {
+					//don't both to fetch if we already have it.
+					nodeHost, _, err := net.SplitHostPort(parseHost(n.Address))
+					if err != nil {
+						warnf("invalid host from node %s", n.Address)
+						continue
+					}
+					if netAddr != nodeHost {
+						tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", nodeHost, netPort+networks.TmRpcPortOffset))
+						warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+
+						status, err := tmClient.Status(context.Background())
+						warnf("failed to get status of %s with error %v", n.Address, err)
+
+						peers := config.P2P.PersistentPeers
+						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
+							status.NodeInfo.NodeID, nodeHost, netPort+networks.TmP2pPortOffset)
+					}
+				}
+
+				//prepend the new node to the list
+				config.Accumulate.Network.Subnets[i].Nodes = append([]cfg.Node{localNode}, config.Accumulate.Network.Subnets[i].Nodes...)
+				break
+			}
+		}
+	}
+
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
