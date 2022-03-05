@@ -1,6 +1,7 @@
 package database
 
 import (
+	"encoding"
 	"errors"
 	"fmt"
 
@@ -10,7 +11,6 @@ import (
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
-	db       storage.KeyValueTxn
 	key      storage.Key
 	writable bool
 	merkle   *managed.MerkleManager
@@ -41,9 +41,19 @@ func (c *Chain) Height() int64 {
 	return c.merkle.MS.Count
 }
 
-// Entry returns the entry in the chain at the given height.
+// Entry loads the entry in the chain at the given height.
 func (c *Chain) Entry(height int64) ([]byte, error) {
 	return c.merkle.Get(height)
+}
+
+// EntryAs loads and unmarshals the entry in the chain at the given height.
+func (c *Chain) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
+	data, err := c.Entry(height)
+	if err != nil {
+		return err
+	}
+
+	return value.UnmarshalBinary(data)
 }
 
 // Entries returns entries in the given range.
