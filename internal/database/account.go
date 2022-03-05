@@ -169,9 +169,19 @@ func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
 	return r.chain(name, true)
 }
 
+// IndexChain returns a chain manager for the index chain of the given chain.
+func (r *Account) IndexChain(name string, major bool) (*Chain, error) {
+	return r.Chain(protocol.IndexChain(name, major), protocol.ChainTypeIndex)
+}
+
 // ReadChain returns a read-only chain manager for the given chain.
 func (r *Account) ReadChain(name string) (*Chain, error) {
 	return r.chain(name, false)
+}
+
+// ReadIndexChain returns a read-only chain manager for the index chain of the given chain.
+func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
+	return r.chain(protocol.IndexChain(name, major), false)
 }
 
 // Index returns a value that can read or write an index value.

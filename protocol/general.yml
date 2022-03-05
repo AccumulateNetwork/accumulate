@@ -49,6 +49,23 @@ AcmeOracle:
     - name: Price
       type: uvarint
 
+IndexEntry:
+  description: represents an entry in an index chain
+  fields:
+    - name: Source
+      description: is the index of the chain from which an anchor was taken
+      type: uint
+    - name: Anchor
+      description: is the index of the chain into which the anchor was added. Omit when indexing the root anchor chain
+      type: uint
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block. Only include when indexing the root anchor chain
+      type: time
+      pointer: true
+
 DataEntry:
   fields:
     - name: ExtIds
