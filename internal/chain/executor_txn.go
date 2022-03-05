@@ -152,16 +152,17 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	return result, nil
 }
 
-func (m *Executor) processInternalDataTransaction(internalAccountPath string, data []byte) error {
+func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd *protocol.WriteData) error {
 	dataAccountUrl := m.Network.NodeUrl(internalAccountPath)
 
-	wd := protocol.WriteData{}
-	wd.Entry.Data = data
+	if wd == nil {
+		return fmt.Errorf("no internal data transaction provided")
+	}
 
 	env := new(protocol.Envelope)
 	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Origin = m.Network.NodeUrl()
-	env.Transaction.Body = &wd
+	env.Transaction.Body = wd
 
 	sw := protocol.SegWitDataEntry{}
 	sw.Cause = *(*[32]byte)(env.GetTxHash())

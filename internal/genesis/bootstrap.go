@@ -120,7 +120,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
-		dataRecords = append(dataRecords, DataRecord{da, nil})
+		dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
 
 		switch opts.Network.Type {
 		case config.Directory:
