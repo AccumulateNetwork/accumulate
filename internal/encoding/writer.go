@@ -12,7 +12,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
+// ErrInvalidFieldNumber is returned when an invalid field number is encountered.
 var ErrInvalidFieldNumber = errors.New("field number is invalid")
+
+// EmptyObject is written when an object would otherwise be empty.
+const EmptyObject = 0x80
 
 // A Writer is used to binary-encode a struct and write it to a io.Writer.
 //
@@ -113,6 +117,11 @@ func (w *Writer) writeField(field uint) {
 // If a list of field names is provided, the error will be formatted as "field
 // <name>: <err>".
 func (w *Writer) Reset(fieldNames []string) (written int, lastField uint, err error) {
+	if w.written == 0 {
+		n, err := w.w.Write([]byte{EmptyObject})
+		w.didWrite(0, n, err, "failed to write empty object marker")
+	}
+
 	written, lastField, err = w.written, w.last, w.err
 	w.written, w.last, w.err = 0, 0, nil
 
