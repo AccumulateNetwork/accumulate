@@ -43,11 +43,17 @@ const (
 	// DataChain is the data chain of a record.
 	DataChain = "data"
 
-	// MajorRootChain is the major root chain of a subnet.
+	// MajorRootChain is the major anchor root chain of a subnet.
 	MajorRootChain = "major-root"
 
-	// MinorRootChain is the minor root chain of a subnet.
+	// MinorRootChain is the minor anchor root chain of a subnet.
 	MinorRootChain = "minor-root"
+
+	// MajorRootIndexChain is the index chain of the major anchor root chain of a subnet.
+	MajorRootIndexChain = "major-root-index"
+
+	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
+	MinorRootIndexChain = "minor-root-index"
 
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
@@ -323,4 +329,13 @@ func BelongsToDn(u *url.URL) bool {
 // BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.
 func BvnNameFromSubnetId(subnetId string) string {
 	return "bvn-" + strings.ToLower(subnetId)
+}
+
+// IndexChain returns the major or minor index chain name for a given chain. Do
+// not use for the root anchor chain.
+func IndexChain(name string, major bool) string {
+	if major {
+		return "major-" + name + "-index"
+	}
+	return "minor-" + name + "-index"
 }

@@ -11,6 +11,9 @@ ChainType:
   Data:
     value: 0x03
     description: holds data entry hashes
+  Index:
+    value: 0x04
+    description: indexes other chains
 
 ObjectType:
   Unknown:
