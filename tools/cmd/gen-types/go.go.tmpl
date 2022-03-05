@@ -17,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	{{- end}}
 	{{- if not (isPkg "types/state")}}
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accum1ulate/types/state"
 	{{- end}}
 	{{- if not (isPkg "types/api/transactions")}}
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -25,12 +25,18 @@ import (
 )
 
 {{range .Types}}
+{{- if .Description}}
+// {{.Name}} {{.Description}}.
+{{- end}}
 type {{.Name}} struct {
 	{{if .IsBinary}}fieldsSet []bool{{end}}
 	{{- range .Embeddings}}
 	{{.Name}}
 	{{- end}}
 	{{- range .Fields}}
+	{{- if .Description}}
+	// {{.Name}} {{.Description}}.
+	{{- end}}
 	{{.Name}} {{resolveType . false}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}`{{end}}
 	{{- end}}
 }

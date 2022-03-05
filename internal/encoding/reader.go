@@ -16,7 +16,7 @@ var ErrFieldsOutOfOrder = errors.New("fields are out of order")
 
 type bytesReader interface {
 	io.Reader
-	io.ByteReader
+	io.ByteScanner
 }
 
 type Reader struct {
@@ -102,6 +102,52 @@ func (r *Reader) Reset(fieldNames []string) (seen []bool, err error) {
 	return
 }
 
+func (r *Reader) nextField() bool {
+	if len(r.seen) == 0 {
+		b, err := r.r.ReadByte()
+		if errors.Is(err, io.EOF) {
+			return false
+		}
+		if err != nil {
+			r.last = 0
+			r.err = fmt.Errorf("failed to read field number: %w", err)
+			return false
+		}
+		if b == EmptyObject {
+			r.current = EmptyObject
+			return false
+		}
+		err = r.r.UnreadByte()
+		if err != nil {
+			r.last = 0
+			r.err = fmt.Errorf("failed to read field number: %w", err)
+			return false
+		}
+	}
+
+	v, err := binary.ReadUvarint(r.r)
+	if errors.Is(err, io.EOF) {
+		return false
+	}
+	if err != nil {
+		r.last = 0
+		r.err = fmt.Errorf("failed to read field number: %w", err)
+		return false
+	}
+	if v < 1 || v > 32 {
+		r.last = 0
+		r.err = fmt.Errorf("failed to read field number: %w", ErrInvalidFieldNumber)
+		return false
+	}
+	r.current = uint(v)
+
+	for len(r.seen) < int(v-1) {
+		r.seen = append(r.seen, false)
+	}
+	r.seen = append(r.seen, true)
+	return true
+}
+
 func (r *Reader) readField(field uint) bool {
 	if r.err != nil {
 		return false
@@ -113,26 +159,9 @@ func (r *Reader) readField(field uint) bool {
 	}
 
 	if r.current == 0 {
-		v, err := binary.ReadUvarint(r.r)
-		if errors.Is(err, io.EOF) {
+		if !r.nextField() {
 			return false
 		}
-		if err != nil {
-			r.last = 0
-			r.err = fmt.Errorf("failed to read field number: %w", err)
-			return false
-		}
-		if v < 1 || v > 32 {
-			r.last = 0
-			r.err = fmt.Errorf("failed to read field number: %w", ErrInvalidFieldNumber)
-			return false
-		}
-		r.current = uint(v)
-
-		for len(r.seen) < int(v-1) {
-			r.seen = append(r.seen, false)
-		}
-		r.seen = append(r.seen, true)
 	}
 
 	if r.current < field {
