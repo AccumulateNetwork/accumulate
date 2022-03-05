@@ -31,14 +31,14 @@ type PendingTransactionsIndex struct {
 }
 
 type TransactionChainEntry struct {
-	fieldsSet   []bool
-	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Chain       string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
-	Block       uint64   `json:"block,omitempty" form:"block" query:"block" validate:"required"`
-	ChainEntry  uint64   `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
-	ChainAnchor uint64   `json:"chainAnchor,omitempty" form:"chainAnchor" query:"chainAnchor" validate:"required"`
-	RootEntry   uint64   `json:"rootEntry,omitempty" form:"rootEntry" query:"rootEntry" validate:"required"`
-	RootAnchor  uint64   `json:"rootAnchor,omitempty" form:"rootAnchor" query:"rootAnchor" validate:"required"`
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	// Chain is the name of the chain.
+	Chain string `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	// ChainIndex is the index of the entry in the chain's index chain.
+	ChainIndex uint64 `json:"chainIndex,omitempty" form:"chainIndex" query:"chainIndex" validate:"required"`
+	// AnchorIndex is the index of the entry in the anchor chain's index chain.
+	AnchorIndex uint64 `json:"anchorIndex,omitempty" form:"anchorIndex" query:"anchorIndex" validate:"required"`
 }
 
 type TransactionChainIndex struct {
@@ -90,19 +90,10 @@ func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
 	if !(v.Chain == u.Chain) {
 		return false
 	}
-	if !(v.Block == u.Block) {
+	if !(v.ChainIndex == u.ChainIndex) {
 		return false
 	}
-	if !(v.ChainEntry == u.ChainEntry) {
-		return false
-	}
-	if !(v.ChainAnchor == u.ChainAnchor) {
-		return false
-	}
-	if !(v.RootEntry == u.RootEntry) {
-		return false
-	}
-	if !(v.RootAnchor == u.RootAnchor) {
+	if !(v.AnchorIndex == u.AnchorIndex) {
 		return false
 	}
 
@@ -243,11 +234,8 @@ func (v *PendingTransactionsIndex) IsValid() error {
 var fieldNames_TransactionChainEntry = []string{
 	1: "Account",
 	2: "Chain",
-	3: "Block",
-	4: "ChainEntry",
-	5: "ChainAnchor",
-	6: "RootEntry",
-	7: "RootAnchor",
+	3: "ChainIndex",
+	4: "AnchorIndex",
 }
 
 func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
@@ -260,20 +248,11 @@ func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
 	if !(len(v.Chain) == 0) {
 		writer.WriteString(2, v.Chain)
 	}
-	if !(v.Block == 0) {
-		writer.WriteUint(3, v.Block)
+	if !(v.ChainIndex == 0) {
+		writer.WriteUint(3, v.ChainIndex)
 	}
-	if !(v.ChainEntry == 0) {
-		writer.WriteUint(4, v.ChainEntry)
-	}
-	if !(v.ChainAnchor == 0) {
-		writer.WriteUint(5, v.ChainAnchor)
-	}
-	if !(v.RootEntry == 0) {
-		writer.WriteUint(6, v.RootEntry)
-	}
-	if !(v.RootAnchor == 0) {
-		writer.WriteUint(7, v.RootAnchor)
+	if !(v.AnchorIndex == 0) {
+		writer.WriteUint(4, v.AnchorIndex)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
@@ -294,29 +273,14 @@ func (v *TransactionChainEntry) IsValid() error {
 		errs = append(errs, "field Chain is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Block is missing")
-	} else if v.Block == 0 {
-		errs = append(errs, "field Block is not set")
+		errs = append(errs, "field ChainIndex is missing")
+	} else if v.ChainIndex == 0 {
+		errs = append(errs, "field ChainIndex is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field ChainEntry is missing")
-	} else if v.ChainEntry == 0 {
-		errs = append(errs, "field ChainEntry is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field ChainAnchor is missing")
-	} else if v.ChainAnchor == 0 {
-		errs = append(errs, "field ChainAnchor is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field RootEntry is missing")
-	} else if v.RootEntry == 0 {
-		errs = append(errs, "field RootEntry is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field RootAnchor is missing")
-	} else if v.RootAnchor == 0 {
-		errs = append(errs, "field RootAnchor is not set")
+		errs = append(errs, "field AnchorIndex is missing")
+	} else if v.AnchorIndex == 0 {
+		errs = append(errs, "field AnchorIndex is not set")
 	}
 
 	switch len(errs) {
@@ -439,19 +403,10 @@ func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Chain = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
-		v.Block = x
+		v.ChainIndex = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
-		v.ChainEntry = x
-	}
-	if x, ok := reader.ReadUint(5); ok {
-		v.ChainAnchor = x
-	}
-	if x, ok := reader.ReadUint(6); ok {
-		v.RootEntry = x
-	}
-	if x, ok := reader.ReadUint(7); ok {
-		v.RootAnchor = x
+		v.AnchorIndex = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
