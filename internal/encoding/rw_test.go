@@ -27,6 +27,18 @@ func rdOk(t *testing.T, r *Reader) {
 	require.NoError(t, err)
 }
 
+func TestEmptyObject(t *testing.T) {
+	r, w := pipe()
+
+	// Write nothing
+	wrOk(t, w)
+
+	// Attempt to read something
+	r.ReadUint(1)
+	r.ReadUint(2)
+	rdOk(t, r)
+}
+
 func TestTypes(t *testing.T) {
 	t.Run("Hash", func(t *testing.T) {
 		r, w := pipe()

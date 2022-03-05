@@ -84,6 +84,7 @@ type TxReceipt struct {
 	Chain          string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
 	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
 	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Error          string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
@@ -240,6 +241,9 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 		return false
 	}
 	if !((&v.Receipt).Equal(&u.Receipt)) {
+		return false
+	}
+	if !(v.Error == u.Error) {
 		return false
 	}
 
@@ -728,6 +732,7 @@ var fieldNames_TxReceipt = []string{
 	2: "Chain",
 	3: "DirectoryBlock",
 	4: "Receipt",
+	5: "Error",
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
@@ -745,6 +750,9 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Receipt).Equal(new(protocol.Receipt))) {
 		writer.WriteValue(4, &v.Receipt)
+	}
+	if !(len(v.Error) == 0) {
+		writer.WriteString(5, v.Error)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TxReceipt)
@@ -773,6 +781,11 @@ func (v *TxReceipt) IsValid() error {
 		errs = append(errs, "field Receipt is missing")
 	} else if (v.Receipt).Equal(new(protocol.Receipt)) {
 		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Error is missing")
+	} else if len(v.Error) == 0 {
+		errs = append(errs, "field Error is not set")
 	}
 
 	switch len(errs) {
@@ -1028,6 +1041,9 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x := new(protocol.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Receipt = *x
+	}
+	if x, ok := reader.ReadString(5); ok {
+		v.Error = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TxReceipt)
