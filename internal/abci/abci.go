@@ -12,6 +12,7 @@
 package abci
 
 import (
+	"github.com/tendermint/tendermint/abci/types"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -27,9 +28,10 @@ const Version uint64 = 0x1
 
 // BeginBlockRequest is the input parameter to Chain.BeginBlock.
 type BeginBlockRequest struct {
-	IsLeader bool
-	Height   int64
-	Time     time.Time
+	IsLeader   bool
+	Height     int64
+	Time       time.Time
+	CommitInfo *types.LastCommitInfo
 }
 
 // BeginBlockResponse is the return value of Chain.BeginBlock.

@@ -501,6 +501,12 @@ type UpdateManager struct {
 	ManagerKeyBook *url.URL `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
 }
 
+type VoteBatch struct {
+	fieldsSet  []bool
+	Proposer   []byte   `json:"proposer,omitempty" form:"proposer" query:"proposer" validate:"required"`
+	Validators [][]byte `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+}
+
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
@@ -1786,6 +1792,22 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 func (v *UpdateManager) Equal(u *UpdateManager) bool {
 	if !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)) {
 		return false
+	}
+
+	return true
+}
+
+func (v *VoteBatch) Equal(u *VoteBatch) bool {
+	if !(bytes.Equal(v.Proposer, u.Proposer)) {
+		return false
+	}
+	if len(v.Validators) != len(u.Validators) {
+		return false
+	}
+	for i := range v.Validators {
+		if !(bytes.Equal(v.Validators[i], u.Validators[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -5292,6 +5314,52 @@ func (v *UpdateManager) IsValid() error {
 	}
 }
 
+var fieldNames_VoteBatch = []string{
+	1: "Proposer",
+	2: "Validators",
+}
+
+func (v *VoteBatch) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Proposer) == 0) {
+		writer.WriteBytes(1, v.Proposer)
+	}
+	if !(len(v.Validators) == 0) {
+		for _, v := range v.Validators {
+			writer.WriteBytes(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_VoteBatch)
+	return buffer.Bytes(), err
+}
+
+func (v *VoteBatch) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Proposer is missing")
+	} else if len(v.Proposer) == 0 {
+		errs = append(errs, "field Proposer is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Validators is missing")
+	} else if len(v.Validators) == 0 {
+		errs = append(errs, "field Validators is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_WriteData = []string{
 	1: "Type",
 	2: "Entry",
@@ -7335,6 +7403,29 @@ func (v *UpdateManager) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *VoteBatch) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *VoteBatch) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
+		v.Proposer = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(2); ok {
+			v.Validators = append(v.Validators, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_VoteBatch)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *WriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8336,6 +8427,19 @@ func (v *UpdateManager) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.ManagerKeyBook = v.ManagerKeyBook
+	return json.Marshal(&u)
+}
+
+func (v *VoteBatch) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Proposer   *string   `json:"proposer,omitempty"`
+		Validators []*string `json:"validators,omitempty"`
+	}{}
+	u.Proposer = encoding.BytesToJSON(v.Proposer)
+	u.Validators = make([]*string, len(v.Validators))
+	for i, x := range v.Validators {
+		u.Validators[i] = encoding.BytesToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -9952,6 +10056,35 @@ func (v *UpdateManager) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.ManagerKeyBook = u.ManagerKeyBook
+	return nil
+}
+
+func (v *VoteBatch) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Proposer   *string   `json:"proposer,omitempty"`
+		Validators []*string `json:"validators,omitempty"`
+	}{}
+	u.Proposer = encoding.BytesToJSON(v.Proposer)
+	u.Validators = make([]*string, len(v.Validators))
+	for i, x := range v.Validators {
+		u.Validators[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Proposer); err != nil {
+		return fmt.Errorf("error decoding Proposer: %w", err)
+	} else {
+		v.Proposer = x
+	}
+	v.Validators = make([][]byte, len(u.Validators))
+	for i, x := range u.Validators {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Validators: %w", err)
+		} else {
+			v.Validators[i] = x
+		}
+	}
 	return nil
 }
 

@@ -3,6 +3,7 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/tendermint/tendermint/abci/types"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -107,6 +108,20 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			Entry   *protocol.DataEntry
 		}
 		var dataRecords []DataRecord
+
+		wd := new(protocol.WriteData)
+		lci := types.LastCommitInfo{}
+		wd.Entry.Data, err = json.Marshal(&lci)
+
+		da := new(protocol.DataAccount)
+		da.Scratch = true
+		da.Url = uAdi.JoinPath(protocol.Votes)
+		da.KeyBook = uBook
+
+		records = append(records, da)
+		urls = append(urls, da.Url)
+		dataRecords = append(dataRecords, DataRecord{da, nil})
+
 		switch opts.Network.Type {
 		case config.Directory:
 			oracle := new(protocol.AcmeOracle)

@@ -341,7 +341,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 
 	g.sendInternal(batch, body)
 }
-
+func (g *governor) sendData
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced

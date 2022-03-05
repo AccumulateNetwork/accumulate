@@ -311,6 +311,23 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 		return abci.BeginBlockResponse{}, fmt.Errorf("cannot write ledger: %w", err)
 	}
 
+	//store votes from previous block
+
+	var da protocol.DataAccount
+	wd := new(protocol.WriteData)
+	wd.Entry.Data, err = json.Marshal(&req.CommitInfo)
+	if err != nil {
+		app.logger.Error("cannot marshal voting info data")
+	}
+	u := m.Network.NodeUrl(protocol.Votes)
+	NewStateManager(m.blockBatch,u, )
+	//store the entry
+	va := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
+
+	va.GetStateAs(&da)
+	da.UpdateData(, wd.Entry.Hash(), &wd.Entry)
+
+
 	return abci.BeginBlockResponse{}, nil
 }
 

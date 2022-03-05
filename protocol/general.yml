@@ -44,6 +44,14 @@ AnchorMetadata:
     - name: Entry
       type: bytes
 
+VoteBatch:
+  fields:
+    - name: Proposer
+      type: bytes
+    - name: Validators
+      repeatable: true
+      type: bytes
+
 AcmeOracle:
   fields:
     - name: Price

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -143,6 +142,51 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 
 	m.blockMeta.Delivered++
 	return result, nil
+}
+
+func (m *Executor) processInternalDataTransaction(internalAccountPath string, data []byte) error {
+	dataAccountUrl := m.Network.NodeUrl(internalAccountPath)
+
+	wd := protocol.WriteData{}
+	wd.Entry.Data = data
+
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
+	env.Transaction.Origin = m.Network.NodeUrl()
+	env.Transaction.Body = &wd
+
+	sw := protocol.SegWitDataEntry{}
+	sw.Cause = *(*[32]byte)(env.GetTxHash())
+	sw.EntryHash = *(*[32]byte)(wd.Entry.Hash())
+	sw.EntryUrl = env.Transaction.Origin
+	env.Transaction.Body = &sw
+
+	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(internalAccountPath), env)
+	if err != nil {
+		return err
+	}
+	st.logger.L = m.logger
+
+	da := new(protocol.DataAccount)
+	va := m.blockBatch.Account(dataAccountUrl)
+	err = va.GetStateAs(da)
+	if err != nil {
+		return err
+	}
+
+	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
+
+	txPending := state.NewPendingTransaction(env)
+	txAccepted, _ := state.NewTransaction(txPending)
+
+	status := &protocol.TransactionStatus{Delivered: true}
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	if err != nil {
+		return err
+	}
+	st.Commit()
+
+	return nil
 }
 
 // validate validates signatures, verifies they are authorized,
