@@ -555,7 +555,11 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		ac := new(protocol.AddCredits)
+<<<<<<< HEAD
 		ac.Amount = *big.NewInt(55)
+=======
+		ac.Amount = *new(big.Int).SetUint64(uint64(55))
+>>>>>>> AC-1085-burn-acme-to-buy-credits
 		ac.Recipient = n.ParseUrl("foo/page0")
 
 		send(newTxn("foo/tokens").
