@@ -1,6 +1,7 @@
 package pmt
 
 import (
+
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -11,6 +12,7 @@ type Manager struct {
 	DBManager storage.KeyValueTxn
 	Dirty     []*BptNode
 	Bpt       *BPT
+	Flushed   [][]byte
 }
 
 // NewBPTManager
@@ -45,7 +47,7 @@ func (m *Manager) LoadNode(node *BptNode) {
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
 
-	data, e := m.DBManager.Get(kBpt.Append(node.BBKey[:])) //                      Get the Byte Block
+	data, e := m.DBManager.Get(kBpt.Append(node.NodeKey[:])) //                      Get the Byte Block
 	if e != nil {
 		panic("Should have a Byte Block for any persisted BPT")
 	}
@@ -57,8 +59,9 @@ func (m *Manager) LoadNode(node *BptNode) {
 // Flushes the Byte Block to disk
 func (m *Manager) FlushNode(node *BptNode) { //   Flush a Byte Block
 	if node.Height&7 == 0 {
+		m.Flushed = append(m.Flushed,append([]byte{},node.NodeKey[:]...))
 		data := m.Bpt.MarshalByteBlock(node)              //
-		m.DBManager.Put(kBpt.Append(node.BBKey[:]), data) //
+		m.DBManager.Put(kBpt.Append(node.NodeKey[:]), data) //
 		if node.Height == 0 {
 			data = m.Bpt.Marshal()
 			m.DBManager.Put(kBptRoot, data)

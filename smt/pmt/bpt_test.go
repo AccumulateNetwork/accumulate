@@ -505,3 +505,21 @@ func BenchmarkBPT_Update2(b *testing.B) {
 	bpt := LoadBptCnt1(1, 10000000, 10000)
 	bpt.Update()
 }
+
+func TestNodeKey(t *testing.T) {
+	r := common.RandHash{}
+	h := r.NextA()
+	for i := 0; i < 254; i++ {
+		nh, ok := GetNodeKey(i, h)
+		//fmt.Printf("%08b %08b %08b\n",nh[0],nh[1],nh[2])
+		require.True(t, ok, "should have a NodeKey")
+		height, key, ok := GetHtKey(nh)
+		require.True(t, ok, "should be able to compute the height and key")
+		require.True(t, height == i,"Height should be the same")
+		left, right, ok := GetChildrenNodeKeys(nh)
+
+		require.True(t,bytes.Equal(key[:i>>3],left[:i>>3]),"key must be part of child key")
+		require.True(t,bytes.Equal(key[:i>>3],right[:i>>3]),"key must be part of child key")
+
+	}
+}

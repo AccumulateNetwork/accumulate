@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func PrintNode(h int, e Entry) {
 		println("nil")
 	case e.T() == TNode:
 		n := e.(*BptNode)
-		fmt.Printf("  %x...%x\n", n.BBKey[:3], n.BBKey[31:])
+		fmt.Printf("  %x...%x\n", n.NodeKey[:3], n.NodeKey[31:])
 		PrintNode(n.Height, n.Left)
 		PrintNode(n.Height, n.Right)
 	case e.T() == TValue:
@@ -42,35 +43,94 @@ func PrintNode(h int, e Entry) {
 
 }
 
-func TestManager(t *testing.T) {
-	t.Skip("fix bpt persistence")
-	d := 100000
+func Check(t *testing.T, bpt *BPT, node *BptNode) {
 
-	store := memory.NewDB()
-	storeTx := store.Begin()
-	bptManager := NewBPTManager(storeTx)
-	for i := 0; i < d; i++ {
-		key := sha256.Sum256([]byte(fmt.Sprintf("0 key %d", i)))
-		value := sha256.Sum256([]byte(fmt.Sprintf("0 key %d", i)))
-		bptManager.InsertKV(key, value)
+	BIdx := byte(node.Height >> 3) //          Calculate the byte index based on the height of this node in the BPT
+	bitIdx := node.Height & 7      //          The bit index is given by the lower 3 bits of the height
+	bit := byte(0x80) >> bitIdx    //          The mask starts at the high end bit in the byte, shifted right by the bitIdx
+
+	ht, key, ok := GetHtKey(node.NodeKey)
+	
+	require.Truef(t, ok, "Should have a nodeKey key %x ht %d", key, ht)
+	require.Truef(t, ht == node.Height, "Height should match nodeKey key %x ht %d", key, ht)
+
+	bpt.LoadNext(BIdx, bit, node, key)
+
+	keyLeft, keyRight, ok := GetChildrenNodeKeys(node.NodeKey)
+
+	if lNode, ok := node.Left.(*BptNode); ok {
+		require.Truef(t, keyLeft == lNode.NodeKey, "Left branch is broken key %x ht %d", key, ht)
 	}
-	bptManager.Bpt.Update()
-	//PrintNode(0, bptManager.Bpt.Root)
-	bptManager = NewBPTManager(storeTx)
-	//PrintNode(0, bptManager.Bpt.Root)
-	for i := 0; i < d; i++ {
-		key := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
-		value := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
-		bptManager.InsertKV(key, value)
+	if rNode, ok := node.Right.(*BptNode); ok {
+		require.Truef(t, keyRight == rNode.NodeKey, "Left branch is broken key %x ht %d", key, ht)
+	}
+
+	switch {
+	case node.Left != nil && node.Right != nil:
+		left := GetHash(node.Left)
+		right := GetHash(node.Right)
+		concat := append(left, right...)
+		hash := sha256.Sum256(concat)
+		if !bytes.Equal(node.Hash[:], hash[:]) {
+			fmt.Println("x")
+		}
+		require.True(t, bytes.Equal(node.Hash[:], hash[:]), "Hash is wrong")
+	case node.Left != nil:
+		require.True(t, bytes.Equal(node.Hash[:], GetHash(node.Left)), "Hash is wrong")
+	case node.Right != nil:
+		require.True(t, bytes.Equal(node.Hash[:], GetHash(node.Right)), "Hash is wrong")
+	}
+
+	if lNode, ok := node.Left.(*BptNode); ok {
+		Check(t, bpt, lNode)
+	}
+	if rNode, ok := node.Right.(*BptNode); ok {
+		Check(t, bpt, rNode)
 	}
 }
 
+func TestManager(t *testing.T) {
+	c := 20
+	d := 10000
+
+	var rh common.RandHash
+
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	for i := 0; i < c; i++ {
+		bptManager := NewBPTManager(storeTx)
+	
+		for j := 0; j < d; j++ {
+			k := rh.NextA()
+			v := rh.NextA()
+			bptManager.InsertKV(k, v)
+		}
+		bptManager.Bpt.Update()
+		Check(t, bptManager.Bpt, bptManager.Bpt.Root)
+
+		sort.Slice(bptManager.Flushed, func(i, j int) bool { return bytes.Compare(bptManager.Flushed[i], bptManager.Flushed[j]) < 0 })
+		last := []byte{255, 255, 255, 255, 255}
+		for _, v := range bptManager.Flushed {
+			if bytes.Equal(last, v) {
+				//		fmt.Print("===========")
+			}
+			//	fmt.Printf("%x\n", v)
+			last = v
+		}
+	}
+	//PrintNode(0, bptManager.Bpt.Root)
+	bptManager := NewBPTManager(storeTx)
+	//PrintNode(0, bptManager.Bpt.Root)
+	key := rh.NextA()
+	bptManager.Bpt.Get(bptManager.Bpt.Root, key)
+
+}
+
 func TestManagerSeries(t *testing.T) {
-	t.Skip("fix bpt persistence")
 	// A set of key value pairs.  We are going to set 100 of them,
 	// Then update those value over a running test.
 	SetOfValues := make(map[[32]byte][32]byte) // Keep up with key/values we add
-	d := 100                                   // Add 100 entries each pass.
+	d := 615                                   // Add 100 entries each pass.
 
 	store := memory.NewDB()
 	storeTx := store.Begin()
@@ -141,9 +201,9 @@ func TestManagerPersist(t *testing.T) {
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
 			k := keys.GetAElement(i)
-			_, entry,found := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
+			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
 			require.NotNilf(t, entry, "Must find all the keys we put into the BPT: node returned is nil %d", i)
-			require.Truef(t,found,"Must find all keys in BPT: key index = %d",i)
+			require.Truef(t, found, "Must find all keys in BPT: key index = %d", i)
 			value, ok := (*entry).(*Value)
 			require.Truef(t, ok, "Must find all the keys we put into the BPT: Key not found %d", i)
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %d", i)
@@ -161,7 +221,7 @@ func TestManagerPersist(t *testing.T) {
 		for i, v := range keys.List {
 			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
 			value, ok := (*entry).(*Value)
-			require.Truef(t, ok&& found, "Must find all the keys we put into the BPT: Key not found %i")
+			require.Truef(t, ok && found, "Must find all the keys we put into the BPT: Key not found %i")
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %i", i)
 		}
 
@@ -192,7 +252,7 @@ func TestBptGet(t *testing.T) {
 		k := keys.GetAElement(idx)
 		v := values.List[idx]
 		node, entry, found := bpt.Get(bpt.Root, k)
-		require.Truef(t,found,"Should find all keys added. idx=%d",idx)
+		require.Truef(t, found, "Should find all keys added. idx=%d", idx)
 		require.NotNilf(t, node, "Should return a node. idx=%d", idx)
 		require.NotNilf(t, *entry, "Should return a value. idx=%d", idx)
 		value := (*entry).(*Value)
@@ -202,11 +262,11 @@ func TestBptGet(t *testing.T) {
 
 	for i := 0; i < numberTests/10; i++ {
 		k := keys.NextA()
-		node, _,found := bpt.Get(bpt.Root, k)
-		require.Falsef(t,found, "Should not find a value for a random key idx:=%d", i)
+		node, _, found := bpt.Get(bpt.Root, k)
+		require.Falsef(t, found, "Should not find a value for a random key idx:=%d", i)
 		BIdx := node.Height >> 3 // Get the Byte Index
-		require.Truef(t, bytes.Equal(k[:BIdx], node.BBKey[1:BIdx+1]),
-			"Key %x should lead to BBKey %x", k[:BIdx], node.BBKey[:BIdx])
+		require.Truef(t, bytes.Equal(k[:BIdx], node.NodeKey[:BIdx]),
+			"Key %x height %d should lead to NodeKey %x", k[:BIdx], node.Height, node.NodeKey[:BIdx])
 
 	}
 }
