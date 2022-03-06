@@ -267,6 +267,12 @@ TxRequest:
     optional: true
   - name: Payload
     type: any
+  - name: Memo
+    type: string
+    optional: true
+  - name: Metadata
+    type: bytes
+    optional: true
 
 TxResponse:
   non-binary: true

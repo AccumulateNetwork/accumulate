@@ -163,6 +163,8 @@ type TxRequest struct {
 	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Memo       string      `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata   []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TxResponse struct {
@@ -704,6 +706,8 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 		KeyPage    KeyPage     `json:"keyPage,omitempty"`
 		TxHash     *string     `json:"txHash,omitempty"`
 		Payload    interface{} `json:"payload,omitempty"`
+		Memo       string      `json:"memo,omitempty"`
+		Metadata   *string     `json:"metadata,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
 	u.IsEnvelope = v.IsEnvelope
@@ -714,6 +718,8 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u.KeyPage = v.KeyPage
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
+	u.Memo = v.Memo
+	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	return json.Marshal(&u)
 }
 
@@ -1299,6 +1305,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		KeyPage    KeyPage     `json:"keyPage,omitempty"`
 		TxHash     *string     `json:"txHash,omitempty"`
 		Payload    interface{} `json:"payload,omitempty"`
+		Memo       string      `json:"memo,omitempty"`
+		Metadata   *string     `json:"metadata,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
 	u.IsEnvelope = v.IsEnvelope
@@ -1309,6 +1317,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u.KeyPage = v.KeyPage
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
+	u.Memo = v.Memo
+	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1335,6 +1345,12 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Payload: %w", err)
 	} else {
 		v.Payload = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
+		return fmt.Errorf("error decoding Metadata: %w", err)
+	} else {
+		v.Metadata = x
 	}
 	return nil
 }

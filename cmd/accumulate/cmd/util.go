@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -256,6 +258,27 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 	params, err := prepareGenTxV2(payload, data, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
+	}
+
+	if Memo != "" {
+		params.Memo = Memo
+	}
+	if Metadata != "" {
+		dataSet := strings.Split(Metadata, ":")
+		switch dataSet[0] {
+		case "hex":
+			bytes, err := hex.DecodeString(dataSet[1])
+			if err != nil {
+				return nil, err
+			}
+			params.Metadata = bytes
+		case "base64":
+			bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
+			if err != nil {
+				return nil, err
+			}
+			params.Metadata = bytes
+		}
 	}
 
 	data, err = json.Marshal(params)
