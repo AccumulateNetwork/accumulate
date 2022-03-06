@@ -91,12 +91,12 @@ func Check(t *testing.T, bpt *BPT, node *BptNode) {
 
 func TestManager(t *testing.T) {
 	c := 20
-	d := 10000
+	d := 200
 
 	var rh common.RandHash
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 	for i := 0; i < c; i++ {
 		bptManager := NewBPTManager(storeTx)
 
@@ -134,7 +134,7 @@ func TestManagerSeries(t *testing.T) {
 	d := 615                                   // Add 100 entries each pass.
 
 	store := memory.NewDB()
-	storeTx := store.Begin()
+	storeTx := store.Begin(true)
 
 	var previous [32]byte    // Previous final root
 	for h := 0; h < 3; h++ { // Run our test 3 times, each time killing one manager, building another which must
@@ -187,7 +187,7 @@ func TestManagerPersist(t *testing.T) {
 		values.SetSeed([]byte{5, 6, 7, 8}) // a different set of hashes
 
 		store := memory.NewDB()              // Set up a memory DB
-		storeTx := store.Begin()             //
+		storeTx := store.Begin(true)         //
 		bptManager := NewBPTManager(storeTx) //
 
 		for j := 0; j < i; j++ {
@@ -198,7 +198,7 @@ func TestManagerPersist(t *testing.T) {
 		bptManager.Bpt.Update()
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
-		storeTx = store.Begin()
+		storeTx = store.Begin(true)
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
 			k := keys.GetAElement(i)
@@ -217,7 +217,7 @@ func TestManagerPersist(t *testing.T) {
 		bptManager.Bpt.Update()
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
-		storeTx = store.Begin()
+		storeTx = store.Begin(true)
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
 			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
