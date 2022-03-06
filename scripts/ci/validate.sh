@@ -386,4 +386,4 @@ RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].v
 NODE_PUB_KEY=$(jq -re .pub_key.value $NODE_PRIV_VAL)
 HEIGHT=$(echo $RESULT | jq -re .mainChain.height)
 #NOTE: This test will only work consistently if we have a single node on the DN
-[ "$RESULT" == "$NODE_PUB_KEY" ] && success || die "No vote record found at DN height $HEIGHT"1
+[ "$RESULT" == "$NODE_PUB_KEY" ] && success || die "No vote record found at DN height $HEIGHT"
