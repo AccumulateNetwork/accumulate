@@ -12,9 +12,9 @@
 package abci
 
 import (
-	"github.com/tendermint/tendermint/abci/types"
 	"time"
 
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"

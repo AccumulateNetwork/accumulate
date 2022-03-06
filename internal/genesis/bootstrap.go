@@ -3,9 +3,9 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/tendermint/tendermint/abci/types"
 	"time"
 
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
