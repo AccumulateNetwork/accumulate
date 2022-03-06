@@ -113,11 +113,12 @@ func (mr *MockChainMockRecorder) EndBlock(arg0 interface{}) *gomock.Call {
 }
 
 // InitChain mocks base method.
-func (m *MockChain) InitChain(state []byte, time time.Time, blockIndex int64) error {
+func (m *MockChain) InitChain(state []byte, time time.Time, blockIndex int64) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "InitChain", state, time, blockIndex)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // InitChain indicates an expected call of InitChain.
