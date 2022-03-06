@@ -92,7 +92,7 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		return nil, err
 	}
 
-	anchor, err := ledger.GetMinorRootChainAnchor()
+	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, err
 	}
@@ -204,8 +204,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 	// Load the root anchor chain so we can verify the system state
 	srcBatch := database.New(src, nil).Begin()
 	defer srcBatch.Discard()
-	srcLedger := srcBatch.Account(m.Network.NodeUrl(protocol.Ledger))
-	srcAnchor, err := srcLedger.GetMinorRootChainAnchor()
+	srcAnchor, err := srcBatch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load root anchor chain from app state: %v", err)
 	}
@@ -225,8 +224,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 	batch = m.DB.Begin()
 	defer batch.Discard()
 
-	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	anchor, err := ledger.GetMinorRootChainAnchor()
+	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +363,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 
 	//return anchor from minor root anchor chain
-	anchor, err := ledger.GetMinorRootChainAnchor()
+	anchor, err := m.blockBatch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, err
 	}

@@ -149,8 +149,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
-	chainLedger := batch.Account(app.Network.NodeUrl(protocol.Ledger))
-	anchor, err := chainLedger.GetMinorRootChainAnchor()
+	anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
 	if err != nil {
 		sentry.CaptureException(err)
 	}
@@ -229,7 +228,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	switch {
 	case err == nil:
 		// InitChain already happened
-		anchor, err := ledger.GetMinorRootChainAnchor()
+		anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
 		if err != nil {
 			panic(fmt.Errorf("failed to get ledger: %v", err))
 		}

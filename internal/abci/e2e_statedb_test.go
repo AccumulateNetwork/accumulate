@@ -47,8 +47,7 @@ func TestStateDBConsistency(t *testing.T) {
 	ledger1 := protocol.NewInternalLedger()
 	batch := n.db.Begin()
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
-	chainLedger := batch.Account(ledger)
-	anchor, err := chainLedger.GetMinorRootChainAnchor()
+	anchor, err := batch.GetMinorRootChainAnchor(n.network)
 	if err != nil {
 		panic(fmt.Errorf("failed to get anchor: %v", err))
 	}
@@ -61,8 +60,7 @@ func TestStateDBConsistency(t *testing.T) {
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin()
 	ledger2 := protocol.NewInternalLedger()
-	chainLedger = batch.Account(n.network.NodeUrl(protocol.Ledger))
-	anchor, err = chainLedger.GetMinorRootChainAnchor()
+	anchor, err = batch.GetMinorRootChainAnchor(n.network)
 	if err != nil {
 		panic(fmt.Errorf("failed to get anchor for batch: %v", err))
 	}
