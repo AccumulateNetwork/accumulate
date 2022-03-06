@@ -237,6 +237,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 		Height:     req.Header.Height,
 		Time:       req.Header.Time,
 		CommitInfo: &req.LastCommitInfo,
+		Evidence:   req.ByzantineValidators,
 	})
 	if err != nil {
 		app.fatal(err, true)
