@@ -321,7 +321,7 @@ func initNode(cmd *cobra.Command, args []string) {
 			if s.ID == config.Accumulate.Network.LocalSubnetID {
 				//loop through all the nodes and add persistent peers
 				for _, n := range s.Nodes {
-					//don't both to fetch if we already have it.
+					//don't bother to fetch if we already have it.
 					nodeHost, _, err := net.SplitHostPort(parseHost(n.Address))
 					if err != nil {
 						warnf("invalid host from node %s", n.Address)
@@ -335,7 +335,8 @@ func initNode(cmd *cobra.Command, args []string) {
 						warnf("failed to get status of %s with error %v", n.Address, err)
 
 						peers := config.P2P.PersistentPeers
-						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers, status.NodeInfo.NodeID, nodeHost, netPort+networks.TmP2pPortOffset)
+						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
+							status.NodeInfo.NodeID, nodeHost, netPort+networks.TmP2pPortOffset)
 					}
 				}
 
