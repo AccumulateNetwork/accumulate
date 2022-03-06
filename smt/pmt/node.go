@@ -109,4 +109,3 @@ func (n *BptNode) UnMarshal(data []byte) []byte {
 	copy(n.Hash[:], hashSlice)
 	return data
 }
-

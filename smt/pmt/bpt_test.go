@@ -515,11 +515,11 @@ func TestNodeKey(t *testing.T) {
 		require.True(t, ok, "should have a NodeKey")
 		height, key, ok := GetHtKey(nh)
 		require.True(t, ok, "should be able to compute the height and key")
-		require.True(t, height == i,"Height should be the same")
+		require.True(t, height == i, "Height should be the same")
 		left, right, ok := GetChildrenNodeKeys(nh)
 
-		require.True(t,bytes.Equal(key[:i>>3],left[:i>>3]),"key must be part of child key")
-		require.True(t,bytes.Equal(key[:i>>3],right[:i>>3]),"key must be part of child key")
+		require.True(t, bytes.Equal(key[:i>>3], left[:i>>3]), "key must be part of child key")
+		require.True(t, bytes.Equal(key[:i>>3], right[:i>>3]), "key must be part of child key")
 
 	}
 }

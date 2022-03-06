@@ -434,12 +434,12 @@ func GetNodeKey(height int, key [32]byte) (nodeKey [32]byte, ok bool) {
 	bitCnt := height & 7                     // Mask to the mod of 8 so mask with 7 or 0b111
 	nk := append([]byte{}, key[:byteCnt]...) // Move the bytes into the node Key
 	lastByte := key[byteCnt]                 // Get the byte following these bytes into lastByte
-	lastByte >>= 7 - bitCnt   //                Shift right all but one bit past the key
-	lastByte |= 1             //                Force that bit to 1
-	lastByte <<= 7 - bitCnt   //                Shift left back to the original starting point
-	nk = append(nk, lastByte) //                Add the last byte to the nk.  Note always add this byte
-	copy(nodeKey[:], nk)      //                Copy into the key array
-	return nodeKey, true      //                Return it as good, and that it works.
+	lastByte >>= 7 - bitCnt                  //                Shift right all but one bit past the key
+	lastByte |= 1                            //                Force that bit to 1
+	lastByte <<= 7 - bitCnt                  //                Shift left back to the original starting point
+	nk = append(nk, lastByte)                //                Add the last byte to the nk.  Note always add this byte
+	copy(nodeKey[:], nk)                     //                Copy into the key array
+	return nodeKey, true                     //                Return it as good, and that it works.
 }
 
 // GetHtKey

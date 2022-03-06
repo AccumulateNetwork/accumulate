@@ -50,7 +50,7 @@ func Check(t *testing.T, bpt *BPT, node *BptNode) {
 	bit := byte(0x80) >> bitIdx    //          The mask starts at the high end bit in the byte, shifted right by the bitIdx
 
 	ht, key, ok := GetHtKey(node.NodeKey)
-	
+
 	require.Truef(t, ok, "Should have a nodeKey key %x ht %d", key, ht)
 	require.Truef(t, ht == node.Height, "Height should match nodeKey key %x ht %d", key, ht)
 
@@ -99,7 +99,7 @@ func TestManager(t *testing.T) {
 	storeTx := store.Begin()
 	for i := 0; i < c; i++ {
 		bptManager := NewBPTManager(storeTx)
-	
+
 		for j := 0; j < d; j++ {
 			k := rh.NextA()
 			v := rh.NextA()

@@ -1,7 +1,6 @@
 package pmt
 
 import (
-
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -59,8 +58,8 @@ func (m *Manager) LoadNode(node *BptNode) {
 // Flushes the Byte Block to disk
 func (m *Manager) FlushNode(node *BptNode) { //   Flush a Byte Block
 	if node.Height&7 == 0 {
-		m.Flushed = append(m.Flushed,append([]byte{},node.NodeKey[:]...))
-		data := m.Bpt.MarshalByteBlock(node)              //
+		m.Flushed = append(m.Flushed, append([]byte{}, node.NodeKey[:]...))
+		data := m.Bpt.MarshalByteBlock(node)                //
 		m.DBManager.Put(kBpt.Append(node.NodeKey[:]), data) //
 		if node.Height == 0 {
 			data = m.Bpt.Marshal()
