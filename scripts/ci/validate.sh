@@ -382,7 +382,7 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 
 section "Query votes chain"
 RESULT=$(accumulate -j data get dn/votes)
-RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address)
+RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -u -p)
 NODE_PUB_KEY=$(jq -re .address $NODE_PRIV_VAL)
 HEIGHT=$(echo $RESULT | jq -re .mainChain.height)
 #NOTE: This test will only work consistently if we have a single node on the DN
