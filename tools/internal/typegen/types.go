@@ -43,6 +43,7 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 
 type DataType struct {
 	Name          string `yaml:"-"`
+	Description   string
 	Kind          string
 	TxType        string `yaml:"tx-type"`
 	ChainType     string `yaml:"chain-type"`
@@ -64,6 +65,7 @@ func (typ *DataType) GoChainType() string {
 
 type Field struct {
 	Name          string
+	Description   string
 	Type          string
 	MarshalAs     string `yaml:"marshal-as"`
 	UnmarshalWith string `yaml:"unmarshal-with"`

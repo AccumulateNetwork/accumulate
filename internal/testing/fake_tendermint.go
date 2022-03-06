@@ -217,7 +217,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 }
 
 func (c *FakeTendermint) getSynthHeight() int64 {
-	batch := c.db.Begin()
+	batch := c.db.Begin(false)
 	defer batch.Discard()
 
 	// Load the ledger state
@@ -240,7 +240,7 @@ func (c *FakeTendermint) getSynthHeight() int64 {
 }
 
 func (c *FakeTendermint) addSynthTxns(blockIndex, lastHeight int64) (int64, bool) {
-	batch := c.db.Begin()
+	batch := c.db.Begin(false)
 	defer batch.Discard()
 
 	// Load the ledger state

@@ -127,6 +127,7 @@ func TestManager(t *testing.T) {
 }
 
 func TestManagerSeries(t *testing.T) {
+
 	// A set of key value pairs.  We are going to set 100 of them,
 	// Then update those value over a running test.
 	SetOfValues := make(map[[32]byte][32]byte) // Keep up with key/values we add

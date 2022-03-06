@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func TestSynthTokenDeposit_Lite(t *testing.T) {
@@ -17,11 +16,10 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
-	db, err := database.Open("", true, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
-	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), gtx)
-	require.ErrorIs(t, err, storage.ErrNotFound)
+	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), gtx)
+	require.NoError(t, err)
 
 	_, err = SyntheticDepositTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
