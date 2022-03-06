@@ -384,6 +384,5 @@ section "Query votes chain"
 RESULT=$(accumulate -j data get dn/votes)
 RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
 NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL)
-HEIGHT=$(echo $RESULT | jq -re .mainChain.height)
 #NOTE: This test will only work consistently if we have a single node on the DN
-[ "$RESULT" == "${NODE_ADDRESS,,}" ] && success || die "No vote record found at DN height $HEIGHT"
+[ "$RESULT" == "${NODE_ADDRESS,,}" ] && success || die "No vote record found on DN"
