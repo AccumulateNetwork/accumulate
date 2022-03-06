@@ -379,3 +379,11 @@ accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/da
 section "Query credits"
 RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
+
+section "Query votes chain"
+RESULT=$(accumulate -j data get dn/votes)
+RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address)
+NODE_PUB_KEY=$(jq -re .pub_key.value $NODE_PRIV_VAL)
+HEIGHT=$(echo $RESULT | jq -re .mainChain.height)
+#NOTE: This test will only work consistently if we have a single node on the DN
+[ "$RESULT" == "$NODE_PUB_KEY" ] && success || die "No vote record found at DN height $HEIGHT"1
