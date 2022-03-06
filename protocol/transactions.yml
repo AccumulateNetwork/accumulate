@@ -226,8 +226,8 @@ CreateToken:
     - name: InitialSupply
       type: bigint
       optional: true
-    - name: HasSupplyLimit
-      type: bool
+    - name: SupplyLimit
+      type: bigint
       optional: true
     - name: Manager
       type: url

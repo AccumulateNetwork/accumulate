@@ -102,11 +102,11 @@ TokenIssuer:
     - name: Properties
       type: url
       pointer: true
-    - name: Supply
+    - name: Issued
       type: bigint
       optional: true
-    - name: HasSupplyLimit
-      type: bool
+    - name: SupplyLimit
+      type: bigint
       optional: true
 
 Anchor:

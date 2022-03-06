@@ -752,14 +752,14 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 		hasSupplyLimit := "no"
-		if ti.HasSupplyLimit {
+		if ti.SupplyLimit.Cmp(big.NewInt(0)) > 0 {
 			hasSupplyLimit = "yes"
 		}
 
 		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.Url)
 		out += fmt.Sprintf("\n\tSymbol\t\t:\t%s", ti.Symbol)
 		out += fmt.Sprintf("\n\tPrecision\t:\t%d", ti.Precision)
-		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", amountToString(ti.Precision, &ti.Supply))
+		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", amountToString(ti.Precision, &ti.Issued))
 		out += fmt.Sprintf("\n\tSupply Limit\t:\t%s", hasSupplyLimit)
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
