@@ -321,7 +321,6 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 	} else {
 
 		wd := protocol.WriteData{}
-		wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("%d", req.Height)))
 		wd.Entry.Data = data
 
 		err := m.processInternalDataTransaction(protocol.Votes, &wd)
