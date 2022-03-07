@@ -114,7 +114,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
-	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey().Address(), fakeTmLogger, n.NextHeight, func(err error) {
+	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
@@ -274,7 +274,7 @@ func (n *FakeNode) WaitForTxns32(ids ...[32]byte) {
 func (n *FakeNode) WaitForTxns(ids ...[]byte) {
 	for _, id := range ids {
 		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
-		n.Require().NoError(err)
+		n.Require().NoErrorf(err, "Failed to query TX %X", id)
 		n.WaitForTxns32(res.SyntheticTxids...)
 	}
 }

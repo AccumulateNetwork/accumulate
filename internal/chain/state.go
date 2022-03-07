@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -16,8 +17,8 @@ import (
 
 type StateManager struct {
 	stateCache
-	submissions   []*submission
-	newValidators []ed25519.PubKey
+	submissions      []*submission
+	validatorUpdates []abci.ValidatorUpdate
 
 	Origin        state.Chain
 	OriginUrl     *url.URL
@@ -46,15 +47,21 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.
 	// Find the origin
 	var err error
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
-	if err == nil {
+	switch {
+	case err == nil:
+		// Found the origin
 		return m, nil
-	}
 
-	// If the origin doesn't exist, that might be OK
-	if errors.Is(err, storage.ErrNotFound) {
-		return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
+	case errors.Is(err, storage.ErrNotFound):
+		// Origin is missing
+		m.Origin = nil
+		return m, nil
+		// return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
+
+	default:
+		// Unknown error
+		return nil, err
 	}
-	return nil, err
 }
 
 func (m *StateManager) Reset() {
@@ -116,7 +123,18 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.newValidators = append(m.newValidators, pubKey)
+	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
+		PubKey:  pubKey,
+		Enabled: true,
+	})
+}
+
+func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
+	// You can't really remove validators as far as I can see, but you can set the voting power to 0
+	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
+		PubKey:  pubKey,
+		Enabled: false,
+	})
 }
 
 func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {

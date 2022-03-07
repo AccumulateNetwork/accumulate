@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -963,4 +964,62 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			seen[id32] = true
 		}
 	}
+}
+
+func TestUpdateValidators(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
+	nodeKey1, nodeKey2 := generateKey(), generateKey()
+	validators := n.network.NodeUrl(protocol.ValidatorBook + "0")
+
+	// Verify there is one validator (node key)
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
+
+	// Add a validator
+	n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperationAdd
+		body.NewKey = nodeKey1.PubKey().Bytes()
+
+		send(newTxn(validators.String()).
+			WithKeyPage(0, 1).
+			WithBody(body).
+			SignLegacyED25519(n.key.Bytes()))
+	})
+
+	// Verify the validator was added
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey1.PubKey()})
+
+	// Update a validator
+	n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperationUpdate
+		body.Key = nodeKey1.PubKey().Bytes()
+		body.NewKey = nodeKey2.PubKey().Bytes()
+
+		send(newTxn(validators.String()).
+			WithKeyPage(0, 2).
+			WithBody(body).
+			SignLegacyED25519(n.key.Bytes()))
+	})
+
+	// Verify the validator was updated
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey2.PubKey()})
+
+	// Remove a validator
+	n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperationRemove
+		body.Key = nodeKey2.PubKey().Bytes()
+
+		send(newTxn(validators.String()).
+			WithKeyPage(0, 3).
+			WithBody(body).
+			SignLegacyED25519(n.key.Bytes()))
+	})
+
+	// Verify the validator was removed
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 }

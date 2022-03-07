@@ -56,6 +56,15 @@ func Parse(s string) (*URL, error) {
 	return v, nil
 }
 
+// MustParse calls Parse and panics if it returns an error.
+func MustParse(s string) *URL {
+	u, err := Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
 func splitColon(s string) (string, string) {
 	t := strings.SplitN(s, ":", 2)
 	if len(t) == 1 {
