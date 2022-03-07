@@ -389,19 +389,32 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 	defer app.recover(nil, true)
 
 	r := app.Chain.EndBlock(EndBlockRequest{})
-	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.NewValidators))
-	for i, key := range r.NewValidators {
-		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
+
+	if len(r.ValidatorsUpdates) > 0 {
+		resp.ValidatorUpdates = getValidatorUpdates(r)
+	}
+	return resp
+}
+
+// getValidatorUpdates adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
+func getValidatorUpdates(r EndBlockResponse) []abci.ValidatorUpdate {
+	validatorUpdates := make([]abci.ValidatorUpdate, len(r.ValidatorsUpdates))
+	for i, u := range r.ValidatorsUpdates {
+		var pwr int64
+		if u.Enabled {
+			pwr = 1
+		}
+
+		validatorUpdates[i] = abci.ValidatorUpdate{
 			PubKey: protocrypto.PublicKey{
 				Sum: &protocrypto.PublicKey_Ed25519{
-					Ed25519: key,
+					Ed25519: u.PubKey,
 				},
 			},
-			Power: 1,
+			Power: pwr,
 		}
 	}
-
-	return resp
+	return validatorUpdates
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
