@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -139,10 +140,11 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	env.Transaction.Body = new(protocol.InternalGenesis)
 
 	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)
-	if err == nil {
-		return nil, errors.New("already initialized")
-	} else if !errors.Is(err, storage.ErrNotFound) {
+	if err != nil {
 		return nil, err
+	}
+	if st.Origin != nil {
+		return nil, errors.New("already initialized")
 	}
 	st.logger.L = m.logger
 
@@ -322,6 +324,10 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) abci.EndBlockResponse {
 
 // Commit implements ./abci.Chain
 func (m *Executor) Commit() ([]byte, error) {
+	return m.commit(false)
+}
+
+func (m *Executor) commit(force bool) ([]byte, error) {
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 
@@ -350,7 +356,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 	ledgerState.Updates = updatedSlice
 
-	if m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
+	if !force && m.blockMeta.Empty() && len(updatedSlice) == 0 && len(ledgerState.Synthetic.Produced) == 0 {
 		m.logInfo("Committed empty transaction")
 		m.blockBatch.Discard()
 	} else {
@@ -430,7 +436,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	}
 	txChainEntries := make([]*txChainIndexEntry, 0, len(ledgerState.Updates))
 
-	// Add an anchor to the root chain for every updated chain
+	// Process chain updates
 	accountSeen := map[string]bool{}
 	updates := ledgerState.Updates
 	ledgerState.Updates = make([]protocol.AnchorMetadata, 0, len(updates))
@@ -443,79 +449,24 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		ledgerState.Updates = append(ledgerState.Updates, u)
 		m.logDebug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
 
-		// Load the chain
-		record := m.blockBatch.Account(u.Account)
-		recordChain, err := record.ReadChain(u.Name)
-		if err != nil {
-			return err
-		}
-
-		// Add its anchor to the root chain
-		rootIndex := rootChain.Height()
-		err = rootChain.AddEntry(recordChain.Anchor(), false)
+		indexIndex, didIndex, err := m.commitChainUpdate(&u, rootChain, accountSeen)
 		if err != nil {
 			return err
 		}
 
 		// Add a pending transaction-chain index update
-		if u.Type == protocol.ChainTypeTransaction {
+		if didIndex && u.Type == protocol.ChainTypeTransaction {
 			e := new(txChainIndexEntry)
 			e.Txid = u.Entry
 			e.Account = u.Account
 			e.Chain = u.Name
-			e.Block = uint64(m.blockIndex)
-			e.ChainEntry = u.Index
-			e.ChainAnchor = uint64(recordChain.Height()) - 1
-			e.RootEntry = uint64(rootIndex)
+			e.ChainIndex = uint64(indexIndex)
+			// e.Block = uint64(m.blockIndex)
+			// e.ChainEntry = u.Index
+			// e.ChainAnchor = uint64(accountChain.Height()) - 1
+			// e.RootEntry = uint64(rootIndex)
 			txChainEntries = append(txChainEntries, e)
 		}
-
-		// Once for each account
-		s := strings.ToLower(u.Account.String())
-		if accountSeen[s] {
-			continue
-		}
-		accountSeen[s] = true
-
-		// Load the state
-		state, err := record.GetState()
-		if err != nil {
-			return err
-		}
-
-		// Marshal it
-		data, err := state.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
-		// Hash it
-		var hashes []byte
-		h := sha256.Sum256(data)
-		hashes = append(hashes, h[:]...)
-
-		// Load the object metadata
-		objMeta, err := record.GetObject()
-		if err != nil {
-			return err
-		}
-
-		// For each chain
-		for _, chainMeta := range objMeta.Chains {
-			// Load the chain
-			recordChain, err := record.ReadChain(chainMeta.Name)
-			if err != nil {
-				return err
-			}
-
-			// Get the anchor
-			anchor := recordChain.Anchor()
-			h := sha256.Sum256(anchor)
-			hashes = append(hashes, h[:]...)
-		}
-
-		// Write the hash of the hashes to the BPT
-		record.PutBpt(sha256.Sum256(hashes))
 	}
 
 	// If dn/oracle was updated, update the ledger's oracle value, but only if
@@ -529,48 +480,33 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	}
 
 	// Add the synthetic transaction chain to the root chain
-	var synthRootIndex, synthAnchorIndex uint64
+	var synthIndex uint64
 	if len(ledgerState.Synthetic.Produced) > 0 {
-		synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
-		if err != nil {
-			return err
-		}
-
-		ledgerState.Updates = append(ledgerState.Updates, protocol.AnchorMetadata{
-			ChainMetadata: protocol.ChainMetadata{
-				Name: protocol.SyntheticChain,
-				Type: protocol.ChainTypeTransaction,
-			},
-			Account: ledgerUrl,
-			Index:   uint64(synthChain.Height() - 1),
-		})
-
-		synthAnchorIndex = uint64(synthChain.Height() - 1)
-		synthRootIndex = uint64(rootChain.Height())
-		err = rootChain.AddEntry(synthChain.Anchor(), false)
+		synthIndex, err = m.commitSynthChainUpdate(ledger, ledgerUrl, ledgerState, rootChain)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Add the BPT to the root chain
-	m.blockBatch.UpdateBpt()
-	ledgerState.Updates = append(ledgerState.Updates, protocol.AnchorMetadata{
-		ChainMetadata: protocol.ChainMetadata{
-			Name: "bpt",
-		},
-		Account: m.Network.NodeUrl(),
-		Index:   uint64(m.blockIndex - 1),
-	})
+	err = m.commitBptUpdate(ledgerState, rootChain)
+	if err != nil {
+		return err
+	}
 
-	err = rootChain.AddEntry(m.blockBatch.RootHash(), false)
+	// Index the root chain
+	rootIndexIndex, err := addIndexChainEntry(ledger, protocol.MinorRootIndexChain, &protocol.IndexEntry{
+		Source:     uint64(rootChain.Height() - 1),
+		BlockIndex: uint64(m.blockIndex),
+		BlockTime:  &m.blockTime,
+	})
 	if err != nil {
 		return err
 	}
 
 	// Update the transaction-chain index
 	for _, e := range txChainEntries {
-		e.RootAnchor = uint64(rootChain.Height()) - 1
+		e.AnchorIndex = rootIndexIndex
 		err = indexing.TransactionChain(m.blockBatch, e.Txid).Add(&e.TransactionChainEntry)
 		if err != nil {
 			return err
@@ -587,11 +523,8 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		err = indexing.TransactionChain(m.blockBatch, e.Transaction).Add(&indexing.TransactionChainEntry{
 			Account:     ledgerUrl,
 			Chain:       protocol.SyntheticChain,
-			Block:       uint64(m.blockIndex),
-			ChainEntry:  e.ChainEntry,
-			ChainAnchor: synthAnchorIndex,
-			RootEntry:   synthRootIndex,
-			RootAnchor:  uint64(rootChain.Height()) - 1,
+			ChainIndex:  synthIndex,
+			AnchorIndex: rootIndexIndex,
 		})
 		if err != nil {
 			return err
@@ -599,4 +532,94 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	}
 
 	return nil
+}
+
+func (m *Executor) commitChainUpdate(update *protocol.AnchorMetadata, rootChain *database.Chain, seen map[string]bool) (indexIndex uint64, didIndex bool, err error) {
+	// Anchor and index the chain
+	account := m.blockBatch.Account(update.Account)
+	indexIndex, didIndex, err = addChainAnchor(rootChain, account, update.Account, update.Name, update.Type)
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Once for each account
+	s := strings.ToLower(update.Account.String())
+	if seen[s] {
+		return indexIndex, didIndex, nil
+	}
+	seen[s] = true
+
+	// Load the state
+	state, err := account.GetState()
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Marshal it
+	data, err := state.MarshalBinary()
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Hash it
+	var hashes []byte
+	h := sha256.Sum256(data)
+	hashes = append(hashes, h[:]...)
+
+	// Load the object metadata
+	objMeta, err := account.GetObject()
+	if err != nil {
+		return 0, false, err
+	}
+
+	// For each chain
+	for _, chainMeta := range objMeta.Chains {
+		// Load the chain
+		recordChain, err := account.ReadChain(chainMeta.Name)
+		if err != nil {
+			return 0, false, err
+		}
+
+		// Get the anchor
+		anchor := recordChain.Anchor()
+		h := sha256.Sum256(anchor)
+		hashes = append(hashes, h[:]...)
+	}
+
+	// Write the hash of the hashes to the BPT
+	account.PutBpt(sha256.Sum256(hashes))
+
+	return indexIndex, didIndex, nil
+}
+
+func (m *Executor) commitSynthChainUpdate(ledger *database.Account, ledgerUrl *url.URL, ledgerState *protocol.InternalLedger, rootChain *database.Chain) (indexIndex uint64, err error) {
+	indexIndex, _, err = addChainAnchor(rootChain, ledger, ledgerUrl, protocol.SyntheticChain, protocol.ChainTypeTransaction)
+	if err != nil {
+		return 0, err
+	}
+
+	ledgerState.Updates = append(ledgerState.Updates, protocol.AnchorMetadata{
+		ChainMetadata: protocol.ChainMetadata{
+			Name: protocol.SyntheticChain,
+			Type: protocol.ChainTypeTransaction,
+		},
+		Account: ledgerUrl,
+		// Index:   uint64(synthChain.Height() - 1),
+	})
+
+	return indexIndex, nil
+}
+
+func (m *Executor) commitBptUpdate(ledgerState *protocol.InternalLedger, rootChain *database.Chain) error {
+	m.blockBatch.UpdateBpt()
+
+	ledgerState.Updates = append(ledgerState.Updates, protocol.AnchorMetadata{
+		ChainMetadata: protocol.ChainMetadata{
+			Name: "bpt",
+		},
+		Account: m.Network.NodeUrl(),
+		Index:   uint64(m.blockIndex - 1),
+	})
+
+	return rootChain.AddEntry(m.blockBatch.RootHash(), false)
 }
