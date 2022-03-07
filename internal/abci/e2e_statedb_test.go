@@ -61,9 +61,7 @@ func TestStateDBConsistency(t *testing.T) {
 	batch = db.Begin()
 	ledger2 := protocol.NewInternalLedger()
 	anchor, err = batch.GetMinorRootChainAnchor(n.network)
-	if err != nil {
-		panic(fmt.Errorf("failed to get anchor for batch: %v", err))
-	}
+	require.NoError(t, err)
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger2))
 	require.Equal(t, ledger1, ledger2, "Ledger does not match after load from disk")
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", anchor), "Hash does not match after load from disk")

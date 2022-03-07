@@ -188,11 +188,3 @@ func (r *Account) Data() (*Data, error) {
 
 	return &Data{r.batch, r.key, chain}, nil
 }
-
-// func (r *Account) GetMinorRootChainAnchor() ([]byte, error) {
-// 	chain, err := r.ReadChain(protocol.MinorRootChain)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return chain.Anchor(), nil
-// }
