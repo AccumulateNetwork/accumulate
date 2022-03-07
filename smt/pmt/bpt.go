@@ -20,6 +20,7 @@ const debug = false
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
+	RootHash  [32]byte              // Root hash of the BPT
 	Root      *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
 	DirtyMap  map[[32]byte]*BptNode // Map of dirty nodes.
 	MaxHeight int                   // Highest height of any node in the BPT
@@ -27,6 +28,24 @@ type BPT struct {
 	power     int                   // Power
 	mask      int                   // Mask used to detect Byte Block boundaries
 	manager   *Manager              // Pointer to the manager for access to the database
+}
+
+// GetRoot
+// Get the Root node for the BPT.  This may load the BPT Root node from disk if not loaded yet.
+func (b *BPT) GetRoot() (root *BptNode,err error) {
+	if b.Root == nil {
+		rootNodeKey,_ := GetNodeKey(0,[32]byte{})
+		if b.manager == nil {
+			return nil,err
+		}
+		var data []byte 
+		if data,err = b.manager.DBManager.Get(rootNodeKey);err != nil {
+			return nil,err
+		}
+		root := new(BptNode)
+		root.UnMarshal(data)
+		b.Hash = root.Hash
+	}
 }
 
 // String
