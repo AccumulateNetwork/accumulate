@@ -138,8 +138,11 @@ type Value interface {
 }
 
 func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory *url.URL, u ...*url.URL) error {
-	identity := directory.Identity()
-	mdi := getIndex(identity, "Directory", "Metadata")
+	if len(u) == 0 {
+		return fmt.Errorf("no URLs supplied to register in directory %s", directory.String())
+	}
+
+	mdi := getIndex(directory, "Directory", "Metadata")
 	md := new(protocol.DirectoryIndexMetadata)
 	data, err := mdi.Get()
 	if err == nil {
@@ -149,11 +152,11 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 		return fmt.Errorf("failed to load metadata: %v", err)
 	}
 
-	getIndex(identity, "Directory", md.Count).Put([]byte(directory.String()))
-	md.Count++
 	for _, u := range u {
-		getIndex(identity, "Directory", md.Count).Put([]byte(u.String()))
-		md.Count++
+		if !u.Equal(directory) {
+			getIndex(directory, "Directory", md.Count).Put([]byte(u.String()))
+			md.Count++
+		}
 	}
 
 	data, err = md.MarshalBinary()

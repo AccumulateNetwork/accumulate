@@ -394,7 +394,7 @@ accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && succe
 section "Query the lite identity directory"
 accumulate adi directory $(dirname $LITE) 0 10 1> /dev/null || die "Failed to get directory for $(dirname $LITE)"
 TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
-[ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
+[ "$TOTAL" -eq 3 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
 
 section "Create ADI Data Account with wait"
 cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data1
