@@ -381,17 +381,7 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
 
 section "Query votes chain"
-RESULT=$(accumulate -j data get dn/votes)
-echo "========= checkpoint alpha ========="
-echo $RESULT
-echo "========= checkpoint alpha ========="
-RESULT=$(echo "$RESULT" | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
-echo "========= checkpoint bravo ========"
-echo $RESULT
-echo "========= checkpoint bravo ========"
+RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data| xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
 NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL)
-echo "========= checkpoint charlie ========="
-echo $NODE_ADDRESS
-echo "========= checkpoint charlie ========="
 #NOTE: This test will only work consistently if we have a single node on the DN
 [ "$RESULT" == "${NODE_ADDRESS,,}" ] && success || die "No vote record found on DN"
