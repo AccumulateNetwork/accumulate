@@ -144,11 +144,11 @@ func TestManager(t *testing.T) {
 		require.Falsef(t, found, "Should not find keys not put into the BPT. Failed at %d", i)
 		if bytes.Compare(first[:], key[:]) < 0 {
 			sb = true
-	//		fmt.Printf("%d first: %x key: %x\n", i, first, key)
+			//		fmt.Printf("%d first: %x key: %x\n", i, first, key)
 		}
 		if bytes.Compare(last[:], key[:]) > 0 {
 			eb = true
-	//		fmt.Printf("%d last:  %x key: %x\n", i, last, key)
+			//		fmt.Printf("%d last:  %x key: %x\n", i, last, key)
 		}
 	}
 
