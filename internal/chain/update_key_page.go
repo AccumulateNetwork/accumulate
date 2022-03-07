@@ -121,7 +121,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.DisableValidator(page.Keys[indexKey].PublicKey)
+			st.DisableValidator(body.Key)
 			st.AddValidator(body.NewKey)
 		}
 
@@ -142,7 +142,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 
 		if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.DisableValidator(page.Keys[indexKey].PublicKey)
+			st.DisableValidator(body.Key)
 		}
 
 		// SetThreshold sets the signature threshold for the Key Page
