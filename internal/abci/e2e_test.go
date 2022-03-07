@@ -455,7 +455,6 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar").String(),
 			n.ParseUrl("FooBar/book0").String(),
 			n.ParseUrl("FooBar/page0").String(),
 			n.ParseUrl("FooBar/Baz").String(),
