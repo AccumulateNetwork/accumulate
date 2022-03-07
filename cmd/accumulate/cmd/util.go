@@ -363,6 +363,7 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+		Result:          r.Result,
 	}
 }
 
