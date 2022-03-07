@@ -3,8 +3,11 @@ package protocol
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha512"
+	"crypto/subtle"
 	"errors"
 
+	"github.com/FactomProject/ed25519/edwards25519"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
@@ -72,4 +75,97 @@ func (e *ED25519Signature) Sign(nonce uint64, privateKey []byte, hash []byte) er
 
 func (e *ED25519Signature) Verify(hash []byte) bool {
 	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
+}
+
+// GetPublicKey returns PublicKey.
+func (e *RCD1Signature) GetPublicKey() []byte {
+	return e.PublicKey
+}
+
+// GetSignature returns Signature.
+func (e *RCD1Signature) GetSignature() []byte {
+	return e.Signature
+}
+
+// Sign
+// Returns the signature for the given message.  What happens is the message
+// is hashed with sha256, then the hash is signed.  The signature of the hash
+// is returned.
+func (e *RCD1Signature) Sign(nonce uint64, privateKey []byte, hash []byte) error {
+	if len(privateKey) != 64 {
+		return errors.New("invalid private key")
+	}
+
+	e.PublicKey = privateKey[32:]
+
+	h := sha512.New()
+	h.Write(privateKey[:32])
+
+	var digest1, messageDigest, hramDigest [64]byte
+	var expandedSecretKey [32]byte
+	h.Sum(digest1[:0])
+	copy(expandedSecretKey[:], digest1[:])
+	expandedSecretKey[0] &= 248
+	expandedSecretKey[31] &= 63
+	expandedSecretKey[31] |= 64
+
+	h.Reset()
+	h.Write(digest1[32:])
+	h.Write(hash)
+	h.Sum(messageDigest[:0])
+
+	var messageDigestReduced [32]byte
+	edwards25519.ScReduce(&messageDigestReduced, &messageDigest)
+	var R edwards25519.ExtendedGroupElement
+	edwards25519.GeScalarMultBase(&R, &messageDigestReduced)
+
+	var encodedR [32]byte
+	R.ToBytes(&encodedR)
+
+	h.Reset()
+	h.Write(encodedR[:])
+	h.Write(privateKey[32:])
+	h.Write(hash)
+	h.Sum(hramDigest[:0])
+	var hramDigestReduced [32]byte
+	edwards25519.ScReduce(&hramDigestReduced, &hramDigest)
+
+	var s [32]byte
+	edwards25519.ScMulAdd(&s, &hramDigestReduced, &expandedSecretKey, &messageDigestReduced)
+
+	var signature []byte
+	copy(signature[:], encodedR[:])
+	copy(signature[32:], s[:])
+	e.Signature = signature
+	return nil
+}
+
+func (e *RCD1Signature) Verify(hash []byte) bool {
+	if e.Signature[63]&224 != 0 {
+		return false
+	}
+
+	var A edwards25519.ExtendedGroupElement
+	if !A.FromBytes((*[32]byte)(e.PublicKey)) {
+		return false
+	}
+
+	h := sha512.New()
+	h.Write(e.Signature[:32])
+	h.Write(e.PublicKey[:])
+	h.Write(hash)
+	var digest [64]byte
+	h.Sum(digest[:0])
+
+	var hReduced [32]byte
+	edwards25519.ScReduce(&hReduced, &digest)
+
+	var R edwards25519.ProjectiveGroupElement
+	var b [32]byte
+	copy(b[:], e.Signature[32:])
+	edwards25519.GeDoubleScalarMultVartime(&R, &hReduced, &A, &b)
+
+	var checkR [32]byte
+	R.ToBytes(&checkR)
+	return subtle.ConstantTimeCompare(e.Signature[:32], checkR[:]) == 1
 }

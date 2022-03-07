@@ -55,6 +55,14 @@ LegacyED25519Signature:
     - name: Signature
       type: bytes
 
+RCD1Signature:
+  kind: signature
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+
 ED25519Signature:
   kind: signature
   fields:
