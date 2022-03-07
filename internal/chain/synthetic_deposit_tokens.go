@@ -64,7 +64,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		if rootIdentity == originIdentity {
 			return nil, fmt.Errorf("invalid origin, expecting origin format acc://lite-account/lite-identity/... but got %s", tx.Transaction.Origin.String())
 		}
-		err = st.AddDirectoryEntry(rootIdentity, originIdentity, tx.Transaction.Origin)
+		err = st.AddDirectoryEntry(rootIdentity, tx.Transaction.Origin)
 		if err != nil {
 			return nil, fmt.Errorf("failed to add directory entries in lite token account %s: %v", tx.Transaction.Origin.RootIdentity(), err)
 		}
