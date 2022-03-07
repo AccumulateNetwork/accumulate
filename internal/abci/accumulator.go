@@ -132,7 +132,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
-	batch := app.DB.Begin()
+	batch := app.DB.Begin(false)
 	defer batch.Discard()
 
 	var height int64
@@ -221,29 +221,13 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	batch := app.DB.Begin()
-	defer batch.Discard()
-	ledger := batch.Account(app.Network.NodeUrl(protocol.Ledger))
-	_, err := ledger.GetState()
-	switch {
-	case err == nil:
-		// InitChain already happened
-		anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
-		if err != nil {
-			panic(fmt.Errorf("failed to get ledger: %v", err))
-		}
-		return abci.ResponseInitChain{AppHash: anchor}
-	case !errors.Is(err, storage.ErrNotFound):
-		panic(fmt.Errorf("failed to check block index: %v", err))
-	}
-
 	app.logger.Info("Initializing")
-	anchor, err := app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
+	root, err := app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: anchor}
+	return abci.ResponseInitChain{AppHash: root}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
@@ -410,19 +394,32 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 	defer app.recover(nil, true)
 
 	r := app.Chain.EndBlock(EndBlockRequest{})
-	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.NewValidators))
-	for i, key := range r.NewValidators {
-		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
+
+	if len(r.ValidatorsUpdates) > 0 {
+		resp.ValidatorUpdates = getValidatorUpdates(r)
+	}
+	return resp
+}
+
+// getValidatorUpdates adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
+func getValidatorUpdates(r EndBlockResponse) []abci.ValidatorUpdate {
+	validatorUpdates := make([]abci.ValidatorUpdate, len(r.ValidatorsUpdates))
+	for i, u := range r.ValidatorsUpdates {
+		var pwr int64
+		if u.Enabled {
+			pwr = 1
+		}
+
+		validatorUpdates[i] = abci.ValidatorUpdate{
 			PubKey: protocrypto.PublicKey{
 				Sum: &protocrypto.PublicKey_Ed25519{
-					Ed25519: key,
+					Ed25519: u.PubKey,
 				},
 			},
-			Power: 1,
+			Power: pwr,
 		}
 	}
-
-	return resp
+	return validatorUpdates
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.

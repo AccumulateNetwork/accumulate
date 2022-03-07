@@ -25,12 +25,12 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 	testCases := map[string]struct {
 		NewStorage func(log.Logger) storage.KeyValueStore
 	}{
-		"Memory": {NewStorage: func(log.Logger) storage.KeyValueStore {
-			return memory.NewDB()
+		"Memory": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
+			return memory.New(logger)
 		}},
 		"Badger": {NewStorage: func(logger log.Logger) storage.KeyValueStore {
-			db := new(badger.DB)
-			require.NoError(b, db.InitDB(filepath.Join(b.TempDir(), "valacc.db"), logger))
+			db, err := badger.New(filepath.Join(b.TempDir(), "badger.db"), logger)
+			require.NoError(b, err)
 			return db
 		}},
 	}
@@ -92,7 +92,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			toKey0 := acctesting.GenerateKey(b.Name(), "to", 0)
 			toUrl0 := acctesting.AcmeLiteAddressStdPriv(toKey0)
 
-			batch := db.Begin()
+			batch := db.Begin(true)
 			require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(fromKey), 1e9, 1e9))
 			require.NoError(b, batch.Commit())
 
