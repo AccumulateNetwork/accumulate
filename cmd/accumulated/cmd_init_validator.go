@@ -63,6 +63,9 @@ func initValidator(cmd *cobra.Command, args []string) {
 	var directory *Subnet
 	var bvns []*Subnet
 
+	//var localAddress string
+	var bvnSubnet []*Subnet
+
 	//now look for the subnet.
 	for i, v := range network.Subnet {
 		//while we are at it, also find the directory.
@@ -72,13 +75,14 @@ func initValidator(cmd *cobra.Command, args []string) {
 			}
 			directory = &network.Subnet[i]
 		}
+		if v.Type == config.BlockValidator {
+			bvnSubnet = append(bvnSubnet, &network.Subnet[i])
+		}
 	}
 
 	if directory == nil {
 		check(fmt.Errorf("cannot find directory configuration in %v", flagInitNetwork.NetworksFileName))
 	}
-
-	//var localAddress string
 
 	//quick validation to make sure the directory node maps to each of the BVN's defined
 	for _, dnn := range directory.Nodes {
@@ -181,35 +185,25 @@ func initValidator(cmd *cobra.Command, args []string) {
 		c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", bvns[i].Nodes[0].IP, directory.Port)
 	}
 
-	bvnConfig := make([][]*cfg.Config, len(bvns))
-	bvnListen := make([][]string, len(bvns))
-	for i, _ := range bvns {
-		bvnConfig[i] = make([]*cfg.Config, 1)
-		bvnListen[i] = make([]string, 1)
+	bvnConfig := make([][]*cfg.Config, len(bvnSubnet))
+	bvnListen := make([][]string, len(bvnSubnet))
+	for i, v := range bvnSubnet {
+		bvnConfig[i] = make([]*cfg.Config, len(v.Nodes))
+		bvnListen[i] = make([]string, len(v.Nodes))
 	}
 
-	bvnRemote := make([][]string, numBvns)
+	bvnRemote := make([][]string, len(bvnSubnet)) //numBvns)
 
-	for i, v := range bvns {
-		bvnConfig[i][0], bvnRemote[i], bvnListen[i][0] = initNetworkNode(network.Network, v.Name, v.Nodes, cfg.BlockValidator,
-			cfg.Validator, i, i, compose)
-		if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
-			for j := range bvnRemote[i] {
-				bvnRemote[i][j] += flagInitNetwork.DnsSuffix
+	for i, v := range bvnSubnet {
+		for j, _ := range v.Nodes {
+			bvnConfig[i][j], bvnRemote[i], bvnListen[i][j] = initNetworkNode(network.Network, v.Name, v.Nodes, cfg.BlockValidator,
+				cfg.Validator, i, j, compose)
+			if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
+				for j := range bvnRemote[i] {
+					bvnRemote[i][j] += flagInitNetwork.DnsSuffix
+				}
 			}
-		}
-	}
-
-	for _, sub := range network.Subnet {
-		for _, bvn := range sub.Nodes {
-			if sub.Type == config.BlockValidator {
-				addresses[sub.Name] = append(addresses[sub.Name], fmt.Sprintf("http://%s:%d", bvn.IP, sub.Port))
-			}
-		}
-	}
-
-	for i, v := range bvns {
-		for _, c := range bvnConfig[i] {
+			c := bvnConfig[i][j]
 			if flagInit.NoEmptyBlocks {
 				c.Consensus.CreateEmptyBlocks = false
 			}
@@ -219,7 +213,30 @@ func initValidator(cmd *cobra.Command, args []string) {
 			}
 			c.Accumulate.Network.Type = config.BlockValidator
 			c.Accumulate.Network.LocalSubnetID = v.Name
-			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[0].IP, v.Port)
+			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
+			c.Accumulate.Network.Subnets = accSub
+		}
+	}
+
+	for _, sub := range bvnSubnet {
+		for _, bvn := range sub.Nodes {
+			addresses[sub.Name] = append(addresses[sub.Name], fmt.Sprintf("http://%s:%d", bvn.IP, sub.Port))
+		}
+	}
+
+	for i, v := range bvnSubnet {
+		for j, _ := range v.Nodes {
+			c := bvnConfig[i][j]
+			if flagInit.NoEmptyBlocks {
+				c.Consensus.CreateEmptyBlocks = false
+			}
+
+			if flagInit.NoWebsite {
+				c.Accumulate.Website.Enabled = false
+			}
+			c.Accumulate.Network.Type = config.BlockValidator
+			c.Accumulate.Network.LocalSubnetID = v.Name
+			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
 			c.Accumulate.Network.Subnets = accSub
 		}
 	}
@@ -282,7 +299,7 @@ func initValidator(cmd *cobra.Command, args []string) {
 			Logger:   logger.With("subnet", protocol.Directory),
 		}))
 
-		for i, _ := range directory.Nodes {
+		for i, _ := range bvnSubnet {
 			check(node.Init(node.InitOptions{
 				WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:     bvns[i].Port,
