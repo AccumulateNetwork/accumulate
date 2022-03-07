@@ -385,7 +385,7 @@ RESULT=$(accumulate -j data get dn/votes)
 echo "========= checkpoint alpha ========="
 echo $RESULT
 echo "========= checkpoint alpha ========="
-RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
+RESULT=$(echo "$RESULT" | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
 echo "========= checkpoint bravo ========"
 echo $RESULT
 echo "========= checkpoint bravo ========"
