@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -89,40 +88,69 @@ func Check(t *testing.T, bpt *BPT, node *BptNode) {
 	}
 }
 
+// TestManager
+// Do a pretty complete test of adding elements to a BPT, store the state of the BPT,
+// Load the state of the BPT, update the state of the BPT, and cycle that a good number of times.
+// Then check that all the elements we put in the BPT are in the BPT
+// Then make sure keys are not in the BPT are not found in the BPT.
+// Exercise GetRange and Get in these tests.  Test includes a key before any keys in the
+// in the BPT and a key after the end of the keys in the BPT
 func TestManager(t *testing.T) {
-	c := 20
-	d := 200
+	c := 100 // How many load cycles
+	d := 10  // How many key/values to be put in the BPT per cycle
 
-	var rh common.RandHash
+	var keys, values common.RandHash // hash sequences
 
-	store := memory.NewDB()
-	storeTx := store.Begin(true)
-	for i := 0; i < c; i++ {
-		bptManager := NewBPTManager(storeTx)
+	store := memory.NewDB()              // use a memory database
+	storeTx := store.Begin(true)         // and begin its use.
+	bptManager := NewBPTManager(storeTx) // Create a BptManager.  We will create a new one each cycle.
 
-		for j := 0; j < d; j++ {
-			k := rh.NextA()
-			v := rh.NextA()
-			bptManager.InsertKV(k, v)
+	for i := 0; i < c; i++ { //             For each cycle
+
+		for j := 0; j < d; j++ { //         Stuff in our key values
+			k := keys.NextAList()     //    Key a list of the keys
+			v := values.NextA()       //
+			bptManager.InsertKV(k, v) //
 		}
 		bptManager.Bpt.Update()
 		Check(t, bptManager.Bpt, bptManager.Bpt.Root)
+		bptManager = NewBPTManager(storeTx)
+	}
+	var first, place, last [32]byte
+	copy(first[:], []byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF})
+	_, first = bptManager.Bpt.GetRange(first, 1)
+	place = first
+	for {
+		a, key := bptManager.Bpt.GetRange(place, 100)
+		if len(a) == 0 {
+			last = place
+			break
+		}
+		place = key
+	}
 
-		sort.Slice(bptManager.Flushed, func(i, j int) bool { return bytes.Compare(bptManager.Flushed[i], bptManager.Flushed[j]) < 0 })
-		last := []byte{255, 255, 255, 255, 255}
-		for _, v := range bptManager.Flushed {
-			if bytes.Equal(last, v) {
-				//		fmt.Print("===========")
-			}
-			//	fmt.Printf("%x\n", v)
-			last = v
+	//fmt.Printf("%x-%x\n", first, last)
+
+	for i := range keys.List {
+		_, _, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
+		require.Truef(t, found, "Must find every key put into the BPT. Failed at %d", i)
+	}
+
+	bptManager = NewBPTManager(storeTx)
+	var sb, eb bool
+	for i := 0; !sb || !eb; i++ {
+		key := keys.NextA()
+		_, _, found := bptManager.Bpt.Get(bptManager.Bpt.Root, key)
+		require.Falsef(t, found, "Should not find keys not put into the BPT. Failed at %d", i)
+		if bytes.Compare(first[:], key[:]) < 0 {
+			sb = true
+	//		fmt.Printf("%d first: %x key: %x\n", i, first, key)
+		}
+		if bytes.Compare(last[:], key[:]) > 0 {
+			eb = true
+	//		fmt.Printf("%d last:  %x key: %x\n", i, last, key)
 		}
 	}
-	//PrintNode(0, bptManager.Bpt.Root)
-	bptManager := NewBPTManager(storeTx)
-	//PrintNode(0, bptManager.Bpt.Root)
-	key := rh.NextA()
-	bptManager.Bpt.Get(bptManager.Bpt.Root, key)
 
 }
 
