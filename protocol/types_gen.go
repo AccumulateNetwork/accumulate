@@ -390,7 +390,7 @@ type SyntheticCreateChain struct {
 type SyntheticDepositCredits struct {
 	fieldsSet []bool
 	Cause     [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
-	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
 type SyntheticDepositTokens struct {
@@ -1551,7 +1551,7 @@ func (v *SyntheticDepositCredits) Equal(u *SyntheticDepositCredits) bool {
 	if !(v.Cause == u.Cause) {
 		return false
 	}
-	if !(v.Amount == u.Amount) {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
 	}
 
@@ -4492,8 +4492,8 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	if !(v.Cause == ([32]byte{})) {
 		writer.WriteHash(2, &v.Cause)
 	}
-	if !(v.Amount == 0) {
-		writer.WriteUint(3, v.Amount)
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(3, &v.Amount)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
@@ -4510,7 +4510,7 @@ func (v *SyntheticDepositCredits) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Amount is missing")
-	} else if v.Amount == 0 {
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
 	}
 
@@ -6911,8 +6911,8 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Cause = *x
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Amount = x
+	if x, ok := reader.ReadBigInt(3); ok {
+		v.Amount = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositCredits)
@@ -8098,11 +8098,11 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   TransactionType `json:"type"`
 		Cause  string          `json:"cause,omitempty"`
-		Amount uint64          `json:"amount,omitempty"`
+		Amount *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -9533,11 +9533,11 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type   TransactionType `json:"type"`
 		Cause  string          `json:"cause,omitempty"`
-		Amount uint64          `json:"amount,omitempty"`
+		Amount *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -9546,7 +9546,11 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cause = x
 	}
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 

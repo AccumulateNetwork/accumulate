@@ -118,7 +118,7 @@ var txnTests = []*TCG{
 		txnTest1("adi", &SyntheticDepositTokens{Cause: [32]byte{1}, Token: parseUrl("ACME"), Amount: *new(big.Int).SetInt64(10000)}),
 	}},
 	{Name: "SyntheticDepositCredits", Cases: []*TC{
-		txnTest1("adi", &SyntheticDepositCredits{Cause: [32]byte{1}, Amount: 1234}),
+		txnTest1("adi", &SyntheticDepositCredits{Cause: [32]byte{1}, Amount: *big.NewInt(1234)}),
 	}},
 	{Name: "SyntheticBurnTokens", Cases: []*TC{
 		txnTest1("adi", &SyntheticBurnTokens{Cause: [32]byte{1}, Amount: *big.NewInt(123456789)}),

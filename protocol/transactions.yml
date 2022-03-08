@@ -376,7 +376,7 @@ SyntheticDepositCredits:
     - name: Cause
       type: chain
     - name: Amount
-      type: uvarint
+      type: bigint
 
 SyntheticBurnTokens:
   kind: tx
