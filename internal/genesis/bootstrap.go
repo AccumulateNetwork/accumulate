@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -107,6 +108,20 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			Entry   *protocol.DataEntry
 		}
 		var dataRecords []DataRecord
+
+		wd := new(protocol.WriteData)
+		lci := types.LastCommitInfo{}
+		wd.Entry.Data, err = json.Marshal(&lci)
+
+		da := new(protocol.DataAccount)
+		da.Scratch = true
+		da.Url = uAdi.JoinPath(protocol.Votes)
+		da.KeyBook = uBook
+
+		records = append(records, da)
+		urls = append(urls, da.Url)
+		dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+
 		switch opts.Network.Type {
 		case config.Directory:
 			oracle := new(protocol.AcmeOracle)
