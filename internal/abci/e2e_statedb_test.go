@@ -48,7 +48,11 @@ func TestStateDBConsistency(t *testing.T) {
 	ledger1 := protocol.NewInternalLedger()
 	batch := n.db.Begin(false)
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
-	rootHash := batch.RootHash()
+	anchor, err := batch.GetMinorRootChainAnchor(n.network)
+	if err != nil {
+		panic(fmt.Errorf("failed to get anchor: %v", err))
+	}
+	rootHash := anchor
 	batch.Discard()
 
 	// Reopen the database
@@ -57,9 +61,11 @@ func TestStateDBConsistency(t *testing.T) {
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin(false)
 	ledger2 := protocol.NewInternalLedger()
+	anchor, err = batch.GetMinorRootChainAnchor(n.network)
+	require.NoError(t, err)
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger2))
 	require.Equal(t, ledger1, ledger2, "Ledger does not match after load from disk")
-	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", batch.RootHash()), "Hash does not match after load from disk")
+	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", anchor), "Hash does not match after load from disk")
 	batch.Discard()
 
 	// Recreate the app and try to do more transactions
