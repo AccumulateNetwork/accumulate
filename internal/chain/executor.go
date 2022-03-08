@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -92,7 +91,12 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		return nil, err
 	}
 
-	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(batch.RootHash()))
+	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
+	if err != nil {
+		return nil, err
+	}
+
+	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(anchor))
 	return m, nil
 }
 
@@ -199,7 +203,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 			return err
 		}
 
-		rootHash = batch.RootHash()
+		rootHash = batch.BptRootHash()
 		return nil
 	})
 	if err == nil {
@@ -216,18 +220,12 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 		return nil, fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
-	// Load the BPT root hash so we can verify the system state
-	var hash [32]byte
-	data, err = src.Begin(false).Get(storage.MakeKey("BPT", "Root"))
-	switch {
-	case err == nil:
-		bpt := pmt.NewBPT()
-		bpt.UnMarshal(data)
-		hash = bpt.Root.Hash
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return nil, fmt.Errorf("failed to load BPT root hash from app state: %v", err)
+	// Load the root anchor chain so we can verify the system state
+	srcBatch := database.New(src, nil).Begin(true)
+	defer srcBatch.Discard()
+	srcAnchor, err := srcBatch.GetMinorRootChainAnchor(&m.Network)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load root anchor chain from app state: %v", err)
 	}
 
 	// Dump the genesis state into the key-value store
@@ -245,9 +243,14 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 	batch = m.DB.Begin(true)
 	defer batch.Discard()
 
+	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
+	if err != nil {
+		return nil, err
+	}
+
 	// Make sure the database BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(hash[:], batch.RootHash()) {
-		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], batch.RootHash()))
+	if !bytes.Equal(srcAnchor, anchor) {
+		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcAnchor, anchor))
 	}
 
 	err = m.governor.DidCommit(batch, true, true, blockIndex, time)
@@ -255,7 +258,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 		return nil, err
 	}
 
-	return batch.RootHash(), nil
+	return anchor, nil
 }
 
 // BeginBlock implements ./abci.Chain
@@ -409,7 +412,13 @@ func (m *Executor) commit(force bool) ([]byte, error) {
 		}
 	}
 
-	return batch.RootHash(), nil
+	//return anchor from minor root anchor chain
+	anchor, err := m.blockBatch.GetMinorRootChainAnchor(&m.Network)
+	if err != nil {
+		return nil, err
+	}
+
+	return anchor, nil
 }
 
 func (m *Executor) updateOraclePrice(ledgerState *protocol.InternalLedger) error {
@@ -637,5 +646,5 @@ func (m *Executor) commitBptUpdate(ledgerState *protocol.InternalLedger, rootCha
 		Index:   uint64(m.blockIndex - 1),
 	})
 
-	return rootChain.AddEntry(m.blockBatch.RootHash(), false)
+	return rootChain.AddEntry(m.blockBatch.BptRootHash(), false)
 }
