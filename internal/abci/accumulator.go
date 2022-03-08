@@ -149,12 +149,17 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
+	if err != nil {
+		sentry.CaptureException(err)
+	}
+
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: batch.RootHash(),
+		LastBlockAppHash: anchor,
 	}
 }
 
