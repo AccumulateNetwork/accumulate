@@ -64,6 +64,9 @@ const ChainTypeAnchor ChainType = 2
 // ChainTypeData holds data entry hashes.
 const ChainTypeData ChainType = 3
 
+// ChainTypeIndex indexes other chains.
+const ChainTypeIndex ChainType = 4
+
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
@@ -418,7 +421,7 @@ func (v ChainType) ID() uint64 { return uint64(v) }
 func (v *ChainType) Set(id uint64) bool {
 	u := ChainType(id)
 	switch u {
-	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData:
+	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData, ChainTypeIndex:
 		*v = u
 		return true
 	default:
@@ -437,6 +440,8 @@ func (v ChainType) String() string {
 		return "anchor"
 	case ChainTypeData:
 		return "data"
+	case ChainTypeIndex:
+		return "index"
 	default:
 		return fmt.Sprintf("ChainType:%d", v)
 	}
@@ -453,6 +458,8 @@ func ChainTypeByName(name string) (ChainType, bool) {
 		return ChainTypeAnchor, true
 	case "data":
 		return ChainTypeData, true
+	case "index":
+		return ChainTypeIndex, true
 	default:
 		return 0, false
 	}

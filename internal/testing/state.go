@@ -65,7 +65,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
-	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so RootIdentity of the BVC is good)
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	from := AcmeLiteAddressStdPriv(sponsor)
 
 	u, err := url.Parse(destAddr)
@@ -179,9 +179,10 @@ func WriteStates(db DB, chains ...state.Chain) error {
 		}
 	}
 
+	directory := urls[0].Identity()
 	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
 		return db.Account(u).Index(key...)
-	}, urls...)
+	}, directory, urls...)
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {

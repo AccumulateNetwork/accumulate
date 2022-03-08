@@ -78,6 +78,96 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 	return ledger.PutState(ledgerState)
 }
 
+func shouldIndexChain(account *url.URL, name string, typ protocol.ChainType) (bool, error) {
+	switch typ {
+	case protocol.ChainTypeIndex:
+		// Index chains are unindexed
+		return false, nil
+
+	case protocol.ChainTypeData:
+		// Data chains are unindexed
+		return false, nil
+
+	case protocol.ChainTypeTransaction:
+		// Transaction chains are indexed
+		return true, nil
+
+	case protocol.ChainTypeAnchor:
+		// Anchor chains are indexed
+		return true, nil
+
+	default:
+		// m.logError("Unknown chain type", "type", typ, "name", name, "account", account)
+		return false, fmt.Errorf("unknown chain type")
+	}
+}
+
+func addIndexChainEntry(account *database.Account, name string, entry *protocol.IndexEntry) (uint64, error) {
+	// Load the index chain
+	indexChain, err := account.Chain(name, protocol.ChainTypeIndex)
+	if err != nil {
+		return 0, err
+	}
+
+	// Marshal the entry
+	data, err := entry.MarshalBinary()
+	if err != nil {
+		return 0, err
+	}
+
+	// TODO Update SMT to handle non-32-byte entries?
+	if len(data) > 32 {
+		panic("Index entry is too big")
+	}
+	if len(data) < 32 {
+		padding := make([]byte, 32-len(data))
+		// TODO Remove once AC-1096 is done
+		// Fake field number to make unmarshalling work
+		padding[0] = 32
+		data = append(data, padding...)
+	}
+
+	// Add the entry
+	err = indexChain.AddEntry(data, false)
+	if err != nil {
+		return 0, err
+	}
+
+	// Return the index of the entry
+	return uint64(indexChain.Height() - 1), nil
+}
+
+func addChainAnchor(rootChain *database.Chain, account *database.Account, accountUrl *url.URL, name string, typ protocol.ChainType) (indexIndex uint64, didIndex bool, err error) {
+	// Load the chain
+	accountChain, err := account.ReadChain(name)
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Add its anchor to the root chain
+	err = rootChain.AddEntry(accountChain.Anchor(), false)
+	if err != nil {
+		return 0, false, err
+	}
+
+	// Check if it should be indexed
+	shouldIndex, err := shouldIndexChain(accountUrl, name, typ)
+	if err != nil || !shouldIndex {
+		return 0, false, err
+	}
+
+	// Add the index chain entry
+	indexIndex, err = addIndexChainEntry(account, protocol.IndexChain(name, false), &protocol.IndexEntry{
+		Source: uint64(accountChain.Height() - 1),
+		Anchor: uint64(rootChain.Height() - 1),
+	})
+	if err != nil {
+		return 0, false, err
+	}
+
+	return indexIndex, true, nil
+}
+
 func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.DirectoryIndexMetadata, error) {
 	b, err := batch.AccountByID(chainId).Index("Directory", "Metadata").Get()
 	if err != nil {

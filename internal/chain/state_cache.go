@@ -126,10 +126,10 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.Trans
 	return c.batch.Transaction(txid[:]).Get()
 }
 
-func (c *stateCache) AddDirectoryEntry(u ...*url.URL) error {
+func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
 	return AddDirectoryEntry(func(u *url.URL, key ...interface{}) Value {
 		return c.RecordIndex(u, key...)
-	}, u...)
+	}, directory, u...)
 }
 
 type Value interface {
@@ -137,9 +137,12 @@ type Value interface {
 	Put([]byte)
 }
 
-func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, u ...*url.URL) error {
-	identity := u[0].Identity()
-	mdi := getIndex(identity, "Directory", "Metadata")
+func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory *url.URL, u ...*url.URL) error {
+	if len(u) == 0 {
+		return fmt.Errorf("no URLs supplied to register in directory %s", directory.String())
+	}
+
+	mdi := getIndex(directory, "Directory", "Metadata")
 	md := new(protocol.DirectoryIndexMetadata)
 	data, err := mdi.Get()
 	if err == nil {
@@ -150,8 +153,10 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, u ...*url.
 	}
 
 	for _, u := range u {
-		getIndex(identity, "Directory", md.Count).Put([]byte(u.String()))
-		md.Count++
+		if !u.Equal(directory) {
+			getIndex(directory, "Directory", md.Count).Put([]byte(u.String()))
+			md.Count++
+		}
 	}
 
 	data, err = md.MarshalBinary()

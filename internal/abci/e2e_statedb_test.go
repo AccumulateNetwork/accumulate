@@ -2,7 +2,6 @@ package abci_test
 
 import (
 	"fmt"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,19 +9,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func TestStateDBConsistency(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-	stores := map[*accumulated.Daemon]*badger.DB{}
+	stores := map[*accumulated.Daemon]storage.KeyValueStore{}
 	for _, netName := range subnets {
 		for _, daemon := range daemons[netName] {
-			store := new(badger.DB)
-			err := store.InitDB(filepath.Join(daemon.Config.RootDir, "valacc.db"), nil)
-			require.NoError(t, err)
+			// store, err := badger.New(filepath.Join(daemon.Config.RootDir, "badger.db"), nil)
+			// require.NoError(t, err)
+			// stores[daemon] = store
+			store := memory.New(nil)
 			stores[daemon] = store
 
 			// Call during test cleanup. This ensures that the app client is shutdown

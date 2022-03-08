@@ -56,6 +56,15 @@ func Parse(s string) (*URL, error) {
 	return v, nil
 }
 
+// MustParse calls Parse and panics if it returns an error.
+func MustParse(s string) *URL {
+	u, err := Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
 func splitColon(s string) (string, string) {
 	t := strings.SplitN(s, ":", 2)
 	if len(t) == 1 {
@@ -176,7 +185,7 @@ func (u *URL) Identity() *URL {
 func (u *URL) Parent() (*URL, error) {
 	v := *u
 	if len(v.Path) == 0 {
-		return nil, fmt.Errorf("URL %q does not have a parent ADI", u.String())
+		return nil, fmt.Errorf("URL %s does not have a parent ADI", u.String())
 	}
 	slashIdx := strings.LastIndex(v.Path, "/")
 	if slashIdx == -1 {

@@ -3,6 +3,7 @@ package chain
 import (
 	"errors"
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -42,14 +43,23 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		_, err = st.LoadUrl(u)
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
+			// Unknown error
 			return nil, fmt.Errorf("error fetching %q: %v", u, err)
-		case cc.IsUpdate && errors.Is(err, storage.ErrNotFound):
+
+		case cc.IsUpdate && err != nil:
+			// Attempted to update but the record does not exist
 			return nil, fmt.Errorf("cannot update %q: does not exist", u)
+
+		case !cc.IsUpdate && err == nil:
+			// Attempted to create but the record already exists
+			return nil, fmt.Errorf("cannot create %q: already exists", u)
+
 		case !cc.IsUpdate:
-			if err == nil {
-				return nil, fmt.Errorf("cannot create %q: already exists", u)
+			// Creating a record, add it to the directory
+			err = st.AddDirectoryEntry(u.Identity(), u)
+			if err != nil {
+				return nil, fmt.Errorf("failed to add a directory entry for %q: %v", u, err)
 			}
-			err = st.AddDirectoryEntry(u)
 		}
 
 		urls[i] = u
