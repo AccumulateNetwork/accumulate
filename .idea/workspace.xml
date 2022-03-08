@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="ALL" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="7046542c-f0c4-449b-81e6-ab6cb1da6e16" name="Changes" comment="more looping">
+      <change beforePath="$PROJECT_DIR$/scripts/ci/validate.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ci/validate.sh" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="GOROOT" url="file:///usr/lib/go-1.17" />
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectId" id="2609797NjHRSKwWq90D24yATj3H" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">
+    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
+    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
+    <property name="WebServerToolWindowFactoryState" value="false" />
+    <property name="configurable..is.expanded" value="true" />
+    <property name="configurable.GoLibrariesConfigurable.is.expanded" value="true" />
+    <property name="go.format.on.save.advertiser.fired" value="true" />
+    <property name="go.formatter.settings.were.checked" value="true" />
+    <property name="go.import.settings.migrated" value="true" />
+    <property name="go.modules.go.list.on.any.changes.was.set" value="true" />
+    <property name="go.sdk.automatically.set" value="true" />
+    <property name="go.watchers.conflict.with.on.save.actions.check.performed" value="true" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/cmd/accumulate" />
+    <property name="node.js.detected.package.eslint" value="true" />
+    <property name="node.js.selected.package.eslint" value="(autodetect)" />
+    <property name="node.js.selected.package.tslint" value="(autodetect)" />
+    <property name="settings.editor.selected.configurable" value="go.vgo" />
+  </component>
+  <component name="RunManager" selected="Go Test.root_test.go">
+    <configuration name="go build accumulated" type="GoApplicationRunConfiguration" factoryName="Go Application">
+      <working_directory value="$PROJECT_DIR$" />
+      <kind value="DIRECTORY" />
+      <directory value="$PROJECT_DIR$/cmd/accumulate" />
+      <filePath value="$PROJECT_DIR$" />
+      <method v="2" />
+    </configuration>
+    <configuration name="go build gitlab.com/accumulatenetwork/accumulate/cmd/accumulated" type="GoApplicationRunConfiguration" factoryName="Go Application" nameIsGenerated="true">
+      <module name="accumulate" />
+      <working_directory value="$PROJECT_DIR$" />
+      <parameters value=" init network BVN0 --networks $USER_HOME$/testnet-6.json -w $USER_HOME$/bvn6 --no-website --no-empty-blocks" />
+      <kind value="DIRECTORY" />
+      <directory value="$PROJECT_DIR$/cmd/accumulated" />
+      <filePath value="$PROJECT_DIR$/../accumulate|$PROJECT_DIR$/cmd/accumulated/main.go" />
+      <method v="2" />
+    </configuration>
+    <configuration name="e2e_test.go" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="accumulated" />
+      <working_directory value="$PROJECT_DIR$/internal/abci" />
+      <root_directory value="$PROJECT_DIR$" />
+      <kind value="FILE" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$/internal/abci/e2e_test.go" />
+      <framework value="gotest" />
+      <method v="2" />
+    </configuration>
+    <configuration name="go test accumulate" type="GoTestRunConfiguration" factoryName="Go Test" nameIsGenerated="true">
+      <module name="accumulate" />
+      <working_directory value="$PROJECT_DIR$" />
+      <kind value="DIRECTORY" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <method v="2" />
+    </configuration>
+    <configuration name="root_test.go" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <working_directory value="$PROJECT_DIR$/cmd/accumulate/cmd" />
+      <root_directory value="$PROJECT_DIR$" />
+      <kind value="FILE" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$/cmd/accumulate/cmd/root_test.go" />
+      <framework value="gotest" />
+      <method v="2" />
+    </configuration>
+    <list>
+      <item itemvalue="Go Build.go build accumulated" />
+      <item itemvalue="Go Build.go build gitlab.com/accumulatenetwork/accumulate/cmd/accumulated" />
+      <item itemvalue="Go Test.e2e_test.go" />
+      <item itemvalue="Go Test.go test accumulate" />
+      <item itemvalue="Go Test.root_test.go" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Go Test.root_test.go" />
+        <item itemvalue="Go Test.e2e_test.go" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="added a test" />
+    <MESSAGE value="converted address to hex" />
+    <MESSAGE value="feat(prot): capture evidence of maleficence" />
+    <MESSAGE value="fix test to address make lower case" />
+    <MESSAGE value="fixed test" />
+    <MESSAGE value="debugging test" />
+    <MESSAGE value="merge with ac-1101" />
+    <MESSAGE value="fixed init issue" />
+    <MESSAGE value="fix test" />
+    <MESSAGE value="debug test" />
+    <MESSAGE value="argh... shiver me hex..." />
+    <MESSAGE value="loop test" />
+    <MESSAGE value="more looping" />
+    <option name="LAST_COMMIT_MESSAGE" value="more looping" />
+  </component>
+  <component name="VgoProject">
+    <integration-enabled>true</integration-enabled>
+    <environment>
+      <map>
+        <entry key="GOPROXY" value="direct" />
+      </map>
+    </environment>
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
+          <line>585</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
+          <line>556</line>
+          <option name="timeStamp" value="3" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+    <watches-manager>
+      <configuration name="GoTestRunConfiguration">
+        <watch expression="balance" />
+        <watch expression="expected" />
+      </configuration>
+    </watches-manager>
+  </component>
+</project>
