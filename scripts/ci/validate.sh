@@ -392,7 +392,7 @@ echo $R3
 NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL)
 VOTE_COUNT=$(echo "$R3" | jq -re '.votes|length')
 FOUND=0
-for i in {1..$VOTE_COUNT}; do
+for ((i = 0; i < $VOTE_COUNT; i++)); do
   echo "COUNT=$i"
   R4=$(echo "$R3" | jq -re .votes[$i].validator.address)
   echo "ADDRESS = $R4"
