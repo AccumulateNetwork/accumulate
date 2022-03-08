@@ -18,8 +18,8 @@ type TokenHolder interface {
 }
 
 type CreditHolder interface {
-	CreditCredits(amount uint64)
-	DebitCredits(amount uint64) bool
+	CreditCredits(amount big.Int)
+	DebitCredits(amount big.Int) bool
 }
 
 var _ TokenHolder = (*TokenAccount)(nil)
@@ -58,20 +58,18 @@ func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
 	return acct.TokenUrl, nil
 }
 
-func (ms *KeyPage) CreditCredits(amount uint64) {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	ms.CreditBalance.Add(&ms.CreditBalance, amt)
+func (ms *KeyPage) CreditCredits(amount big.Int) {
+	amt := amount
+	ms.CreditBalance.Add(&ms.CreditBalance, &amt)
 }
 
-func (ms *KeyPage) DebitCredits(amount uint64) bool {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
+func (ms *KeyPage) DebitCredits(amount big.Int) bool {
+	amt := amount
 	if amt.Cmp(&ms.CreditBalance) > 0 {
 		return false
 	}
 
-	ms.CreditBalance.Sub(&ms.CreditBalance, amt)
+	ms.CreditBalance.Sub(&ms.CreditBalance, &amt)
 	return true
 }
 
@@ -101,20 +99,19 @@ func (acct *LiteTokenAccount) DebitTokens(amount *big.Int) bool {
 	return true
 }
 
-func (acct *LiteTokenAccount) CreditCredits(amount uint64) {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	acct.CreditBalance.Add(&acct.CreditBalance, amt)
+func (acct *LiteTokenAccount) CreditCredits(amount big.Int) {
+	amt := amount
+	acct.CreditBalance.Add(&acct.CreditBalance, &amt)
 }
 
-func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
+func (acct *LiteTokenAccount) DebitCredits(amount big.Int) bool {
+	amt := amount
+
 	if amt.Cmp(&acct.CreditBalance) > 0 {
 		return false
 	}
 
-	acct.CreditBalance.Sub(&acct.CreditBalance, amt)
+	acct.CreditBalance.Sub(&acct.CreditBalance, &amt)
 	return true
 }
 

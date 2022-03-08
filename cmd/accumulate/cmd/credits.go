@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math/big"
+	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
@@ -61,7 +63,7 @@ func AddCredits(origin string, args []string) (string, error) {
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
-	credits.Amount = *amt
+	credits.Amount = *new(big.Int).SetUint64(uint64(amt * protocol.CreditPrecision))
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {

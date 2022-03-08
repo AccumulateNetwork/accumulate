@@ -34,7 +34,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.Require().Equal(int64(acctesting.TestTokenAmount*acctesting.TokenMx), account.Balance.Int64())
 
 	var nonce uint64 = 1
-	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl, Amount: *new(big.Int).SetUint64(uint64(1e8))})
+	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl, Amount: *big.NewInt(1e8)})
 	s.dut.SubmitTxn(tx)
 	s.dut.WaitForTxns(tx.GetTxHash())
 

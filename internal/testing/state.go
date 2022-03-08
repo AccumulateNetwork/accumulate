@@ -138,7 +138,7 @@ func AddCredits(db DB, account *url.URL, credits float64) error {
 		return err
 	}
 
-	state.(protocol.CreditHolder).CreditCredits(uint64(credits * protocol.CreditPrecision))
+	state.(protocol.CreditHolder).CreditCredits(*new(big.Int).SetUint64(uint64(credits * protocol.CreditPrecision)))
 	return db.Account(account).PutState(state)
 }
 

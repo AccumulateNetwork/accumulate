@@ -37,19 +37,15 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	// credits wanted
 	amount.Mul(amount, &body.Amount) // Amount in credits
 	amount.Div(amount, big.NewInt(protocol.CreditsPerFiatUnit))
+	amount.Mul(amount, big.NewInt(protocol.AcmeOraclePrecision))         //dollars / token
+	amount.Div(amount, new(big.Int).SetUint64(ledgerState.ActiveOracle)) // Amount in acme
 
-	//dollars / token
-	amount.Mul(amount, big.NewInt(protocol.AcmeOraclePrecision))
-	amount.Div(amount, big.NewInt(int64(ledgerState.ActiveOracle))) // Amount in acme
-
-	// TODO: convert credit purchase from buying exact number of credits to
-	// specifying amount of acme to spend. body.Amount needs to be converted to bigint
-	// If specifying amount of acme to spend, do this instead of amount calculation above:
-	//credits := types.NewAmount(protocol.CreditsPerFiatUnit) // want to obtain credits
-	//credits.Mul(int64(ledgerState.ActiveOracle))            // fiat units / acme
-	//credits.Mul(body.Amount)                                // acme the user wants to spend
-	//credits.Div(protocol.AcmeOraclePrecision)               // adjust the precision of oracle to real units
-	//credits.Div(protocol.AcmePrecision)                     // adjust the precision of acme to spend to real units
+	// If specifying amount of acme to spend
+	// credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
+	// credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
+	// credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend
+	// credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
+	// credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
 
 	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -372,7 +373,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		}
 	}
 
-	if !page.DebitCredits(uint64(fee)) {
+	if !page.DebitCredits(*new(big.Int).SetUint64(uint64(fee))) {
 		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.Url, page.CreditBalance.String(), fee)
 	}
 
@@ -423,7 +424,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envel
 		}
 	}
 
-	if !account.DebitCredits(uint64(fee)) {
+	if !account.DebitCredits(*new(big.Int).SetUint64(uint64(fee))) {
 		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.Url, account.CreditBalance.String(), fee)
 	}
 
@@ -545,7 +546,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	if err != nil || fee > protocol.FeeFailedMaximum {
 		fee = protocol.FeeFailedMaximum
 	}
-	st.Signator.DebitCredits(uint64(fee))
+	st.Signator.DebitCredits(*new(big.Int).SetUint64(uint64(fee)))
 
 	return sigRecord.PutState(st.Signator)
 }

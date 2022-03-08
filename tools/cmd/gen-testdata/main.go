@@ -68,9 +68,9 @@ var txnTests = []*TCG{
 		txnTest1("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME"), Scratch: true}),
 	}},
 	{Name: "SendTokens", Cases: []*TC{
-		txnTest1("adi/ACME", &SendTokens{To: []*TokenRecipient{{Url: parseUrl("other/ACME"), Amount: *new(big.Int).SetInt64(100)}}}),
-		txnTest1("adi/ACME", &SendTokens{To: []*TokenRecipient{{Url: parseUrl("other/ACME"), Amount: *new(big.Int).SetInt64(100)}}, Meta: json.RawMessage(`{"foo":"bar"}`)}),
-		txnTest1("adi/ACME", &SendTokens{To: []*TokenRecipient{{Url: parseUrl("alice/ACME"), Amount: *new(big.Int).SetInt64(100)}, {Url: parseUrl("bob/ACME"), Amount: *new(big.Int).SetInt64(100)}}}),
+		txnTest1("adi/ACME", &SendTokens{To: []*TokenRecipient{{Url: parseUrl("other/ACME"), Amount: *big.NewInt(100)}}}),
+		txnTest1("adi/ACME", &SendTokens{To: []*TokenRecipient{{Url: parseUrl("other/ACME"), Amount: *big.NewInt(100)}}, Meta: json.RawMessage(`{"foo":"bar"}`)}),
+		txnTest1("adi/ACME", &SendTokens{To: []*TokenRecipient{{Url: parseUrl("alice/ACME"), Amount: *big.NewInt(100)}, {Url: parseUrl("bob/ACME"), Amount: *big.NewInt(100)}}}),
 	}},
 	{Name: "CreateDataAccount", Cases: []*TC{
 		txnTest1("adi", &CreateDataAccount{Url: parseUrl("adi/data")}),
@@ -88,10 +88,10 @@ var txnTests = []*TCG{
 		txnTest1("adi", &CreateToken{Url: parseUrl("adi/foocoin"), Symbol: "FOO", Precision: 10}),
 	}},
 	{Name: "IssueTokens", Cases: []*TC{
-		txnTest1("adi/foocoin", &IssueTokens{Recipient: parseUrl("adi/foo"), Amount: *new(big.Int).SetInt64(100)}),
+		txnTest1("adi/foocoin", &IssueTokens{Recipient: parseUrl("adi/foo"), Amount: *big.NewInt(100)}),
 	}},
 	{Name: "BurnTokens", Cases: []*TC{
-		txnTest1("adi/foo", &BurnTokens{Amount: *new(big.Int).SetInt64(100)}),
+		txnTest1("adi/foo", &BurnTokens{Amount: *big.NewInt(100)}),
 	}},
 	{Name: "CreateKeyPage", Cases: []*TC{
 		txnTest1("adi", &CreateKeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpecParams{{PublicKey: key[32:]}}}),
@@ -100,7 +100,7 @@ var txnTests = []*TCG{
 		txnTest1("adi", &CreateKeyBook{Url: parseUrl("adi/book"), Pages: []*url.URL{parseUrl("adi/page")}}),
 	}},
 	{Name: "AddCredits", Cases: []*TC{
-		txnTest1("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: *new(big.Int).SetUint64(uint64(100))}),
+		txnTest1("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: *big.NewInt(100)}),
 	}},
 	{Name: "UpdateKeyPage", Cases: []*TC{
 		txnTest1("adi", &UpdateKeyPage{Operation: KeyPageOperationAdd, NewKey: key[32:]}),
@@ -115,7 +115,7 @@ var txnTests = []*TCG{
 		txnTest1("adi", &SyntheticWriteData{Cause: [32]byte{1}, Entry: DataEntry{Data: []byte("foo"), ExtIds: [][]byte{[]byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "SyntheticDepositTokens", Cases: []*TC{
-		txnTest1("adi", &SyntheticDepositTokens{Cause: [32]byte{1}, Token: parseUrl("ACME"), Amount: *new(big.Int).SetInt64(10000)}),
+		txnTest1("adi", &SyntheticDepositTokens{Cause: [32]byte{1}, Token: parseUrl("ACME"), Amount: *big.NewInt(10000)}),
 	}},
 	{Name: "SyntheticDepositCredits", Cases: []*TC{
 		txnTest1("adi", &SyntheticDepositCredits{Cause: [32]byte{1}, Amount: *big.NewInt(1234)}),
@@ -137,7 +137,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&TokenAccount{AccountHeader: AccountHeader{Url: parseUrl("adi/foo"), KeyBook: parseUrl("adi/book")}, TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *new(big.Int).SetInt64(12345), Nonce: 654, CreditBalance: *big.NewInt(9835)}),
+		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), Nonce: 654, CreditBalance: *big.NewInt(9835)}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
 		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKey: key[32:], Nonce: 651896, Owner: parseUrl("foo/bar")}}, CreditBalance: *big.NewInt(98532), Threshold: 3}),
