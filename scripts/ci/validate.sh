@@ -386,16 +386,15 @@ echo $R2
 #xxd -r -p doesn't like the R2 string for some reason, so converting using sed instead
 R3=$(echo "$R2" | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
 echo $R3
-NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL)
+NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
+echo "NODE_ADDRESS = $NODE_ADDRESS"
 VOTE_COUNT=$(echo "$R3" | jq -re '.votes|length')
 FOUND=0
 for ((i = 0; i < $VOTE_COUNT; i++)); do
   echo "COUNT=$i"
   R4=$(echo "$R3" | jq -re .votes[$i].validator.address)
   echo "ADDRESS = $R4"
-  R5=$(echo "$R5" | base64 -d | hexdump -e '"%x"')
-  echo "HEX ADDRESS = $R5"
-  if [ "$R5" == "${NODE_ADDRESS,,}" ]; then
+  if [ "$R4" == "$NODE_ADDRESS" ]; then
     echo "FOUND VOTE"
     FOUND=1
   fi
