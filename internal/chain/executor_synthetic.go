@@ -7,7 +7,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
@@ -24,11 +23,8 @@ func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error
 			return err
 		}
 
-		txPending := state.NewPendingTransaction(tx)
-		txState, txPending := state.NewTransaction(txPending)
-
 		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(txState, status, nil)
+		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx, status, nil)
 		if err != nil {
 			return err
 		}
