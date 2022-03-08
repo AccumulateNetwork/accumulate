@@ -205,15 +205,12 @@ accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transac
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
 success
 
-if false; then
-    # TODO Enable after AC-1088 is complete. AC-809 causes this to fail because of how nonces are handled.
-    section "Signing the transaction with the same key does not deliver it"
-    wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
-    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
-    wait-for-tx $TXID
-    success
-fi
+section "Signing the transaction with the same key does not deliver it"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+wait-for-tx $TXID
+success
 
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
