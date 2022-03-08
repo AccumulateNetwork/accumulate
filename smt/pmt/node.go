@@ -1,9 +1,5 @@
 package pmt
 
-import (
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-)
-
 // Note that the tree considered here grows up by convention here, where
 // Parent nodes are at the bottom, and leaves are at the top. Obviously
 // mapping up to down and down to up is valid if a need to have the tree
@@ -33,13 +29,12 @@ import (
 // to create a node.  In other words, not too much of an issue.
 
 type BptNode struct {
-	ID     uint64   // Node Count
-	Height int      // Root is 0. above root is 1. Above above root is 2, etc.
-	BBKey  [32]byte // Byte Block Key.
-	Hash   [32]byte // This is the summary hash for the tree
-	Left   Entry    // The hash of the child Left and up the tree, bit is zero
-	Right  Entry    // the hash to the child Right and up the tree, bit is one
-	Parent *BptNode // the Parent node "below" this node
+	Height  int      // Root is 0. above root is 1. Above above root is 2, etc.
+	NodeKey [32]byte // Byte Block Key.
+	Hash    [32]byte // This is the summary hash for the tree
+	Left    Entry    // The hash of the child Left and up the tree, bit is zero
+	Right   Entry    // the hash to the child Right and up the tree, bit is one
+	Parent  *BptNode // the Parent node "below" this node
 }
 
 func (n *BptNode) Equal(entry Entry) (equal bool) {
@@ -58,7 +53,7 @@ func (n *BptNode) Equal(entry Entry) (equal bool) {
 	switch {                 //                              this conversion will panic, get caught, and return false
 	case n.Height != node.Height: //                      Height == Height
 		return false //
-	case n.BBKey != node.BBKey: //                        BBKey == BBKey
+	case n.NodeKey != node.NodeKey: //                    NodeKey == NodeKey
 		return false //
 	case n.Hash != node.Hash: //                          Hash == Hash
 		return false //
@@ -83,13 +78,6 @@ func (n *BptNode) T() int {
 	return TNode
 }
 
-// GetID
-// Returns the ID for this node.  This is used to compare nodes and serve
-// as a key in the BPT.DirtyMap.
-func (n *BptNode) GetID() uint64 {
-	return n.ID
-}
-
 // GetHash
 // Returns the Hash value for computing the summary hash of the BPT.  By
 // being in the interface, it does eliminate some book keeping where
@@ -105,8 +93,7 @@ func (n *BptNode) GetHash() []byte {
 //
 // See (p *BPT)MarshalByteBlock
 func (n *BptNode) Marshal() (data []byte) {
-	data = append(data, common.Uint64Bytes(n.ID)...)
-	data = append(data, n.BBKey[:]...)
+	data = append(data, n.NodeKey[:]...)
 	data = append(data, byte(n.Height))
 	data = append(data, n.Hash[:]...)
 	return data
@@ -115,17 +102,10 @@ func (n *BptNode) Marshal() (data []byte) {
 // UnMarshal
 // Deserialize the fields of the Node.  See (p *BPT)UnMarshalByteBlock
 func (n *BptNode) UnMarshal(data []byte) []byte {
-	n.ID, data = common.BytesUint64(data)
 	keySlice, data := data[:32], data[32:]
-	copy(n.BBKey[:], keySlice)
+	copy(n.NodeKey[:], keySlice)
 	n.Height, data = int(data[0]), data[1:]
 	hashSlice, data := data[:32], data[32:]
 	copy(n.Hash[:], hashSlice)
 	return data
-}
-
-func GetBBKey(BIdx byte, key [32]byte) (BBKey [32]byte) {
-	copy(BBKey[:BIdx], key[:BIdx])
-	BBKey[31] = BIdx
-	return BBKey
 }
