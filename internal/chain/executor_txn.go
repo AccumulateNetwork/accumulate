@@ -153,6 +153,52 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	return result, nil
 }
 
+func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd *protocol.WriteData) error {
+	dataAccountUrl := m.Network.NodeUrl(internalAccountPath)
+
+	if wd == nil {
+		return fmt.Errorf("no internal data transaction provided")
+	}
+
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
+	env.Transaction.Origin = m.Network.NodeUrl()
+	env.Transaction.Body = wd
+
+	sw := protocol.SegWitDataEntry{}
+	sw.Cause = *(*[32]byte)(env.GetTxHash())
+	sw.EntryHash = *(*[32]byte)(wd.Entry.Hash())
+	sw.EntryUrl = env.Transaction.Origin
+	env.Transaction.Body = &sw
+
+	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(internalAccountPath), env)
+	if err != nil {
+		return err
+	}
+	st.logger.L = m.logger
+
+	da := new(protocol.DataAccount)
+	va := m.blockBatch.Account(dataAccountUrl)
+	err = va.GetStateAs(da)
+	if err != nil {
+		return err
+	}
+
+	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
+
+	txPending := state.NewPendingTransaction(env)
+	txAccepted, _ := state.NewTransaction(txPending)
+
+	status := &protocol.TransactionStatus{Delivered: true}
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	if err != nil {
+		return err
+	}
+	st.Commit()
+
+	return nil
+}
+
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
 func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {

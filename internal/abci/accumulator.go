@@ -238,9 +238,10 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	_, err := app.Chain.BeginBlock(BeginBlockRequest{
-		IsLeader: bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
-		Height:   req.Header.Height,
-		Time:     req.Header.Time,
+		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
+		Height:     req.Header.Height,
+		Time:       req.Header.Time,
+		CommitInfo: &req.LastCommitInfo,
 	})
 	if err != nil {
 		app.fatal(err, true)
