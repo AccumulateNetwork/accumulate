@@ -404,7 +404,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case ks.Nonce >= env.Transaction.Nonce:
+		case ks.Nonce >= env.Transaction.Nonce && !st.TxnExists(env.TxHash):
 			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, env.Transaction.Nonce)
 		default:
 			ks.Nonce = env.Transaction.Nonce
@@ -455,7 +455,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case account.Nonce >= env.Transaction.Nonce:
+		case account.Nonce >= env.Transaction.Nonce && !st.TxnExists(env.TxHash):
 			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, env.Transaction.Nonce)
 		default:
 			account.Nonce = env.Transaction.Nonce
