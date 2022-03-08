@@ -382,6 +382,18 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 
 section "Query votes chain"
 RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data| xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
+R1=$(accumulate -j data get dn/votes)
+echo $R1
+R2=$(echo "$R1" | jq -re .data.entry.data )
+echo $R2
+R3=$(echo "$R2" | xxd -r -p)
+echo $R3
+R4=$(echo "$R3" | jq -re .votes[0].validator.address)
+echo $R4
+R5=$(echo "$R5" | base64 -d)
+echo $R5
+R6=$(echo "$R6" | xxd -p)
+echo $R6
 NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL)
 #NOTE: This test will only work consistently if we have a single node on the DN
 [ "$RESULT" == "${NODE_ADDRESS,,}" ] && success || die "No vote record found on DN"
