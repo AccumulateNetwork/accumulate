@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -142,7 +141,7 @@ func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 // out hashes.  And that we can update the BPT
 func TestInsert(t *testing.T) {
 
-	const numElements = 1000 // Choose a number of transactions to process
+	const numElements = 100 // Choose a number of transactions to process
 
 	bpt := NewBPT()            //                 Allocate a BPT
 	var rh common.RandHash     //                 Provides a sequence of hashes
@@ -152,7 +151,6 @@ func TestInsert(t *testing.T) {
 		}
 		bpt.Update() //                             Update hashes so far
 	}
-
 	CheckOrder(t, bpt)
 
 }
@@ -299,16 +297,16 @@ func TestUpdateValues(t *testing.T) {
 		valSeed = sha256.Sum256(valSeed[:]) //   move the value
 	} // loop and continue
 
-	b := NewBPT()            //                Get a BPT
-	start := time.Now()      //                Set the clock
+	b := NewBPT() //                Get a BPT
+	//	start := time.Now()      //                Set the clock
 	for _, v := range pair { //                for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //  it into the PBT
 	}
 	b.Update()
-	one := b.Root.Hash                                                 // update the BPT to get the correct summary hash
-	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
-	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
-	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
+	one := b.Root.Hash // update the BPT to get the correct summary hash
+	//	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
+	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
+	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
 	if len(pair) > numElements/2 {
 		updatePair := pair[numElements/2]                   //                Pick a pair out in the middle of the list
 		updatePair.key = sha256.Sum256(updatePair.value[:]) //                  change the value,
@@ -319,7 +317,7 @@ func TestUpdateValues(t *testing.T) {
 		if bytes.Equal(one[:], onePrime[:]) {
 			t.Fatalf("one %x should not be the same as onePrime", one)
 		}
-		fmt.Printf("Prime pass: %x\n", onePrime) // Print the summary hash from pass one
+		//fmt.Printf("Prime pass: %x\n", onePrime) // Print the summary hash from pass one
 	}
 }
 
@@ -505,4 +503,22 @@ func BenchmarkBPT_Update1(b *testing.B) {
 func BenchmarkBPT_Update2(b *testing.B) {
 	bpt := LoadBptCnt1(1, 10000000, 10000)
 	bpt.Update()
+}
+
+func TestNodeKey(t *testing.T) {
+	r := common.RandHash{}
+	h := r.NextA()
+	for i := 0; i < 254; i++ {
+		nh, ok := GetNodeKey(i, h)
+		//fmt.Printf("%08b %08b %08b\n",nh[0],nh[1],nh[2])
+		require.True(t, ok, "should have a NodeKey")
+		height, key, ok := GetHtKey(nh)
+		require.True(t, ok, "should be able to compute the height and key")
+		require.True(t, height == i, "Height should be the same")
+		left, right, ok := GetChildrenNodeKeys(nh)
+
+		require.True(t, bytes.Equal(key[:i>>3], left[:i>>3]), "key must be part of child key")
+		require.True(t, bytes.Equal(key[:i>>3], right[:i>>3]), "key must be part of child key")
+
+	}
 }
