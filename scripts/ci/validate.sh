@@ -381,9 +381,30 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
 
 section "Query votes chain"
-RESULT=$(accumulate -j data get dn/votes)
-RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -u -p)
-NODE_PUB_KEY=$(jq -re .address $NODE_PRIV_VAL)
-HEIGHT=$(echo $RESULT | jq -re .mainChain.height)
+#RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data| xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
+R1=$(accumulate -j data get dn/votes)
+echo $R1
+R2=$(echo "$R1" | jq -re .data.entry.data )
+echo $R2
+#xxd -r -p doesn't like the R2 string for some reason, so converting using sed instead
+R3=$(echo "$R2" | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+echo $R3
+NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL)
+VOTE_COUNT=$(echo "$R3" | jq -re '.votes|length')
+FOUND=0
+for i in {1..$VOTE_COUNT}; do
+  echo "COUNT=$i"
+  R4=$(echo "$R3" | jq -re .votes[$i].validator.address)
+  echo "ADDRESS = $R4"
+  R5=$(echo "$R5" | base64 -d)
+  echo "BINARY ADDRESS = $R5"
+  R6=$(echo "$R6" | xxd -p)
+  echo "HEX ADDRESS $R6"
+  if [ "$R6" == "${NODE_ADDRESS,,}" ]; then
+    echo "FOUND VOTE"
+    FOUND=1
+  fi
+done
+
 #NOTE: This test will only work consistently if we have a single node on the DN
-[ "$RESULT" == "$NODE_PUB_KEY" ] && success || die "No vote record found at DN height $HEIGHT"
+[ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
