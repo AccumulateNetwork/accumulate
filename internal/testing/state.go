@@ -231,6 +231,17 @@ func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
 	return WriteStates(db, adi)
 }
 
+func CreateDirectory(db DB, urlStr types.String) error {
+	identityUrl, err := url.Parse(*urlStr.AsString())
+	if err != nil {
+		return err
+	}
+
+	adi := protocol.NewADI()
+	adi.Url = identityUrl
+	return WriteStates(db, adi)
+}
+
 func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, credits float64) error {
 	err := CreateADI(db, key, urlStr)
 	if err != nil {

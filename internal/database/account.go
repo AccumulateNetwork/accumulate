@@ -134,6 +134,11 @@ func (r *Account) PutState(accountState state.Chain) error {
 	case *protocol.LiteTokenAccount, *protocol.LiteDataAccount,
 		*protocol.KeyBook, *protocol.KeyPage:
 		// Empty key book is OK
+	case *protocol.ADI:
+		// A directory is a sub ADI and does not have a key book
+		if len(accountState.Header().Url.Path) == 0 && accountState.Header().KeyBook == nil {
+			return fmt.Errorf("missing key book on ADI root")
+		}
 	default:
 		if accountState.Header().KeyBook == nil {
 			return fmt.Errorf("missing key book")

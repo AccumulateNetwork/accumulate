@@ -137,18 +137,44 @@ func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	})
 }
 
-func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
-	if u == nil {
-		account.Header().KeyBook = m.Origin.Header().KeyBook
-		return nil
+func (m *StateManager) setKeyBook(accountHdr *protocol.AccountHeader, keyBookUrl *url.URL) error {
+	var err error
+	if keyBookUrl == nil {
+		originBook := m.Origin.Header().KeyBook
+		if originBook != nil {
+			accountHdr.KeyBook = originBook
+		} else {
+			accountHdr.KeyBook, err = m.getDirectoryKeyBook()
+		}
+		return err
 	}
 
 	book := new(protocol.KeyBook)
-	err := m.LoadUrlAs(u, book)
+	err = m.LoadUrlAs(keyBookUrl, book)
 	if err != nil {
-		return fmt.Errorf("invalid key book %q: %v", u, err)
+		return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 	}
 
-	account.Header().KeyBook = u
+	accountHdr.KeyBook = keyBookUrl
 	return nil
+}
+
+// getDirectoryKeyBook does a hierarchical lookup for the key book in the directory's parent
+func (m *StateManager) getDirectoryKeyBook() (*url.URL, error) {
+	parentUrl, err := m.OriginUrl.Parent()
+	for {
+		if err != nil {
+			return nil, fmt.Errorf("no key book could be found in the hierarchy of directory/identity %s", m.OriginUrl)
+		}
+
+		parentADI := protocol.NewADI()
+		err = m.LoadUrlAs(parentUrl, parentADI)
+		if err != nil {
+			return nil, fmt.Errorf("can't load parent ADI of %s: %w", parentUrl, err)
+		}
+		if parentADI.KeyBook != nil {
+			return parentADI.KeyBook, nil
+		}
+		parentUrl, err = parentUrl.Parent()
+	}
 }

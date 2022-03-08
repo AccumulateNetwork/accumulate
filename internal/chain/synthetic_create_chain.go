@@ -99,6 +99,11 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		case protocol.AccountTypeKeyPage:
 			// A key page can be unbound
 
+		case protocol.AccountTypeIdentity:
+			// ADI root always has a key book, directory not
+			if record.Header().KeyBook == nil && len(record.Header().Url.Path) == 0 {
+				return nil, fmt.Errorf("ADI root %q does not specify a key book", u)
+			}
 		default:
 			// Anything else must have a key book
 			if record.Header().KeyBook == nil {

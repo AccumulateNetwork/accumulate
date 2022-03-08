@@ -31,7 +31,7 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	token.Properties = body.Properties
 	token.ManagerKeyBook = body.Manager
 
-	err := st.setKeyBook(token, body.KeyBookUrl)
+	err := st.setKeyBook(token.Header(), body.KeyBookUrl)
 	if err != nil {
 		return nil, err
 	}

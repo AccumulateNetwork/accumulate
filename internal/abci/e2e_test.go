@@ -431,6 +431,82 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 }
 
+func TestCreateAdiDataAccountInDirectory(t *testing.T) {
+
+	t.Run("Data Account data entry in directory", func(t *testing.T) {
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
+		adiKey := generateKey()
+		batch := n.db.Begin(true)
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		require.NoError(t, batch.Commit())
+
+		n.Batch(func(send func(*protocol.Envelope)) {
+			tdir := new(protocol.CreateDirectory)
+			tdir.Url = n.ParseUrl("FooBar/dir01")
+			send(newTxn("FooBar").
+				WithBody(tdir).
+				SignLegacyED25519(adiKey))
+		})
+		require.NoError(t, batch.Commit())
+
+		n.Batch(func(send func(*protocol.Envelope)) {
+			tac := new(protocol.CreateDataAccount)
+			tac.Url = n.ParseUrl("FooBar/dir01/oof")
+			send(newTxn("FooBar/dir01").
+				WithBody(tac).
+				SignLegacyED25519(adiKey))
+		})
+
+		r := n.GetDataAccount("FooBar/dir01/oof")
+		require.Equal(t, "acc://FooBar/dir01/oof", r.Url.String())
+		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/dir01").String())
+		require.Contains(t, n.GetDirectory("FooBar/dir01"), n.ParseUrl("FooBar/dir01/oof").String())
+
+		wd := new(protocol.WriteData)
+		n.Batch(func(send func(*protocol.Envelope)) {
+			for i := 0; i < 10; i++ {
+				wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("test id %d", i)))
+			}
+
+			wd.Entry.Data = []byte("thequickbrownfoxjumpsoverthelazydog")
+
+			send(newTxn("FooBar/oof").
+				WithBody(wd).
+				SignLegacyED25519(adiKey))
+		})
+
+		// Without the sleep, this test fails on Windows and macOS
+		time.Sleep(3 * time.Second)
+
+		// Test getting the data by URL
+		rde := new(protocol.ResponseDataEntry)
+		n.QueryAccountAs("FooBar/dir01/oof#data", rde)
+
+		if !rde.Entry.Equal(&wd.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry hash.
+		rde2 := new(protocol.ResponseDataEntry)
+		n.QueryAccountAs(fmt.Sprintf("FooBar/dir01/oof#data/%X", wd.Entry.Hash()), rde2)
+
+		if !rde.Entry.Equal(&rde2.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry set
+		rde3 := new(protocol.ResponseDataEntrySet)
+		n.QueryAccountAs("FooBar/dir01/oof#data/0:1", rde3)
+		if !rde.Entry.Equal(&rde3.DataEntries[0].Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+	})
+}
+
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
 		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)

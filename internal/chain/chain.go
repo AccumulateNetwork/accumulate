@@ -38,6 +38,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			BurnTokens{},
 			CreateDataAccount{},
 			CreateIdentity{},
+			CreateDirectory{},
 			CreateKeyBook{},
 			CreateKeyPage{},
 			CreateToken{},

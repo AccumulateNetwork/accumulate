@@ -2,13 +2,14 @@ package chain
 
 import (
 	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type CreateDirectory struct{}
 
-//func (CreateDirectory) Type() types.TxType { return types.TxTypeCreateDirectory }
+func (CreateDirectory) Type() protocol.TransactionType {
+	return protocol.TransactionTypeCreateDirectory
+}
 
 func (CreateDirectory) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// *protocol.IdentityCreate, *url.URL, state.Chain
@@ -23,7 +24,7 @@ func (CreateDirectory) Validate(st *StateManager, tx *protocol.Envelope) (protoc
 	}
 
 	if body.Url.Path == "" {
-		return nil, fmt.Errorf("URL %s is a root ADI, the directory should be a sub ADI", body.Url.String())
+		return nil, fmt.Errorf("URL %s is a root ADI, the directory must be a child entity", body.Url.String())
 	}
 
 	switch st.Origin.(type) {
@@ -34,7 +35,7 @@ func (CreateDirectory) Validate(st *StateManager, tx *protocol.Envelope) (protoc
 	}
 
 	identity := protocol.NewADI()
-	identity.Url = body.Url.JoinPath("/directory")
+	identity.Url = body.Url
 
 	st.Create(identity)
 	return nil, nil
