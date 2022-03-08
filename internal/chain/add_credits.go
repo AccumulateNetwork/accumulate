@@ -87,11 +87,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
 	}
 
-	if !account.CanDebitTokens(credits) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), credits)
+	if !account.CanDebitTokens(&body.Amount) {
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), body.Amount)
 	}
 
-	if !account.DebitTokens(credits) {
+	if !account.DebitTokens(&body.Amount) {
 		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
 	}
 	st.Update(account)
@@ -99,13 +99,13 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
 	copy(sdc.Cause[:], tx.GetTxHash())
-	sdc.Amount = body.Amount
+	sdc.Amount = *credits
 	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token
 	burnAcme := new(protocol.SyntheticBurnTokens)
 	copy(sdc.Cause[:], tx.GetTxHash())
-	burnAcme.Amount = *credits
+	burnAcme.Amount = body.Amount
 	st.Submit(tokenUrl, burnAcme)
 
 	return nil, nil
