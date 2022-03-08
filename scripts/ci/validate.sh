@@ -393,11 +393,9 @@ for ((i = 0; i < $VOTE_COUNT; i++)); do
   echo "COUNT=$i"
   R4=$(echo "$R3" | jq -re .votes[$i].validator.address)
   echo "ADDRESS = $R4"
-  R5=$(echo "$R5" | base64 -d)
-  echo "BINARY ADDRESS = $R5"
-  R6=$(echo "$R6" | xxd -p)
-  echo "HEX ADDRESS $R6"
-  if [ "$R6" == "${NODE_ADDRESS,,}" ]; then
+  R5=$(echo "$R5" | base64 -d | hexdump -e '"%x"')
+  echo "HEX ADDRESS = $R5"
+  if [ "$R5" == "${NODE_ADDRESS,,}" ]; then
     echo "FOUND VOTE"
     FOUND=1
   fi
