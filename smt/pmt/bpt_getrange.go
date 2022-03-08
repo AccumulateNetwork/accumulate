@@ -46,7 +46,7 @@ func (b *BPT) WalkRange(found *bool, node *BptNode, count int, key [32]byte, val
 			*found = true //                                        point. But we have nothing to do.
 			return        //                                               we are done.
 		case (entry).T() == TNode: //                               If a node, recurse and get its stuff.
-			values = b.WalkRange(found, (entry).(*BptNode), count, key, values)
+			values = b.WalkRange(found, (entry).(*BptNode), count, key, values) // **Note values is updated here only
 		default: //                                                 If not a node, not nil, it is a value.
 			v := (entry).(*Value)              //                   Get the value
 			*found = true                      //                   No matter what, start collecting the range
@@ -68,30 +68,21 @@ func (b *BPT) WalkRange(found *bool, node *BptNode, count int, key [32]byte, val
 
 	b.LoadNext(BIdx, bit, node, key) //   We also need the BIdx and bit to make sure the BPT is loaded.
 
-	if len(values) >= count {
-		return values
+	if len(values) >= count { //          See if done
+		return values //                     and leave if done
 	}
 
-	if !*found { //                       If we haven't found the starting point, the logic is different
-		if key[BIdx]&bit > 0 { //         Now look to the left only if the bit is set in the key for this height
-			do(node.Left)             //  Look Left
-			if len(values) >= count { //  See if we are done
-				return values //            and and leave if we are.
-			}
-			if *found { //                If looking left found the start, we can't
-				do(node.Right) //           ignore going right
-			}
-		} else { //                       But if the key doesn't have the bit set, we have to branch to the right
-			do(node.Right) //             Look Right; and we are done.
-		}
-	} else { //                           We have already found the starting point
-		do(node.Left)             //      So look left
-		if len(values) >= count { //      Check if done
-			return values //
-		} //
-		do(node.Right) //                 Look right
+	if *found || key[BIdx]&bit > 0 { //   If the start key is found, or going left tracks the start key
+		do(node.Left) //        then look Left to find the start key/collect range values
 	}
-	return values
+
+	if len(values) >= count { //          See if done
+		return values //                and leave if done
+	}
+
+	do(node.Right) //                     look to the right
+
+	return values //                      return the values found so far
 }
 
 // Insert

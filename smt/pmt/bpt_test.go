@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
@@ -298,16 +297,16 @@ func TestUpdateValues(t *testing.T) {
 		valSeed = sha256.Sum256(valSeed[:]) //   move the value
 	} // loop and continue
 
-	b := NewBPT()            //                Get a BPT
-	start := time.Now()      //                Set the clock
+	b := NewBPT() //                Get a BPT
+	//	start := time.Now()      //                Set the clock
 	for _, v := range pair { //                for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //  it into the PBT
 	}
 	b.Update()
-	one := b.Root.Hash                                                 // update the BPT to get the correct summary hash
-	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
-	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
-	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
+	one := b.Root.Hash // update the BPT to get the correct summary hash
+	//	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
+	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
+	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
 	if len(pair) > numElements/2 {
 		updatePair := pair[numElements/2]                   //                Pick a pair out in the middle of the list
 		updatePair.key = sha256.Sum256(updatePair.value[:]) //                  change the value,
@@ -318,7 +317,7 @@ func TestUpdateValues(t *testing.T) {
 		if bytes.Equal(one[:], onePrime[:]) {
 			t.Fatalf("one %x should not be the same as onePrime", one)
 		}
-		fmt.Printf("Prime pass: %x\n", onePrime) // Print the summary hash from pass one
+		//fmt.Printf("Prime pass: %x\n", onePrime) // Print the summary hash from pass one
 	}
 }
 
