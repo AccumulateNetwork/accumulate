@@ -554,7 +554,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		ac := new(protocol.AddCredits)
-		ac.Amount = *big.NewInt(55)
+		ac.Amount = *big.NewInt(55e6)
 		ac.Recipient = n.ParseUrl("foo/page0")
 
 		send(newTxn("foo/tokens").
@@ -567,17 +567,18 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
-	amount := big.NewInt(protocol.AcmePrecision) // Do everything with ACME precision
-	amount.Mul(amount, big.NewInt(55))
-	amount.Div(amount, big.NewInt(protocol.CreditsPerFiatUnit))
-	amount.Mul(amount, big.NewInt(protocol.AcmeOraclePrecision))
-	amount.Div(amount, big.NewInt(int64(ledgerState.ActiveOracle)))
 
-	expected := big.NewInt(int64(uint64(acmeAmount*protocol.AcmePrecision) - amount.Uint64()))
+	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
+	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
+	credits.Mul(credits, big.NewInt(55e6))                                // acme the user wants to spend
+	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
+	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
+
+	expected := big.NewInt(int64(uint64(acmeAmount*protocol.AcmePrecision) - credits.Uint64()))
 
 	ks := n.GetKeyPage("foo/page0")
 	acct := n.GetTokenAccount("foo/tokens")
-	balance := acct.Balance.Int64()
+	balance := &acct.Balance
 
 	require.Equal(t, int64(55), ks.CreditBalance.Int64())
 	require.Equal(t, expected, balance)

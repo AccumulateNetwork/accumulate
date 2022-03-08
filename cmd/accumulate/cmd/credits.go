@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
@@ -29,8 +28,8 @@ var creditsCmd = &cobra.Command{
 }
 
 func PrintCredits() {
-	fmt.Println("  accumulate credits [origin lite token account] [lite token account or key page url] [amount] 		Send credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		acme to credits to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin lite token account] [lite token account or key page url] [amount in acme] 		Send credits using a lite token account or adi key page to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount in acme] 		purchase credits using ACME to send to another lite token account or adi key page")
 }
 
 func AddCredits(origin string, args []string) (string, error) {
@@ -54,15 +53,14 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	//amt, err := strconv.ParseFloat(args[1], 64)
-	amt, err := amountToBigInt(protocol.ACME, args[1])
+	amt, err := amountToBigInt(protocol.ACME, args[1]) // amount in acme
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
-	credits.Amount = *amt.Mul(amt, big.NewInt(protocol.CreditPrecision))
+	credits.Amount = *amt
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {

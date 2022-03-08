@@ -31,13 +31,6 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("cannot purchase credits: acme oracle price has not been set")
 	}
 
-	// tokens = credits / (credits to dollars) / (dollars per token)
-	// amount := big.NewInt(protocol.AcmePrecision) // Do everything with ACME precision
-	// amount.Mul(amount, &body.Amount)             // Amount in credits wanted
-	// amount.Div(amount, big.NewInt(protocol.CreditsPerFiatUnit))
-	// amount.Mul(amount, big.NewInt(protocol.AcmeOraclePrecision))         //dollars / token
-	// amount.Div(amount, new(big.Int).SetUint64(ledgerState.ActiveOracle)) // Amount in acme
-
 	// If specifying amount of acme to spend
 	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
@@ -88,11 +81,14 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 
 	if !account.CanDebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), body.Amount)
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
 	}
 
 	if !account.DebitTokens(&body.Amount) {
 		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
+	}
+	if credits == big.NewInt(0) {
+		return nil, fmt.Errorf("%v credits", credits)
 	}
 	st.Update(account)
 

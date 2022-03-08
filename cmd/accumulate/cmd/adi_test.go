@@ -33,7 +33,7 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	//faucet the lite account to make sure there are tokens available
 	testCase5_1(t, tc)
 
-	_, err := tc.executeTx(t, "credits %s %s 1000", liteAccounts[0], liteAccounts[0])
+	_, err := tc.executeTx(t, "credits %s %s 10", liteAccounts[0], liteAccounts[0])
 	require.NoError(t, err)
 
 	_, err = tc.executeTx(t, "adi create %s acc://RedWagon red1", liteAccounts[0])

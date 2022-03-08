@@ -77,7 +77,7 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: liteUrl,
-				Amount:    *big.NewInt(1e5),
+				Amount:    *big.NewInt(1e10),
 			},
 		})
 
