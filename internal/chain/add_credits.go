@@ -32,20 +32,18 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 
 	// tokens = credits / (credits to dollars) / (dollars per token)
-	amount := big.NewInt(protocol.AcmePrecision) // Do everything with ACME precision
-
-	// credits wanted
-	amount.Mul(amount, &body.Amount) // Amount in credits
-	amount.Div(amount, big.NewInt(protocol.CreditsPerFiatUnit))
-	amount.Mul(amount, big.NewInt(protocol.AcmeOraclePrecision))         //dollars / token
-	amount.Div(amount, new(big.Int).SetUint64(ledgerState.ActiveOracle)) // Amount in acme
+	// amount := big.NewInt(protocol.AcmePrecision) // Do everything with ACME precision
+	// amount.Mul(amount, &body.Amount)             // Amount in credits wanted
+	// amount.Div(amount, big.NewInt(protocol.CreditsPerFiatUnit))
+	// amount.Mul(amount, big.NewInt(protocol.AcmeOraclePrecision))         //dollars / token
+	// amount.Div(amount, new(big.Int).SetUint64(ledgerState.ActiveOracle)) // Amount in acme
 
 	// If specifying amount of acme to spend
-	// credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
-	// credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
-	// credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend
-	// credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
-	// credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
+	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
+	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
+	credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend
+	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
+	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
 
 	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {
@@ -89,11 +87,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
 	}
 
-	if !account.CanDebitTokens(amount) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), amount)
+	if !account.CanDebitTokens(credits) {
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), credits)
 	}
 
-	if !account.DebitTokens(amount) {
+	if !account.DebitTokens(credits) {
 		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
 	}
 	st.Update(account)
@@ -107,7 +105,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	//Create synthetic burn token
 	burnAcme := new(protocol.SyntheticBurnTokens)
 	copy(sdc.Cause[:], tx.GetTxHash())
-	burnAcme.Amount = *amount
+	burnAcme.Amount = *credits
 	st.Submit(tokenUrl, burnAcme)
 
 	return nil, nil
