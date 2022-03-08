@@ -44,8 +44,6 @@ func TestBPT_Equal(t *testing.T) {
 	bpt2 := LoadBpt() // Get a bunch of nodes
 	//fmt.Printf("Max Height %d Max ID %d\n", bpt1.MaxHeight, bpt1.MaxNodeID)
 
-	unique := make(map[uint64]int64)
-
 	for i := int64(0); i < 100; i++ {
 		rand.Seed(i)
 		p1 := GetPath(bpt1)
@@ -95,8 +93,6 @@ func TestBPT_Equal(t *testing.T) {
 		if leaf.Left != nil && leaf.Left.T() == TNode {
 			t.Error("Last node is no leaf")
 		}
-		unique[p1[len(p1)-1].ID] = i
-
 		if len(p1) != len(p2) {
 			t.Error("Path is not the same")
 		}
@@ -117,9 +113,8 @@ func TestBPT_Equal(t *testing.T) {
 func TestNode_Marshal(t *testing.T) {
 	node1 := new(BptNode)
 	node1.Height = 27
-	node1.BBKey = [32]byte{0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 14, 15}
+	node1.NodeKey = [32]byte{0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 14, 15}
 	node1.Hash = [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 10, 20}
-	node1.ID = 87654
 
 	data := node1.Marshal()
 	node2 := new(BptNode)
