@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7046542c-f0c4-449b-81e6-ab6cb1da6e16" name="Changes" comment="more looping" />
+    <list default="true" id="7046542c-f0c4-449b-81e6-ab6cb1da6e16" name="Changes" comment="more looping">
+      <change beforePath="$PROJECT_DIR$/scripts/ci/validate.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/ci/validate.sh" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -86,10 +88,10 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Go Build.go build gitlab.com/accumulatenetwork/accumulate/cmd/accumulated" />
       <item itemvalue="Go Build.go build accumulated" />
-      <item itemvalue="Go Test.go test accumulate" />
+      <item itemvalue="Go Build.go build gitlab.com/accumulatenetwork/accumulate/cmd/accumulated" />
       <item itemvalue="Go Test.e2e_test.go" />
+      <item itemvalue="Go Test.go test accumulate" />
       <item itemvalue="Go Test.root_test.go" />
     </list>
     <recent_temporary>
@@ -143,12 +145,12 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>583</line>
+          <line>585</line>
           <option name="timeStamp" value="2" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>554</line>
+          <line>556</line>
           <option name="timeStamp" value="3" />
         </line-breakpoint>
       </breakpoints>

@@ -378,27 +378,16 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
 
 section "Query votes chain"
-#RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data| xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
-R1=$(accumulate -j data get dn/votes)
-echo $R1
-R2=$(echo "$R1" | jq -re .data.entry.data )
-echo $R2
-#xxd -r -p doesn't like the R2 string for some reason, so converting using sed instead
-R3=$(echo "$R2" | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
-echo $R3
+#xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
+RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+#convert the node address to search for to base64
 NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
-echo "NODE_ADDRESS = $NODE_ADDRESS"
-VOTE_COUNT=$(echo "$R3" | jq -re '.votes|length')
+VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
 FOUND=0
 for ((i = 0; i < $VOTE_COUNT; i++)); do
-  echo "COUNT=$i"
-  R4=$(echo "$R3" | jq -re .votes[$i].validator.address)
-  echo "ADDRESS = $R4"
-  if [ "$R4" == "$NODE_ADDRESS" ]; then
-    echo "FOUND VOTE"
+  R2=$(echo "$RESULT" | jq -re .votes[$i].validator.address)
+  if [ "$R2" == "$NODE_ADDRESS" ]; then
     FOUND=1
   fi
 done
-
-#NOTE: This test will only work consistently if we have a single node on the DN
 [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
