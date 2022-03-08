@@ -376,3 +376,18 @@ accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/da
 section "Query credits"
 RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
+
+section "Query votes chain"
+#xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
+RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+#convert the node address to search for to base64
+NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
+VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
+FOUND=0
+for ((i = 0; i < $VOTE_COUNT; i++)); do
+  R2=$(echo "$RESULT" | jq -re .votes[$i].validator.address)
+  if [ "$R2" == "$NODE_ADDRESS" ]; then
+    FOUND=1
+  fi
+done
+[ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"

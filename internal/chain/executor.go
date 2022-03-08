@@ -315,6 +315,22 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 		return abci.BeginBlockResponse{}, fmt.Errorf("cannot write ledger: %w", err)
 	}
 
+	//store votes from previous block, choosing to marshal as json to make it easily viewable by explorers
+
+	data, err := json.Marshal(&req.CommitInfo)
+	if err != nil {
+		m.logger.Error("cannot marshal voting info data")
+	} else {
+
+		wd := protocol.WriteData{}
+		wd.Entry.Data = data
+
+		err := m.processInternalDataTransaction(protocol.Votes, &wd)
+		if err != nil {
+			m.logger.Error(fmt.Sprintf("error processing internal vote transaction, %v", err))
+		}
+	}
+
 	return abci.BeginBlockResponse{}, nil
 }
 
