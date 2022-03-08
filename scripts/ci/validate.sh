@@ -381,12 +381,12 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
 
 section "Query votes chain"
-RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data| xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
+#RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data| xxd -r -p | jq -re .votes[0].validator.address | base64 -d | xxd -p)
 R1=$(accumulate -j data get dn/votes)
 echo $R1
 R2=$(echo "$R1" | jq -re .data.entry.data )
 echo $R2
-R3=$(echo "$R2" | xxd -r -p)
+R3=$(echo "$R2" | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf) #xxd -r -p)
 echo $R3
 R4=$(echo "$R3" | jq -re .votes[0].validator.address)
 echo $R4
