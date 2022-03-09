@@ -7,6 +7,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
@@ -151,8 +152,8 @@ func (b *Batch) UpdateBpt() {
 	b.bpt.Bpt.Update()
 }
 
-// RootHash returns the root hash of the BPT.
-func (b *Batch) RootHash() []byte {
+// BptRootHash returns the root hash of the BPT.
+func (b *Batch) BptRootHash() []byte {
 	// Make a copy
 	h := b.bpt.Bpt.Root.Hash
 	return h[:]
@@ -193,4 +194,13 @@ func (b *Batch) Commit() error {
 // Discard will result in a panic.
 func (b *Batch) Discard() {
 	b.store.Discard()
+}
+
+func (b *Batch) GetMinorRootChainAnchor(network *config.Network) ([]byte, error) {
+	ledger := b.Account(network.NodeUrl(protocol.Ledger))
+	chain, err := ledger.ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return nil, err
+	}
+	return chain.Anchor(), nil
 }
