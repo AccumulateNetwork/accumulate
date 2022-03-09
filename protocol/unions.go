@@ -31,6 +31,7 @@ type Signature interface {
 
 	GetPublicKey() []byte
 	GetSignature() []byte
+	GetRCDHash() []byte
 
 	Sign(nonce uint64, privateKey []byte, msghash []byte) error
 	Verify(hash []byte) bool

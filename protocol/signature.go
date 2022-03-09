@@ -3,11 +3,8 @@ package protocol
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha512"
-	"crypto/subtle"
 	"errors"
 
-	"github.com/FactomProject/ed25519/edwards25519"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
@@ -49,6 +46,10 @@ func (e *LegacyED25519Signature) Verify(hash []byte) bool {
 			e.Signature) //                                     with the signature
 }
 
+func (e *LegacyED25519Signature) GetRCDHash() []byte {
+	return nil
+}
+
 // GetPublicKey returns PublicKey.
 func (e *ED25519Signature) GetPublicKey() []byte {
 	return e.PublicKey
@@ -77,6 +78,10 @@ func (e *ED25519Signature) Verify(hash []byte) bool {
 	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
 }
 
+func (e *ED25519Signature) GetRCDHash() []byte {
+	return nil
+}
+
 // GetPublicKey returns PublicKey.
 func (e *RCD1Signature) GetPublicKey() []byte {
 	return e.PublicKey
@@ -102,31 +107,9 @@ func (e *RCD1Signature) Sign(nonce uint64, privateKey []byte, hash []byte) error
 }
 
 func (e *RCD1Signature) Verify(hash []byte) bool {
-	if e.Signature[63]&224 != 0 {
-		return false
-	}
+	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
+}
 
-	var A edwards25519.ExtendedGroupElement
-	if !A.FromBytes((*[32]byte)(e.PublicKey)) {
-		return false
-	}
-
-	h := sha512.New()
-	h.Write(e.Signature[:32])
-	h.Write(e.PublicKey[:])
-	h.Write(hash)
-	var digest [64]byte
-	h.Sum(digest[:0])
-
-	var hReduced [32]byte
-	edwards25519.ScReduce(&hReduced, &digest)
-
-	var R edwards25519.ProjectiveGroupElement
-	var b [32]byte
-	copy(b[:], e.Signature[32:])
-	edwards25519.GeDoubleScalarMultVartime(&R, &hReduced, &A, &b)
-
-	var checkR [32]byte
-	R.ToBytes(&checkR)
-	return subtle.ConstantTimeCompare(e.Signature[:32], checkR[:]) == 1
+func (e *RCD1Signature) GetRCDHash() []byte {
+	return e.RCDHash
 }

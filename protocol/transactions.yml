@@ -62,6 +62,9 @@ RCD1Signature:
       type: bytes
     - name: Signature
       type: bytes
+    - name: RCDHash
+      type: bytes
+
 
 ED25519Signature:
   kind: signature

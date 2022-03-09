@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
-	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6
 	github.com/boltdb/bolt v1.3.1
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/dgraph-io/badger v1.6.2
