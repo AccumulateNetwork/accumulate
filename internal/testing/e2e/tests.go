@@ -34,7 +34,8 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.Require().Equal(int64(acctesting.TestTokenAmount*acctesting.TokenMx), account.Balance.Int64())
 
 	var nonce uint64 = 1
-	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl, Amount: *big.NewInt(1e8)})
+	amtAcmeToBuyCredits := int64(10 * protocol.AcmePrecision)
+	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl, Amount: *big.NewInt(amtAcmeToBuyCredits)})
 	s.dut.SubmitTxn(tx)
 	s.dut.WaitForTxns(tx.GetTxHash())
 
@@ -68,10 +69,11 @@ func (s *Suite) TestCreateLiteAccount() {
 		s.dut.SubmitTxn(tx)
 		txids = append(txids, tx.GetTxHash())
 	}
+	total += amtAcmeToBuyCredits
 
 	s.dut.WaitForTxns(txids...)
 
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(4e4*acctesting.TokenMx-total), account.Balance.Int64())
+	s.Require().Equal(int64(5e5*protocol.AcmePrecision-total), account.Balance.Int64())
 }

@@ -34,7 +34,8 @@ func TestStateDBConsistency(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, getDb, true)
 	n := nodes[subnets[1]][0]
 
-	n.testLiteTx(10)
+	acmeToSpendOnCredits := 1e9 / 5
+	n.testLiteTx(10, acmeToSpendOnCredits)
 
 	for _, nodes := range nodes {
 		for _, node := range nodes {
@@ -63,5 +64,6 @@ func TestStateDBConsistency(t *testing.T) {
 	// Recreate the app and try to do more transactions
 	nodes = RunTestNet(t, subnets, daemons, getDb, false)
 	n = nodes[subnets[1]][0]
-	n.testLiteTx(10)
+
+	n.testLiteTx(10, acmeToSpendOnCredits)
 }

@@ -37,7 +37,7 @@ func TestProofADI(t *testing.T) {
 			SignLegacyED25519(liteKey))
 	})
 
-	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.AcmePrecision))
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
 
 	batch = n.db.Begin(true)
@@ -54,7 +54,7 @@ func TestProofADI(t *testing.T) {
 			SignLegacyED25519(adiKey))
 	})
 
-	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.AcmePrecision))
 	n.GetADI("RoadRunner")
 	n.GetTokenAccount("RoadRunner/Baz")
 
