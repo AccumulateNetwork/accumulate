@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 	"unicode"
@@ -60,6 +61,9 @@ const (
 
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
+
+	// MofNFactor is the factor of how many of the validator signatures are required respective of their total number
+	MofNFactor = 0.75
 )
 
 // AcmeUrl returns `acc://ACME`.
@@ -341,4 +345,9 @@ func IndexChain(name string, major bool) string {
 		return "major-" + name + "-index"
 	}
 	return "minor-" + name + "-index"
+}
+
+func GetValidatorsMOfN(nrOfValidators int) uint64 {
+	threshold := float64(nrOfValidators) * MofNFactor
+	return uint64(math.Round(threshold))
 }

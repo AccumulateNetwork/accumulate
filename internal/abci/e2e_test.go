@@ -82,7 +82,8 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 			exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
 			send(newTxn(sponsorAddr).
 				WithBody(exch).
-				SignLegacyED25519(sponsor))
+				SignLegacyED25519(sponsor).
+				Build())
 		}
 	})
 
@@ -106,7 +107,8 @@ func TestFaucet(t *testing.T) {
 			WithOrigin(protocol.FaucetUrl).
 			WithNonce(faucet.Nonce()).
 			WithBody(body).
-			Sign(protocol.SignWithFaucet))
+			Sign(protocol.SignWithFaucet).
+			Build())
 	})
 
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
@@ -132,7 +134,8 @@ func TestAnchorChain(t *testing.T) {
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
 			WithBody(adi).
-			SignLegacyED25519(liteAccount))
+			SignLegacyED25519(liteAccount).
+			Build())
 	})
 
 	// Sanity check
@@ -177,7 +180,8 @@ func TestAnchorChain(t *testing.T) {
 
 		send(newTxn(originUrl).
 			WithBody(wd).
-			SignLegacyED25519(dn.key.Bytes()))
+			SignLegacyED25519(dn.key.Bytes()).
+			Build())
 	})
 
 	// Get the anchor chain manager for DN
@@ -232,7 +236,7 @@ func TestCreateADI(t *testing.T) {
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
 			WithBody(adi).
-			SignLegacyED25519(liteAccount))
+			SignLegacyED25519(liteAccount).Build())
 	})
 
 	r := n.GetADI("RoadRunner")
@@ -285,7 +289,8 @@ func TestCreateLiteDataAccount(t *testing.T) {
 			wdt.Entry = firstEntry
 			send(newTxn("FooBar").
 				WithBody(wdt).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		partialChainId, err := protocol.ParseLiteDataAddress(liteDataAddress)
@@ -315,7 +320,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			tac.Url = n.ParseUrl("FooBar/oof")
 			send(newTxn("FooBar").
 				WithBody(tac).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
@@ -345,7 +351,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			cda.ManagerKeyBookUrl = n.ParseUrl("acc://FooBar/mgr/book1")
 			send(newTxn("FooBar").
 				WithBody(cda).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		u := n.ParseUrl("acc://FooBar/foo/book1")
@@ -372,7 +379,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			tac.Url = n.ParseUrl("FooBar/oof")
 			send(newTxn("FooBar").
 				WithBody(tac).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
@@ -389,7 +397,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 			send(newTxn("FooBar/oof").
 				WithBody(wd).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		// Without the sleep, this test fails on Windows and macOS
@@ -438,7 +447,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac.TokenUrl = protocol.AcmeUrl()
 			send(newTxn("FooBar").
 				WithBody(tac).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
@@ -472,7 +482,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac.KeyBookUrl = n.ParseUrl("foo/book1")
 			send(newTxn("FooBar").
 				WithBody(tac).
-				SignLegacyED25519(adiKey))
+				SignLegacyED25519(adiKey).
+				Build())
 		})
 
 		u := n.ParseUrl("foo/book1")
@@ -508,7 +519,8 @@ func TestLiteAccountTx(t *testing.T) {
 		send(newTxn(aliceUrl).
 			WithKeyPage(0, 2).
 			WithBody(exch).
-			SignLegacyED25519(alice))
+			SignLegacyED25519(alice).
+			Build())
 	})
 
 	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-3000), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
@@ -535,7 +547,8 @@ func TestAdiAccountTx(t *testing.T) {
 
 		send(newTxn("foo/tokens").
 			WithBody(exch).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	require.Equal(t, int64(acctesting.TokenMx-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
@@ -561,7 +574,8 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 		send(newTxn("foo/tokens").
 			WithBody(ac).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
@@ -604,7 +618,8 @@ func TestCreateKeyPage(t *testing.T) {
 
 		send(newTxn("foo").
 			WithBody(cms).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	spec := n.GetKeyPage("foo/keyset1")
@@ -637,7 +652,8 @@ func TestCreateKeyBook(t *testing.T) {
 
 		send(newTxn("foo").
 			WithBody(csg).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	group := n.GetKeyBook("foo/book1")
@@ -676,7 +692,8 @@ func TestAddKeyPage(t *testing.T) {
 
 		send(newTxn("foo/book1").
 			WithBody(cms).
-			SignLegacyED25519(testKey1))
+			SignLegacyED25519(testKey1).
+			Build())
 	})
 
 	spec := n.GetKeyPage("foo/page2")
@@ -709,7 +726,8 @@ func TestAddKey(t *testing.T) {
 
 		send(newTxn("foo/page1").
 			WithBody(body).
-			SignLegacyED25519(testKey))
+			SignLegacyED25519(testKey).
+			Build())
 	})
 
 	spec := n.GetKeyPage("foo/page1")
@@ -740,7 +758,8 @@ func TestUpdateKey(t *testing.T) {
 
 		send(newTxn("foo/page1").
 			WithBody(body).
-			SignLegacyED25519(testKey))
+			SignLegacyED25519(testKey).
+			Build())
 	})
 
 	spec := n.GetKeyPage("foo/page1")
@@ -769,7 +788,8 @@ func TestRemoveKey(t *testing.T) {
 
 		send(newTxn("foo/page1").
 			WithBody(body).
-			SignLegacyED25519(testKey2))
+			SignLegacyED25519(testKey2).
+			Build())
 	})
 
 	spec := n.GetKeyPage("foo/page1")
@@ -812,7 +832,8 @@ func TestSignatorHeight(t *testing.T) {
 
 		send(newTxn(liteUrl.String()).
 			WithBody(adi).
-			SignLegacyED25519(liteKey))
+			SignLegacyED25519(liteKey).
+			Build())
 	})
 
 	batch = n.db.Begin(true)
@@ -827,7 +848,8 @@ func TestSignatorHeight(t *testing.T) {
 		tac.TokenUrl = protocol.AcmeUrl()
 		send(newTxn("foo").
 			WithBody(tac).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	require.Equal(t, keyPageHeight, getHeight(keyPageUrl), "Key page height changed")
@@ -851,7 +873,8 @@ func TestCreateToken(t *testing.T) {
 
 		send(newTxn("foo").
 			WithBody(body).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	n.GetTokenIssuer("foo/tokens")
@@ -878,7 +901,8 @@ func TestIssueTokens(t *testing.T) {
 
 		send(newTxn("foo/tokens").
 			WithBody(body).
-			SignLegacyED25519(fooKey))
+			SignLegacyED25519(fooKey).
+			Build())
 	})
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
@@ -910,7 +934,8 @@ func TestInvalidDeposit(t *testing.T) {
 
 		send(newTxn(liteAddr.String()).
 			WithBody(body).
-			SignLegacyED25519(n.key.Bytes()))
+			SignLegacyED25519(n.key.Bytes()).
+			Build())
 	})[0]
 
 	tx := n.GetTx(id[:])
@@ -974,7 +999,8 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(validators.String()).
 			WithKeyPage(0, 1).
 			WithBody(body).
-			SignLegacyED25519(n.key.Bytes()))
+			SignLegacyED25519(n.key.Bytes()).
+			Build())
 	})
 
 	// Verify the validator was added
@@ -990,11 +1016,14 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(validators.String()).
 			WithKeyPage(0, 2).
 			WithBody(body).
-			SignLegacyED25519(n.key.Bytes()))
+			SignLegacyED25519(n.key.Bytes()).
+			SignLegacyED25519(nodeKey1.Bytes()).
+			Build())
 	})
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey2.PubKey()})
+	keys := n.client.Validators()
+	require.ElementsMatch(t, keys, []crypto.PubKey{n.key.PubKey(), nodeKey2.PubKey()})
 
 	// Remove a validator
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -1005,7 +1034,9 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(validators.String()).
 			WithKeyPage(0, 3).
 			WithBody(body).
-			SignLegacyED25519(n.key.Bytes()))
+			SignLegacyED25519(n.key.Bytes()).
+			SignLegacyED25519(nodeKey2.Bytes()).
+			Build())
 	})
 
 	// Verify the validator was removed

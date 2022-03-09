@@ -69,19 +69,24 @@ func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
 	return tb
 }
 
-func (tb TransactionBuilder) Sign(signer func(nonce uint64, hash []byte) (protocol.Signature, error)) *protocol.Envelope {
+func (tb TransactionBuilder) Sign(signer func(nonce uint64, hash []byte) (protocol.Signature, error)) TransactionBuilder {
 	sig, err := signer(tb.Transaction.Nonce, tb.GetTxHash())
 	if err != nil {
 		panic(err)
 	}
 
 	tb.Signatures = append(tb.Signatures, sig)
-	return tb.Envelope
+	return tb
 }
 
-func (tb TransactionBuilder) SignLegacyED25519(key []byte) *protocol.Envelope {
-	return tb.Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
+func (tb TransactionBuilder) SignLegacyED25519(key []byte) TransactionBuilder {
+	tb.Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
 		sig := new(protocol.LegacyED25519Signature)
 		return sig, sig.Sign(nonce, key, hash)
 	})
+	return tb
+}
+
+func (tb TransactionBuilder) Build() *protocol.Envelope {
+	return tb.Envelope
 }

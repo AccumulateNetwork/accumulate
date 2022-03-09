@@ -19,16 +19,6 @@ func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
 	return nil
 }
 
-// GetMofN
-// return the signature requirements of the Key Page.  Each Key Page requires
-// m of n signatures, where m <= n, and n is the number of keys on the key page.
-// m is the Threshold number of signatures required to validate a transaction
-func (ms *KeyPage) GetMofN() (m, n uint64) {
-	m = ms.Threshold
-	n = uint64(len(ms.Keys))
-	return m, n
-}
-
 // SetThreshold
 // set the signature threshold to M.  Returns an error if m > n
 func (ms *KeyPage) SetThreshold(m uint64) error {

@@ -65,5 +65,6 @@ func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, bod
 		WithKeyPage(0, s.dut.GetRecordHeight(sponsor.String())).
 		WithNonce(nonce).
 		WithBody(body).
-		SignLegacyED25519(key)
+		SignLegacyED25519(key).
+		Build()
 }

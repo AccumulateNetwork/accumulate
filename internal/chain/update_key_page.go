@@ -82,6 +82,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		bookUrl = book.Url
 	}
 
+	isValidatorBook := st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl)
 	switch body.Operation {
 	case protocol.KeyPageOperationAdd:
 		// Check that a NewKey was provided, and that the key isn't already on
@@ -101,8 +102,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 		page.Keys = append(page.Keys, key)
 
-		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.AddValidator(ed25519.PubKey(body.NewKey))
+		if isValidatorBook && len(body.NewKey) == ed25519.PubKeySize {
+			st.AddValidator(body.NewKey)
+			page.Threshold = protocol.GetValidatorsMOfN(len(page.Keys))
 		}
 
 	case protocol.KeyPageOperationUpdate:
@@ -120,7 +122,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			bodyKey.Owner = body.Owner
 		}
 
-		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+		if len(body.NewKey) == ed25519.PubKeySize && isValidatorBook {
 			st.DisableValidator(body.Key)
 			st.AddValidator(body.NewKey)
 		}
@@ -133,20 +135,26 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 		page.Keys = append(page.Keys[:indexKey], page.Keys[indexKey+1:]...)
 
-		if len(page.Keys) == 0 && priority == 0 {
+		keyCount := len(page.Keys)
+		if keyCount == 0 && priority == 0 {
 			return nil, fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
-		if page.Threshold > uint64(len(page.Keys)) {
-			page.Threshold = uint64(len(page.Keys))
-		}
-
-		if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+		if isValidatorBook {
 			st.DisableValidator(body.Key)
+			page.Threshold = protocol.GetValidatorsMOfN(keyCount)
+		} else {
+			if page.Threshold > uint64(keyCount) {
+				page.Threshold = uint64(keyCount)
+			}
 		}
 
 		// SetThreshold sets the signature threshold for the Key Page
 	case protocol.KeyPageOperationSetThreshold:
+		if isValidatorBook {
+			return nil, fmt.Errorf("the threshold of a validator book is controlled automatically and therefore it can't be set manually")
+		}
+
 		// Don't care what values are provided by keys....
 		if err := page.SetThreshold(body.Threshold); err != nil {
 			return nil, err
