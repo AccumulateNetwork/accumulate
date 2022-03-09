@@ -151,11 +151,6 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	daemon := daemons[protocol.Directory][0]
 	jrpc := daemon.Jrpc_TESTONLY()
 
-	rpcAddrs := make([]string, 0, 3)
-	for _, netName := range subnets[1:] {
-		rpcAddrs = append(rpcAddrs, daemons[netName][0].Config.RPC.ListenAddress)
-	}
-
 	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
 	require.NoError(t, err)
 	require.NotEqual(t, lite.Routing()%3, protocol.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
