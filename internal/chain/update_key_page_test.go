@@ -55,7 +55,8 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				WithOrigin(u).
 				WithKeyPage(idx, 1).
 				WithBody(body).
-				SignLegacyED25519(testKey)
+				SignLegacyED25519(testKey).
+				Build()
 
 			st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
 			require.NoError(t, err)

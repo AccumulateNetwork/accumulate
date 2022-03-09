@@ -36,7 +36,8 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 		WithKeyPage(0, 1).
 		WithNonce(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey)
+		SignLegacyED25519(fooKey).
+		Build()
 
 	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
 	require.NoError(t, err)

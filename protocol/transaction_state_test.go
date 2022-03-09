@@ -25,7 +25,8 @@ func TestTransactionState(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithOrigin(addr).
 		WithBody(&nts1).
-		SignLegacyED25519(key)
+		SignLegacyED25519(key).
+		Build()
 
 	txPendingState := state.NewPendingTransaction(env)
 	txPendingState.Url = &url.URL{Authority: "RedWagon", Path: "/myAccount"}

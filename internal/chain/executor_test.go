@@ -103,7 +103,8 @@ func BenchmarkHighTps(b *testing.B) {
 						ed := new(protocol.ED25519Signature)
 						err := ed.Sign(nonce, nodeKey, hash)
 						return ed, err
-					})
+					}).
+					Build()
 
 				_, err := exec.DeliverTx(env)
 				if err != nil {
@@ -121,7 +122,8 @@ func BenchmarkHighTps(b *testing.B) {
 						ed := new(protocol.ED25519Signature)
 						err := ed.Sign(nonce, nodeKey, hash)
 						return ed, err
-					})
+					}).
+					Build()
 
 				for i := 0; i < b.N; i++ {
 					*batchStorePtr = batch.Copy()
@@ -193,7 +195,8 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 			ed := new(protocol.ED25519Signature)
 			err := ed.Sign(nonce, key, hash)
 			return ed, err
-		})
+		}).
+		Build()
 
 	// Check passes
 	_, err = chain.CheckTx(env)

@@ -105,7 +105,8 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 						{Url: toUrl0, Amount: *big.NewInt(1)},
 					},
 				}).
-				SignLegacyED25519(fromKey)
+				SignLegacyED25519(fromKey).
+				Build()
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

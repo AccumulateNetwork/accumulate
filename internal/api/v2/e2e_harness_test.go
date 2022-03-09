@@ -120,7 +120,8 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		WithKeyPage(keyPageIndex, qr.MainChain.Height).
 		WithNonceTimestamp().
 		WithBody(params.Payload).
-		SignLegacyED25519(params.Key)
+		SignLegacyED25519(params.Key).
+		Build()
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction.Origin
@@ -158,7 +159,8 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIn
 		WithKeyPage(keyPageIndex, keyPageHeight).
 		WithNonceTimestamp().
 		WithBody(params.Payload).
-		SignLegacyED25519(params.Key)
+		SignLegacyED25519(params.Key).
+		Build()
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction.Origin
