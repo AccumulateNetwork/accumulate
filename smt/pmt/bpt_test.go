@@ -66,9 +66,6 @@ func TestBPT_Marshal(t *testing.T) {
 	}
 }
 
-
-
-
 // TestInsert
 // Sort to make sure we can add elements to the BPT and get
 // out hashes.  And that we can update the BPT
@@ -147,7 +144,7 @@ func TestInsertOrder(t *testing.T) {
 	for _, v := range pair { //        for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //    into the PBT
 	}
-	b.Update()         // update the BPT to get the correct summary hash
+	b.Update()              // update the BPT to get the correct summary hash
 	one := b.GetRoot().Hash //
 	//tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
@@ -162,7 +159,7 @@ func TestInsertOrder(t *testing.T) {
 	for _, v := range pair { //                                         Insert the scrambled pairs
 		b.Insert(v.key, v.value) //                                     into the BPT
 	} //
-	b.Update()         // Update the summary hash
+	b.Update()              // Update the summary hash
 	two := b.GetRoot().Hash //
 	//tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
@@ -245,7 +242,7 @@ func TestUpdateValues(t *testing.T) {
 		updatePair.key = sha256.Sum256(updatePair.value[:]) //                  change the value,
 		b.Insert(updatePair.key, updatePair.value)          //                  then insert it into BPT
 		b.Update()                                          //
-		onePrime := b.GetRoot().Hash                             //                Update and get the summary hash
+		onePrime := b.GetRoot().Hash                        //                Update and get the summary hash
 
 		if bytes.Equal(one[:], onePrime[:]) {
 			t.Fatalf("one %x should not be the same as onePrime", one)

@@ -50,7 +50,6 @@ func (b *BPT) GetRoot() (root *BptNode) {
 	return b.Root
 }
 
-
 // Equal
 // Used to do some testing
 func (b *BPT) Equal(b2 *BPT) (equal bool) {
@@ -94,7 +93,7 @@ func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
 	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
 	copy(b.RootHash[:], data[:32])
-	data = data[32:]
+	data = data[:32]
 	return data
 }
 

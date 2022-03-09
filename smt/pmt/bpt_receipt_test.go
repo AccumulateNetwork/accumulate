@@ -50,7 +50,7 @@ func TestBPT_receipt(t *testing.T) {
 
 	keyList := append([][]byte{}, keys.List...)                                                   // Get all the keys
 	sort.Slice(keyList, func(i, j int) bool { return bytes.Compare(keyList[i], keyList[j]) < 0 }) //
-	require.False(t, chk(t, bpt.GetRoot()), "should not work as updates are needed")                   //
+	require.False(t, chk(t, bpt.GetRoot()), "should not work as updates are needed")              //
 
 	bpt.Update()
 

@@ -151,7 +151,6 @@ func TestManager(t *testing.T) {
 			//		fmt.Printf("%d last:  %x key: %x\n", i, last, key)
 		}
 	}
-
 }
 
 func TestManagerSeries(t *testing.T) {
@@ -191,9 +190,9 @@ func TestManagerSeries(t *testing.T) {
 				if bytes.Equal(priorRoot[:], currentRoot[:]) { //        Prior should be different, cause we added stuff
 					t.Error("added stuff, hash should not be equal") //
 				} //
-				bptManager.Bpt.Update()
 				//fmt.Printf("%x %x\n", priorRoot, currentRoot)
 				previous = currentRoot //                                Make previous track current state of database
+				bptManager.Bpt.Update()
 			}
 		}
 		bptManager := NewBPTManager(storeTx)    //  One more check that previous is the same as current when

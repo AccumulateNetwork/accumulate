@@ -149,12 +149,17 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
+	if err != nil {
+		sentry.CaptureException(err)
+	}
+
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: batch.RootHash(),
+		LastBlockAppHash: anchor,
 	}
 }
 
@@ -233,9 +238,10 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	_, err := app.Chain.BeginBlock(BeginBlockRequest{
-		IsLeader: bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
-		Height:   req.Header.Height,
-		Time:     req.Header.Time,
+		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
+		Height:     req.Header.Height,
+		Time:       req.Header.Time,
+		CommitInfo: &req.LastCommitInfo,
 	})
 	if err != nil {
 		app.fatal(err, true)
