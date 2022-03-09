@@ -580,7 +580,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	acct := n.GetTokenAccount("foo/tokens")
 	balance := &acct.Balance
 
-	require.Equal(t, int64(55), ks.CreditBalance.Int64())
+	require.Equal(t, int64(275), ks.CreditBalance.Int64())
 	require.Equal(t, expected, balance)
 }
 
