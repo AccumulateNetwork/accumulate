@@ -38,6 +38,10 @@ TransactionQueryResponse:
     - name: TransactionHash
       type: bytes
       alternative: Txid
+    - name: Transaction
+      type: protocol.Transaction
+      pointer: true
+      marshal-as: reference
     - name: Signatures
       repeatable: true
       type: protocol.Signature

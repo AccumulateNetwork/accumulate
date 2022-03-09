@@ -29,6 +29,7 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, envelope *prot
 	res.Data = envelope.Transaction.Body
 	res.TransactionHash = txid[:]
 	res.MainChain = ms
+	res.Transaction = envelope.Transaction
 	res.KeyPage = new(KeyPage)
 	res.KeyPage.Height = envelope.Transaction.KeyPageHeight
 	res.KeyPage.Index = envelope.Transaction.KeyPageIndex

@@ -141,6 +141,7 @@ type TransactionQueryResponse struct {
 	Origin             *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	KeyPage            *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	TransactionHash    []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	Transaction        *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signatures         []protocol.Signature        `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Status             *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids     [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
@@ -648,6 +649,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		KeyPage            *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash    *string                     `json:"transactionHash,omitempty"`
 		Txid               *string                     `json:"txid,omitempty"`
+		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
 		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
 		Status             *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
@@ -664,6 +666,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.KeyPage = v.KeyPage
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Transaction = v.Transaction
 	u.Signatures = make([]json.RawMessage, len(v.Signatures))
 	for i, x := range v.Signatures {
 		if y, err := json.Marshal(x); err != nil {
@@ -1188,6 +1191,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		KeyPage            *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash    *string                     `json:"transactionHash,omitempty"`
 		Txid               *string                     `json:"txid,omitempty"`
+		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
 		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
 		Status             *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
@@ -1204,6 +1208,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.KeyPage = v.KeyPage
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Transaction = v.Transaction
 	u.Signatures = make([]json.RawMessage, len(v.Signatures))
 	for i, x := range v.Signatures {
 		if y, err := json.Marshal(x); err != nil {
@@ -1253,6 +1258,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 			v.TransactionHash = x
 		}
 	}
+	v.Transaction = u.Transaction
 	v.Signatures = make([]protocol.Signature, len(u.Signatures))
 	for i, x := range u.Signatures {
 		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
