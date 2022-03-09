@@ -91,10 +91,10 @@ func (b *BPT) GetRange(startKey [32]byte, count int) (values []*Value, lastKey [
 	if count == 0 { // If they didn't ask for anything, there is nothing to do.
 		return
 	}
-	var found bool                                                // We use found as flag as a solid state that we found our start
-	values = b.WalkRange(&found, b.Root, count, startKey, values) // Look for the starting point, and collect a "count" number of entries
-	if len(values) > 0 {                                          // If we got something, go ahead and return the last element
-		lastKey = values[len(values)-1].Key //                       The lastKey can be easily used to ask for another contiguous range
+	var found bool                                                     // We use found as flag as a solid state that we found our start
+	values = b.WalkRange(&found, b.GetRoot(), count, startKey, values) // Look for the starting point, and collect a "count" number of entries
+	if len(values) > 0 {                                               // If we got something, go ahead and return the last element
+		lastKey = values[len(values)-1].Key //                             The lastKey can be easily used to ask for another contiguous range
 	}
 	return values, lastKey
 } //

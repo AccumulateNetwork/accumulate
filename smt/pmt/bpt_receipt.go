@@ -73,7 +73,7 @@ func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receip
 // Returns the receipt for the current state for the given chainID
 func (b *BPT) GetReceipt(chainID [32]byte) *managed.Receipt { //          The location of a value is determined by the chainID (a key)
 	receipt := new(managed.Receipt)
-	receipt.MDRoot = b.CollectReceipt(0, 0x80, b.Root, chainID, receipt) //
+	receipt.MDRoot = b.CollectReceipt(0, 0x80, b.GetRoot(), chainID, receipt) //
 	if receipt.MDRoot == nil {
 		return nil
 	}

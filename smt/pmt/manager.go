@@ -17,16 +17,16 @@ type Manager struct {
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
 func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPTManager
-	manager := new(Manager)            //     Allocate the struct
-	manager.DBManager = dbManager      //     populate with pointer to the database manager
-	manager.Bpt = NewBPT()             //     Allocate a new BPT
-	manager.Bpt.manager = manager      //     Allow the Bpt to call back to the manager for db access
-	data, e := dbManager.Get(kBptRoot) //     Get the BPT settings from disk
-	if e == nil {                      //     If nothing is found, well this is a fresh instance
-		manager.Bpt.UnMarshal(data)        // But if data is found, then unmarshal
-		manager.LoadNode(manager.Bpt.Root) // and load up the root data for the BPT
+	manager := new(Manager)            //          Allocate the struct
+	manager.DBManager = dbManager      //          populate with pointer to the database manager
+	manager.Bpt = NewBPT()             //          Allocate a new BPT
+	manager.Bpt.manager = manager      //          Allow the Bpt to call back to the manager for db access
+	data, e := dbManager.Get(kBptRoot) //          Get the BPT settings from disk
+	if e == nil {                      //          If nothing is found, well this is a fresh instance
+		manager.Bpt.UnMarshal(data)             // But if data is found, then unmarshal
+		manager.LoadNode(manager.Bpt.GetRoot()) // and load up the root data for the BPT
 	} //
-	return manager //                         Return a new BPT manager
+	return manager //                              Return a new BPT manager
 }
 
 // GetRootHash
@@ -35,7 +35,7 @@ func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPT
 // the current root hash, which would be true up to the point that any
 // node in the BPT is updated.
 func (m *Manager) GetRootHash() [32]byte {
-	return m.Bpt.Root.Hash
+	return m.Bpt.RootHash
 }
 
 // LoadNode
