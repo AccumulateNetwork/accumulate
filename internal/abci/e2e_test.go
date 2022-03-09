@@ -74,6 +74,9 @@ func TestEvilNode(t *testing.T) {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
 
+	//sleep to allow some blocks to process to generate evidencein
+	time.Sleep(time.Second * 2)
+
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
 	evData, err := batch.Account(dn.network.NodeUrl(protocol.Evidence)).Data()
