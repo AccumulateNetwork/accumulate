@@ -132,11 +132,11 @@
     <list>
       <item itemvalue="Go Build.go build accumulated" />
       <item itemvalue="Go Build.go build gitlab.com/accumulatenetwork/accumulate/cmd/accumulated" />
-      <item itemvalue="Go Test.go test accumulate" />
       <item itemvalue="Go Test.e2e_test.go" />
-      <item itemvalue="Go Test.root_test.go" />
       <item itemvalue="Go Test.executor_test.go" />
+      <item itemvalue="Go Test.go test accumulate" />
       <item itemvalue="Go Test.root_test.go (1)" />
+      <item itemvalue="Go Test.root_test.go" />
     </list>
     <recent_temporary>
       <list>
