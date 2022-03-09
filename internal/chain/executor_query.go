@@ -20,6 +20,7 @@ import (
 
 func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
 	qv := u.QueryValues()
+
 	switch {
 	case qv.Get("txid") != "":
 		// Query by transaction ID
@@ -256,8 +257,19 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 						return nil, nil, err
 					}
 					res := &protocol.ResponseDataEntry{}
-
-					copy(res.EntryHash[:], entry.Hash())
+					_, err = protocol.ParseLiteDataAddress(u)
+					if err != nil {
+						copy(res.EntryHash[:], entry.Hash())
+						res.Entry = *entry
+						return []byte("data-entry"), res, nil
+					}
+					firstentry, err := data.Entry(int64(0))
+					if err != nil {
+						return nil, nil, err
+					}
+					id := protocol.ComputeLiteDataAccountId(firstentry)
+					newh, _ := protocol.ComputeLiteEntryHashFromEntry(id, entry)
+					copy(res.EntryHash[:], newh)
 					res.Entry = *entry
 					return []byte("data-entry"), res, nil
 				}
