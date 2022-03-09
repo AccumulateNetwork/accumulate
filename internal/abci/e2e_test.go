@@ -88,7 +88,7 @@ func TestEvilNode(t *testing.T) {
 	err = json.Unmarshal(de.Data, &ev)
 	require.NoError(t, err)
 	require.Greaterf(t, len(ev), 0, "no evidence data")
-	require.Greater(t, ev[0].Height, 0, "no valid evidence available")
+	require.Greater(t, int64(ev[0].Height), int64(0), "no valid evidence available")
 
 }
 
