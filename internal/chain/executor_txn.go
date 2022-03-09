@@ -186,11 +186,8 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 
 	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
 
-	txPending := state.NewPendingTransaction(env)
-	txAccepted, _ := state.NewTransaction(txPending)
-
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, nil)
 	if err != nil {
 		return err
 	}
