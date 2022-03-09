@@ -53,6 +53,7 @@ type FakeTendermint struct {
 	txMu     *sync.RWMutex
 	txCond   *sync.Cond
 	txActive int
+	isEvil   bool
 }
 
 type txStatus struct {
@@ -66,7 +67,7 @@ type txStatus struct {
 	Done          bool
 }
 
-func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, pubKey crypto.PubKey, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, pubKey crypto.PubKey, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration, isEvil bool) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
@@ -82,6 +83,7 @@ func NewFakeTendermint(app <-chan abci.Application, db *database.Database, netwo
 	c.txPend = map[[32]byte]bool{}
 	c.txMu = new(sync.RWMutex)
 	c.txCond = sync.NewCond(c.txMu.RLocker())
+	c.isEvil = isEvil
 
 	c.validators = []crypto.PubKey{pubKey}
 
@@ -353,6 +355,17 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		begin := abci.RequestBeginBlock{}
 		begin.Header.Height = height
 		begin.Header.ProposerAddress = c.address
+		if c.isEvil {
+			//add evidence of something happening to the evidence chain.
+			ev := abci.Evidence{}
+			ev.Validator.Address = c.address
+			ev.Type = abci.EvidenceType_LIGHT_CLIENT_ATTACK
+			ev.Height = height
+			ev.Time.Add(interval * time.Duration(ev.Height))
+			ev.TotalVotingPower = 1
+			begin.ByzantineValidators = append(begin.ByzantineValidators, ev)
+		}
+
 		c.app.BeginBlock(begin)
 
 		if debugTX {

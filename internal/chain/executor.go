@@ -316,7 +316,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 	}
 
 	//store votes from previous block, choosing to marshal as json to make it easily viewable by explorers
-	data, err := json.Marshal(&req.CommitInfo)
+	data, err := json.Marshal(req.CommitInfo)
 	if err != nil {
 		m.logger.Error("cannot marshal voting info data as json")
 	} else {
@@ -338,7 +338,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 			wd := protocol.WriteData{}
 			wd.Entry.Data = data
 
-			err := m.processInternalDataTransaction(protocol.Votes, &wd)
+			err := m.processInternalDataTransaction(protocol.Evidence, &wd)
 			if err != nil {
 				m.logger.Error(fmt.Sprintf("error processing internal evidence transaction, %v", err))
 			}
