@@ -111,13 +111,18 @@ func (m *MerkleManager) GetChainState(key storage.Key) (merkleState *MerkleState
 func (m *MerkleManager) ReadChainHead(key storage.Key) (ms *MerkleState, err error) {
 	ms = new(MerkleState)
 	ms.HashFunction = m.MS.HashFunction
-	state, e := m.Manager.Get(key.Append("Head")) //   Get the state for the Merkle Tree
-	if e == nil {                                 //   If the State exists
+	state, err := m.Manager.Get(key.Append("Head")) //   Get the state for the Merkle Tree
+	switch {
+	case err == nil: //   If the State exists
 		if err := ms.UnMarshal(state); err != nil { //     Set that as our state
 			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", key) // Blow up of the database is bad
 		}
+		return ms, nil
+	case errors.Is(err, storage.ErrNotFound):
+		return ms, nil
+	default:
+		return nil, err
 	}
-	return ms, nil
 }
 
 // Equal
