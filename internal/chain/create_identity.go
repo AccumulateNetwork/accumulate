@@ -55,7 +55,7 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	bookExists := st.LoadUrlAs(bookUrl, book) == nil
 	if !bookExists {
 		book.Url = bookUrl
-		book.Pages = append(book.Pages, pageUrl)
+		book.PageCount = 1
 	}
 
 	identity := protocol.NewADI()
