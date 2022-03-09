@@ -132,24 +132,24 @@ func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error 
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
-func AddCredits(db DB, account *url.URL, credits float64) error {
+func AddCredits(db DB, account *url.URL, acme float64) error {
 	state, err := db.Account(account).GetState()
 	if err != nil {
 		return err
 	}
 
-	state.(protocol.CreditHolder).CreditCredits(*new(big.Int).SetUint64(uint64(credits * protocol.CreditPrecision)))
+	state.(protocol.CreditHolder).CreditCredits(*new(big.Int).SetUint64(uint64(acme * protocol.AcmePrecision)))
 	return db.Account(account).PutState(state)
 }
 
-func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, credits float64) error {
+func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, acme float64) error {
 	url := AcmeLiteAddressTmPriv(key)
 	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
 	if err != nil {
 		return err
 	}
 
-	return AddCredits(db, url, credits)
+	return AddCredits(db, url, acme)
 }
 
 func WriteStates(db DB, chains ...state.Chain) error {

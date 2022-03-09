@@ -44,19 +44,24 @@ func TestCreateLiteAccount(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	var count = 11
-	originAddr, balances := n.testLiteTx(count)
-	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
+	acmeToSpendOnCredits := 100.0
+	originAddr, balances := n.testLiteTx(count, acmeToSpendOnCredits)
+	amountSent := float64(count * 1000)
+	initialAmount := acctesting.TestTokenAmount * protocol.AcmePrecision
+	currentBalance := n.GetLiteTokenAccount(originAddr).Balance.Int64()
+	totalAmountSent := initialAmount - amountSent
+	require.Equal(t, int64(totalAmountSent), currentBalance)
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
 }
 
-func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
+func (n *FakeNode) testLiteTx(count int, acmeToSpend float64) (string, map[string]int64) {
 	_, sponsor, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(n.t, err)
 	sponsorAddr := acctesting.AcmeLiteAddressStdPriv(sponsor).String()
 
-	recipients := make([]string, 10)
+	recipients := make([]string, count)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key).String()
@@ -67,7 +72,9 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 	})
 
 	batch := n.db.Begin(true)
-	n.Require().NoError(acctesting.AddCredits(batch, acctesting.AcmeLiteAddressStdPriv(sponsor), 1e9))
+	//acme to credits @ $0.05 acme price is 1:5
+
+	n.Require().NoError(acctesting.AddCredits(batch, acctesting.AcmeLiteAddressStdPriv(sponsor), acmeToSpend))
 	n.require.NoError(batch.Commit())
 
 	balance := map[string]int64{}
@@ -118,7 +125,8 @@ func TestAnchorChain(t *testing.T) {
 
 	liteAccount := generateKey()
 	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
+	acmeToSpend := 1e6 / 5
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, acmeToSpend))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*Tx)) {
@@ -552,9 +560,10 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 	require.NoError(t, batch.Commit())
 
+	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
 	n.Batch(func(send func(*transactions.Envelope)) {
 		ac := new(protocol.AddCredits)
-		ac.Amount = *big.NewInt(55e6)
+		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
 		ac.Recipient = n.ParseUrl("foo/page0")
 
 		send(newTxn("foo/tokens").
@@ -568,20 +577,22 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
 
+	//Credits I should have received
+
 	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
-	credits.Mul(credits, big.NewInt(55e6))                                // acme the user wants to spend
+	credits.Mul(credits, big.NewInt(acmeToSpendOnCredits))                // acme the user wants to spend
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
 	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
 
-	expected := big.NewInt(int64(uint64(acmeAmount*protocol.AcmePrecision) - credits.Uint64()))
+	expectedCreditsToReceive := credits.Int64()
+	//the balance of the account should be
 
 	ks := n.GetKeyPage("foo/page0")
 	acct := n.GetTokenAccount("foo/tokens")
-	balance := &acct.Balance
 
-	require.Equal(t, int64(275), ks.CreditBalance.Int64())
-	require.Equal(t, expected, balance)
+	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance.Int64())
+	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
 }
 
 func TestCreateKeyPage(t *testing.T) {
