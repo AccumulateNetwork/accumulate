@@ -236,7 +236,8 @@ func TestCreateADI(t *testing.T) {
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
 			WithBody(adi).
-			SignLegacyED25519(liteAccount).Build())
+			SignLegacyED25519(liteAccount).
+			Build())
 	})
 
 	r := n.GetADI("RoadRunner")
