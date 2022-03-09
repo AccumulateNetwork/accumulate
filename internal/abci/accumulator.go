@@ -322,7 +322,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 	}
 
-	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), app.Chain.CheckTx, req.Tx)
+	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), app.Chain.DeliverTx, req.Tx)
 	if err != nil {
 		return abci.ResponseDeliverTx{
 			Code: uint32(err.Code),

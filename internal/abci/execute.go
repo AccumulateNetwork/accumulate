@@ -41,7 +41,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 			status.Code = err.Code.ID()
 			status.Message = err.Error()
 		} else if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
-			logger.Debug("Check succeeded",
+			logger.Debug("Transaction succeeded",
 				"type", typ,
 				"txid", logging.AsHex(txid),
 				"hash", logging.AsHex(hash))
