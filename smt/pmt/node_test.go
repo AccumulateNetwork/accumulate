@@ -11,7 +11,7 @@ import (
 // (But if you set the seed, you can get the same random path)
 func GetPath(bpt *BPT) (path []*BptNode) {
 	bpt.Update()
-	here := bpt.Root //                                 Find a leaf node
+	here := bpt.GetRoot() //                                 Find a leaf node
 	for {
 		path = append(path, here)
 		if rand.Int()&1 == 0 {
