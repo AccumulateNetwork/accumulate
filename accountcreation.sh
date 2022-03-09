@@ -1,7 +1,7 @@
 rm -rf  C:/Users/jathi/.accumulate
 ACC_API=http://127.0.1.1:26660/v2
 echo $ACC_API
-#go build ./cmd/accumulate
+go build ./cmd/accumulate
 echo "generating new lite token accounts......."
 ./accumulate account generate
 ./accumulate account generate

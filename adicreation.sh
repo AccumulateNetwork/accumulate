@@ -11,4 +11,4 @@ echo "ADI Created!!"
 echo "Buying credits for your ADI "
 ./accumulate credits $Account1 acc://testadi1/testpage1 1000 -s local
 echo "Credits added :>"
-echo "your adi is $(./accumulate get acc://testadi1 -s local)"
+#echo "your adi is $(./accumulate adi get acc://testadi1 -s local)"
