@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="7046542c-f0c4-449b-81e6-ab6cb1da6e16" name="Changes" comment="merge with AC-1101">
+    <list default="true" id="7046542c-f0c4-449b-81e6-ab6cb1da6e16" name="Changes" comment="added test and fixed an issue">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/internal/abci/e2e_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/abci/e2e_test.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/internal/abci/fakenode_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/abci/fakenode_test.go" afterDir="false" />
@@ -46,7 +46,7 @@
     <property name="node.js.selected.package.tslint" value="(autodetect)" />
     <property name="settings.editor.selected.configurable" value="go.vgo" />
   </component>
-  <component name="RunManager" selected="Go Test.root_test.go (1)">
+  <component name="RunManager" selected="Go Test.e2e_test.go">
     <configuration default="true" type="GoApplicationRunConfiguration" factoryName="Go Application">
       <module name="accumulated" />
       <working_directory value="$PROJECT_DIR$" />
@@ -140,8 +140,8 @@
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Go Test.root_test.go (1)" />
         <item itemvalue="Go Test.e2e_test.go" />
+        <item itemvalue="Go Test.root_test.go (1)" />
         <item itemvalue="Go Test.executor_test.go" />
         <item itemvalue="Go Test.root_test.go" />
       </list>
@@ -177,7 +177,8 @@
     <MESSAGE value="loop test" />
     <MESSAGE value="more looping" />
     <MESSAGE value="merge with AC-1101" />
-    <option name="LAST_COMMIT_MESSAGE" value="merge with AC-1101" />
+    <MESSAGE value="added test and fixed an issue" />
+    <option name="LAST_COMMIT_MESSAGE" value="added test and fixed an issue" />
   </component>
   <component name="VgoProject">
     <integration-enabled>true</integration-enabled>
@@ -191,41 +192,6 @@
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>110</line>
-          <option name="timeStamp" value="10" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>100</line>
-          <option name="timeStamp" value="23" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>96</line>
-          <option name="timeStamp" value="24" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>109</line>
-          <option name="timeStamp" value="25" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/internal/abci/e2e_test.go</url>
-          <line>107</line>
-          <option name="timeStamp" value="26" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/internal/chain/executor_query.go</url>
-          <line>199</line>
-          <option name="timeStamp" value="32" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
-          <url>file://$PROJECT_DIR$/cmd/accumulate/cmd/root_test.go</url>
-          <line>74</line>
-          <option name="timeStamp" value="33" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/cmd/accumulate/cmd/root_test.go</url>
           <line>55</line>
           <option name="timeStamp" value="34" />
@@ -235,14 +201,12 @@
           <line>95</line>
           <option name="timeStamp" value="35" />
         </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/cmd/accumulate/cmd/root_test.go</url>
+          <line>75</line>
+          <option name="timeStamp" value="38" />
+        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
-    <watches-manager>
-      <configuration name="GoTestRunConfiguration">
-        <watch expression="balance" />
-        <watch expression="expected" />
-        <watch expression="data" />
-      </configuration>
-    </watches-manager>
   </component>
 </project>
