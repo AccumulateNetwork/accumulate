@@ -427,7 +427,7 @@ func (m *Executor) commit(force bool) ([]byte, error) {
 	}
 
 	//return anchor from minor root anchor chain
-	anchor, err := m.blockBatch.GetMinorRootChainAnchor(&m.Network)
+	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, err
 	}
