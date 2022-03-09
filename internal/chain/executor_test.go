@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -18,14 +19,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func BenchmarkHighTps(b *testing.B) {
-	store := new(memory.DB)
-	_ = store.InitDB("", nil)
+	store := memory.New(nil)
 	db := database.New(store, nil)
 
 	network := config.Network{
@@ -45,8 +46,7 @@ func BenchmarkHighTps(b *testing.B) {
 	require.NoError(b, err)
 	require.NoError(b, exec.Start())
 
-	kv := new(memory.DB)
-	_ = kv.InitDB("", nil)
+	kv := memory.New(nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
 		Network:     network,
 		GenesisTime: time.Now(),
@@ -134,5 +134,83 @@ func BenchmarkHighTps(b *testing.B) {
 			})
 		})
 	}
+}
 
+func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
+	// Setup
+	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
+	db := database.OpenInMemory(logger)
+	key := acctesting.GenerateKey(t.Name())
+	network := config.Network{
+		Type:          config.BlockValidator,
+		LocalSubnetID: t.Name(),
+	}
+	chain, err := chain.NewNodeExecutor(chain.ExecutorOptions{
+		DB:      db,
+		Logger:  logger,
+		Key:     key,
+		Network: network,
+		Router:  acctesting.NullRouter{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, chain.Start())
+
+	// Genesis
+	temp := memory.New(logger)
+	_, err = genesis.Init(temp, genesis.InitOpts{
+		Network:     network,
+		GenesisTime: time.Now(),
+		Logger:      logger,
+		Validators: []tmtypes.GenesisValidator{
+			{PubKey: ed25519.PubKey(key[32:])},
+		},
+	})
+	require.NoError(t, err)
+
+	state, err := temp.MarshalJSON()
+	require.NoError(t, err)
+
+	_, err = chain.InitChain(state, time.Now(), 1)
+	require.NoError(t, err)
+
+	// Start a block
+	_, err = chain.BeginBlock(abci.BeginBlockRequest{
+		IsLeader: true,
+		Height:   2,
+		Time:     time.Now(),
+	})
+	require.NoError(t, err)
+
+	// Create a synthetic transaction where the origin does not exist
+	env := acctesting.NewTransaction().
+		WithOrigin(url.MustParse("acc://account-that-doesnt-exist")).
+		WithNonceTimestamp().
+		WithBody(&protocol.SyntheticDepositCredits{
+			Cause:  [32]byte{1},
+			Amount: 1,
+		}).
+		Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
+			ed := new(protocol.ED25519Signature)
+			err := ed.Sign(nonce, key, hash)
+			return ed, err
+		})
+
+	// Check passes
+	_, err = chain.CheckTx(env)
+	require.Nilf(t, err, "%v", err)
+
+	// Deliver fails
+	_, err = chain.DeliverTx(env)
+	require.NotNil(t, err)
+
+	// Commit the block
+	_, err = chain.ForceCommit()
+	require.NoError(t, err)
+
+	// Verify that the synthetic transaction was recorded
+	batch := db.Begin(false)
+	defer batch.Discard()
+	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
+	require.NoError(t, err, "Failed to get the synthetic transaction status")
+	require.NotZero(t, status.Code)
 }

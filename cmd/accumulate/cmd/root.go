@@ -74,6 +74,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(versionCmd)
 	cmd.AddCommand(tokenCmd)
 	cmd.AddCommand(managerCmd)
+	cmd.AddCommand(oracleCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)

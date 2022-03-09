@@ -605,6 +605,17 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	for i, txid := range res.SyntheticTxids {
 		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
 	}
+
+	for _, receipt := range res.Receipts {
+		out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		if receipt.Error != "" {
+			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
+		}
+		if !receipt.Receipt.Convert().Validate() {
+			out += fmt.Sprintf("  Invalid!!\n")
+		}
+	}
+
 	return out, nil
 }
 

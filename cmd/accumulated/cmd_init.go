@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/rs/zerolog"
@@ -27,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	etcd "go.etcd.io/etcd/client/v3"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,6 +59,7 @@ var flagInit struct {
 	NoWebsite     bool
 	Reset         bool
 	LogLevels     string
+	Etcd          []string
 }
 
 var flagInitNode struct {
@@ -89,6 +92,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
+	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -250,10 +254,52 @@ func initNode(cmd *cobra.Command, args []string) {
 	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.LocalSubnetID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Subnet
+
+	if flagInit.Net != "" {
+		config.Accumulate.Network.LocalAddress = parseHost(flagInit.Net)
+		//need to find the subnet and add the local address to it as well.
+		localNode := cfg.Node{Address: flagInit.Net, Type: nodeType}
+		for i, s := range config.Accumulate.Network.Subnets {
+			if s.ID == config.Accumulate.Network.LocalSubnetID {
+				//loop through all the nodes and add persistent peers
+				for _, n := range s.Nodes {
+					//don't bother to fetch if we already have it.
+					nodeHost, _, err := net.SplitHostPort(parseHost(n.Address))
+					if err != nil {
+						warnf("invalid host from node %s", n.Address)
+						continue
+					}
+					if netAddr != nodeHost {
+						tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", nodeHost, netPort+networks.TmRpcPortOffset))
+						warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+
+						status, err := tmClient.Status(context.Background())
+						warnf("failed to get status of %s with error %v", n.Address, err)
+
+						peers := config.P2P.PersistentPeers
+						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
+							status.NodeInfo.NodeID, nodeHost, netPort+networks.TmP2pPortOffset)
+					}
+				}
+
+				//prepend the new node to the list
+				config.Accumulate.Network.Subnets[i].Nodes = append([]cfg.Node{localNode}, config.Accumulate.Network.Subnets[i].Nodes...)
+				break
+			}
+		}
+	}
+
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
 		config.LogLevel = flagInit.LogLevels
+	}
+
+	if len(flagInit.Etcd) > 0 {
+		config.Accumulate.Storage.Type = cfg.EtcdStorage
+		config.Accumulate.Storage.Etcd = new(etcd.Config)
+		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
+		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 	}
 
 	if flagInit.Reset {
@@ -519,6 +565,13 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 	}
 	if flagInit.NoWebsite {
 		config.Accumulate.Website.Enabled = false
+	}
+
+	if len(flagInit.Etcd) > 0 {
+		config.Accumulate.Storage.Type = cfg.EtcdStorage
+		config.Accumulate.Storage.Etcd = new(etcd.Config)
+		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
+		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 	}
 
 	if !flagInitDevnet.Docker {

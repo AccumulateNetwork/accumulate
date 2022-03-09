@@ -146,44 +146,42 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 	printed := new(int64)
 
 	for i := 0; i < int(manager.MS.Count); i++ {
-		go func(i int) {
-			atomic.AddInt64(running, 1)
-			for j := i; j < int(manager.MS.Count); j++ {
-				element := GetHash(i)
-				anchor := GetHash(j)
+		atomic.AddInt64(running, 1)
+		for j := i; j < int(manager.MS.Count); j++ {
+			element := GetHash(i)
+			anchor := GetHash(j)
 
-				r, _ := GetReceipt(manager, element, anchor)
-				if i < 0 || i >= int(manager.MS.Count) || //       If (i) is out of range
-					j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
-					j < i { //                                    Or if the anchor is before the element
-					if r != nil { //                            then you should not be able to generate a receipt
-						t.Error("Should not be able to generate a receipt")
-						return
-					}
-				} else {
-					if r == nil {
-						t.Error("Failed to generate receipt", i, j)
-						return
-					}
-					if !r.Validate() {
-						t.Error("Receipt fails for element ", i, " anchor ", j)
-						return
-					}
-					atomic.AddInt64(total, 1)
-				}
-				t := atomic.LoadInt64(total)
-				if t-atomic.LoadInt64(printed) >= 100000 {
-					atomic.StoreInt64(printed, t)
-					seconds := int64(time.Now().Sub(start).Seconds()) + 1
-					fmt.Printf("Element: %7d     Receipts generated: %12s     Rate: %8d/s\n",
-						i, humanize.Comma(t), t/seconds)
-				}
-				if t > receiptCount {
+			r, _ := GetReceipt(manager, element, anchor)
+			if i < 0 || i >= int(manager.MS.Count) || //       If (i) is out of range
+				j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
+				j < i { //                                    Or if the anchor is before the element
+				if r != nil { //                            then you should not be able to generate a receipt
+					t.Error("Should not be able to generate a receipt")
 					return
 				}
+			} else {
+				if r == nil {
+					t.Error("Failed to generate receipt", i, j)
+					return
+				}
+				if !r.Validate() {
+					t.Error("Receipt fails for element ", i, " anchor ", j)
+					return
+				}
+				atomic.AddInt64(total, 1)
 			}
-			atomic.AddInt64(running, -1)
-		}(i)
+			t := atomic.LoadInt64(total)
+			if t-atomic.LoadInt64(printed) >= 100000 {
+				atomic.StoreInt64(printed, t)
+				seconds := int64(time.Now().Sub(start).Seconds()) + 1
+				fmt.Printf("Element: %7d     Receipts generated: %12s     Rate: %8d/s\n",
+					i, humanize.Comma(t), t/seconds)
+			}
+			if t > receiptCount {
+				return
+			}
+		}
+		atomic.AddInt64(running, -1)
 		if atomic.LoadInt64(total) > receiptCount {
 			break
 		}
@@ -203,8 +201,8 @@ func TestBadgerReceipts(t *testing.T) {
 		t.Skip("Skipping test: running CI: flaky")
 	}
 
-	badger := new(badger.DB)
-	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
+	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"), nil)
+	require.NoError(t, err)
 	defer badger.Close()
 
 	manager, err := NewMerkleManager(badger.Begin(true), 2)
@@ -212,7 +210,7 @@ func TestBadgerReceipts(t *testing.T) {
 
 	PopulateDatabase(manager, 700)
 
-	GenerateReceipts(manager, 150000, t)
+	GenerateReceipts(manager, 1500, t)
 
 }
 

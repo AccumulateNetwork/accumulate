@@ -205,15 +205,12 @@ accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transac
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
 success
 
-if false; then
-    # TODO Enable after AC-1088 is complete. AC-809 causes this to fail because of how nonces are handled.
-    section "Signing the transaction with the same key does not deliver it"
-    wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
-    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
-    wait-for-tx $TXID
-    success
-fi
+section "Signing the transaction with the same key does not deliver it"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+wait-for-tx $TXID
+success
 
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
@@ -375,6 +372,25 @@ TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
 section "Create ADI Data Account with wait"
 cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data1
 accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/data1"
+
+section "Query credits"
+RESULT=$(accumulate -j oracle  | jq -re .price)
+[ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
+
+section "Query votes chain"
+#xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
+RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+#convert the node address to search for to base64
+NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
+VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
+FOUND=0
+for ((i = 0; i < $VOTE_COUNT; i++)); do
+  R2=$(echo "$RESULT" | jq -re .votes[$i].validator.address)
+  if [ "$R2" == "$NODE_ADDRESS" ]; then
+    FOUND=1
+  fi
+done
+[ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
 
 section "Transaction with Memo"
 TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)

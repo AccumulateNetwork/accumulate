@@ -12,8 +12,7 @@ import (
 )
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
-	db, err := database.Open("", true, nil)
-	require.NoError(t, err)
+	db := database.OpenInMemory(nil)
 
 	fooKey := generateKey()
 	batch := db.Begin(true)

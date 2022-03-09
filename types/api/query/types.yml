@@ -103,6 +103,8 @@ TxReceipt:
     - name: Receipt
       type: protocol.Receipt
       marshal-as: reference
+    - name: Error
+      type: string
 
 ResponsePending:
   fields:
