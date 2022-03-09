@@ -154,7 +154,7 @@ func (b *Batch) UpdateBpt() {
 // RootHash returns the root hash of the BPT.
 func (b *Batch) RootHash() []byte {
 	// Make a copy
-	h := b.bpt.Bpt.Root.Hash
+	h := b.bpt.Bpt.RootHash
 	return h[:]
 }
 

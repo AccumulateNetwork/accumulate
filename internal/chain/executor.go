@@ -223,7 +223,7 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) ([]b
 	case err == nil:
 		bpt := pmt.NewBPT()
 		bpt.UnMarshal(data)
-		hash = bpt.Root.Hash
+		hash = bpt.RootHash
 	case errors.Is(err, storage.ErrNotFound):
 		// OK
 	default:
