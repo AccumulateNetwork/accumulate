@@ -74,9 +74,6 @@ func TestEvilNode(t *testing.T) {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
 
-	//sleep to allow some blocks to process to generate evidencein
-	time.Sleep(time.Second * 2)
-
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
 	evData, err := batch.Account(dn.network.NodeUrl(protocol.Evidence)).Data()
@@ -88,7 +85,7 @@ func TestEvilNode(t *testing.T) {
 	err = json.Unmarshal(de.Data, &ev)
 	require.NoError(t, err)
 	require.Greaterf(t, len(ev), 0, "no evidence data")
-	require.Greater(t, int64(ev[0].Height), int64(0), "no valid evidence available")
+	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
 
 }
 
