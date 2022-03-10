@@ -61,7 +61,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		}
 
 		rootIdentity := tx.Transaction.Origin.RootIdentity()
-		if rootIdentity == originIdentity {
+		if rootIdentity.Equal(originIdentity) && !protocol.AcmeUrl().Equal(body.Token) {
 			return nil, fmt.Errorf("invalid origin, expecting origin format acc://lite-account/lite-identity/... but got %s", tx.Transaction.Origin.String())
 		}
 		err = st.AddDirectoryEntry(rootIdentity, tx.Transaction.Origin)
