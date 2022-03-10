@@ -3,6 +3,7 @@ package testing
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -330,10 +331,12 @@ func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey
 	page.KeyBook = bookUrl
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
-	if len(publicKeyHash) > 0 {
+	if len(publicKeyHash) == 1 {
 		key := new(protocol.KeySpec)
 		key.PublicKey = publicKeyHash[0]
 		page.Keys = []*protocol.KeySpec{key}
+	} else if len(publicKeyHash) > 1 {
+		return errors.New("CreateKeyBook only supports one page key at the moment") // TOOO do we need to suport this? (Also in create_book.go)
 	}
 
 	accounts := []protocol.Account{book, page}

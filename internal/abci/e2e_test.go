@@ -702,7 +702,7 @@ func TestAddKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"), testKey.PubKey().Bytes())
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
@@ -731,7 +731,7 @@ func TestUpdateKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"), testKey.PubKey().Bytes())
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
@@ -761,9 +761,20 @@ func TestRemoveKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
+
+	// Add second key because CreateKeyBook can't do it
+	n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperationAdd
+		body.NewKey = testKey2.PubKey().Bytes()
+
+		send(newTxn("foo/book1/1").
+			WithBody(body).
+			SignLegacyED25519(testKey1))
+	})
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
@@ -771,6 +782,7 @@ func TestRemoveKey(t *testing.T) {
 		body.Key = testKey1.PubKey().Bytes()
 
 		send(newTxn("foo/book1/1").
+			WithKeyPage(0, 2).
 			WithBody(body).
 			SignLegacyED25519(testKey2))
 	})
