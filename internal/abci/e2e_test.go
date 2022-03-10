@@ -803,7 +803,9 @@ func TestSignatorHeight(t *testing.T) {
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
-	keyPageUrl, err := url.Parse("foo/book0/1")
+	keyBookUrl, err := url.Parse("foo/book")
+	require.NoError(t, err)
+	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
 	require.NoError(t, err)
 
 	batch := n.db.Begin(true)
@@ -822,9 +824,7 @@ func TestSignatorHeight(t *testing.T) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("foo")
 		adi.PublicKey = fooKey.PubKey().Bytes()
-		var err error
-		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
-		require.NoError(t, err)
+		adi.KeyBookUrl = keyBookUrl
 
 		send(newTxn(liteUrl.String()).
 			WithBody(adi).
@@ -832,7 +832,7 @@ func TestSignatorHeight(t *testing.T) {
 	})
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book0/1"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, keyPageUrl, 1e9))
 	require.NoError(t, batch.Commit())
 
 	keyPageHeight := getHeight(keyPageUrl)
@@ -976,7 +976,7 @@ func TestUpdateValidators(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	validators := n.network.NodeUrl(protocol.ValidatorBook + "0")
+	validators := protocol.FormatKeyPageUrl(n.network.NodeUrl(protocol.ValidatorBook), 0)
 
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})

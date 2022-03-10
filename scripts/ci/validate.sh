@@ -321,7 +321,7 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Create a sub ADI"
-wait-for cli-tx adi create keytest keytest-1-0 keytest/sub1 keytest-2-0 keytest/sub1/book keytest/sub1/book/1
+wait-for cli-tx adi create keytest keytest-1-0 keytest/sub1 keytest-2-0 keytest/sub1/book
 accumulate adi get keytest/sub1 1> /dev/null && success || die "Cannot find keytest/sub1"
 
 section "Add credits to the sub ADI's key page 0"
