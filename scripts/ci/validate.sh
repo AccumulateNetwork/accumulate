@@ -377,6 +377,12 @@ section "Query credits"
 RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
 
+section "Transaction with Memo"
+TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
+wait-for-tx $TXID
+MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.memo)
+[ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
+
 section "Query votes chain"
 #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
 RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
@@ -392,7 +398,3 @@ for ((i = 0; i < $VOTE_COUNT; i++)); do
 done
 [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
 
-section "Transaction with Memo"
-TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
-wait-for-tx $TXID
-accumulate -j tx get $TXID | echo -re

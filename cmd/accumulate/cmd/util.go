@@ -264,20 +264,26 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 		params.Memo = Memo
 	}
 	if Metadata != "" {
-		dataSet := strings.Split(Metadata, ":")
-		switch dataSet[0] {
-		case "hex":
-			bytes, err := hex.DecodeString(dataSet[1])
-			if err != nil {
-				return nil, err
+		if strings.Contains(Metadata, ":") {
+			dataSet := strings.Split(Metadata, ":")
+			switch dataSet[0] {
+			case "hex":
+				bytes, err := hex.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				params.Metadata = bytes
+			case "base64":
+				bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				params.Metadata = bytes
+			default:
+				params.Metadata = []byte(dataSet[1])
 			}
-			params.Metadata = bytes
-		case "base64":
-			bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
-			if err != nil {
-				return nil, err
-			}
-			params.Metadata = bytes
+		} else {
+			params.Metadata = []byte(Metadata)
 		}
 	}
 
