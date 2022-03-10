@@ -20,6 +20,7 @@ type TransactionMax uint64
 
 type Account interface {
 	encoding.BinaryValue
+	MerkleHash() []byte
 	GetType() AccountType
 	Type() AccountType
 	Header() *AccountHeader
@@ -27,6 +28,7 @@ type Account interface {
 
 type Signature interface {
 	encoding.BinaryValue
+	MerkleHash() []byte
 	Type() SignatureType
 
 	GetPublicKey() []byte
@@ -38,11 +40,13 @@ type Signature interface {
 
 type TransactionBody interface {
 	encoding.BinaryValue
+	MerkleHash() []byte
 	GetType() TransactionType
 	Type() TransactionType
 }
 
 type TransactionResult interface {
+	MerkleHash() []byte
 	GetType() TransactionType
 	Type() TransactionType
 	encoding.BinaryValue

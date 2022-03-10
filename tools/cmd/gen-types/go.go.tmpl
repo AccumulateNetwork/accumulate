@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	{{- if not (isPkg "protocol")}}
@@ -148,6 +149,34 @@ func (v *{{.Name}}) IsValid() error {
 	default:
 		return errors.New(strings.Join(errs, "; "))
 	}
+}
+{{end}}{{end}}
+
+{{range .Types}}{{if .IsBinary}}
+func (v *{{.Name}}) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	{{if .IsUnion}}
+	hasher.AddEnum({{pkg "protocol"}}{{.UnionType}}{{.UnionValue}})
+	{{- end}}
+
+	{{- range .Embeddings}}
+	hasher.AddValue(&v.{{.Name}})
+	{{- end}}
+
+	{{- range .Fields}}
+	{{- if .IsMarshalled}}
+	{{- if .OmitEmpty}}
+	if !({{isZero . (print "v." .Name)}}) {
+		{{hashValue . "hasher" (print "v." .Name)}}
+	}
+	{{- else }}
+	{{hashValue . "hasher" (print "v." .Name)}}
+	{{- end}}
+	{{- end}}
+	{{- end}}
+
+	return hasher.MerkleHash()
 }
 {{end}}{{end}}
 

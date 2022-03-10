@@ -62,6 +62,7 @@ var goFuncs = template.FuncMap{
 
 	"areEqual":             GoAreEqual,
 	"binaryMarshalValue":   GoBinaryMarshalValue,
+	"hashValue":            GoHashValue,
 	"binaryUnmarshalValue": GoBinaryUnmarshalValue,
 	"valueToJson":          GoValueToJson,
 	"valueFromJson":        GoValueFromJson,
@@ -340,6 +341,27 @@ func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, err
 	}
 
 	return fmt.Sprintf("\tfor _, v := range %s { %s.Write%s(%d, %sv) }", varName, writerName, method, field.Number, ptrPrefix), nil
+}
+
+func GoHashValue(field *Field, hasherName, varName string) (string, error) {
+	method, wantPtr := goBinaryMethod(field)
+	if method == "" {
+		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
+	}
+
+	var ptrPrefix string
+	switch {
+	case wantPtr && !field.Pointer:
+		ptrPrefix = "&"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "*"
+	}
+
+	if !field.Repeatable {
+		return fmt.Sprintf("\t%s.Add%s(%s%s)", hasherName, method, ptrPrefix, varName), nil
+	}
+
+	return fmt.Sprintf("\tfor _, v := range %s { %s.Add%s(%sv) }", varName, hasherName, method, ptrPrefix), nil
 }
 
 func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, error) {

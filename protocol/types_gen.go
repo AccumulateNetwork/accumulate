@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -5520,6 +5521,1196 @@ func (v *WriteDataTo) IsValid() error {
 	default:
 		return errors.New(strings.Join(errs, "; "))
 	}
+}
+
+func (v *ADI) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeIdentity)
+	hasher.AddValue(&v.AccountHeader)
+
+	return hasher.MerkleHash()
+}
+
+func (v *AccountHeader) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(v.KeyBook == nil) {
+		hasher.AddUrl(v.KeyBook)
+	}
+	if !(v.ManagerKeyBook == nil) {
+		hasher.AddUrl(v.ManagerKeyBook)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *AcmeFaucet) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeAcmeFaucet)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *AcmeOracle) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Price == 0) {
+		hasher.AddUint(v.Price)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *AddCredits) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeAddCredits)
+	if !(v.Recipient == nil) {
+		hasher.AddUrl(v.Recipient)
+	}
+	if !(v.Amount == 0) {
+		hasher.AddUint(v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *Anchor) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeAnchor)
+	hasher.AddValue(&v.AccountHeader)
+
+	return hasher.MerkleHash()
+}
+
+func (v *AnchorMetadata) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddValue(&v.ChainMetadata)
+	if !(v.Account == nil) {
+		hasher.AddUrl(v.Account)
+	}
+	if !(v.Index == 0) {
+		hasher.AddUint(v.Index)
+	}
+	if !(v.SourceIndex == 0) {
+		hasher.AddUint(v.SourceIndex)
+	}
+	if !(v.SourceBlock == 0) {
+		hasher.AddUint(v.SourceBlock)
+	}
+	if !(len(v.Entry) == 0) {
+		hasher.AddBytes(v.Entry)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *AnchoredRecord) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Record) == 0) {
+		hasher.AddBytes(v.Record)
+	}
+	if !(v.Anchor == ([32]byte{})) {
+		hasher.AddHash(&v.Anchor)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *BurnTokens) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeBurnTokens)
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *ChainMetadata) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Name) == 0) {
+		hasher.AddString(v.Name)
+	}
+	if !(v.Type == 0) {
+		hasher.AddEnum(v.Type)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *ChainParams) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Data) == 0) {
+		hasher.AddBytes(v.Data)
+	}
+	if !(!v.IsUpdate) {
+		hasher.AddBool(v.IsUpdate)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *CreateDataAccount) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeCreateDataAccount)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(v.KeyBookUrl == nil) {
+		hasher.AddUrl(v.KeyBookUrl)
+	}
+	if !(v.ManagerKeyBookUrl == nil) {
+		hasher.AddUrl(v.ManagerKeyBookUrl)
+	}
+	if !(!v.Scratch) {
+		hasher.AddBool(v.Scratch)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *CreateIdentity) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeCreateIdentity)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(len(v.PublicKey) == 0) {
+		hasher.AddBytes(v.PublicKey)
+	}
+	if !(len(v.KeyBookName) == 0) {
+		hasher.AddString(v.KeyBookName)
+	}
+	if !(len(v.KeyPageName) == 0) {
+		hasher.AddString(v.KeyPageName)
+	}
+	if !(v.Manager == nil) {
+		hasher.AddUrl(v.Manager)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *CreateKeyBook) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeCreateKeyBook)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(len(v.Pages) == 0) {
+		for _, v := range v.Pages {
+			hasher.AddUrl(v)
+		}
+	}
+	if !(v.Manager == nil) {
+		hasher.AddUrl(v.Manager)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *CreateKeyPage) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeCreateKeyPage)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(len(v.Keys) == 0) {
+		for _, v := range v.Keys {
+			hasher.AddValue(v)
+		}
+	}
+	if !(v.Manager == nil) {
+		hasher.AddUrl(v.Manager)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *CreateToken) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeCreateToken)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(v.KeyBookUrl == nil) {
+		hasher.AddUrl(v.KeyBookUrl)
+	}
+	if !(len(v.Symbol) == 0) {
+		hasher.AddString(v.Symbol)
+	}
+	if !(v.Precision == 0) {
+		hasher.AddUint(v.Precision)
+	}
+	if !(v.Properties == nil) {
+		hasher.AddUrl(v.Properties)
+	}
+	if !((v.InitialSupply).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.InitialSupply)
+	}
+	if !(!v.HasSupplyLimit) {
+		hasher.AddBool(v.HasSupplyLimit)
+	}
+	if !(v.Manager == nil) {
+		hasher.AddUrl(v.Manager)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *CreateTokenAccount) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeCreateTokenAccount)
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(v.TokenUrl == nil) {
+		hasher.AddUrl(v.TokenUrl)
+	}
+	if !(v.KeyBookUrl == nil) {
+		hasher.AddUrl(v.KeyBookUrl)
+	}
+	if !(!v.Scratch) {
+		hasher.AddBool(v.Scratch)
+	}
+	if !(v.Manager == nil) {
+		hasher.AddUrl(v.Manager)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *DataAccount) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeDataAccount)
+	hasher.AddValue(&v.AccountHeader)
+	if !(!v.Scratch) {
+		hasher.AddBool(v.Scratch)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *DataEntry) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.ExtIds) == 0) {
+		for _, v := range v.ExtIds {
+			hasher.AddBytes(v)
+		}
+	}
+	if !(len(v.Data) == 0) {
+		hasher.AddBytes(v.Data)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *DirectoryIndexMetadata) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Count == 0) {
+		hasher.AddUint(v.Count)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *DirectoryQueryResult) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			hasher.AddString(v)
+		}
+	}
+	if !(len(v.ExpandedEntries) == 0) {
+		for _, v := range v.ExpandedEntries {
+			hasher.AddValue(v)
+		}
+	}
+	hasher.AddUint(v.Total)
+
+	return hasher.MerkleHash()
+}
+
+func (v *ED25519Signature) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(SignatureTypeED25519)
+	if !(len(v.PublicKey) == 0) {
+		hasher.AddBytes(v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		hasher.AddBytes(v.Signature)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *EmptyResult) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeUnknown)
+
+	return hasher.MerkleHash()
+}
+
+func (v *Envelope) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			hasher.AddValue(v)
+		}
+	}
+	if !(len(v.TxHash) == 0) {
+		hasher.AddBytes(v.TxHash)
+	}
+	if !(v.Transaction == nil) {
+		hasher.AddValue(v.Transaction)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *IndexEntry) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Source == 0) {
+		hasher.AddUint(v.Source)
+	}
+	if !(v.Anchor == 0) {
+		hasher.AddUint(v.Anchor)
+	}
+	if !(v.BlockIndex == 0) {
+		hasher.AddUint(v.BlockIndex)
+	}
+	if !(v.BlockTime == nil) {
+		hasher.AddTime(*v.BlockTime)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *InternalGenesis) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeInternalGenesis)
+
+	return hasher.MerkleHash()
+}
+
+func (v *InternalLedger) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeInternalLedger)
+	hasher.AddValue(&v.AccountHeader)
+	if !(v.Index == 0) {
+		hasher.AddInt(v.Index)
+	}
+	if !(v.Timestamp == (time.Time{})) {
+		hasher.AddTime(v.Timestamp)
+	}
+	if !((v.Synthetic).Equal(new(SyntheticLedger))) {
+		hasher.AddValue(&v.Synthetic)
+	}
+	if !(v.PendingOracle == 0) {
+		hasher.AddUint(v.PendingOracle)
+	}
+	if !(v.ActiveOracle == 0) {
+		hasher.AddUint(v.ActiveOracle)
+	}
+	if !(len(v.Updates) == 0) {
+		for _, v := range v.Updates {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *InternalSendTransactions) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeInternalSendTransactions)
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *InternalTransactionsSent) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeInternalTransactionsSent)
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			hasher.AddHash(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *InternalTransactionsSigned) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeInternalTransactionsSigned)
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *IssueTokens) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeIssueTokens)
+	if !(v.Recipient == nil) {
+		hasher.AddUrl(v.Recipient)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *KeyBook) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeKeyBook)
+	hasher.AddValue(&v.AccountHeader)
+	if !(len(v.Pages) == 0) {
+		for _, v := range v.Pages {
+			hasher.AddUrl(v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *KeyPage) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeKeyPage)
+	hasher.AddValue(&v.AccountHeader)
+	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.CreditBalance)
+	}
+	if !(v.Threshold == 0) {
+		hasher.AddUint(v.Threshold)
+	}
+	if !(len(v.Keys) == 0) {
+		for _, v := range v.Keys {
+			hasher.AddValue(v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *KeySpec) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.PublicKey) == 0) {
+		hasher.AddBytes(v.PublicKey)
+	}
+	if !(v.Nonce == 0) {
+		hasher.AddUint(v.Nonce)
+	}
+	if !(v.Owner == nil) {
+		hasher.AddUrl(v.Owner)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *KeySpecParams) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.PublicKey) == 0) {
+		hasher.AddBytes(v.PublicKey)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *LegacyED25519Signature) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(SignatureTypeLegacyED25519)
+	if !(v.Nonce == 0) {
+		hasher.AddUint(v.Nonce)
+	}
+	if !(len(v.PublicKey) == 0) {
+		hasher.AddBytes(v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		hasher.AddBytes(v.Signature)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *LiteDataAccount) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeLiteDataAccount)
+	hasher.AddValue(&v.AccountHeader)
+	if !(len(v.Tail) == 0) {
+		hasher.AddBytes(v.Tail)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *LiteIdentity) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeLiteIdentity)
+	hasher.AddValue(&v.AccountHeader)
+
+	return hasher.MerkleHash()
+}
+
+func (v *LiteTokenAccount) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeLiteTokenAccount)
+	hasher.AddValue(&v.AccountHeader)
+	if !(v.TokenUrl == nil) {
+		hasher.AddUrl(v.TokenUrl)
+	}
+	if !((v.Balance).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Balance)
+	}
+	if !(v.Nonce == 0) {
+		hasher.AddUint(v.Nonce)
+	}
+	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.CreditBalance)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *MetricsRequest) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Metric) == 0) {
+		hasher.AddString(v.Metric)
+	}
+	if !(v.Duration == 0) {
+		hasher.AddDuration(v.Duration)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *Object) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Entry) == 0) {
+		hasher.AddBytes(v.Entry)
+	}
+	if !(v.Height == 0) {
+		hasher.AddUint(v.Height)
+	}
+	if !(len(v.Roots) == 0) {
+		for _, v := range v.Roots {
+			hasher.AddBytes(v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *ObjectMetadata) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Type == 0) {
+		hasher.AddEnum(v.Type)
+	}
+	if !(len(v.Chains) == 0) {
+		for _, v := range v.Chains {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *PendingTransactionState) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypePendingTransaction)
+	hasher.AddValue(&v.AccountHeader)
+	if !(len(v.Signature) == 0) {
+		for _, v := range v.Signature {
+			hasher.AddValue(v)
+		}
+	}
+	if !(v.TransactionState == nil) {
+		hasher.AddValue(v.TransactionState)
+	}
+	if !(len(v.Status) == 0) {
+		hasher.AddBytes(v.Status)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *Receipt) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.Start) == 0) {
+		hasher.AddBytes(v.Start)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *ReceiptEntry) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(!v.Right) {
+		hasher.AddBool(v.Right)
+	}
+	if !(len(v.Hash) == 0) {
+		hasher.AddBytes(v.Hash)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *RemoveManager) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeRemoveManager)
+
+	return hasher.MerkleHash()
+}
+
+func (v *RequestDataEntry) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(v.EntryHash == ([32]byte{})) {
+		hasher.AddHash(&v.EntryHash)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *RequestDataEntrySet) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !(v.Start == 0) {
+		hasher.AddUint(v.Start)
+	}
+	if !(v.Count == 0) {
+		hasher.AddUint(v.Count)
+	}
+	if !(!v.ExpandChains) {
+		hasher.AddBool(v.ExpandChains)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *ResponseDataEntry) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.EntryHash == ([32]byte{})) {
+		hasher.AddHash(&v.EntryHash)
+	}
+	if !((v.Entry).Equal(new(DataEntry))) {
+		hasher.AddValue(&v.Entry)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *ResponseDataEntrySet) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(len(v.DataEntries) == 0) {
+		for _, v := range v.DataEntries {
+			hasher.AddValue(&v)
+		}
+	}
+	if !(v.Total == 0) {
+		hasher.AddUint(v.Total)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SegWitDataEntry) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSegWitDataEntry)
+	if !(v.Cause == ([32]byte{})) {
+		hasher.AddHash(&v.Cause)
+	}
+	if !(v.EntryUrl == nil) {
+		hasher.AddUrl(v.EntryUrl)
+	}
+	if !(v.EntryHash == ([32]byte{})) {
+		hasher.AddHash(&v.EntryHash)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SendTokens) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSendTokens)
+	if !(v.Hash == ([32]byte{})) {
+		hasher.AddHash(&v.Hash)
+	}
+	if !(len(v.Meta) == 0) {
+		hasher.AddBytes(v.Meta)
+	}
+	if !(len(v.To) == 0) {
+		for _, v := range v.To {
+			hasher.AddValue(v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SendTransaction) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Payload == (nil)) {
+		hasher.AddValue(v.Payload)
+	}
+	if !(v.Recipient == nil) {
+		hasher.AddUrl(v.Recipient)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SignPending) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSignPending)
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticAnchor) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticAnchor)
+	if !(v.Source == nil) {
+		hasher.AddUrl(v.Source)
+	}
+	if !(!v.Major) {
+		hasher.AddBool(v.Major)
+	}
+	if !(v.RootAnchor == ([32]byte{})) {
+		hasher.AddHash(&v.RootAnchor)
+	}
+	if !(v.RootIndex == 0) {
+		hasher.AddUint(v.RootIndex)
+	}
+	if !(v.Block == 0) {
+		hasher.AddUint(v.Block)
+	}
+	if !(v.SourceIndex == 0) {
+		hasher.AddUint(v.SourceIndex)
+	}
+	if !(v.SourceBlock == 0) {
+		hasher.AddUint(v.SourceBlock)
+	}
+	if !(v.AcmeOraclePrice == 0) {
+		hasher.AddUint(v.AcmeOraclePrice)
+	}
+	if !((v.Receipt).Equal(new(Receipt))) {
+		hasher.AddValue(&v.Receipt)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticBurnTokens) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticBurnTokens)
+	if !(v.Cause == ([32]byte{})) {
+		hasher.AddHash(&v.Cause)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticCreateChain) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticCreateChain)
+	if !(v.Cause == ([32]byte{})) {
+		hasher.AddHash(&v.Cause)
+	}
+	if !(len(v.Chains) == 0) {
+		for _, v := range v.Chains {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticDepositCredits) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticDepositCredits)
+	if !(v.Cause == ([32]byte{})) {
+		hasher.AddHash(&v.Cause)
+	}
+	if !(v.Amount == 0) {
+		hasher.AddUint(v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticDepositTokens) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticDepositTokens)
+	if !(v.Cause == ([32]byte{})) {
+		hasher.AddHash(&v.Cause)
+	}
+	if !(v.Token == nil) {
+		hasher.AddUrl(v.Token)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticLedger) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Nonce == 0) {
+		hasher.AddUint(v.Nonce)
+	}
+	if !(len(v.Produced) == 0) {
+		for _, v := range v.Produced {
+			hasher.AddHash(&v)
+		}
+	}
+	if !(len(v.Unsigned) == 0) {
+		for _, v := range v.Unsigned {
+			hasher.AddHash(&v)
+		}
+	}
+	if !(len(v.Unsent) == 0) {
+		for _, v := range v.Unsent {
+			hasher.AddHash(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticMirror) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticMirror)
+	if !(len(v.Objects) == 0) {
+		for _, v := range v.Objects {
+			hasher.AddValue(&v)
+		}
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *SyntheticWriteData) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeSyntheticWriteData)
+	if !(v.Cause == ([32]byte{})) {
+		hasher.AddHash(&v.Cause)
+	}
+	if !((v.Entry).Equal(new(DataEntry))) {
+		hasher.AddValue(&v.Entry)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TokenAccount) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeTokenAccount)
+	hasher.AddValue(&v.AccountHeader)
+	if !(v.TokenUrl == nil) {
+		hasher.AddUrl(v.TokenUrl)
+	}
+	if !((v.Balance).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Balance)
+	}
+	if !(!v.Scratch) {
+		hasher.AddBool(v.Scratch)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TokenIssuer) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeTokenIssuer)
+	hasher.AddValue(&v.AccountHeader)
+	if !(len(v.Symbol) == 0) {
+		hasher.AddString(v.Symbol)
+	}
+	if !(v.Precision == 0) {
+		hasher.AddUint(v.Precision)
+	}
+	if !(v.Properties == nil) {
+		hasher.AddUrl(v.Properties)
+	}
+	if !((v.Supply).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Supply)
+	}
+	if !(!v.HasSupplyLimit) {
+		hasher.AddBool(v.HasSupplyLimit)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TokenRecipient) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Url == nil) {
+		hasher.AddUrl(v.Url)
+	}
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		hasher.AddBigInt(&v.Amount)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *Transaction) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddValue(&v.TransactionHeader)
+	if !(v.Body == (nil)) {
+		hasher.AddValue(v.Body)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TransactionHeader) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Origin == nil) {
+		hasher.AddUrl(v.Origin)
+	}
+	if !(v.KeyPageHeight == 0) {
+		hasher.AddUint(v.KeyPageHeight)
+	}
+	if !(v.KeyPageIndex == 0) {
+		hasher.AddUint(v.KeyPageIndex)
+	}
+	if !(v.Nonce == 0) {
+		hasher.AddUint(v.Nonce)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TransactionSignature) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.Transaction == ([32]byte{})) {
+		hasher.AddHash(&v.Transaction)
+	}
+	if !(v.Signature == (nil)) {
+		hasher.AddValue(v.Signature)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TransactionState) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(AccountTypeTransaction)
+	hasher.AddValue(&v.AccountHeader)
+	hasher.AddValue(&v.TxState)
+
+	return hasher.MerkleHash()
+}
+
+func (v *TransactionStatus) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(!v.Remote) {
+		hasher.AddBool(v.Remote)
+	}
+	if !(!v.Delivered) {
+		hasher.AddBool(v.Delivered)
+	}
+	if !(!v.Pending) {
+		hasher.AddBool(v.Pending)
+	}
+	if !(v.Code == 0) {
+		hasher.AddUint(v.Code)
+	}
+	if !(len(v.Message) == 0) {
+		hasher.AddString(v.Message)
+	}
+	if !(v.Result == (nil)) {
+		hasher.AddValue(v.Result)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *TxState) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	if !(v.SigInfo == nil) {
+		hasher.AddValue(v.SigInfo)
+	}
+	if !(v.Transaction == (nil)) {
+		hasher.AddValue(v.Transaction)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *UpdateKeyPage) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeUpdateKeyPage)
+	if !(v.Operation == 0) {
+		hasher.AddEnum(v.Operation)
+	}
+	if !(len(v.Key) == 0) {
+		hasher.AddBytes(v.Key)
+	}
+	if !(len(v.NewKey) == 0) {
+		hasher.AddBytes(v.NewKey)
+	}
+	if !(v.Owner == nil) {
+		hasher.AddUrl(v.Owner)
+	}
+	if !(v.Threshold == 0) {
+		hasher.AddUint(v.Threshold)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *UpdateManager) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeUpdateManager)
+	if !(v.ManagerKeyBook == nil) {
+		hasher.AddUrl(v.ManagerKeyBook)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *WriteData) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeWriteData)
+	if !((v.Entry).Equal(new(DataEntry))) {
+		hasher.AddValue(&v.Entry)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *WriteDataResult) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeWriteData)
+	if !(v.EntryHash == ([32]byte{})) {
+		hasher.AddHash(&v.EntryHash)
+	}
+	if !(v.AccountUrl == nil) {
+		hasher.AddUrl(v.AccountUrl)
+	}
+	if !(len(v.AccountID) == 0) {
+		hasher.AddBytes(v.AccountID)
+	}
+
+	return hasher.MerkleHash()
+}
+
+func (v *WriteDataTo) MerkleHash() []byte {
+	var hasher hash.Hasher
+
+	hasher.AddEnum(TransactionTypeWriteDataTo)
+	if !(v.Recipient == nil) {
+		hasher.AddUrl(v.Recipient)
+	}
+	if !((v.Entry).Equal(new(DataEntry))) {
+		hasher.AddValue(&v.Entry)
+	}
+
+	return hasher.MerkleHash()
 }
 
 func (v *ADI) UnmarshalBinary(data []byte) error {
