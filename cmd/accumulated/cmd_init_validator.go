@@ -49,15 +49,14 @@ func loadNetworkConfiguration(file string) (ret Network, err error) {
 }
 
 //load network config file
-func initValidator(cmd *cobra.Command, args []string) {
+func initNetwork(cmd *cobra.Command, args []string) {
 
 	if cmd.Flag("network").Changed {
 		fatalf("--network is not applicable to accumulated init validator")
 	}
 
-	network, err := loadNetworkConfiguration(flagInitNetwork.NetworksFileName)
-
-	fmt.Printf("%v", network)
+	networkConfigFile := args[0]
+	network, err := loadNetworkConfiguration(networkConfigFile)
 	check(err)
 
 	var directory *Subnet
@@ -81,9 +80,12 @@ func initValidator(cmd *cobra.Command, args []string) {
 	}
 
 	if directory == nil {
-		check(fmt.Errorf("cannot find directory configuration in %v", flagInitNetwork.NetworksFileName))
+		check(fmt.Errorf("cannot find directory configuration in %v", networkConfigFile))
 	}
 
+	if directory.Name != "Directory" {
+		check(fmt.Errorf("directory name specified in file was %s, but accumulated requires it to be \"Directory\"", directory.Name))
+	}
 	//quick validation to make sure the directory node maps to each of the BVN's defined
 	for _, dnn := range directory.Nodes {
 		found := false

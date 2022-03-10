@@ -54,10 +54,10 @@ var cmdInitNode = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
-var cmdInitValidator = &cobra.Command{
-	Use:   "network <subnet name>",
+var cmdInitNetwork = &cobra.Command{
+	Use:   "network <network configuration file",
 	Short: "Initialize a network",
-	Run:   initValidator,
+	Run:   initNetwork,
 	Args:  cobra.ExactArgs(1),
 }
 
@@ -99,31 +99,24 @@ var flagInitDevnet struct {
 }
 
 var flagInitNetwork struct {
-	NetworksFileName string
-	Subnet           string
-	GenesisDoc       string
-	Docker           bool
-	DockerTag        string
-	UseVolumes       bool
-	Compose          bool
-	DnsSuffix        string
+	GenesisDoc string
+	Docker     bool
+	DockerTag  string
+	UseVolumes bool
+	Compose    bool
+	DnsSuffix  string
 }
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitValidator, cmdListNamedNetworkConfig)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdListNamedNetworkConfig)
 
-	cmdInitValidator.Flags().StringVar(&flagInitNetwork.NetworksFileName, "networks", "networks.json", "Networks file name")
-	cmdInitValidator.MarkFlagRequired("networks")
-
-	cmdInitValidator.Flags().StringVar(&flagInitNetwork.Subnet, "subnet", "BVN0", "Specify the subnet to configure within the network")
-	//cmdInitValidator.MarkFlagRequired("subnet")
-	cmdInitValidator.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
-	cmdInitValidator.Flags().BoolVar(&flagInitNetwork.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
-	cmdInitValidator.Flags().StringVar(&flagInitNetwork.DockerTag, "tag", "latest", "Tag to use on the docker images")
-	cmdInitValidator.Flags().BoolVar(&flagInitNetwork.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
-	cmdInitValidator.Flags().BoolVar(&flagInitNetwork.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
-	cmdInitValidator.Flags().StringVar(&flagInitNetwork.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DockerTag, "tag", "latest", "Tag to use on the docker images")
+	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
+	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
