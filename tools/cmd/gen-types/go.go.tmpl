@@ -154,7 +154,7 @@ func (v *{{.Name}}) IsValid() error {
 
 {{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, {{if .IsUnion}}1+{{end}}{{len .Embeddings}}+{{len .Fields}})
 
 	{{if .IsUnion}}
 	hasher.AddEnum({{pkg "protocol"}}{{.UnionType}}{{.UnionValue}})

@@ -5524,7 +5524,7 @@ func (v *WriteDataTo) IsValid() error {
 }
 
 func (v *ADI) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+0)
 
 	hasher.AddEnum(AccountTypeIdentity)
 	hasher.AddValue(&v.AccountHeader)
@@ -5533,7 +5533,7 @@ func (v *ADI) MerkleHash() []byte {
 }
 
 func (v *AccountHeader) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+3)
 
 	if !(v.Url == nil) {
 		hasher.AddUrl(v.Url)
@@ -5549,7 +5549,7 @@ func (v *AccountHeader) MerkleHash() []byte {
 }
 
 func (v *AcmeFaucet) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeAcmeFaucet)
 	if !(v.Url == nil) {
@@ -5560,7 +5560,7 @@ func (v *AcmeFaucet) MerkleHash() []byte {
 }
 
 func (v *AcmeOracle) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+1)
 
 	if !(v.Price == 0) {
 		hasher.AddUint(v.Price)
@@ -5570,7 +5570,7 @@ func (v *AcmeOracle) MerkleHash() []byte {
 }
 
 func (v *AddCredits) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeAddCredits)
 	if !(v.Recipient == nil) {
@@ -5584,7 +5584,7 @@ func (v *AddCredits) MerkleHash() []byte {
 }
 
 func (v *Anchor) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+0)
 
 	hasher.AddEnum(AccountTypeAnchor)
 	hasher.AddValue(&v.AccountHeader)
@@ -5593,7 +5593,7 @@ func (v *Anchor) MerkleHash() []byte {
 }
 
 func (v *AnchorMetadata) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+5)
 
 	hasher.AddValue(&v.ChainMetadata)
 	if !(v.Account == nil) {
@@ -5616,7 +5616,7 @@ func (v *AnchorMetadata) MerkleHash() []byte {
 }
 
 func (v *AnchoredRecord) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.Record) == 0) {
 		hasher.AddBytes(v.Record)
@@ -5629,7 +5629,7 @@ func (v *AnchoredRecord) MerkleHash() []byte {
 }
 
 func (v *BurnTokens) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeBurnTokens)
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
@@ -5640,7 +5640,7 @@ func (v *BurnTokens) MerkleHash() []byte {
 }
 
 func (v *ChainMetadata) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.Name) == 0) {
 		hasher.AddString(v.Name)
@@ -5653,7 +5653,7 @@ func (v *ChainMetadata) MerkleHash() []byte {
 }
 
 func (v *ChainParams) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.Data) == 0) {
 		hasher.AddBytes(v.Data)
@@ -5666,7 +5666,7 @@ func (v *ChainParams) MerkleHash() []byte {
 }
 
 func (v *CreateDataAccount) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+4)
 
 	hasher.AddEnum(TransactionTypeCreateDataAccount)
 	if !(v.Url == nil) {
@@ -5686,7 +5686,7 @@ func (v *CreateDataAccount) MerkleHash() []byte {
 }
 
 func (v *CreateIdentity) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+5)
 
 	hasher.AddEnum(TransactionTypeCreateIdentity)
 	if !(v.Url == nil) {
@@ -5709,7 +5709,7 @@ func (v *CreateIdentity) MerkleHash() []byte {
 }
 
 func (v *CreateKeyBook) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(TransactionTypeCreateKeyBook)
 	if !(v.Url == nil) {
@@ -5728,7 +5728,7 @@ func (v *CreateKeyBook) MerkleHash() []byte {
 }
 
 func (v *CreateKeyPage) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(TransactionTypeCreateKeyPage)
 	if !(v.Url == nil) {
@@ -5747,7 +5747,7 @@ func (v *CreateKeyPage) MerkleHash() []byte {
 }
 
 func (v *CreateToken) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+8)
 
 	hasher.AddEnum(TransactionTypeCreateToken)
 	if !(v.Url == nil) {
@@ -5779,7 +5779,7 @@ func (v *CreateToken) MerkleHash() []byte {
 }
 
 func (v *CreateTokenAccount) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+5)
 
 	hasher.AddEnum(TransactionTypeCreateTokenAccount)
 	if !(v.Url == nil) {
@@ -5802,7 +5802,7 @@ func (v *CreateTokenAccount) MerkleHash() []byte {
 }
 
 func (v *DataAccount) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+1)
 
 	hasher.AddEnum(AccountTypeDataAccount)
 	hasher.AddValue(&v.AccountHeader)
@@ -5814,7 +5814,7 @@ func (v *DataAccount) MerkleHash() []byte {
 }
 
 func (v *DataEntry) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.ExtIds) == 0) {
 		for _, v := range v.ExtIds {
@@ -5829,7 +5829,7 @@ func (v *DataEntry) MerkleHash() []byte {
 }
 
 func (v *DirectoryIndexMetadata) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+1)
 
 	if !(v.Count == 0) {
 		hasher.AddUint(v.Count)
@@ -5839,7 +5839,7 @@ func (v *DirectoryIndexMetadata) MerkleHash() []byte {
 }
 
 func (v *DirectoryQueryResult) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+3)
 
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
@@ -5857,7 +5857,7 @@ func (v *DirectoryQueryResult) MerkleHash() []byte {
 }
 
 func (v *ED25519Signature) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(SignatureTypeED25519)
 	if !(len(v.PublicKey) == 0) {
@@ -5871,7 +5871,7 @@ func (v *ED25519Signature) MerkleHash() []byte {
 }
 
 func (v *EmptyResult) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+0)
 
 	hasher.AddEnum(TransactionTypeUnknown)
 
@@ -5879,7 +5879,7 @@ func (v *EmptyResult) MerkleHash() []byte {
 }
 
 func (v *Envelope) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+4)
 
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
@@ -5897,7 +5897,7 @@ func (v *Envelope) MerkleHash() []byte {
 }
 
 func (v *IndexEntry) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+4)
 
 	if !(v.Source == 0) {
 		hasher.AddUint(v.Source)
@@ -5916,7 +5916,7 @@ func (v *IndexEntry) MerkleHash() []byte {
 }
 
 func (v *InternalGenesis) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+0)
 
 	hasher.AddEnum(TransactionTypeInternalGenesis)
 
@@ -5924,7 +5924,7 @@ func (v *InternalGenesis) MerkleHash() []byte {
 }
 
 func (v *InternalLedger) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+6)
 
 	hasher.AddEnum(AccountTypeInternalLedger)
 	hasher.AddValue(&v.AccountHeader)
@@ -5953,7 +5953,7 @@ func (v *InternalLedger) MerkleHash() []byte {
 }
 
 func (v *InternalSendTransactions) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeInternalSendTransactions)
 	if !(len(v.Transactions) == 0) {
@@ -5966,7 +5966,7 @@ func (v *InternalSendTransactions) MerkleHash() []byte {
 }
 
 func (v *InternalTransactionsSent) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeInternalTransactionsSent)
 	if !(len(v.Transactions) == 0) {
@@ -5979,7 +5979,7 @@ func (v *InternalTransactionsSent) MerkleHash() []byte {
 }
 
 func (v *InternalTransactionsSigned) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeInternalTransactionsSigned)
 	if !(len(v.Transactions) == 0) {
@@ -5992,7 +5992,7 @@ func (v *InternalTransactionsSigned) MerkleHash() []byte {
 }
 
 func (v *IssueTokens) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeIssueTokens)
 	if !(v.Recipient == nil) {
@@ -6006,7 +6006,7 @@ func (v *IssueTokens) MerkleHash() []byte {
 }
 
 func (v *KeyBook) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+1)
 
 	hasher.AddEnum(AccountTypeKeyBook)
 	hasher.AddValue(&v.AccountHeader)
@@ -6020,7 +6020,7 @@ func (v *KeyBook) MerkleHash() []byte {
 }
 
 func (v *KeyPage) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+3)
 
 	hasher.AddEnum(AccountTypeKeyPage)
 	hasher.AddValue(&v.AccountHeader)
@@ -6040,7 +6040,7 @@ func (v *KeyPage) MerkleHash() []byte {
 }
 
 func (v *KeySpec) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+3)
 
 	if !(len(v.PublicKey) == 0) {
 		hasher.AddBytes(v.PublicKey)
@@ -6056,7 +6056,7 @@ func (v *KeySpec) MerkleHash() []byte {
 }
 
 func (v *KeySpecParams) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+1)
 
 	if !(len(v.PublicKey) == 0) {
 		hasher.AddBytes(v.PublicKey)
@@ -6066,7 +6066,7 @@ func (v *KeySpecParams) MerkleHash() []byte {
 }
 
 func (v *LegacyED25519Signature) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(SignatureTypeLegacyED25519)
 	if !(v.Nonce == 0) {
@@ -6083,7 +6083,7 @@ func (v *LegacyED25519Signature) MerkleHash() []byte {
 }
 
 func (v *LiteDataAccount) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+1)
 
 	hasher.AddEnum(AccountTypeLiteDataAccount)
 	hasher.AddValue(&v.AccountHeader)
@@ -6095,7 +6095,7 @@ func (v *LiteDataAccount) MerkleHash() []byte {
 }
 
 func (v *LiteIdentity) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+0)
 
 	hasher.AddEnum(AccountTypeLiteIdentity)
 	hasher.AddValue(&v.AccountHeader)
@@ -6104,7 +6104,7 @@ func (v *LiteIdentity) MerkleHash() []byte {
 }
 
 func (v *LiteTokenAccount) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+4)
 
 	hasher.AddEnum(AccountTypeLiteTokenAccount)
 	hasher.AddValue(&v.AccountHeader)
@@ -6125,7 +6125,7 @@ func (v *LiteTokenAccount) MerkleHash() []byte {
 }
 
 func (v *MetricsRequest) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.Metric) == 0) {
 		hasher.AddString(v.Metric)
@@ -6138,7 +6138,7 @@ func (v *MetricsRequest) MerkleHash() []byte {
 }
 
 func (v *Object) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+3)
 
 	if !(len(v.Entry) == 0) {
 		hasher.AddBytes(v.Entry)
@@ -6156,7 +6156,7 @@ func (v *Object) MerkleHash() []byte {
 }
 
 func (v *ObjectMetadata) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(v.Type == 0) {
 		hasher.AddEnum(v.Type)
@@ -6171,7 +6171,7 @@ func (v *ObjectMetadata) MerkleHash() []byte {
 }
 
 func (v *PendingTransactionState) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+3)
 
 	hasher.AddEnum(AccountTypePendingTransaction)
 	hasher.AddValue(&v.AccountHeader)
@@ -6191,7 +6191,7 @@ func (v *PendingTransactionState) MerkleHash() []byte {
 }
 
 func (v *Receipt) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.Start) == 0) {
 		hasher.AddBytes(v.Start)
@@ -6206,7 +6206,7 @@ func (v *Receipt) MerkleHash() []byte {
 }
 
 func (v *ReceiptEntry) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(!v.Right) {
 		hasher.AddBool(v.Right)
@@ -6219,7 +6219,7 @@ func (v *ReceiptEntry) MerkleHash() []byte {
 }
 
 func (v *RemoveManager) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+0)
 
 	hasher.AddEnum(TransactionTypeRemoveManager)
 
@@ -6227,7 +6227,7 @@ func (v *RemoveManager) MerkleHash() []byte {
 }
 
 func (v *RequestDataEntry) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(v.Url == nil) {
 		hasher.AddUrl(v.Url)
@@ -6240,7 +6240,7 @@ func (v *RequestDataEntry) MerkleHash() []byte {
 }
 
 func (v *RequestDataEntrySet) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+4)
 
 	if !(v.Url == nil) {
 		hasher.AddUrl(v.Url)
@@ -6259,7 +6259,7 @@ func (v *RequestDataEntrySet) MerkleHash() []byte {
 }
 
 func (v *ResponseDataEntry) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(v.EntryHash == ([32]byte{})) {
 		hasher.AddHash(&v.EntryHash)
@@ -6272,7 +6272,7 @@ func (v *ResponseDataEntry) MerkleHash() []byte {
 }
 
 func (v *ResponseDataEntrySet) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(len(v.DataEntries) == 0) {
 		for _, v := range v.DataEntries {
@@ -6287,7 +6287,7 @@ func (v *ResponseDataEntrySet) MerkleHash() []byte {
 }
 
 func (v *SegWitDataEntry) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(TransactionTypeSegWitDataEntry)
 	if !(v.Cause == ([32]byte{})) {
@@ -6304,7 +6304,7 @@ func (v *SegWitDataEntry) MerkleHash() []byte {
 }
 
 func (v *SendTokens) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(TransactionTypeSendTokens)
 	if !(v.Hash == ([32]byte{})) {
@@ -6323,7 +6323,7 @@ func (v *SendTokens) MerkleHash() []byte {
 }
 
 func (v *SendTransaction) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(v.Payload == (nil)) {
 		hasher.AddValue(v.Payload)
@@ -6336,7 +6336,7 @@ func (v *SendTransaction) MerkleHash() []byte {
 }
 
 func (v *SignPending) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+0)
 
 	hasher.AddEnum(TransactionTypeSignPending)
 
@@ -6344,7 +6344,7 @@ func (v *SignPending) MerkleHash() []byte {
 }
 
 func (v *SyntheticAnchor) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+9)
 
 	hasher.AddEnum(TransactionTypeSyntheticAnchor)
 	if !(v.Source == nil) {
@@ -6379,7 +6379,7 @@ func (v *SyntheticAnchor) MerkleHash() []byte {
 }
 
 func (v *SyntheticBurnTokens) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeSyntheticBurnTokens)
 	if !(v.Cause == ([32]byte{})) {
@@ -6393,7 +6393,7 @@ func (v *SyntheticBurnTokens) MerkleHash() []byte {
 }
 
 func (v *SyntheticCreateChain) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeSyntheticCreateChain)
 	if !(v.Cause == ([32]byte{})) {
@@ -6409,7 +6409,7 @@ func (v *SyntheticCreateChain) MerkleHash() []byte {
 }
 
 func (v *SyntheticDepositCredits) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeSyntheticDepositCredits)
 	if !(v.Cause == ([32]byte{})) {
@@ -6423,7 +6423,7 @@ func (v *SyntheticDepositCredits) MerkleHash() []byte {
 }
 
 func (v *SyntheticDepositTokens) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(TransactionTypeSyntheticDepositTokens)
 	if !(v.Cause == ([32]byte{})) {
@@ -6440,7 +6440,7 @@ func (v *SyntheticDepositTokens) MerkleHash() []byte {
 }
 
 func (v *SyntheticLedger) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+4)
 
 	if !(v.Nonce == 0) {
 		hasher.AddUint(v.Nonce)
@@ -6465,7 +6465,7 @@ func (v *SyntheticLedger) MerkleHash() []byte {
 }
 
 func (v *SyntheticMirror) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeSyntheticMirror)
 	if !(len(v.Objects) == 0) {
@@ -6478,7 +6478,7 @@ func (v *SyntheticMirror) MerkleHash() []byte {
 }
 
 func (v *SyntheticWriteData) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeSyntheticWriteData)
 	if !(v.Cause == ([32]byte{})) {
@@ -6492,7 +6492,7 @@ func (v *SyntheticWriteData) MerkleHash() []byte {
 }
 
 func (v *TokenAccount) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+3)
 
 	hasher.AddEnum(AccountTypeTokenAccount)
 	hasher.AddValue(&v.AccountHeader)
@@ -6510,7 +6510,7 @@ func (v *TokenAccount) MerkleHash() []byte {
 }
 
 func (v *TokenIssuer) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+1+5)
 
 	hasher.AddEnum(AccountTypeTokenIssuer)
 	hasher.AddValue(&v.AccountHeader)
@@ -6534,7 +6534,7 @@ func (v *TokenIssuer) MerkleHash() []byte {
 }
 
 func (v *TokenRecipient) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(v.Url == nil) {
 		hasher.AddUrl(v.Url)
@@ -6547,7 +6547,7 @@ func (v *TokenRecipient) MerkleHash() []byte {
 }
 
 func (v *Transaction) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+2)
 
 	hasher.AddValue(&v.TransactionHeader)
 	if !(v.Body == (nil)) {
@@ -6558,7 +6558,7 @@ func (v *Transaction) MerkleHash() []byte {
 }
 
 func (v *TransactionHeader) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+4)
 
 	if !(v.Origin == nil) {
 		hasher.AddUrl(v.Origin)
@@ -6577,7 +6577,7 @@ func (v *TransactionHeader) MerkleHash() []byte {
 }
 
 func (v *TransactionSignature) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+2)
 
 	if !(v.Transaction == ([32]byte{})) {
 		hasher.AddHash(&v.Transaction)
@@ -6590,7 +6590,7 @@ func (v *TransactionSignature) MerkleHash() []byte {
 }
 
 func (v *TransactionState) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+2+0)
 
 	hasher.AddEnum(AccountTypeTransaction)
 	hasher.AddValue(&v.AccountHeader)
@@ -6600,7 +6600,7 @@ func (v *TransactionState) MerkleHash() []byte {
 }
 
 func (v *TransactionStatus) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+6)
 
 	if !(!v.Remote) {
 		hasher.AddBool(v.Remote)
@@ -6625,7 +6625,7 @@ func (v *TransactionStatus) MerkleHash() []byte {
 }
 
 func (v *TxState) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 0+3)
 
 	if !(v.SigInfo == nil) {
 		hasher.AddValue(v.SigInfo)
@@ -6638,7 +6638,7 @@ func (v *TxState) MerkleHash() []byte {
 }
 
 func (v *UpdateKeyPage) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+5)
 
 	hasher.AddEnum(TransactionTypeUpdateKeyPage)
 	if !(v.Operation == 0) {
@@ -6661,7 +6661,7 @@ func (v *UpdateKeyPage) MerkleHash() []byte {
 }
 
 func (v *UpdateManager) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeUpdateManager)
 	if !(v.ManagerKeyBook == nil) {
@@ -6672,7 +6672,7 @@ func (v *UpdateManager) MerkleHash() []byte {
 }
 
 func (v *WriteData) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+1)
 
 	hasher.AddEnum(TransactionTypeWriteData)
 	if !((v.Entry).Equal(new(DataEntry))) {
@@ -6683,7 +6683,7 @@ func (v *WriteData) MerkleHash() []byte {
 }
 
 func (v *WriteDataResult) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+3)
 
 	hasher.AddEnum(TransactionTypeWriteData)
 	if !(v.EntryHash == ([32]byte{})) {
@@ -6700,7 +6700,7 @@ func (v *WriteDataResult) MerkleHash() []byte {
 }
 
 func (v *WriteDataTo) MerkleHash() []byte {
-	var hasher hash.Hasher
+	hasher := make(hash.Hasher, 0, 1+0+2)
 
 	hasher.AddEnum(TransactionTypeWriteDataTo)
 	if !(v.Recipient == nil) {
