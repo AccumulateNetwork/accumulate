@@ -9,6 +9,26 @@ import (
 	"strings"
 )
 
+type RCD struct {
+	Version byte
+	PubKey  [32]byte
+}
+
+func (r *RCD) Hash() []byte {
+	var buffer bytes.Buffer
+	buffer.WriteByte(r.Version)
+	buffer.Write(r.PubKey[:])
+	h := sha256.Sum256(buffer.Bytes())
+	return h[:]
+}
+
+func GetRCDHashFromPublicKey(pubKey []byte, version byte) []byte {
+	r := RCD{}
+	r.Version = version
+	copy(r.PubKey[:], pubKey)
+	return r.Hash()
+}
+
 func GetRCDFromFactoidAddress(fa string) ([]byte, error) {
 
 	if len(fa) != 52 {
