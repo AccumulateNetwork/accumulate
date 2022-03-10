@@ -113,7 +113,7 @@ ReceiptSignature:
   fields: []
 
 SyntheticSignature:
-  kind: signature
+  union: { type: signature }
   description: is used to initiate transactions between BVNs
   fields:
     - name: SourceNetwork
@@ -129,7 +129,7 @@ SyntheticSignature:
       type: uint
 
 InternalSignature:
-  kind: signature
+  union: { type: signature }
   description: is used when executing transactions internally
   fields:
     - name: Network
@@ -319,20 +319,9 @@ UpdateKeyPage:
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: enum
-    - name: Key
-      type: bytes
-      optional: true
-    - name: NewKey
-      type: bytes
-      optional: true
-    - name: Owner
-      type: url
-      pointer: true
-      optional: true
-    - name: Threshold
-      type: uvarint
-      optional: true
+      marshal-as: value
+      unmarshal-with: UnmarshalKeyPageOperation
+      zero-value: nil
 
 UpdateManager:
   union: { type: transaction }
@@ -474,6 +463,51 @@ SegWitDataEntry:
     - name: EntryHash
       type: chain
 
+##### Key Page Operations #####
+
+AddKeyOperation:
+  union: { type: keyPageOperation, value: Add }
+  fields:
+    - name: Entry
+      type: KeySpecParams
+      marshal-as: reference
+
+RemoveKeyOperation:
+  union: { type: keyPageOperation, value: Remove }
+  fields:
+    - name: Entry
+      type: KeySpecParams
+      marshal-as: reference
+
+UpdateKeyOperation:
+  union: { type: keyPageOperation, value: Update }
+  fields:
+    - name: OldEntry
+      type: KeySpecParams
+      marshal-as: reference
+    - name: NewEntry
+      type: KeySpecParams
+      marshal-as: reference
+
+SetThresholdKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Threshold
+      type: uvarint
+
+UpdateAllowedKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Allow
+      type: TransactionType
+      repeatable: true
+      marshal-as: enum
+    - name: Deny
+      type: TransactionType
+      repeatable: true
+      marshal-as: enum
+
+
 ##### Result Types #####
 
 EmptyResult:
@@ -492,6 +526,19 @@ WriteDataResult:
       type: bytes
 
 ##### Data Types #####
+
+UpdateAllowedTransactions:
+  fields:
+    - name: Whitelist
+      description: is reserved for future use
+      type: bool
+      optional: true
+    - name: Transactions
+      description: is a list of allowed transaction types
+      type: TransactionType
+      marshal-as: enum
+      repeatable: true
+      optional: true
 
 TokenRecipient:
   fields:
@@ -512,6 +559,9 @@ KeySpecParams:
   fields:
     - name: PublicKey
       type: bytes
+    - name: Owner
+      type: url
+      pointer: true
 
 AnchoredRecord:
   fields:

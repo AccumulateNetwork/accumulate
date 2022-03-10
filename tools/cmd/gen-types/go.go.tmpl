@@ -99,7 +99,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	{{if .IsUnion}}
-	writer.WriteUint(1, {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}}.ID())
+	writer.WriteEnum(1, {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}})
 	{{- end}}
 
 	{{- range .Embeddings}}

@@ -31,11 +31,11 @@ var pageCmd = &cobra.Command{
 			} else if args[0] == "key" {
 				switch arg := args[1]; arg {
 				case "update":
-					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationUpdate, args[3:])
+					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationTypeUpdate, args[3:])
 				case "add":
-					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationAdd, args[3:])
+					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationTypeAdd, args[3:])
 				case "remove":
-					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationRemove, args[3:])
+					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationTypeRemove, args[3:])
 				default:
 					fmt.Println("Usage:")
 					PrintKeyPageCreate()
@@ -157,7 +157,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 
 }
 
-func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (string, error) {
+func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []string) (string, error) {
 	u, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
@@ -172,10 +172,9 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	var oldKey []byte
 
 	ukp := protocol.UpdateKeyPage{}
-	ukp.Operation = op
 
 	switch op {
-	case protocol.KeyPageOperationUpdate:
+	case protocol.KeyPageOperationTypeUpdate:
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -187,15 +186,18 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
-	case protocol.KeyPageOperationAdd:
+		ukp.Operation = &protocol.UpdateKeyOperation{
+			OldEntry: protocol.KeySpecParams{PublicKey: oldKey},
+			NewEntry: protocol.KeySpecParams{PublicKey: newKey},
+		}
+	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		newKey, err = resolvePublicKey(args[0])
-		if err != nil {
-			return "", err
+		ukp.Operation = &protocol.AddKeyOperation{
+			Entry: protocol.KeySpecParams{PublicKey: newKey},
 		}
-	case protocol.KeyPageOperationRemove:
+	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -203,10 +205,10 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
+		ukp.Operation = &protocol.RemoveKeyOperation{
+			Entry: protocol.KeySpecParams{PublicKey: oldKey},
+		}
 	}
-
-	ukp.Key = oldKey[:]
-	ukp.NewKey = newKey[:]
 
 	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)
 	if err != nil {
@@ -214,4 +216,32 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	}
 
 	return ActionResponseFrom(res).Print()
+}
+
+func lockKeyPage(args []string) (string, error) {
+	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	if err != nil {
+		return "", err
+	}
+
+	op := new(protocol.UpdateAllowedKeyPageOperation)
+	op.Deny = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
+	txn := new(protocol.UpdateKeyPage)
+	txn.Operation = op
+
+	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
+}
+
+func unlockKeyPage(args []string) (string, error) {
+	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	if err != nil {
+		return "", err
+	}
+
+	op := new(protocol.UpdateAllowedKeyPageOperation)
+	op.Allow = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
+	txn := new(protocol.UpdateKeyPage)
+	txn.Operation = op
+
+	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }

@@ -69,6 +69,11 @@ KeyPage:
       type: KeySpec
       pointer: true
       marshal-as: reference
+    - name: TransactionBlacklist
+      type: AllowedTransactions
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 KeyBook:
   union: { type: account }

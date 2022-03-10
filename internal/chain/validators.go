@@ -33,7 +33,7 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 
 	// Ensure the key does not already exist
 	keyHash := sha256.Sum256(body.Key)
-	_, _, found := page.FindKeyHash(keyHash[:])
+	_, _, found := page.EntryByKeyHash(keyHash[:])
 	if found {
 		return nil, fmt.Errorf("key is already a validator")
 	}
@@ -61,7 +61,7 @@ func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (proto
 
 	// Find the key
 	keyHash := sha256.Sum256(body.Key)
-	index, _, found := page.FindKeyHash(keyHash[:])
+	index, _, found := page.EntryByKeyHash(keyHash[:])
 	if !found {
 		return nil, fmt.Errorf("key is not a validator")
 	}
@@ -98,14 +98,14 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 
 	// Find the old key
 	oldKeyHash := sha256.Sum256(body.OldKey)
-	_, entry, found := page.FindKeyHash(oldKeyHash[:])
+	_, entry, found := page.EntryByKeyHash(oldKeyHash[:])
 	if !found {
 		return nil, fmt.Errorf("old key is not a validator")
 	}
 
 	// Ensure the new key does not already exist
 	newKeyHash := sha256.Sum256(body.NewKey)
-	_, _, found = page.FindKeyHash(newKeyHash[:])
+	_, _, found = page.EntryByKeyHash(newKeyHash[:])
 	if found {
 		return nil, fmt.Errorf("new key is already a validator")
 	}

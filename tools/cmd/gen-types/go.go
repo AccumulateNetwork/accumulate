@@ -26,17 +26,6 @@ type goUnionTypeSpec struct {
 }
 
 var goFuncs = template.FuncMap{
-	"_unionTypes": func() []goUnionTypeSpec {
-		// TODO This should not be hard coded
-		return []goUnionTypeSpec{
-			{"account", "AccountType", "Account", "account type"},
-			{"transaction", "TransactionType", "TransactionBody", "transaction type"},
-			{"signature", "SignatureType", "Signature", "signature type"},
-		}
-	},
-	"isUnion": func(union *goUnionTypeSpec, typ *Type) bool {
-		return typ.Union.Type == union.Type
-	},
 	"isPkg": func(s string) bool {
 		return s == PackagePath
 	},
@@ -351,17 +340,17 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
 	}
 
+	// Unmarshal uses new(...) for values and enums, so wantPtr is true
+	wantPtr = wantPtr || method == "Value" || method == "Enum"
+
 	var ptrPrefix string
 	switch {
+	case field.UnmarshalWith != "":
+		// OK
 	case wantPtr && !field.Pointer:
 		ptrPrefix = "*"
 	case !wantPtr && field.Pointer:
 		ptrPrefix = "&"
-	case field.UnmarshalWith != "",
-		field.Pointer:
-		// OK
-	case method == "Value" || method == "Enum":
-		ptrPrefix = "*"
 	}
 
 	var set string
@@ -412,8 +401,10 @@ func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, err
 	switch {
 	case method == "":
 		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
-	case wantPtr:
+	case wantPtr && !field.Pointer:
 		ptrPrefix = "&"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "*"
 	}
 
 	if !field.Repeatable {
@@ -437,8 +428,10 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 	switch {
 	case method == "":
 		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
-	case wantPtr:
+	case wantPtr && !field.Pointer:
 		ptrPrefix = "*"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "&"
 	}
 
 	if !field.Repeatable {

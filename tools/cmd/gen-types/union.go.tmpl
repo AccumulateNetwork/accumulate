@@ -11,19 +11,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
-{{- $types := .Types}}
-{{- range _unionTypes}}
+{{- range .Unions}}{{if not (eq .Type "result")}}
 
 // New{{.Interface}} creates a new {{.Interface}} for the specified {{.Enumeration}}.
 func New{{.Interface}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	switch typ {
-	{{- $union := .}}
-	{{- range $types}}{{if isUnion $union .}}
+	{{- range .Members}}
 	case {{.UnionType}}{{.UnionValue}}:
 		return new({{.Name}}), nil
-	{{- end}}{{end}}
+	{{- end}}
 	default:
-		return nil, fmt.Errorf("unknown {{$union.NaturalName}} %v", typ)
+		return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
 	}
 }
 
@@ -110,4 +108,4 @@ func Unmarshal{{.Interface}}JSON(data []byte) ({{.Interface}}, error) {
 	return acnt, nil
 }
 
-{{- end}}
+{{- end}}{{end}}
