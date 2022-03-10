@@ -95,7 +95,6 @@ type CreateIdentity struct {
 	Url        *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
-	PageNr     uint64   `json:"pageNr,omitempty" form:"pageNr" query:"pageNr" validate:"required"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
@@ -928,9 +927,6 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 		return false
 	}
 	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
-		return false
-	}
-	if !(v.PageNr == u.PageNr) {
 		return false
 	}
 	if !((v.Manager).Equal(u.Manager)) {
@@ -2376,8 +2372,7 @@ var fieldNames_CreateIdentity = []string{
 	2: "Url",
 	3: "PublicKey",
 	4: "KeyBookUrl",
-	5: "PageNr",
-	6: "Manager",
+	5: "Manager",
 }
 
 func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
@@ -2394,11 +2389,8 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(4, v.KeyBookUrl)
 	}
-	if !(v.PageNr == 0) {
-		writer.WriteUint(5, v.PageNr)
-	}
 	if !(v.Manager == nil) {
-		writer.WriteUrl(6, v.Manager)
+		writer.WriteUrl(5, v.Manager)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateIdentity)
@@ -2412,11 +2404,6 @@ func (v *CreateIdentity) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field PageNr is missing")
-	} else if v.PageNr == 0 {
-		errs = append(errs, "field PageNr is not set")
 	}
 
 	switch len(errs) {
@@ -5789,10 +5776,7 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(4); ok {
 		v.KeyBookUrl = x
 	}
-	if x, ok := reader.ReadUint(5); ok {
-		v.PageNr = x
-	}
-	if x, ok := reader.ReadUrl(6); ok {
+	if x, ok := reader.ReadUrl(5); ok {
 		v.Manager = x
 	}
 
@@ -7614,14 +7598,12 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 		Url        *url.URL        `json:"url,omitempty"`
 		PublicKey  *string         `json:"publicKey,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
-		PageNr     uint64          `json:"pageNr,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookUrl = v.KeyBookUrl
-	u.PageNr = v.PageNr
 	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
@@ -8646,14 +8628,12 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 		Url        *url.URL        `json:"url,omitempty"`
 		PublicKey  *string         `json:"publicKey,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
-		PageNr     uint64          `json:"pageNr,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookUrl = v.KeyBookUrl
-	u.PageNr = v.PageNr
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8665,7 +8645,6 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 		v.PublicKey = x
 	}
 	v.KeyBookUrl = u.KeyBookUrl
-	v.PageNr = u.PageNr
 	v.Manager = u.Manager
 	return nil
 }

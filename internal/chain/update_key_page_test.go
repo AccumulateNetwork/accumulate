@@ -35,10 +35,9 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	batch := db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page0", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page2", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book", nil))
+	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
 	for _, idx := range []uint64{0, 1, 2} {

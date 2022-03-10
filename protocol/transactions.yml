@@ -121,8 +121,6 @@ CreateIdentity:
       type: url
       pointer: true
       optional: true
-    - name: PageNr
-      type: uvarint
     - name: Manager
       type: url
       pointer: true

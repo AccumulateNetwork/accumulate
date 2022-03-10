@@ -34,8 +34,6 @@ func TestProofADI(t *testing.T) {
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
 		require.NoError(t, err)
-		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page0", adi.Url))
-		require.NoError(t, err)
 		adi.PublicKey = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
@@ -43,10 +41,10 @@ func TestProofADI(t *testing.T) {
 	})
 
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
-	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
+	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKey)
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/page0"), initialCredits))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/book0/1"), initialCredits))
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
@@ -59,7 +57,7 @@ func TestProofADI(t *testing.T) {
 			SignLegacyED25519(adiKey))
 	})
 
-	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
 	n.GetADI("RoadRunner")
 	n.GetTokenAccount("RoadRunner/Baz")
 

@@ -130,16 +130,16 @@ TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
 success
 
 section "Generate keys"
-ensure-key keytest-0-0
 ensure-key keytest-1-0
-ensure-key keytest-1-1
-ensure-key keytest-1-2
 ensure-key keytest-2-0
 ensure-key keytest-2-1
+ensure-key keytest-2-2
+ensure-key keytest-2-0
+ensure-key keytest-3-1
 echo
 
 section "Create an ADI"
-wait-for cli-tx adi create ${LITE} keytest keytest-0-0 keytest/book keytest/page0
+wait-for cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book
 accumulate adi get keytest 1> /dev/null && success || die "Cannot find keytest"
 
 section "Verify fee charge"
@@ -147,7 +147,7 @@ BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
 
 section "Recreating an ADI fails and the synthetic transaction is recorded"
-TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book keytest/page1` || return 1
+TXID=`cli-tx adi create ${LITE} keytest keytest-2-0 keytest/book` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
@@ -156,39 +156,39 @@ STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
 echo $STATUS | jq -re .message 1> /dev/null || die "Synthetic transaction does not have a message"
 success
 
-section "Add credits to the ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/page0 60000
-BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 60000 ] && success || die "keytest/page0 should have 60000 credits but has ${BALANCE}"
+section "Add credits to the ADI's key page 1"
+wait-for cli-tx credits ${LITE} keytest/book/1 60000
+BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/book/1 should have 60000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
-wait-for cli-tx page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
-wait-for cli-tx page create keytest/book keytest-0-0 keytest/page2 keytest-2-0
-accumulate page get keytest/page1 1> /dev/null || die "Cannot find keytest/page1"
-accumulate page get keytest/page2 1> /dev/null || die "Cannot find keytest/page2"
+wait-for cli-tx page create keytest/book keytest-1-0 keytest/book keytest-2-0
+wait-for cli-tx page create keytest/book keytest-1-0 keytest/book keytest-2-0
+accumulate page get keytest/book/2 1> /dev/null || die "Cannot find page keytest/book/2"
+accumulate page get keytest/book/3 1> /dev/null || die "Cannot find page keytest/book/3"
 success
 
-section "Add credits to the ADI's key page 1"
-wait-for cli-tx credits ${LITE} keytest/page1 100
-BALANCE=$(accumulate -j page get keytest/page1 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 100 ] && success || die "keytest/page1 should have 100 credits but has ${BALANCE}"
+section "Add credits to the ADI's key page 2"
+wait-for cli-tx credits ${LITE} keytest/book/2 100
+BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 100 ] && success || die "keytest/book/2 should have 100 credits but has ${BALANCE}"
 
-section "Add a key to page 1 using a key from page 1"
-wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-1
-wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-2
+section "Add a key to page 2 using a key from page 3"
+wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-1
+wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
 success
 
 section "Add a key to page 2 using a key from page 1"
-wait-for cli-tx page key add keytest/page2 keytest-1-0 1 keytest-2-1
+wait-for cli-tx page key add keytest/book/3 keytest-2-0 1 keytest-3-1
 success
 
 section "Set threshold to 2 of 2"
-wait-for cli-tx tx execute keytest/page1 keytest-1-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
-THRESHOLD=$(accumulate -j get keytest/page1 | jq -re .data.threshold)
-[ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/page1 threshold: want 2, got ${THRESHOLD}"
+wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
+THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
+[ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create token --scratch keytest keytest-0-0 0 keytest/tokens ACME keytest/book
+wait-for cli-tx account create token --scratch keytest keytest-1-0 0 keytest/tokens ACME keytest/book
 accumulate account get keytest/tokens 1> /dev/null || die "Cannot find keytest/tokens"
 accumulate -j account get keytest/tokens | jq -re .data.scratch 1> /dev/null || die "keytest/tokens is not a scratch account"
 success
@@ -199,7 +199,7 @@ BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
 
 section "Send tokens from the ADI token account to the lite token account using the multisig page"
-TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1)
+TXID=$(cli-tx tx create keytest/tokens keytest-2-0 ${LITE} 1)
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
@@ -208,7 +208,7 @@ success
 if false; then
     # TODO Enable after AC-1088 is complete. AC-809 causes this to fail because of how nonces are handled.
     section "Signing the transaction with the same key does not deliver it"
-    wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+    wait-for cli-tx-env tx sign keytest/tokens keytest-2-0 $TXID
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
     accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
     wait-for-tx $TXID
@@ -232,14 +232,14 @@ RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
-wait-for cli-tx-env tx sign keytest/tokens keytest-1-1 $TXID
+wait-for cli-tx-env tx sign keytest/tokens keytest-2-1 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
 wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-cli-tx-env tx sign keytest/tokens keytest-1-2 $TXID && die "Signed the transaction after it was delivered" || success
+cli-tx-env tx sign keytest/tokens keytest-2-2 $TXID && die "Signed the transaction after it was delivered" || success
 
 # section "Bug AC-551"
 # api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null
@@ -275,13 +275,13 @@ TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
 (accumulate -j tx get --prove $TXID | jq -e .receipts[0] -C --indent 0) && success || die "Failed to get receipt for ${TXID}"
 
 section "Create a token issuer"
-wait-for cli-tx token create keytest keytest-0-0 keytest/token-issuer TOK 10
+wait-for cli-tx token create keytest keytest-1-0 keytest/token-issuer TOK 10
 accumulate get keytest/token-issuer 1> /dev/null || die "Cannot find keytest/token-issuer"
 success
 
 section "Issue tokens"
 LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
-wait-for cli-tx token issue keytest/token-issuer keytest-0-0 ${LITE_TOK} 123.0123456789
+wait-for cli-tx token issue keytest/token-issuer keytest-1-0 ${LITE_TOK} 123.0123456789
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 keytest tokens but has ${BALANCE}"
 
@@ -296,23 +296,23 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 230123456789 keytest tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
-ACCOUNT_ID=$(accumulate -j account create data --lite keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
+ACCOUNT_ID=$(accumulate -j account create data --lite keytest keytest-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
 [ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
-wait-for cli-tx data write-to keytest keytest-0-0 $ACCOUNT_ID "data test"
+wait-for cli-tx data write-to keytest keytest-1-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
 accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
 accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
 
 section "Create ADI Data Account"
-wait-for cli-tx account create data --scratch keytest keytest-0-0 keytest/data
+wait-for cli-tx account create data --scratch keytest keytest-1-0 keytest/data
 accumulate account get keytest/data 1> /dev/null || die "Cannot find keytest/data"
 accumulate -j account get keytest/data | jq -re .data.scratch 1> /dev/null || die "keytest/data is not a scratch account"
 success
 
 section "Write data to ADI Data Account"
-JSON=$(accumulate -j data write keytest/data keytest-0-0 foo bar)
+JSON=$(accumulate -j data write keytest/data keytest-1-0 foo bar)
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
@@ -321,22 +321,22 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Create a sub ADI"
-wait-for cli-tx adi create keytest keytest-0-0 keytest/sub1 keytest-1-0 keytest/sub1/book keytest/sub1/page0
+wait-for cli-tx adi create keytest keytest-1-0 keytest/sub1 keytest-2-0 keytest/sub1/book keytest/sub1/book/1
 accumulate adi get keytest/sub1 1> /dev/null && success || die "Cannot find keytest/sub1"
 
 section "Add credits to the sub ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/sub1/page0 60000
-BALANCE=$(accumulate -j page get keytest/sub1/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/page0 should have 60000 credits but has ${BALANCE}"
+wait-for cli-tx credits ${LITE} keytest/sub1/book/1 60000
+BALANCE=$(accumulate -j page get keytest/sub1/book/1 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/book/1 should have 60000 credits but has ${BALANCE}"
 
 section "Create Data Account for sub ADI"
-wait-for cli-tx account create data --scratch keytest/sub1 keytest-1-0 keytest/sub1/data
+wait-for cli-tx account create data --scratch keytest/sub1 keytest-2-0 keytest/sub1/data
 accumulate account get keytest/sub1/data 1> /dev/null || die "Cannot find keytest/sub1/data"
 accumulate -j account get keytest/sub1/data | jq -re .data.scratch 1> /dev/null || die "keytest/sub1/data is not a scratch account"
 success
 
 section "Write data to sub ADI Data Account"
-JSON=$(accumulate -j data write keytest/sub1/data keytest-1-0 "foo" "bar")
+JSON=$(accumulate -j data write keytest/sub1/data keytest-2-0 "foo" "bar")
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
@@ -345,7 +345,7 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Issue a new token"
-JSON=$(accumulate -j token create keytest keytest-0-0 keytest/foocoin bar 8)
+JSON=$(accumulate -j token create keytest keytest-1-0 keytest/foocoin bar 8)
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
@@ -375,13 +375,13 @@ RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "Create keypage with manager"
-wait-for cli-tx tx execute keytest/book keytest-0-0 '{"type": "createKeyPage","url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
+wait-for cli-tx tx execute keytest/book keytest-1-0 '{"type": "createKeyPage","url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
 RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
-wait-for cli-tx manager set keytest/page2 keytest-2-0 keytest/book
-RESULT=$(accumulate -j get keytest/page2 | jq -re .data.managerKeyBook)
+wait-for cli-tx manager set keytest/book/3 keytest-2-0 keytest/book
+RESULT=$(accumulate -j get keytest/book/3 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
@@ -397,7 +397,7 @@ TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
 [ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
 
 section "Create ADI Data Account with wait"
-cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data1
+cli-tx account create data --scratch --wait 10s keytest keytest-1-0 keytest/data1
 accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/data1"
 
 section "Query credits"

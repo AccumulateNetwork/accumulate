@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -60,9 +61,6 @@ const (
 
 	// DefaultKeyBook is the default key book name when not specified
 	DefaultKeyBook = "book0"
-
-	// DefaultKeyPage is the default key page name when not specified
-	DefaultKeyPage = "page0"
 )
 
 // AcmeUrl returns `acc://ACME`.
@@ -341,4 +339,9 @@ func IndexChain(name string, major bool) string {
 		return "major-" + name + "-index"
 	}
 	return "minor-" + name + "-index"
+}
+
+// FormatKeyPageUrl provides a global method to format the KeyPage URL which is currently acc://id/book/1
+func FormatKeyPageUrl(keyBookUrl *url.URL, pageNr uint64) *url.URL {
+	return keyBookUrl.JoinPath(strconv.FormatUint(pageNr+1, 10))
 }

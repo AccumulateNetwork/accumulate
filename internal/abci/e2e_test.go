@@ -132,8 +132,6 @@ func TestAnchorChain(t *testing.T) {
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
 		require.NoError(t, err)
-		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page", adi.Url))
-		require.NoError(t, err)
 		adi.PublicKey = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
@@ -236,8 +234,6 @@ func TestCreateADI(t *testing.T) {
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
 		require.NoError(t, err)
-		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/bar-page", adi.Url))
-		require.NoError(t, err)
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
@@ -249,9 +245,9 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, "acc://RoadRunner", r.Url.String())
 
 	kg := n.GetKeyBook("RoadRunner/foo-book")
-	require.Len(t, kg.Pages, 1)
+	require.Equal(t, uint64(1), kg.PageCount)
 
-	ks := n.GetKeyPage("RoadRunner/bar-page")
+	ks := n.GetKeyPage("RoadRunner/foo-book/1")
 	require.Len(t, ks.Keys, 1)
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
@@ -342,10 +338,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", "acc://FooBar/foo/page1"))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", "acc://FooBar/mgr/page1"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
+		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
 		require.NoError(t, batch.Commit())
 
 		n.Batch(func(send func(*transactions.Envelope)) {
@@ -457,7 +453,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		require.Equal(t, []string{
 			n.ParseUrl("FooBar/book0").String(),
-			n.ParseUrl("FooBar/page0").String(),
+			n.ParseUrl("FooBar/book0/1").String(),
 			n.ParseUrl("FooBar/Baz").String(),
 		}, n.GetDirectory("FooBar"))
 	})
@@ -470,8 +466,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"))
+		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book1", pageKey.PubKey().Bytes()))
 		require.NoError(t, batch.Commit())
 
 		n.Batch(func(send func(*transactions.Envelope)) {
@@ -566,7 +562,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	n.Batch(func(send func(*transactions.Envelope)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = 55
-		ac.Recipient = n.ParseUrl("foo/page0")
+		ac.Recipient = n.ParseUrl("foo/book0/1")
 
 		send(newTxn("foo/tokens").
 			WithBody(ac).
@@ -586,7 +582,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	expected := uint64(acmeAmount*protocol.AcmePrecision) - amount.Uint64()
 
-	ks := n.GetKeyPage("foo/page0")
+	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
 	balance := acct.Balance.Int64()
 
@@ -604,22 +600,26 @@ func TestCreateKeyPage(t *testing.T) {
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, batch.Commit())
 
+	spec := n.GetKeyPage("foo/book0/1")
+	require.Len(t, spec.Keys, 1)
+	key := spec.Keys[0]
+	require.Equal(t, uint64(0), key.Nonce)
+	require.Equal(t, fooKey.PubKey().Bytes(), key.PublicKey)
+
 	n.Batch(func(send func(*transactions.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = n.ParseUrl("foo/keyset1")
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey.PubKey().Bytes(),
 		})
 
-		send(newTxn("foo").
+		send(newTxn("foo/book0").
 			WithBody(cms).
 			SignLegacyED25519(fooKey))
 	})
 
-	spec := n.GetKeyPage("foo/keyset1")
+	spec = n.GetKeyPage("foo/book0/2")
 	require.Len(t, spec.Keys, 1)
-	key := spec.Keys[0]
-	require.Nil(t, spec.KeyBook)
+	key = spec.Keys[0]
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
@@ -632,29 +632,28 @@ func TestCreateKeyBook(t *testing.T) {
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
-	specUrl := n.ParseUrl("foo/page1")
+	bookUrl := n.ParseUrl("foo/book1")
+	specUrl := n.ParseUrl("foo/book1/1")
 
-	groupUrl := n.ParseUrl("foo/book1")
-
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		csg := new(protocol.CreateKeyBook)
 		csg.Url = n.ParseUrl("foo/book1")
-		csg.Pages = append(csg.Pages, specUrl)
+		csg.PublicKeyHash = testKey.PubKey().Bytes()
 
 		send(newTxn("foo").
 			WithBody(csg).
 			SignLegacyED25519(fooKey))
 	})
 
-	group := n.GetKeyBook("foo/book1")
-	require.Len(t, group.Pages, 1)
-	require.Equal(t, specUrl.String(), group.Pages[0].String())
+	book := n.GetKeyBook("foo/book1")
+	require.Equal(t, uint64(1), book.PageCount)
+	require.Equal(t, bookUrl, book.Url)
 
-	spec := n.GetKeyPage("foo/page1")
-	require.Equal(t, spec.KeyBook.String(), groupUrl.String())
+	spec := n.GetKeyPage("foo/book1/1")
+	require.Equal(t, bookUrl, spec.KeyBook)
+	require.Equal(t, specUrl, spec.Url)
 }
 
 func TestAddKeyPage(t *testing.T) {
@@ -668,17 +667,15 @@ func TestAddKeyPage(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	// Sanity check
-	require.Equal(t, u.String(), n.GetKeyPage("foo/page1").KeyBook.String())
+	require.Equal(t, u.String(), n.GetKeyPage("foo/book1/1").KeyBook.String())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = n.ParseUrl("foo/page2")
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey2.PubKey().Bytes(),
 		})
@@ -688,7 +685,7 @@ func TestAddKeyPage(t *testing.T) {
 			SignLegacyED25519(testKey1))
 	})
 
-	spec := n.GetKeyPage("foo/page2")
+	spec := n.GetKeyPage("foo/book1/2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
 	require.Equal(t, u.String(), spec.KeyBook.String())
@@ -705,9 +702,8 @@ func TestAddKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"), testKey.PubKey().Bytes())
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
@@ -716,12 +712,12 @@ func TestAddKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationAdd
 		body.NewKey = newKey.PubKey().Bytes()
 
-		send(newTxn("foo/page1").
+		send(newTxn("foo/book1/1").
 			WithBody(body).
 			SignLegacyED25519(testKey))
 	})
 
-	spec := n.GetKeyPage("foo/page1")
+	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 2)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
 }
@@ -735,9 +731,8 @@ func TestUpdateKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"), testKey.PubKey().Bytes())
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
@@ -747,12 +742,12 @@ func TestUpdateKey(t *testing.T) {
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
 
-		send(newTxn("foo/page1").
+		send(newTxn("foo/book1/1").
 			WithBody(body).
 			SignLegacyED25519(testKey))
 	})
 
-	spec := n.GetKeyPage("foo/page1")
+	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
@@ -766,9 +761,8 @@ func TestRemoveKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -776,12 +770,12 @@ func TestRemoveKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationRemove
 		body.Key = testKey1.PubKey().Bytes()
 
-		send(newTxn("foo/page1").
+		send(newTxn("foo/book1/1").
 			WithBody(body).
 			SignLegacyED25519(testKey2))
 	})
 
-	spec := n.GetKeyPage("foo/page1")
+	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
@@ -797,7 +791,7 @@ func TestSignatorHeight(t *testing.T) {
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
-	keyPageUrl, err := url.Parse("foo/page0")
+	keyPageUrl, err := url.Parse("foo/book0/1")
 	require.NoError(t, err)
 
 	batch := n.db.Begin(true)
@@ -819,8 +813,6 @@ func TestSignatorHeight(t *testing.T) {
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
 		require.NoError(t, err)
-		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page0", adi.Url))
-		require.NoError(t, err)
 
 		send(newTxn(liteUrl.String()).
 			WithBody(adi).
@@ -828,7 +820,7 @@ func TestSignatorHeight(t *testing.T) {
 	})
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page0"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book0/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	keyPageHeight := getHeight(keyPageUrl)
