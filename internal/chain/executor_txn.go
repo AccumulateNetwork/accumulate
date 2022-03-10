@@ -443,7 +443,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 
 	for i, sig := range env.Signatures {
 		if sig.Type() == protocol.SignatureTypeRCD1 {
-			sigKH := sha256.Sum256(sig.GetRCDHash())
+			sigKH := protocol.GetRCDHashFromPublicKey(sig.GetPublicKey(), 1)
 			if !bytes.Equal(urlKH, sigKH[:20]) {
 				return fmt.Errorf("signature %d's rcd1 hash does not match the origin record", i)
 			}

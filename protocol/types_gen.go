@@ -313,7 +313,6 @@ type RCD1Signature struct {
 	fieldsSet []bool
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	RCDHash   []byte `json:"rCDHash,omitempty" form:"rCDHash" query:"rCDHash" validate:"required"`
 }
 
 type Receipt struct {
@@ -1407,9 +1406,6 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Signature, u.Signature)) {
-		return false
-	}
-	if !(bytes.Equal(v.RCDHash, u.RCDHash)) {
 		return false
 	}
 
@@ -3918,7 +3914,6 @@ var fieldNames_RCD1Signature = []string{
 	1: "Type",
 	2: "PublicKey",
 	3: "Signature",
-	4: "RCDHash",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -3931,9 +3926,6 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
-	}
-	if !(len(v.RCDHash) == 0) {
-		writer.WriteBytes(4, v.RCDHash)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
@@ -3952,11 +3944,6 @@ func (v *RCD1Signature) IsValid() error {
 		errs = append(errs, "field Signature is missing")
 	} else if len(v.Signature) == 0 {
 		errs = append(errs, "field Signature is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field RCDHash is missing")
-	} else if len(v.RCDHash) == 0 {
-		errs = append(errs, "field RCDHash is not set")
 	}
 
 	switch len(errs) {
@@ -6755,9 +6742,6 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Signature = x
 	}
-	if x, ok := reader.ReadBytes(4); ok {
-		v.RCDHash = x
-	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
 	v.fieldsSet = seen
@@ -8175,12 +8159,10 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 		Type      SignatureType `json:"type"`
 		PublicKey *string       `json:"publicKey,omitempty"`
 		Signature *string       `json:"signature,omitempty"`
-		RCDHash   *string       `json:"rCDHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
-	u.RCDHash = encoding.BytesToJSON(v.RCDHash)
 	return json.Marshal(&u)
 }
 
@@ -9506,12 +9488,10 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		Type      SignatureType `json:"type"`
 		PublicKey *string       `json:"publicKey,omitempty"`
 		Signature *string       `json:"signature,omitempty"`
-		RCDHash   *string       `json:"rCDHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
-	u.RCDHash = encoding.BytesToJSON(v.RCDHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -9524,11 +9504,6 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Signature: %w", err)
 	} else {
 		v.Signature = x
-	}
-	if x, err := encoding.BytesFromJSON(u.RCDHash); err != nil {
-		return fmt.Errorf("error decoding RCDHash: %w", err)
-	} else {
-		v.RCDHash = x
 	}
 	return nil
 }
