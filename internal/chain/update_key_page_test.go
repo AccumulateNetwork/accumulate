@@ -47,7 +47,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			body.Key = testKey.PubKey().Bytes()
 			body.NewKey = newKey.PubKey().Bytes()
 
-			u, err := url.Parse("foo/book/1")
+			u, err := url.Parse("foo/book/2")
 			require.NoError(t, err)
 
 			env := acctesting.NewTransaction().
@@ -63,7 +63,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, `cannot modify "acc://foo/book/1" with a lower priority key page`)
+				require.EqualError(t, err, `cannot modify "acc://foo/book/2" with a lower priority key page`)
 			}
 
 			// Do not store state changes
