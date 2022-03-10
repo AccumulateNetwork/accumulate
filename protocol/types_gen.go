@@ -114,15 +114,14 @@ type CreateKeyPage struct {
 }
 
 type CreateToken struct {
-	fieldsSet     []bool
-	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	KeyBookUrl    *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
-	Symbol        string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision     uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties    *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
-	InitialSupply big.Int  `json:"initialSupply,omitempty" form:"initialSupply" query:"initialSupply"`
-	SupplyLimit   big.Int  `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
-	Manager       *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	fieldsSet   []bool
+	Url         *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	KeyBookUrl  *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
+	Symbol      string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision   uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
+	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
+	Manager     *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateTokenAccount struct {
@@ -447,7 +446,7 @@ type TokenIssuer struct {
 	Precision   uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
 	Issued      big.Int  `json:"issued,omitempty" form:"issued" query:"issued"`
-	SupplyLimit big.Int  `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
+	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
 }
 
 type TokenRecipient struct {
@@ -995,10 +994,7 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 	if !((v.Properties).Equal(u.Properties)) {
 		return false
 	}
-	if !((&v.InitialSupply).Cmp(&u.InitialSupply) == 0) {
-		return false
-	}
-	if !((&v.SupplyLimit).Cmp(&u.SupplyLimit) == 0) {
+	if !((v.SupplyLimit).Cmp(u.SupplyLimit) == 0) {
 		return false
 	}
 	if !((v.Manager).Equal(u.Manager)) {
@@ -1691,7 +1687,7 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 	if !((&v.Issued).Cmp(&u.Issued) == 0) {
 		return false
 	}
-	if !((&v.SupplyLimit).Cmp(&u.SupplyLimit) == 0) {
+	if !((v.SupplyLimit).Cmp(u.SupplyLimit) == 0) {
 		return false
 	}
 
@@ -2554,9 +2550,8 @@ var fieldNames_CreateToken = []string{
 	4: "Symbol",
 	5: "Precision",
 	6: "Properties",
-	7: "InitialSupply",
-	8: "SupplyLimit",
-	9: "Manager",
+	7: "SupplyLimit",
+	8: "Manager",
 }
 
 func (v *CreateToken) MarshalBinary() ([]byte, error) {
@@ -2579,14 +2574,11 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	if !(v.Properties == nil) {
 		writer.WriteUrl(6, v.Properties)
 	}
-	if !((v.InitialSupply).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(7, &v.InitialSupply)
-	}
-	if !((v.SupplyLimit).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(8, &v.SupplyLimit)
+	if !(v.SupplyLimit == nil) {
+		writer.WriteBigInt(7, v.SupplyLimit)
 	}
 	if !(v.Manager == nil) {
-		writer.WriteUrl(9, v.Manager)
+		writer.WriteUrl(8, v.Manager)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateToken)
@@ -4907,8 +4899,8 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	if !((v.Issued).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(6, &v.Issued)
 	}
-	if !((v.SupplyLimit).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(7, &v.SupplyLimit)
+	if !(v.SupplyLimit == nil) {
+		writer.WriteBigInt(7, v.SupplyLimit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenIssuer)
@@ -5924,12 +5916,9 @@ func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Properties = x
 	}
 	if x, ok := reader.ReadBigInt(7); ok {
-		v.InitialSupply = *x
+		v.SupplyLimit = x
 	}
-	if x, ok := reader.ReadBigInt(8); ok {
-		v.SupplyLimit = *x
-	}
-	if x, ok := reader.ReadUrl(9); ok {
+	if x, ok := reader.ReadUrl(8); ok {
 		v.Manager = x
 	}
 
@@ -7216,7 +7205,7 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Issued = *x
 	}
 	if x, ok := reader.ReadBigInt(7); ok {
-		v.SupplyLimit = *x
+		v.SupplyLimit = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TokenIssuer)
@@ -7694,15 +7683,14 @@ func (v *CreateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          TransactionType `json:"type"`
-		Url           *url.URL        `json:"url,omitempty"`
-		KeyBookUrl    *url.URL        `json:"keyBookUrl,omitempty"`
-		Symbol        string          `json:"symbol,omitempty"`
-		Precision     uint64          `json:"precision,omitempty"`
-		Properties    *url.URL        `json:"properties,omitempty"`
-		InitialSupply *string         `json:"initialSupply,omitempty"`
-		SupplyLimit   *string         `json:"supplyLimit,omitempty"`
-		Manager       *url.URL        `json:"manager,omitempty"`
+		Type        TransactionType `json:"type"`
+		Url         *url.URL        `json:"url,omitempty"`
+		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
+		Symbol      string          `json:"symbol,omitempty"`
+		Precision   uint64          `json:"precision,omitempty"`
+		Properties  *url.URL        `json:"properties,omitempty"`
+		SupplyLimit *string         `json:"supplyLimit,omitempty"`
+		Manager     *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -7710,8 +7698,7 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
-	u.SupplyLimit = encoding.BigintToJSON(&v.SupplyLimit)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
@@ -8322,7 +8309,7 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u.Precision = v.Precision
 	u.Properties = v.Properties
 	u.Issued = encoding.BigintToJSON(&v.Issued)
-	u.SupplyLimit = encoding.BigintToJSON(&v.SupplyLimit)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	return json.Marshal(&u)
 }
 
@@ -8752,15 +8739,14 @@ func (v *CreateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          TransactionType `json:"type"`
-		Url           *url.URL        `json:"url,omitempty"`
-		KeyBookUrl    *url.URL        `json:"keyBookUrl,omitempty"`
-		Symbol        string          `json:"symbol,omitempty"`
-		Precision     uint64          `json:"precision,omitempty"`
-		Properties    *url.URL        `json:"properties,omitempty"`
-		InitialSupply *string         `json:"initialSupply,omitempty"`
-		SupplyLimit   *string         `json:"supplyLimit,omitempty"`
-		Manager       *url.URL        `json:"manager,omitempty"`
+		Type        TransactionType `json:"type"`
+		Url         *url.URL        `json:"url,omitempty"`
+		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
+		Symbol      string          `json:"symbol,omitempty"`
+		Precision   uint64          `json:"precision,omitempty"`
+		Properties  *url.URL        `json:"properties,omitempty"`
+		SupplyLimit *string         `json:"supplyLimit,omitempty"`
+		Manager     *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -8768,8 +8754,7 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
-	u.SupplyLimit = encoding.BigintToJSON(&v.SupplyLimit)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8779,15 +8764,10 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	v.Symbol = u.Symbol
 	v.Precision = u.Precision
 	v.Properties = u.Properties
-	if x, err := encoding.BigintFromJSON(u.InitialSupply); err != nil {
-		return fmt.Errorf("error decoding InitialSupply: %w", err)
-	} else {
-		v.InitialSupply = *x
-	}
 	if x, err := encoding.BigintFromJSON(u.SupplyLimit); err != nil {
 		return fmt.Errorf("error decoding SupplyLimit: %w", err)
 	} else {
-		v.SupplyLimit = *x
+		v.SupplyLimit = x
 	}
 	v.Manager = u.Manager
 	return nil
@@ -9834,7 +9814,7 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u.Precision = v.Precision
 	u.Properties = v.Properties
 	u.Issued = encoding.BigintToJSON(&v.Issued)
-	u.SupplyLimit = encoding.BigintToJSON(&v.SupplyLimit)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -9852,7 +9832,7 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	if x, err := encoding.BigintFromJSON(u.SupplyLimit); err != nil {
 		return fmt.Errorf("error decoding SupplyLimit: %w", err)
 	} else {
-		v.SupplyLimit = *x
+		v.SupplyLimit = x
 	}
 	return nil
 }

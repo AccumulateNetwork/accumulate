@@ -223,11 +223,9 @@ CreateToken:
       type: url
       pointer: true
       optional: true
-    - name: InitialSupply
-      type: bigint
-      optional: true
     - name: SupplyLimit
       type: bigint
+      pointer: true
       optional: true
     - name: Manager
       type: url

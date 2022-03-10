@@ -25,7 +25,6 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	token := protocol.NewTokenIssuer()
 	token.Url = body.Url
 	token.Precision = body.Precision
-	token.Issued = body.InitialSupply
 	token.SupplyLimit = body.SupplyLimit
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties

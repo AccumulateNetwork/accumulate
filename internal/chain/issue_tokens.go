@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -24,7 +23,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
 	}
 
-	if issuer.Issued.Cmp(&body.Amount) < 0 && issuer.SupplyLimit.Cmp(big.NewInt(0)) > 0 {
+	if issuer.Issued.Cmp(&body.Amount) < 0 && issuer.SupplyLimit == nil {
 		return nil, fmt.Errorf("can't issue more than the limited supply")
 	}
 	issuer.Issued.Sub(&issuer.Issued, &body.Amount)
