@@ -409,8 +409,10 @@ func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, err
 	switch {
 	case method == "":
 		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
-	case wantPtr:
+	case wantPtr && !field.Pointer:
 		ptrPrefix = "&"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "*"
 	}
 
 	if !field.Repeatable {
@@ -434,8 +436,10 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 	switch {
 	case method == "":
 		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
-	case wantPtr:
+	case wantPtr && !field.Pointer:
 		ptrPrefix = "*"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "&"
 	}
 
 	if !field.Repeatable {
