@@ -314,8 +314,11 @@ func DnUrl() *url.URL {
 	return &url.URL{Authority: "dn"}
 }
 
-// BvnUrl returns `acc://bvn-${subnet}`.
-func BvnUrl(subnet string) *url.URL {
+// SubnetUrl returns `acc://bvn-${subnet}` or `acc://dn`.
+func SubnetUrl(subnet string) *url.URL {
+	if strings.EqualFold(subnet, Directory) {
+		return DnUrl()
+	}
 	return &url.URL{Authority: "bvn-" + subnet}
 }
 
@@ -367,7 +370,28 @@ func ParseAnchorChain(name string) (string, bool) {
 	return name[7:], true
 }
 
-// FormatKeyPageUrl provides a global method to format the KeyPage URL which is currently acc://id/book/1
-func FormatKeyPageUrl(keyBookUrl *url.URL, pageNr uint64) *url.URL {
-	return keyBookUrl.JoinPath(strconv.FormatUint(pageNr+1, 10))
+// FormatKeyPageUrl constructs the URL of a key page from the URL of its key
+// book and the page index. For example, the URL for the first page of id/book
+// is id/book/1.
+func FormatKeyPageUrl(keyBook *url.URL, pageIndex uint64) *url.URL {
+	return keyBook.JoinPath(strconv.FormatUint(pageIndex+1, 10))
+}
+
+// ParseKeyPageUrl parses a key page URL, returning the key book URL and the
+// page number. If the URL does not represent a key page, the last return value
+// is false. ParseKeyPageUrl is the inverse of FormatKeyPageUrl.
+func ParseKeyPageUrl(keyPage *url.URL) (*url.URL, uint64, bool) {
+	i := strings.LastIndexByte(keyPage.Path, '/')
+	if i < 0 {
+		return nil, 0, false
+	}
+
+	index, err := strconv.ParseUint(keyPage.Path[i+1:], 10, 16)
+	if err != nil {
+		return nil, 0, false
+	}
+
+	keyBook := *keyPage
+	keyBook.Path = keyBook.Path[:i]
+	return &keyBook, index, true
 }

@@ -36,7 +36,7 @@ func TestProofADI(t *testing.T) {
 		adi.PublicKey = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
-			SignLegacyED25519(liteKey))
+			Initiate(protocol.SignatureTypeLegacyED25519, liteKey))
 	})
 
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
@@ -53,7 +53,7 @@ func TestProofADI(t *testing.T) {
 		tac.TokenUrl = protocol.AcmeUrl()
 		send(newTxn("RoadRunner").
 			WithBody(tac).
-			SignLegacyED25519(adiKey))
+			Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 	})
 
 	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))

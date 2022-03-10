@@ -96,14 +96,11 @@ func BenchmarkHighTps(b *testing.B) {
 
 			for i := 0; i < size; i++ {
 				env := acctesting.NewTransaction().
-					WithOrigin(liteAddr).
+					WithPrincipal(liteAddr).
+					WithSigner(network.NodeUrl(), 1).
 					WithNonceTimestamp().
 					WithBody(deposit).
-					Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
-						ed := new(protocol.ED25519Signature)
-						err := ed.Sign(nonce, nodeKey, hash)
-						return ed, err
-					})
+					Initiate(protocol.SignatureTypeED25519, nodeKey)
 
 				_, err := exec.DeliverTx(env)
 				if err != nil {
@@ -114,14 +111,11 @@ func BenchmarkHighTps(b *testing.B) {
 			b.ResetTimer()
 			b.Run("DeliverTx", func(b *testing.B) {
 				env := acctesting.NewTransaction().
-					WithOrigin(liteAddr).
+					WithPrincipal(liteAddr).
+					WithSigner(network.NodeUrl(), 1).
 					WithNonceTimestamp().
 					WithBody(deposit).
-					Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
-						ed := new(protocol.ED25519Signature)
-						err := ed.Sign(nonce, nodeKey, hash)
-						return ed, err
-					})
+					Initiate(protocol.SignatureTypeED25519, nodeKey)
 
 				for i := 0; i < b.N; i++ {
 					*batchStorePtr = batch.Copy()
@@ -183,17 +177,14 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 
 	// Create a synthetic transaction where the origin does not exist
 	env := acctesting.NewTransaction().
-		WithOrigin(url.MustParse("acc://account-that-does-not-exist")).
+		WithPrincipal(url.MustParse("acc://account-that-does-not-exist")).
+		WithSigner(network.NodeUrl(), 1).
 		WithNonceTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
 			Cause:  [32]byte{1},
 			Amount: 1,
 		}).
-		Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
-			ed := new(protocol.ED25519Signature)
-			err := ed.Sign(nonce, key, hash)
-			return ed, err
-		})
+		Initiate(protocol.SignatureTypeED25519, key)
 
 	// Check passes
 	_, err = chain.CheckTx(env)

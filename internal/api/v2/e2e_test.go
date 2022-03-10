@@ -297,7 +297,7 @@ func TestTokenTransfer(t *testing.T) {
 			}
 			for i, daemon := range daemons {
 				japi := daemon.Jrpc_TESTONLY()
-				res := executeTxFail(t, japi, "send-tokens", 0, 1, txParams)
+				res := executeTxFail(t, japi, "send-tokens", bobUrl, 1, txParams)
 				code := res.Result.(map[string]interface{})["code"].(float64)
 				assert.Equal(t, protocol.ErrorCodeNotFound, protocol.ErrorCode(code), "Node %d (%s) returned the wrong error code", i, netName)
 			}

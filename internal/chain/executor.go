@@ -135,7 +135,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 
 	env := new(protocol.Envelope)
 	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Origin = protocol.AcmeUrl()
+	env.Transaction.Header.Principal = protocol.AcmeUrl()
 	env.Transaction.Body = new(protocol.InternalGenesis)
 
 	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)

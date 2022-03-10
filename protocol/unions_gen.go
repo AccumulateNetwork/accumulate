@@ -292,6 +292,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(RCD1Signature), nil
 	case SignatureTypeReceipt:
 		return new(ReceiptSignature), nil
+	case SignatureTypeSynthetic:
+		return new(SyntheticSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", typ)
 	}

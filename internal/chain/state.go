@@ -16,9 +16,8 @@ import (
 type StateManager struct {
 	stateCache
 
-	Origin        protocol.Account
-	OriginUrl     *url.URL
-	OriginChainId [32]byte
+	Origin    protocol.Account
+	OriginUrl *url.URL
 
 	Signator    creditChain
 	SignatorUrl *url.URL
@@ -31,12 +30,22 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Enve
 	m := new(StateManager)
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
-	m.OriginUrl = env.Transaction.Origin
 
-	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
+	// copy(m.OriginChainId[:], m.OriginUrl.AccountID())
+
+	// TODO Process each signature separately
+
+	// Find the signator
+	var err error
+	m.SignatorUrl = env.Signatures[0].GetSigner()
+	err = m.LoadUrlAs(m.SignatorUrl, &m.Signator)
+	if err != nil {
+		// The signer must not be missing
+		return nil, err
+	}
 
 	// Find the origin
-	var err error
+	m.OriginUrl = env.Transaction.Header.Principal
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
 	switch {
 	case err == nil:
@@ -104,10 +113,7 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 
-	txn := new(protocol.Transaction)
-	txn.Origin = url
-	txn.Body = body
-	m.blockState.DidProduceTxn(txn)
+	m.blockState.DidProduceTxn(url, body)
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
