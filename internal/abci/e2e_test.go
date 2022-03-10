@@ -71,8 +71,8 @@ func TestEvilNode(t *testing.T) {
 	n := nodes[bvn][0]
 
 	var count = 11
-
-	originAddr, balances := n.testLiteTx(count)
+	acmeToSpendOnCredits := 100.0
+	originAddr, balances := n.testLiteTx(count, acmeToSpendOnCredits)
 	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())

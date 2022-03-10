@@ -187,7 +187,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 		WithNonceTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
 			Cause:  [32]byte{1},
-			Amount: 1,
+			Amount: *big.NewInt(1),
 		}).
 		Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
 			ed := new(protocol.ED25519Signature)
