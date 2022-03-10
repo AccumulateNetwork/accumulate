@@ -316,18 +316,32 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 	}
 
 	//store votes from previous block, choosing to marshal as json to make it easily viewable by explorers
-
-	data, err := json.Marshal(&req.CommitInfo)
+	data, err := json.Marshal(req.CommitInfo)
 	if err != nil {
-		m.logger.Error("cannot marshal voting info data")
+		m.logger.Error("cannot marshal voting info data as json")
 	} else {
-
 		wd := protocol.WriteData{}
 		wd.Entry.Data = data
 
 		err := m.processInternalDataTransaction(protocol.Votes, &wd)
 		if err != nil {
 			m.logger.Error(fmt.Sprintf("error processing internal vote transaction, %v", err))
+		}
+	}
+
+	//capture evidence of maleficence if any occurred
+	if req.Evidence != nil {
+		data, err := json.Marshal(req.Evidence)
+		if err != nil {
+			m.logger.Error("cannot marshal evidence as json")
+		} else {
+			wd := protocol.WriteData{}
+			wd.Entry.Data = data
+
+			err := m.processInternalDataTransaction(protocol.Evidence, &wd)
+			if err != nil {
+				m.logger.Error(fmt.Sprintf("error processing internal evidence transaction, %v", err))
+			}
 		}
 	}
 
@@ -413,7 +427,7 @@ func (m *Executor) commit(force bool) ([]byte, error) {
 	}
 
 	//return anchor from minor root anchor chain
-	anchor, err := m.blockBatch.GetMinorRootChainAnchor(&m.Network)
+	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, err
 	}
