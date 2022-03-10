@@ -62,7 +62,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	var directory *Subnet
 	var bvns []*Subnet
 
-	//var localAddress string
 	var bvnSubnet []*Subnet
 
 	//now look for the subnet.
@@ -108,22 +107,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			check(fmt.Errorf("%s is defined in the directory nodes networks file, but has no supporting BVN node", dnn.IP))
 		}
 	}
-	//if localAddress == "" {
-	//	check(fmt.Errorf("cannot find local address for directory node"))
-	//}
 
 	// we'll need 1 DN for each BVN.
 	numBvns := len(network.Subnet) - 1
 
-	// if length of the directory !=
-
 	if flagInitNetwork.Compose {
 		flagInitNetwork.Docker = true
 	}
-
-	//if flagInitNetwork.Docker && cmd.Flag("ip").Changed {
-	//	fatalf("--ip and --docker are mutually exclusive")
-	//}
 
 	count := 1 //we will only need a count of 1 since the bvn and dn will be run in the same app
 	compose := new(dc.Config)
@@ -246,49 +236,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		nodeReset()
 	}
-	//
-	////if we neet to bootstrap we need to fetch genesis document and set persistent peers
-	//accClient, err := client.New(fmt.Sprintf("http://%s:%d", subnet, subnet.Port+networks.AccRouterJsonPortOffset))
-	//checkf(err, "failed to create API client for %s", args[0])
-	//
-	//tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, subnet.Port+networks.TmRpcPortOffset))
-	//checkf(err, "failed to create Tendermint client for %s", args[0])
-	//
-	//version := getVersion(accClient)
-	//switch {
-	//case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-	//	warnf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.", args[0])
-	//
-	//case accumulate.Commit != version.Commit:
-	//	if flagInitNode.SkipVersionCheck {
-	//		warnf("This executable is version %s but %s is %s. This may cause the node to fail.", formatVersion(accumulate.Version, accumulate.IsVersionKnown()), args[0], formatVersion(version.Version, version.VersionIsKnown))
-	//	} else {
-	//		fatalf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
-	//	}
-	//}
-	//
-	//description, err := accClient.Describe(context.Background())
-	//checkf(err, "failed to get description from %s", args[0])
-	//
-	//var genDoc *types.GenesisDoc
-	//if cmd.Flag("genesis-doc").Changed {
-	//	genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-	//	checkf(err, "failed to load genesis doc %q", flagInitNode.GenesisDoc)
-	//} else {
-	//	warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
-	//	rgen, err := tmClient.Genesis(context.Background())
-	//	checkf(err, "failed to get genesis from %s", args[0])
-	//	genDoc = rgen.Genesis
-	//}
-	//
-	//config := config.Default(description.Subnet.Type, config.Validator, description.Subnet.ID)
-	//config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	//config.Accumulate.Network = description.Subnet
-	//if flagInit.LogLevels != "" {
-	//	_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
-	//	checkf(err, "--log-level")
-	//	config.LogLevel = flagInit.LogLevels
-	//}
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
