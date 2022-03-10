@@ -3,6 +3,7 @@ package query
 import (
 	"bytes"
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"

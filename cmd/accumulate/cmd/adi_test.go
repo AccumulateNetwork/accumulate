@@ -156,17 +156,6 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 	r, err = tc.execute(t, "adi directory acc://RedWagon/sub1 0 10")
 	require.NoError(t, err)
 	t.Log(r)
-
-	/*	commandLine = fmt.Sprintf("adi create acc://RedWagon/sub1 red2 acc://RedWagon/sub1/sub2 red3")
-		r, err = tc.executeTx(t, commandLine)
-		require.NoError(t, err)
-		t.Log(r)
-
-		//if this doesn't fail, then adi is created
-		r, err = tc.execute(t, "adi directory acc://RedWagon/sub1/sub2 0 10")
-		require.NoError(t, err)
-		t.Log(r)
-	*/
 }
 
 //testCase2_7a
