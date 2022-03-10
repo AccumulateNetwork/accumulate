@@ -63,7 +63,7 @@ const (
 	SyntheticChain = "synthetic"
 
 	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
-	ValidatorMofNFactor = 2 / 3
+	ValidatorMofNFactor = 2.0 / 3.0
 )
 
 // AcmeUrl returns `acc://ACME`.
