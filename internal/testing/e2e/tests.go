@@ -75,5 +75,5 @@ func (s *Suite) TestCreateLiteAccount() {
 
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(5e5*protocol.AcmePrecision-total), account.Balance.Int64())
+	s.Require().Equal(int64(3e5*acctesting.TokenMx-total), account.Balance.Int64())
 }

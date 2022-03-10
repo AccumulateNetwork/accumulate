@@ -1,10 +1,7 @@
 package pmt
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // CollectReceipt
@@ -19,10 +16,8 @@ import (
 func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receipt *managed.Receipt) (hash []byte) {
 	if node.Left != nil && node.Left.T() == TNotLoaded || // Check if either the Left or Right
 		node.Right != nil && node.Right.T() == TNotLoaded { // are pointing to not loaded.
-		node.BBKey = GetBBKey(BIdx, key) // If not loaded, load the nodes
-		n := b.manager.LoadNode(node)
-		node.Left = n.Left
-		node.Right = n.Right
+		b.manager.LoadNode(node)
+
 	}
 
 	var entry, other Entry // The node has a left or right entry that builds a tree.
@@ -77,11 +72,8 @@ func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receip
 // GetReceipt
 // Returns the receipt for the current state for the given chainID
 func (b *BPT) GetReceipt(chainID [32]byte) *managed.Receipt { //          The location of a value is determined by the chainID (a key)
-	if debug {
-		fmt.Printf("BPT insert key=%v\n", storage.Key(chainID))
-	}
 	receipt := new(managed.Receipt)
-	receipt.MDRoot = b.CollectReceipt(0, 0x80, b.Root, chainID, receipt) //
+	receipt.MDRoot = b.CollectReceipt(0, 0x80, b.GetRoot(), chainID, receipt) //
 	if receipt.MDRoot == nil {
 		return nil
 	}

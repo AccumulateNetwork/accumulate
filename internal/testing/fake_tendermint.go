@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -11,8 +12,10 @@ import (
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
+	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	rpc "github.com/tendermint/tendermint/rpc/client"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
@@ -38,6 +41,7 @@ type FakeTendermint struct {
 	address    crypto.Address
 	logger     log.Logger
 	onError    func(err error)
+	validators []crypto.PubKey
 
 	stop    chan struct{}
 	stopped *sync.WaitGroup
@@ -49,6 +53,7 @@ type FakeTendermint struct {
 	txMu     *sync.RWMutex
 	txCond   *sync.Cond
 	txActive int
+	isEvil   bool
 }
 
 type txStatus struct {
@@ -62,13 +67,13 @@ type txStatus struct {
 	Done          bool
 }
 
-func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, pubKey crypto.PubKey, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration, isEvil bool) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
 	c.network = network
 	c.nextHeight = nextHeight
-	c.address = address
+	c.address = pubKey.Address()
 	c.logger = logger
 	c.onError = onError
 	c.stop = make(chan struct{})
@@ -78,6 +83,9 @@ func NewFakeTendermint(app <-chan abci.Application, db *database.Database, netwo
 	c.txPend = map[[32]byte]bool{}
 	c.txMu = new(sync.RWMutex)
 	c.txCond = sync.NewCond(c.txMu.RLocker())
+	c.isEvil = isEvil
+
+	c.validators = []crypto.PubKey{pubKey}
 
 	c.appWg.Add(1)
 	go func() {
@@ -87,6 +95,10 @@ func NewFakeTendermint(app <-chan abci.Application, db *database.Database, netwo
 
 	go c.execute(interval)
 	return c
+}
+
+func (c *FakeTendermint) Validators() []crypto.PubKey {
+	return c.validators
 }
 
 func (c *FakeTendermint) Shutdown() {
@@ -343,6 +355,17 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		begin := abci.RequestBeginBlock{}
 		begin.Header.Height = height
 		begin.Header.ProposerAddress = c.address
+		if c.isEvil {
+			//add evidence of something happening to the evidence chain.
+			ev := abci.Evidence{}
+			ev.Validator.Address = c.address
+			ev.Type = abci.EvidenceType_LIGHT_CLIENT_ATTACK
+			ev.Height = height
+			ev.Time.Add(interval * time.Duration(ev.Height))
+			ev.TotalVotingPower = 1
+			begin.ByzantineValidators = append(begin.ByzantineValidators, ev)
+		}
+
 		c.app.BeginBlock(begin)
 
 		if debugTX {
@@ -372,8 +395,12 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			}
 		}
 
-		c.app.EndBlock(abci.RequestEndBlock{})
+		endBlockResp := c.app.EndBlock(abci.RequestEndBlock{})
 		c.app.Commit()
+
+		for _, update := range endBlockResp.ValidatorUpdates {
+			c.applyValidatorUpdate(&update)
+		}
 
 		for _, sub := range queue {
 			sub.Done = true
@@ -399,6 +426,26 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 	}
 }
 
+func (c *FakeTendermint) applyValidatorUpdate(update *abci.ValidatorUpdate) {
+	key, ok := update.PubKey.Sum.(*protocrypto.PublicKey_Ed25519)
+	if !ok {
+		panic(fmt.Errorf("expected ED25519, got %T", update.PubKey.Sum))
+	}
+
+	if update.Power > 0 {
+		c.validators = append(c.validators, ed25519.PubKey(key.Ed25519))
+		return
+	}
+
+	for i, v := range c.validators {
+		if bytes.Equal(v.Bytes(), key.Ed25519) {
+			copy(c.validators[i:], c.validators[i+1:])
+			c.validators = c.validators[:len(c.validators)-1]
+			return
+		}
+	}
+}
+
 func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
 	var h [32]byte
 	copy(h[:], hash)
@@ -419,11 +466,11 @@ func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctyp
 	}, nil
 }
 
-func (c *FakeTendermint) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*ctypes.ResultABCIQuery, error) {
+func (c *FakeTendermint) ABCIQuery(ctx context.Context, path string, data tmbytes.HexBytes) (*ctypes.ResultABCIQuery, error) {
 	return c.ABCIQueryWithOptions(ctx, path, data, rpc.DefaultABCIQueryOptions)
 }
 
-func (c *FakeTendermint) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts rpc.ABCIQueryOptions) (*ctypes.ResultABCIQuery, error) {
+func (c *FakeTendermint) ABCIQueryWithOptions(ctx context.Context, path string, data tmbytes.HexBytes, opts rpc.ABCIQueryOptions) (*ctypes.ResultABCIQuery, error) {
 	r := c.App().Query(abci.RequestQuery{Data: data, Path: path, Height: opts.Height, Prove: opts.Prove})
 	return &ctypes.ResultABCIQuery{Response: r}, nil
 }
