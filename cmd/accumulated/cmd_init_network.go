@@ -3,6 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -12,12 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"io"
-	"io/ioutil"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
 )
 
 type Node struct {
