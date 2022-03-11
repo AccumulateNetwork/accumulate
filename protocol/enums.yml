@@ -36,6 +36,9 @@ SignatureType:
   ED25519:
     value: 2
     description: represents an ED25519 signature
+  RCD1:
+    value: 3
+    description: represents an RCD1 signature
 
 KeyPageOperation:
   Unknown:
