@@ -442,16 +442,9 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 	}
 
 	for i, sig := range env.Signatures {
-		if sig.Type() == protocol.SignatureTypeRCD1 {
-			sigKH := protocol.GetRCDHashFromPublicKey(sig.GetPublicKey(), 1)
-			if !bytes.Equal(urlKH, sigKH[:20]) {
-				return fmt.Errorf("signature %d's rcd1 hash does not match the origin record", i)
-			}
-		} else {
-			sigKH := sha256.Sum256(sig.GetPublicKey())
-			if !bytes.Equal(urlKH, sigKH[:20]) {
-				return fmt.Errorf("signature %d's public key does not match the origin record", i)
-			}
+		sigKH := sha256.Sum256(sig.GetPublicKey())
+		if !bytes.Equal(urlKH, sigKH[:20]) {
+			return fmt.Errorf("signature %d's public key does not match the origin record", i)
 		}
 
 		// Don't bother with nonces for the faucet

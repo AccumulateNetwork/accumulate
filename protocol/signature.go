@@ -3,7 +3,6 @@ package protocol
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -77,7 +76,10 @@ func (e *ED25519Signature) Verify(hash []byte) bool {
 
 // GetPublicKey returns PublicKey.
 func (e *RCD1Signature) GetPublicKey() []byte {
-	return e.PublicKey
+	b := make([]byte, len(e.PublicKey)+1)
+	b[0] = 1
+	copy(b[1:], e.PublicKey)
+	return b
 }
 
 // GetSignature returns Signature.
@@ -101,12 +103,4 @@ func (e *RCD1Signature) Sign(nonce uint64, privateKey []byte, hash []byte) error
 
 func (e *RCD1Signature) Verify(hash []byte) bool {
 	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
-}
-
-func GetRCDHashFromPublicKey(pubKey []byte, version byte) []byte {
-	var buffer bytes.Buffer
-	buffer.WriteByte(version)
-	buffer.Write(pubKey[:])
-	h := sha256.Sum256(buffer.Bytes())
-	return h[:]
 }
