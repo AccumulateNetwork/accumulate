@@ -309,6 +309,12 @@ type PendingTransactionState struct {
 	Status           json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
+type RCD1Signature struct {
+	fieldsSet []bool
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+}
+
 type Receipt struct {
 	fieldsSet []bool
 	Start     []byte         `json:"start,omitempty" form:"start" query:"start" validate:"required"`
@@ -702,6 +708,8 @@ func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAcco
 func (*PendingTransactionState) Type() AccountType { return AccountTypePendingTransaction }
 
 func (*PendingTransactionState) GetType() AccountType { return AccountTypePendingTransaction }
+
+func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*RemoveManager) Type() TransactionType { return TransactionTypeRemoveManager }
 
@@ -1387,6 +1395,17 @@ func (v *PendingTransactionState) Equal(u *PendingTransactionState) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Status, u.Status)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
 
@@ -3874,6 +3893,52 @@ func (v *PendingTransactionState) IsValid() error {
 		errs = append(errs, "field Status is missing")
 	} else if len(v.Status) == 0 {
 		errs = append(errs, "field Status is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RCD1Signature = []string{
+	1: "Type",
+	2: "PublicKey",
+	3: "Signature",
+}
+
+func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, SignatureTypeRCD1.ID())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RCD1Signature)
+	return buffer.Bytes(), err
+}
+
+func (v *RCD1Signature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
 	}
 
 	switch len(errs) {
@@ -6652,6 +6717,32 @@ func (v *PendingTransactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ SignatureType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != SignatureTypeRCD1 {
+		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeRCD1, typ)
+	}
+
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RCD1Signature)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *Receipt) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8058,6 +8149,18 @@ func (v *PendingTransactionState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      SignatureType `json:"type"`
+		PublicKey *string       `json:"publicKey,omitempty"`
+		Signature *string       `json:"signature,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	return json.Marshal(&u)
+}
+
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start   *string        `json:"start,omitempty"`
@@ -9372,6 +9475,31 @@ func (v *PendingTransactionState) UnmarshalJSON(data []byte) error {
 	}
 	v.TransactionState = u.TransactionState
 	v.Status = u.Status
+	return nil
+}
+
+func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      SignatureType `json:"type"`
+		PublicKey *string       `json:"publicKey,omitempty"`
+		Signature *string       `json:"signature,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
 	return nil
 }
 
