@@ -31,6 +31,12 @@ TransactionHeader:
       type: uvarint
     - name: Nonce
       type: uvarint
+    - name: Memo
+      type: string
+      optional: true
+    - name: Metadata
+      type: bytes
+      optional: true
 
 Transaction:
   embeddings:
