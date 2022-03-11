@@ -186,11 +186,8 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 
 	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
 
-	txPending := state.NewPendingTransaction(env)
-	txAccepted, _ := state.NewTransaction(txPending)
-
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, nil)
 	if err != nil {
 		return err
 	}
@@ -209,7 +206,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	}
 
 	// Calculate the fee before modifying the transaction
-	fee, err := protocol.ComputeFee(env)
+	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -220,7 +217,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	switch {
 	case err == nil:
 		// Populate the transaction from the database
-		env.Transaction = txState.Restore().Transaction
+		env.Transaction = txState.Transaction
 		txt = env.Transaction.Type()
 
 	case !errors.Is(err, storage.ErrNotFound):
@@ -545,13 +542,13 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 	}
 
 	// Store against the transaction hash
-	err := m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, env.Signatures)
+	err := m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, env.Signatures)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
 
 	// Store against the envelope hash
-	err = m.blockBatch.Transaction(env.EnvHash()).Put(txAccepted, status, env.Signatures)
+	err = m.blockBatch.Transaction(env.EnvHash()).Put(env, status, env.Signatures)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
@@ -626,7 +623,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 		return err
 	}
 
-	fee, err := protocol.ComputeFee(env)
+	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil || fee > protocol.FeeFailedMaximum {
 		fee = protocol.FeeFailedMaximum
 	}
