@@ -285,6 +285,9 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 		return nil, err
 	}
 
+	params.Memo = si.Memo
+	params.Metadata = si.Metadata
+
 	data, err = json.Marshal(params)
 	if err != nil {
 		return nil, err
