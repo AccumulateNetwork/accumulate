@@ -156,6 +156,9 @@ TransactionType:
   InternalTransactionsSent:
     value: 0x63
     description: notifies the executor of synthetic transactions that have been sent
+  SyntheticReceipt:
+    value: 0x64
+    description: notifies the sender of synthetic transactions when a transaction has failed.
 
 AccountType:
   Unknown:

@@ -280,6 +280,9 @@ const TransactionTypeInternalTransactionsSigned TransactionType = 98
 // TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
 const TransactionTypeInternalTransactionsSent TransactionType = 99
 
+// TransactionTypeSyntheticReceipt notifies the sender of synthetic transactions when a transaction has failed..
+const TransactionTypeSyntheticReceipt TransactionType = 100
+
 // ID returns the ID of the Account Type
 func (v AccountType) ID() uint64 { return uint64(v) }
 
@@ -1040,7 +1043,7 @@ func (v TransactionType) ID() uint64 { return uint64(v) }
 func (v *TransactionType) Set(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent, TransactionTypeSyntheticReceipt:
 		*v = u
 		return true
 	default:
@@ -1111,6 +1114,8 @@ func (v TransactionType) String() string {
 		return "internalTransactionsSigned"
 	case TransactionTypeInternalTransactionsSent:
 		return "internalTransactionsSent"
+	case TransactionTypeSyntheticReceipt:
+		return "syntheticReceipt"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1179,6 +1184,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeInternalTransactionsSigned, true
 	case "internalTransactionsSent":
 		return TransactionTypeInternalTransactionsSent, true
+	case "syntheticReceipt":
+		return TransactionTypeSyntheticReceipt, true
 	default:
 		return 0, false
 	}
