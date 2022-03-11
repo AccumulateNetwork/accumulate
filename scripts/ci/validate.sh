@@ -2,6 +2,7 @@
 
 # Stop immediately on error
 set -e
+set -x # TODO REMOVE AFTER DEBUG
 
 # section <name> - Print a section header
 function section {
