@@ -58,6 +58,9 @@ docker buildx:
   image: docker:20-git
   stage: build
   needs: []
+  only:
+  - develop
+  - tags
   variables:
     GIT_STRATEGY: none
   artifacts:
@@ -72,8 +75,22 @@ docker buildx:
 
 build images:
   stage: build
+  image: docker:20
+  services: [ 'docker:20-dind' ]
+  script:
+    - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
+    - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
+    - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+
+build multiarch images:
+  stage: build
   needs: [ 'docker buildx' ]
   image: docker:20
+  only:
+  - develop
+  - tags
   services:
     - name: docker:20-dind
       command: [ --experimental ] # Do we need this?
