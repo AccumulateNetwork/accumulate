@@ -91,7 +91,7 @@ PendingTransactionState:
   chain-type: PendingTransaction
   omit-new-func: true
   embeddings:
-  - AccountHeader
+    - AccountHeader
   fields:
     - name: Signature
       repeatable: true
@@ -311,7 +311,7 @@ UpdateKeyPage:
 
 SignPending:
   kind: tx
-  fields: []
+  fields: [ ]
 
 ##### Synthetic #####
 
@@ -394,6 +394,18 @@ SyntheticMirror:
       type: AnchoredRecord
       marshal-as: reference
 
+SyntheticReceipt:
+  kind: tx
+  fields:
+    - name: TxHash
+      type: bytes
+    - name: Cause
+      type: chain
+      marshal-as: none
+    - name: Reason
+      type: string
+      optional: true
+
 SegWitDataEntry:
   kind: tx
   fields:
@@ -410,7 +422,7 @@ SegWitDataEntry:
 EmptyResult:
   kind: tx-result
   tx-type: Unknown
-  fields: []
+  fields: [ ]
 
 WriteDataResult:
   kind: tx-result
