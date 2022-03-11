@@ -67,7 +67,7 @@ docker buildx:
     paths:
       - buildx
     expire_in: 1 day
-  services: [ 'docker:20-dind' ]
+  services: [ docker:20-dind ]
   script:
     - export DOCKER_BUILDKIT=1
     - git clone git://github.com/docker/buildx ./docker-buildx
@@ -76,7 +76,7 @@ docker buildx:
 build images:
   stage: build
   image: docker:20
-  services: [ 'docker:20-dind' ]
+  services: [ docker:20-dind ]
   needs: []
   script:
     - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
@@ -87,7 +87,7 @@ build images:
 
 build multiarch images:
   stage: build
-  needs: [ 'docker buildx' ]
+  needs: [ docker buildx ]
   image: docker:20
   only:
   - develop
@@ -156,7 +156,8 @@ build binaries:
 configure:
   stage: build
   extends: .go
-  needs: [git describe]
+  needs: [ git describe ]
+  only: [ develop ]
   script:
   - |
     function init {
@@ -175,8 +176,8 @@ configure:
 
 .deploy:
   stage: deploy
-  only: [develop] # only run on the main branch
-  needs: [configure, test]
+  only: [ develop ] # only run on the main branch
+  needs: [ configure, test ]
   tags:
   - linux
   - docker
@@ -214,8 +215,8 @@ deploy 4/4:
 .validate:
   stage: validate
   extends: .go
-  only: [develop] # only run on the main branch
-  needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
+  only: [ develop ] # only run on the main branch
+  needs: [ deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4 ]
   variables:
     ACC_API: https://devnet.accumulatenetwork.io/v2
     # set mnemonic for predictable addresses
@@ -223,9 +224,9 @@ deploy 4/4:
 
 validate docker:
   stage: validate
-  needs: ['build images']
+  needs: [ build images ]
   image: docker
-  services: ['docker:dind']
+  services: [ docker:dind ]
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
