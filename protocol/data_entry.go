@@ -21,7 +21,8 @@ func ComputeEntryHash(data [][]byte) []byte {
 	return smt.GetMDRoot().Bytes()
 }
 
-const WriteDataMax = 10240
+const TransactionSizeMax = 10240
+const SignatureSizeMax = 1024
 
 func (e *DataEntry) Hash() []byte {
 	return ComputeEntryHash(append(e.ExtIds, e.Data))
@@ -35,8 +36,8 @@ func (e *DataEntry) CheckSize() (int, error) {
 		return 0, err
 	}
 	size := len(b)
-	if size > WriteDataMax {
-		return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
+	if size > TransactionSizeMax {
+		return 0, fmt.Errorf("data amount exceeds %v byte entry limit", TransactionSizeMax)
 	}
 	if size <= 0 {
 		return 0, fmt.Errorf("no data provided for WriteData")

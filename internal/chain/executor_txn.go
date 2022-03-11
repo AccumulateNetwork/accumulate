@@ -206,7 +206,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	}
 
 	// Calculate the fee before modifying the transaction
-	fee, err := protocol.ComputeFee(env)
+	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -623,7 +623,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 		return err
 	}
 
-	fee, err := protocol.ComputeFee(env)
+	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil || fee > protocol.FeeFailedMaximum {
 		fee = protocol.FeeFailedMaximum
 	}
