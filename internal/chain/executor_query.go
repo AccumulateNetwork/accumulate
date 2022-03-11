@@ -21,6 +21,7 @@ import (
 
 func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
 	qv := u.QueryValues()
+
 	switch {
 	case qv.Get("txid") != "":
 		// Query by transaction ID
@@ -252,15 +253,33 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					res.Entry = *entry
 					return []byte("data-entry"), res, nil
 				} else {
-					entry, err := data.Entry(int64(index))
+					stop := index + 1
+
+					entryHashes, err := data.GetHashes(int64(index), int64(stop))
 					if err != nil {
 						return nil, nil, err
 					}
 					res := &protocol.ResponseDataEntry{}
 
-					copy(res.EntryHash[:], entry.Hash())
+					copy(res.EntryHash[:], entryHashes[0])
+
+					entry, err := data.Get(entryHashes[0])
+					if err != nil {
+						return nil, nil, err
+					}
 					res.Entry = *entry
+
 					return []byte("data-entry"), res, nil
+
+					/*	entry, err := data.Entry(int64(index))
+						if err != nil {
+							return nil, nil, err
+						}
+						res := &protocol.ResponseDataEntry{}
+
+						copy(res.EntryHash[:], entry.Hash())
+						res.Entry = *entry
+						return []byte("data-entry"), res, nil*/
 				}
 			}
 		}

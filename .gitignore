@@ -7,6 +7,7 @@ tools/cmd/gen-enum/gen-enum
 tools/cmd/gen-types/go_build*
 tools/cmd/gen-enum/go_build*
 
+
 # Binaries and test data
 *.exe
 *.test

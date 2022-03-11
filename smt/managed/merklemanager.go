@@ -284,7 +284,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 }
 
 // Get the nth leaf node
-func (m *MerkleManager) Get(element int64) (Hash, error) {
+func (m *MerkleManager) Get(element int64) (Hash, error) { // Issue AC-1034 is arising from here i guess please look into it once
 	data, err := m.Manager.Get(m.key.Append("Element", element))
 	if err != nil {
 		return nil, err

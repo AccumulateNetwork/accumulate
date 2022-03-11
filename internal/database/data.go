@@ -59,7 +59,7 @@ func (d *Data) GetLatest() ([]byte, *protocol.DataEntry, error) {
 	if height == 0 {
 		return nil, nil, storage.ErrNotFound
 	}
-	hash, err := d.chain.Entry(height - 1)
+	hash, err := d.chain.Entry(height - 1) //this method is causing problems in AC-1034
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,7 +79,7 @@ func (d *Data) GetHashes(start, end int64) ([][]byte, error) {
 
 // Entry looks up an entry by its height.
 func (d *Data) Entry(height int64) (*protocol.DataEntry, error) {
-	hash, err := d.chain.Entry(height)
+	hash, err := d.chain.Entry(height) //this method is causing problems in AC-1034
 	if err != nil {
 		return nil, err
 	}
