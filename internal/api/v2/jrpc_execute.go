@@ -158,18 +158,16 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	res.SimpleHash = simpleHash[:]
 
 	// Parse the results
-	var results []protocol.TransactionResult
+	var results []*protocol.TransactionStatus
 	rd := bytes.NewReader(resp.Data)
 	for rd.Len() > 0 {
-		result, err := protocol.UnmarshalTransactionResultFrom(rd)
+		status := new(protocol.TransactionStatus)
+		err := status.UnmarshalBinaryFrom(rd)
 		if err != nil {
 			m.logError("Failed to decode transaction results", "error", err)
 			break
 		}
-		if _, ok := result.(*protocol.EmptyResult); ok {
-			result = nil
-		}
-		results = append(results, result)
+		results = append(results, status)
 	}
 
 	if len(results) == 1 {
