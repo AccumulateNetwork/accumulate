@@ -372,8 +372,8 @@ RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "Create keypage with manager"
-wait-for cli-tx tx execute keytest/book keytest-1-0 '{"type": "createKeyPage","url": "keytest/page3", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
-RESULT=$(accumulate -j get keytest/page3 | jq -re .data.managerKeyBook)
+wait-for cli-tx tx execute keytest/book keytest-1-0 '{"type": "createKeyPage", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
+RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
@@ -382,8 +382,8 @@ RESULT=$(accumulate -j get keytest/book/3 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
-wait-for cli-tx manager remove keytest/page3 keytest-2-0
-accumulate -j get keytest/page3 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
+wait-for cli-tx manager remove keytest/book/4 keytest-2-0
+accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
 
 section "Query the lite identity"
 accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"
