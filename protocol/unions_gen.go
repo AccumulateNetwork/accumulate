@@ -284,6 +284,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ED25519Signature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
+	case SignatureTypeRCD1:
+		return new(RCD1Signature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", typ)
 	}

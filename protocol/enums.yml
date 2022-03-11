@@ -11,6 +11,9 @@ ChainType:
   Data:
     value: 0x03
     description: holds data entry hashes
+  Index:
+    value: 0x04
+    description: indexes other chains
 
 ObjectType:
   Unknown:
@@ -33,6 +36,9 @@ SignatureType:
   ED25519:
     value: 2
     description: represents an ED25519 signature
+  RCD1:
+    value: 3
+    description: represents an RCD1 signature
 
 KeyPageOperation:
   Unknown:

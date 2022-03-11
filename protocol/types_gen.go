@@ -176,6 +176,19 @@ type Envelope struct {
 	hash        []byte
 }
 
+// IndexEntry represents an entry in an index chain.
+type IndexEntry struct {
+	fieldsSet []bool
+	// Source is the index of the chain from which an anchor was taken.
+	Source uint64 `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// Anchor is the index of the chain into which the anchor was added. Omit when indexing the root anchor chain.
+	Anchor uint64 `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
+	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
+	// BlockTime is the start time of the block. Only include when indexing the root anchor chain.
+	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+}
+
 type InternalGenesis struct {
 	fieldsSet []bool
 }
@@ -294,6 +307,12 @@ type PendingTransactionState struct {
 	Signature        []Signature     `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	TransactionState *TxState        `json:"transactionState,omitempty" form:"transactionState" query:"transactionState" validate:"required"`
 	Status           json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+}
+
+type RCD1Signature struct {
+	fieldsSet []bool
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 }
 
 type Receipt struct {
@@ -689,6 +708,8 @@ func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAcco
 func (*PendingTransactionState) Type() AccountType { return AccountTypePendingTransaction }
 
 func (*PendingTransactionState) GetType() AccountType { return AccountTypePendingTransaction }
+
+func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*RemoveManager) Type() TransactionType { return TransactionTypeRemoveManager }
 
@@ -1109,6 +1130,23 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	return true
 }
 
+func (v *IndexEntry) Equal(u *IndexEntry) bool {
+	if !(v.Source == u.Source) {
+		return false
+	}
+	if !(v.Anchor == u.Anchor) {
+		return false
+	}
+	if !(v.BlockIndex == u.BlockIndex) {
+		return false
+	}
+	if !(*v.BlockTime == *u.BlockTime) {
+		return false
+	}
+
+	return true
+}
+
 func (v *InternalGenesis) Equal(u *InternalGenesis) bool {
 
 	return true
@@ -1357,6 +1395,17 @@ func (v *PendingTransactionState) Equal(u *PendingTransactionState) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Status, u.Status)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
 
@@ -2920,6 +2969,68 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
+var fieldNames_IndexEntry = []string{
+	1: "Source",
+	2: "Anchor",
+	3: "BlockIndex",
+	4: "BlockTime",
+}
+
+func (v *IndexEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Source == 0) {
+		writer.WriteUint(1, v.Source)
+	}
+	if !(v.Anchor == 0) {
+		writer.WriteUint(2, v.Anchor)
+	}
+	if !(v.BlockIndex == 0) {
+		writer.WriteUint(3, v.BlockIndex)
+	}
+	if !(v.BlockTime == nil) {
+		writer.WriteTime(4, *v.BlockTime)
+	}
+
+	_, _, err := writer.Reset(fieldNames_IndexEntry)
+	return buffer.Bytes(), err
+}
+
+func (v *IndexEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == 0 {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == 0 {
+		errs = append(errs, "field Anchor is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BlockIndex is missing")
+	} else if v.BlockIndex == 0 {
+		errs = append(errs, "field BlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field BlockTime is missing")
+	} else if v.BlockTime == nil {
+		errs = append(errs, "field BlockTime is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_InternalGenesis = []string{
 	1: "Type",
 }
@@ -3787,6 +3898,52 @@ func (v *PendingTransactionState) IsValid() error {
 		errs = append(errs, "field Status is missing")
 	} else if len(v.Status) == 0 {
 		errs = append(errs, "field Status is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RCD1Signature = []string{
+	1: "Type",
+	2: "PublicKey",
+	3: "Signature",
+}
+
+func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, SignatureTypeRCD1.ID())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RCD1Signature)
+	return buffer.Bytes(), err
+}
+
+func (v *RCD1Signature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
 	}
 
 	switch len(errs) {
@@ -6051,6 +6208,31 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *IndexEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Anchor = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.BlockIndex = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.BlockTime = &x
+	}
+
+	seen, err := reader.Reset(fieldNames_IndexEntry)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *InternalGenesis) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -6536,6 +6718,32 @@ func (v *PendingTransactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PendingTransactionState)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ SignatureType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != SignatureTypeRCD1 {
+		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeRCD1, typ)
+	}
+
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RCD1Signature)
 	v.fieldsSet = seen
 	return err
 }
@@ -7946,6 +8154,18 @@ func (v *PendingTransactionState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      SignatureType `json:"type"`
+		PublicKey *string       `json:"publicKey,omitempty"`
+		Signature *string       `json:"signature,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	return json.Marshal(&u)
+}
+
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start   *string        `json:"start,omitempty"`
@@ -9260,6 +9480,31 @@ func (v *PendingTransactionState) UnmarshalJSON(data []byte) error {
 	}
 	v.TransactionState = u.TransactionState
 	v.Status = u.Status
+	return nil
+}
+
+func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      SignatureType `json:"type"`
+		PublicKey *string       `json:"publicKey,omitempty"`
+		Signature *string       `json:"signature,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
 	return nil
 }
 

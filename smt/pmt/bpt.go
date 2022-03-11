@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 const debug = false
@@ -21,34 +20,34 @@ const debug = false
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	Root      *BptNode            // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
-	DirtyMap  map[uint64]*BptNode // Map of dirty nodes.
-	MaxHeight int                 // Highest height of any node in the BPT
-	MaxNodeID uint64              // Maximum node id assigned to any node
-	power     int                 // Power
-	mask      int                 // Mask used to detect Byte Block boundaries
-	manager   *Manager            // Pointer to the manager for access to the database
+	RootHash  [32]byte              // Root hash of the BPT
+	Root      *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	DirtyMap  map[[32]byte]*BptNode // Map of dirty nodes.
+	MaxHeight int                   // Highest height of any node in the BPT
+	NumNodes  uint64                // number of nodes in the BPT
+	power     int                   // Power
+	mask      int                   // Mask used to detect Byte Block boundaries
+	manager   *Manager              // Pointer to the manager for access to the database
 }
 
-// String
-func (b *BPT) String() (str string) {
-	buff := "                                                                                                        "
-	fmt.Printf("DirtyMap len %d\n", len(b.DirtyMap))
-	fmt.Printf("MaxHeight    %d\n", b.MaxHeight)
-	fmt.Printf("MaxNodeID    %d\n", b.MaxNodeID)
-	fmt.Printf("power        %d\n", b.power)
-	fmt.Printf("mask         %x\n", b.mask)
-	depth := 0
-	width := 5
-	prt := func(depth, width int, node *BptNode) {
-		fmt.Printf("\r%s %x", buff[:depth*width], node.Hash[:4])
-		if node.Left != nil {
+// GetRoot
+// Get the Root node for the BPT.  This may load the BPT Root node from disk if not loaded yet.
+func (b *BPT) GetRoot() (root *BptNode) {
+	if b.Root == nil {
+		rootNodeKey, _ := GetNodeKey(0, [32]byte{})
+		if b.manager == nil {
+			return nil
+		}
 
+		if data, err := b.manager.DBManager.Get(kBpt.Append(rootNodeKey)); err != nil {
+			return nil
+		} else {
+			root := new(BptNode)
+			root.UnMarshal(data)
+			b.RootHash = root.Hash
 		}
 	}
-	prt(depth, width, b.Root)
-	return str
-
+	return b.Root
 }
 
 // Equal
@@ -60,13 +59,13 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 		}
 	}()
 
-	if !b.Root.Equal(b2.Root) {
+	if !b.GetRoot().Equal(b2.GetRoot()) {
 		return false
 	}
 	if b.MaxHeight != b2.MaxHeight {
 		return false
 	}
-	if b.MaxNodeID != b2.MaxNodeID {
+	if b.NumNodes != b2.NumNodes {
 		return false
 	}
 	return true
@@ -77,10 +76,10 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, common.Uint64Bytes(b.MaxNodeID)...)
+	data = append(data, common.Uint64Bytes(b.NumNodes)...)
 	data = append(data, byte(b.power>>8), byte(b.power))
 	data = append(data, byte(b.mask>>8), byte(b.mask))
-	data = append(data, b.Root.Marshal()...)
+	data = append(data, b.RootHash[:]...)
 	return data
 }
 
@@ -88,28 +87,28 @@ func (b *BPT) Marshal() (data []byte) {
 // Load the BPT in support of initialization from disk.  Note that
 // an existing BPT will be over written completely.
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
-	b.DirtyMap = make(map[uint64]*BptNode)
+	b.DirtyMap = make(map[[32]byte]*BptNode)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.MaxNodeID, data = common.BytesUint64(data)
+	b.NumNodes, data = common.BytesUint64(data)
 	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
 	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
-	data = b.Root.UnMarshal(data)
+	copy(b.RootHash[:], data[:32])
+	data = data[:32]
 	return data
 }
 
 // NewNode
 // Allocate a new Node for use with this BPT.  Note that various bookkeeping
 // tasks are performed for the caller.
-func (b *BPT) NewNode(parent *BptNode) (node *BptNode) {
-	node = new(BptNode)             // Create the node
-	node.Parent = parent            // Set the Parent
-	node.Height = parent.Height + 1 // Make the height 1 greater than the Parent
-	if node.Height > b.MaxHeight {  // If the height is the biggest we have seen
-		b.MaxHeight = node.Height //     then keep it as the new max height
+func (b *BPT) NewNode(key [32]byte, parent *BptNode) (node *BptNode) {
+	node = new(BptNode)                            // Create the node
+	node.Parent = parent                           // Set the Parent
+	node.Height = parent.Height + 1                // Make the height 1 greater than the Parent
+	node.NodeKey, _ = GetNodeKey(node.Height, key) // Set the NodeKey
+	if node.Height > b.MaxHeight {                 // If the height is the biggest we have seen
+		b.MaxHeight = node.Height //                   then keep it as the new max height
 	}
-	b.MaxNodeID++         //           Increment the Node ID (no zero ID nodes)
-	node.ID = b.MaxNodeID //           Assign the Node ID to this node
-	return node           //           done
+	return node //           done
 }
 
 // NewValue
@@ -125,7 +124,7 @@ func (b *BPT) NewValue(parent *BptNode, key, hash [32]byte) (value *Value) {
 // Sort if a node is in the dirty tracking. Allows batching updates for greater
 // efficiency.
 func (b *BPT) IsDirty(node *BptNode) bool { // Sort if node is in our Dirty Map
-	_, ok := b.DirtyMap[node.GetID()] //     do the check
+	_, ok := b.DirtyMap[node.NodeKey] //     do the check
 	return ok                         //     return result
 }
 
@@ -135,7 +134,7 @@ func (b *BPT) Clean(node *BptNode) {
 	if node == nil { //                   That said, we do care if it is nil
 		return //                         If nil, nothing to do.  The root has a nil Parent.
 	}
-	delete(b.DirtyMap, node.GetID()) //   If not nil, delete it from the map
+	delete(b.DirtyMap, node.NodeKey) //   If not nil, delete it from the map
 } //                                      Note this doesn't matter if the node
 //                                        isn't in the map
 
@@ -145,9 +144,7 @@ func (b *BPT) Dirty(node *BptNode) {
 	if node == nil { //                   Errors occur if nils are not removed
 		return //                         done if nil
 	}
-	b.DirtyMap[node.GetID()] = node //    Put the node in dirty tracking map
-	b.Clean(node.Parent)            //    Note if we handle the child, we will handle the
-	//                                     Parent.  So take it out of tracking.
+	b.DirtyMap[node.NodeKey] = node //    Put the node in dirty tracking map
 }
 
 // GetDirtyList
@@ -165,6 +162,53 @@ func (b *BPT) GetDirtyList() (list []*BptNode) {
 	return list //                                Return sorted list
 }
 
+// LoadNext
+// Load the next level of nodes if it is necessary.  We build Byte Blocks of
+// nodes which store all the nodes and values within 8 bits of a key.  If the
+// key is longer, certainly there will be more Byte Blocks 8 bits later.
+//
+// Note if a Byte Block is loaded, then the node passed in is replaced by
+// the node loaded.
+func (b *BPT) LoadNext(BIdx, bit byte, node *BptNode, key [32]byte) {
+	if node.Left != nil && node.Left.T() == TNotLoaded ||
+		node.Right != nil && node.Right.T() == TNotLoaded {
+		b.manager.LoadNode(node)
+		_, ok1 := node.Left.(*NotLoaded)
+		_, ok2 := node.Right.(*NotLoaded)
+		if ok1 || ok2 {
+			panic("We didn't load the node")
+		}
+	}
+}
+
+// Get
+// Return the highest node that exists on the path to a particular node,
+// and the entry along the path
+func (b *BPT) Get(node *BptNode, key [32]byte) (highest *BptNode, entry *Entry, found bool) {
+
+	BIdx := byte(node.Height >> 3) //          Calculate the byte index based on the height of this node in the BPT
+	bitIdx := node.Height & 7      //          The bit index is given by the lower 3 bits of the height
+	bit := byte(0x80) >> bitIdx    //          The mask starts at the high end bit in the byte, shifted right by the bitIdx
+
+	entry = &node.Left      //                 Assume Left
+	if bit&key[BIdx] == 0 { //                 Check for Right
+		entry = &node.Right //                 Change to Right
+	}
+
+	b.LoadNext(BIdx, bit, node, key) //        Make sure following nodes are loaded
+
+	switch { //                                Recurse down all the nodes
+	case *entry == nil:
+		return node, nil, false
+	case (*entry).T() == TNode: //
+		return b.Get((*entry).(*BptNode), key) //
+	case (*entry).T() == TValue: //                           Look for value
+		value := (*entry).(*Value)
+		return node, entry, bytes.Equal(value.Key[:], key[:]) // Return true or false if value is found
+	}
+	panic("Should never reach this point")
+}
+
 // insertAtNode
 // A recursive routine that pushes collisions towards the leaves of the
 // binary patricia tree until the keys don't match any more.  Note that
@@ -172,72 +216,52 @@ func (b *BPT) GetDirtyList() (list []*BptNode) {
 // patricia trees anyway
 //
 // Inputs:
-// BIdx -- byte index into the key
-// bit  -- index to the bit
 // node -- the node in the BPT where the value (key, hash) is being inserted
 // key  -- The key in the BPT which determines were in the BPT the hash goes
 // hash -- The current value of the key, as tracked by the BPT
-func (b *BPT) insertAtNode(BIdx, bit byte, node *BptNode, key, hash [32]byte) {
+func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
 
-	step := func() { //  In order to reduce redundant code, we step with a
-		bit >>= 1     // local function.         Inlining might provide some
-		if bit == 0 { //                         performance.  What we are doing is shifting the
-			bit = 0x80 //                        bit test up on each level of the Merkle tree.  If the bit
-			BIdx++     //                        shifts out of a BIdx, we increment the BIdx and start over
-		}
+	BIdx := byte(node.Height >> 3) // Calculate the byte index based on the height of this node in the BPT
+	bitIdx := node.Height & 7      // The bit index is given by the lower 3 bits of the height
+	bit := byte(0x80) >> bitIdx    // The mask starts at the high end bit in the byte, shifted right by the bitIdx
+
+	entry := &node.Left
+	if bit&key[BIdx] == 0 { //                                       Check if heading left (the assumption)
+		entry = &node.Right //                                       If wrong, heading
 	}
 
-	Insert := func(e *Entry) { //                                    Again, to avoid redundant code, Left and Right
-		switch { //                                                  processing is done once here.
-		case *e == nil: //                                           Sort if the Left/Right is nil.
-			v := b.NewValue(node, key, hash) //                      If it is, we can put the value here
-			*e = v                           //
-			b.Dirty(node)                    //                      And changing the value of a node makes it dirty
-			return                           //                      we are done.
-		case (*e).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
-			step()                                                //    If it is a node, then try and insert it on that node
-			b.insertAtNode(BIdx, bit, (*e).(*BptNode), key, hash) //    Recurse up the tree
-		default: //                                                  If not a node, not nil, it is a value.
-			v := (*e).(*Value)                 //                    A collision. Get the value that got here first
-			if bytes.Equal(key[:], v.Key[:]) { //                    If this value is the same as we are inserting
-				if !bytes.Equal((*e).(*Value).Hash[:], hash[:]) { // Make sure this is really a change, i.e.
-					(*e).(*Value).Hash = hash //                     the new hash is really different.  If it is
-					b.Dirty(node)             //                     mark the node as dirty
-				}
-				return //                                            Changed or not, we are done.
-			} //                                                     The idea is to create a node, to replace the value
-			nn := b.NewNode(node)                        //          that was here, and the old value and the new value
-			*e = nn                                      //          and insert them at one height higher.
-			step()                                       //          This means we walk down the bits of both values
-			nn.BBKey = GetBBKey(BIdx, key)               //          Record the nn.BBKey
-			b.insertAtNode(BIdx, bit, nn, key, hash)     //          until they diverge.
-			b.insertAtNode(BIdx, bit, nn, v.Key, v.Hash) //          Because these are chainIDs, while they could be
-		} //                                                         mined to attack our BPT, we don't much care; it will
-	} //                                                             cost the attackers more than the protocol
+	b.LoadNext(BIdx, bit, node, key)
 
-	if node.Left != nil && node.Left.T() == TNotLoaded ||
-		node.Right != nil && node.Right.T() == TNotLoaded {
-		node.BBKey = GetBBKey(BIdx, key)
-		n := b.manager.LoadNode(node)
-		node.Left = n.Left
-		node.Right = n.Right
-	}
-
-	if bit&key[BIdx] > 0 { //       Note that this is the code that calls the Inline function Insert, and Insert
-		Insert(&node.Left) //       in turn calls step.  We check the bit on the given BIdx. 0 goes Left
-	} else { //
-		Insert(&node.Right) //      0 goes Right
-	}
+	switch { //                                                      processing is done once here.
+	case *entry == nil: //                                           Sort if the Left/Right is nil.
+		v := b.NewValue(node, key, hash) //                          If it is, we can put the value here
+		*entry = v                       //
+		b.Dirty(node)                    //                          And changing the value of a node makes it dirty
+		return                           //                          we are done.
+	case (*entry).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
+		b.insertAtNode((*entry).(*BptNode), key, hash) //            Recurse up the tree
+	default: //                                                      If not a node, not nil, it is a value.
+		v := (*entry).(*Value)             //                        A collision. Get the value that got here first
+		if bytes.Equal(key[:], v.Key[:]) { //                        If this value is the same as we are inserting
+			if !bytes.Equal((*entry).(*Value).Hash[:], hash[:]) { // Make sure this is really a change, i.e.
+				(*entry).(*Value).Hash = hash //                     the new hash is really different.  If it is
+				b.Dirty(node)                 //                     mark the node as dirty
+			}
+			return //                                                Changed or not, we are done.
+		} //                                                         The idea is to create a node, to replace the value
+		nn := b.NewNode(key, node)                     //            that was here, and the old value and the new value
+		*entry = nn                                    //            and insert them at one height higher.
+		nn.NodeKey, _ = GetNodeKey(node.Height+1, key) //            Record the nn.BBKey
+		b.insertAtNode(nn, key, hash)                  //            until they diverge.
+		b.insertAtNode(nn, v.Key, v.Hash)              //            Because these are chainIDs, while they could be
+	} //                                                             mined to attack our BPT, we don't much care; it will
 
 }
 
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
 func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
-	if debug {
-		fmt.Printf("BPT insert key=%v value=%X\n", storage.Key(key), hash)
-	}
-	b.insertAtNode(0, 0x80, b.Root, key, hash) //          in that location is the hash.  We start at byte 0, lowest
+	b.insertAtNode(b.GetRoot(), key, hash) //          in that location is the hash.  We start at byte 0, lowest
 } //                                                   significant bit. (which is masked with a 1)
 
 // GetHash
@@ -252,43 +276,41 @@ func GetHash(e Entry) []byte {
 // Update the Patricia Tree hashes with the values from the
 // updates since the last update
 func (b *BPT) Update() {
-	for len(b.DirtyMap) > 0 { //                          While the DirtyMap has nodes to process
-		dirtyList := b.GetDirtyList() //                   Get the Dirty List. Note sorted by height, High to low
+	for len(b.DirtyMap) > 0 { //                            While the DirtyMap has nodes to process
+		dirtyList := b.GetDirtyList() //                    Get the Dirty List. Note sorted by height, High to low
 
-		h := dirtyList[0].Height      //                   Get current height so we do one pass at one height at a time.
-		for _, n := range dirtyList { //                   go through the list, and add parents to the dirty map
+		h := dirtyList[0].Height      //                    Get current height so we do one pass at one height at a time.
+		for _, n := range dirtyList { //                    go through the list, and add parents to the dirty map
 			if n.Height != h { //                           Note when the height is done,
-				break //                                     bap out
+				break //                                    bap out
 			} //
-			if h&b.mask == 0 && b.manager != nil { //      Sort and see if at the root node for a byte block
+			if h&b.mask == 0 && b.manager != nil { //       Sort and see if at the root node for a byte block
 				b.manager.FlushNode(n) //                   If so, flush the byte block; it has already been updated
 			} //
-			L := GetHash(n.Left)  //                       Get the Left Branch
-			R := GetHash(n.Right) //                       Get the Right Branch
-			switch {              //                       Sort four conditions:
-			case L != nil && R != nil: //                  If we have both L and R then combine
+			L := GetHash(n.Left)  //                        Get the Left Branch
+			R := GetHash(n.Right) //                        Get the Right Branch
+			switch {              //                        Sort four conditions:
+			case L != nil && R != nil: //                   If we have both L and R then combine
 				n.Hash = sha256.Sum256(append(L, R...)) //  Take the hash of L+R
-			case L != nil: //                              The next condition is where we only have L
+			case L != nil: //                               The next condition is where we only have L
 				copy(n.Hash[:], L) //                       Just use L.  No hash required
-			case R != nil: //                              Just have R.  Again, just use R.
+			case R != nil: //                               Just have R.  Again, just use R.
 				copy(n.Hash[:], R) //                       No Hash Required
-			default: //                                    The fourth condition never happens, and bad if it does.
-				panic("dead nodes should not exist") //      This is a node without a child somewhere up the tree.
+			default: //                                     The fourth condition never happens, and bad if it does.
+				panic("dead nodes should not exist") //     This is a node without a child somewhere up the tree.
 			}
-			if debug {
-				fmt.Printf("BPT update, node %d -> %X\n", n.ID, n.Hash)
-			}
-			b.Clean(n)        //                           Node has been updated, so it is clean
-			b.Dirty(n.Parent) //                           The Parent is dirty cause it must consider this new state
+			b.Clean(n)        //                            Node has been updated, so it is clean
+			b.Dirty(n.Parent) //                            The Parent is dirty cause it must consider this new state
 		}
 	}
-	if b.manager != nil { //                             Root doesn't get flushed (has no parent)
-		b.manager.FlushNode(b.Root) //                    So flush it special
+	if b.manager != nil { //                                Root doesn't get flushed (has no parent)
+		b.manager.FlushNode(b.GetRoot()) //                 So flush it special
 	} //
+	b.RootHash = b.GetRoot().Hash //                        Set the root hash (so we don't have to load Root)
 }
 
 func (b *BPT) EnsureRootHash() {
-	n := b.Root
+	n := b.GetRoot()      //                       Get the Root node
 	L := GetHash(n.Left)  //                       Get the Left Branch
 	R := GetHash(n.Right) //                       Get the Right Branch
 	switch {              //                       Sort four conditions:
@@ -305,13 +327,14 @@ func (b *BPT) EnsureRootHash() {
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.
 func NewBPT() *BPT {
-	b := new(BPT)                          // Get a Binary Patrica Tree
-	b.power = 8                            // using 4 bits to persist BPTs to disk
-	b.mask = b.power - 1                   // Take the bits to the power of 2 -1
-	b.Root = new(BptNode)                  // Allocate summary node (contributes nothing to BPT summary Hash
-	b.Root.Height = 0                      // Before the next level
-	b.DirtyMap = make(map[uint64]*BptNode) // Allocate the Dirty Map, because batching updates is
-	return b                               // a pretty powerful way to process Patricia Trees
+	b := new(BPT)                                 // Get a Binary Patrica Tree
+	b.power = 8                                   // using 4 bits to persist BPTs to disk
+	b.mask = b.power - 1                          // Take the bits to the power of 2 -1
+	b.Root = new(BptNode)                         // Allocate summary node (contributes nothing to BPT summary Hash
+	b.Root.Height = 0                             // Before the next level
+	b.Root.NodeKey, _ = GetNodeKey(0, [32]byte{}) // Set the zero height NodeKey
+	b.DirtyMap = make(map[[32]byte]*BptNode)      // Allocate the Dirty Map, because batching updates is
+	return b                                      // a pretty powerful way to process Patricia Trees
 }
 
 // MarshalByteBlock
@@ -398,4 +421,83 @@ func (b *BPT) UnMarshalEntry(parent *BptNode, data []byte) (Entry, []byte) { //
 		return n, data
 	}
 	panic("failure to decode the ByteBlock")
+}
+
+// GetNodeKey
+// We need a key to address nodes in the protocol. These nodes need a unique key
+// for debugging purposes.
+// We return the key with height number of bits followed by a one end bit followed by all bits clear
+// Heights greater than 255 (0-254) bits are not supported.
+func GetNodeKey(height int, key [32]byte) (nodeKey [32]byte, ok bool) {
+	if height > 254 { //                         Limit is 254 because one bit marks the end of the nodeKey
+		return nodeKey, false //                Return a blank nodeKey and flag it didn't work
+	} //
+	byteCnt := height >> 3                   // The byte count is height/8 (shift left by 3)
+	bitCnt := height & 7                     // Mask to the mod of 8 so mask with 7 or 0b111
+	nk := append([]byte{}, key[:byteCnt]...) // Move the bytes into the node Key
+	lastByte := key[byteCnt]                 // Get the byte following these bytes into lastByte
+	lastByte >>= 7 - bitCnt                  //                Shift right all but one bit past the key
+	lastByte |= 1                            //                Force that bit to 1
+	lastByte <<= 7 - bitCnt                  //                Shift left back to the original starting point
+	nk = append(nk, lastByte)                //                Add the last byte to the nk.  Note always add this byte
+	copy(nodeKey[:], nk)                     //                Copy into the key array
+	return nodeKey, true                     //                Return it as good, and that it works.
+}
+
+// GetHtKey
+// Extract the height and Key fragment from a nodeKey.  The reverse operation of GetNodeKey
+// Mostly useful for debugging and testing
+func GetHtKey(nodeKey [32]byte) (height int, key [32]byte, ok bool) {
+	copy(key[:], nodeKey[:])
+	byteIdx := 0                             // Calculate the trailing bytes of zero
+	for i := 31; i > 0 && key[i] == 0; i-- { // Look at byte 31 back to 0
+		byteIdx++
+	}
+	byteIdx = 31 - byteIdx // Convert to bytes not zero
+
+	lastByte := nodeKey[byteIdx]
+	if lastByte == 0 {
+		return height, key, false
+	}
+	bit := 1
+	bitMask := byte(1)
+	for lastByte&bitMask == 0 {
+		bit++
+		bitMask <<= 1
+	}
+	key[byteIdx] ^= bitMask
+	return byteIdx*8 + 8 - bit, key, true
+}
+
+// GetLeftNodeKey
+// Computes the nodeKey that a left branch from a BptNode must have
+func GetChildrenNodeKeys(nodeKey [32]byte) (left, right [32]byte, ok bool) {
+	copy(left[:], nodeKey[:])           // left is the same as nodeKey with the last bit set
+	copy(right[:], nodeKey[:])          // right is the same as nodeKey with the last bit clear
+	byteIdx := 0                        // Calculate the trailing bytes of zero
+	for i := 31; nodeKey[i] == 0; i-- { // Look at byte 31 back to 0
+		byteIdx++ //                       Count how many trailing bytes are zero
+	}
+	byteIdx = 31 - byteIdx //              Convert to leading bytes not zero
+
+	lastByte := nodeKey[byteIdx] //        Get the first of the trailing zero bytes
+	if lastByte == 0 {           //        If that is zero (i.e. no byte has a bit set)
+		return left, right, false //         this is an invalid nodeKey
+	}
+	bit := 1                    //         Find the last bit set
+	bitMask := byte(1)          //
+	for lastByte&bitMask == 0 { //         For every zero low order bit
+		bit++         //                   Increment count of bits clear
+		bitMask <<= 1 //                   shift up the mask
+	}
+	bitsSet := 8 - bit            //       Bits set == 8 - bits clear
+	height := byteIdx*8 + bitsSet //       Height is 8 bits for every non-zero byte + bitsSet
+
+	right[byteIdx] ^= bitMask //           The nodeKey is actually the key fragment for the left
+	//                                     While the right needs the end bit clear
+	if left, ok = GetNodeKey(height+1, left); ok { // Calculate the Left; if good then
+		right, ok = GetNodeKey(height+1, right) //    Calculate the Right
+		return left, right, ok                  //    And return the fail flag from right
+	} //
+	return left, right, false //           Ah. The left failed; no need to look at the right
 }

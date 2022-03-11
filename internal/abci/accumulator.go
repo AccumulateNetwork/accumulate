@@ -2,7 +2,6 @@ package abci
 
 import (
 	"bytes"
-	"crypto/sha256"
 	_ "crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -19,13 +18,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -149,12 +145,17 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
+	if err != nil {
+		sentry.CaptureException(err)
+	}
+
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: batch.RootHash(),
+		LastBlockAppHash: anchor,
 	}
 }
 
@@ -233,9 +234,11 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	_, err := app.Chain.BeginBlock(BeginBlockRequest{
-		IsLeader: bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
-		Height:   req.Header.Height,
-		Time:     req.Header.Time,
+		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
+		Height:     req.Header.Height,
+		Time:       req.Header.Time,
+		CommitInfo: &req.LastCommitInfo,
+		Evidence:   req.ByzantineValidators,
 	})
 	if err != nil {
 		app.fatal(err, true)
@@ -282,48 +285,31 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	if app.didPanic {
 		return abci.ResponseCheckTx{
 			Code: uint32(protocol.ErrorCodeDidPanic),
-			Info: "Node state is invalid",
+			Log:  "Node state is invalid",
 		}
 	}
 
-	h := sha256.Sum256(req.Tx)
-	tmHash := logging.AsHex(h[:])
-
-	// Unmarshal all of the envelopes
-	// Unmarshal all of the envelopes
-	envelopes, err := transactions.UnmarshalAll(req.Tx)
+	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), app.Chain.CheckTx, req.Tx)
 	if err != nil {
-		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "tx", tmHash, "error", err)
-		return abci.ResponseCheckTx{Code: uint32(protocol.ErrorCodeEncodingError), Log: "Unable to decode transaction"}
+		return abci.ResponseCheckTx{
+			Code: uint32(err.Code),
+			Log:  err.Error(),
+		}
 	}
 
-	// Check all of the transactions
-	resp := abci.ResponseCheckTx{Code: uint32(protocol.ErrorCodeOK)}
-	for _, env := range envelopes {
-		txid := logging.AsHex(env.GetTxHash())
-		result, err := app.Chain.CheckTx(env)
-		if err != nil {
-			sentry.CaptureException(err)
-			app.logger.Info("Check failed", "type", env.Transaction.Type().String(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
-			return abci.ResponseCheckTx{
-				Code: uint32(err.Code),
-				Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().String(), err),
-			}
-		}
+	var resp abci.ResponseCheckTx
+	resp.Data = respData
 
-		typ := env.Transaction.Type()
-		if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
-			app.logger.Debug("Check succeeded", "type", typ, "txid", txid, "hash", tmHash)
-		}
-
-		data, err2 := result.MarshalBinary()
-		if err2 != nil {
-			app.logger.Error("Check - failed to marshal transaction result", "error", err2, "type", typ, "txid", txid, "hash", tmHash)
+	// If a user transaction fails, the batch fails
+	for i, result := range results {
+		if result.Code == 0 {
 			continue
 		}
-
-		resp.Data = append(resp.Data, data...)
+		if !envelopes[i].Transaction.Type().IsUser() {
+			continue
+		}
+		resp.Code = uint32(protocol.ErrorCodeUnknownError)
+		resp.Log = "One or more user transactions failed"
 	}
 
 	return resp
@@ -343,45 +329,17 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 	}
 
-	h := sha256.Sum256(req.Tx)
-	tmHash := logging.AsHex(h[:])
-
-	// Unmarshal all of the envelopes
-	envelopes, err := transactions.UnmarshalAll(req.Tx)
+	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), app.Chain.DeliverTx, req.Tx)
 	if err != nil {
-		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "tx", tmHash, "error", err)
-		return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeEncodingError), Log: "Unable to decode transaction"}
+		return abci.ResponseDeliverTx{
+			Code: uint32(err.Code),
+			Log:  err.Error(),
+		}
 	}
 
-	// Deliver all of the transactions
-	resp := abci.ResponseCheckTx{Code: uint32(protocol.ErrorCodeOK)}
-	for _, env := range envelopes {
-		txid := logging.AsHex(env.GetTxHash())
-		result, err := app.Chain.DeliverTx(env)
-		if err != nil {
-			sentry.CaptureException(err)
-			app.logger.Info("Deliver failed", "type", env.Transaction.Type().String(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
-			// Whether or not the transaction succeeds does not matter to Tendermint
-			continue
-		}
-
-		typ := env.Transaction.Type()
-		if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
-			app.logger.Debug("Deliver succeeded", "type", typ, "txid", txid, "hash", tmHash)
-		}
-
-		data, err2 := result.MarshalBinary()
-		if err2 != nil {
-			app.logger.Error("Check - failed to marshal transaction result", "error", err2, "type", typ, "txid", txid, "hash", tmHash)
-			continue
-		}
-
-		resp.Data = append(resp.Data, data...)
-	}
-
+	// Deliver never fails, unless the batch cannot be decoded
 	app.txct += int64(len(envelopes))
-	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK)}
+	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK), Data: respData}
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
@@ -389,19 +347,32 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 	defer app.recover(nil, true)
 
 	r := app.Chain.EndBlock(EndBlockRequest{})
-	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.NewValidators))
-	for i, key := range r.NewValidators {
-		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
+
+	if len(r.ValidatorsUpdates) > 0 {
+		resp.ValidatorUpdates = getValidatorUpdates(r)
+	}
+	return resp
+}
+
+// getValidatorUpdates adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
+func getValidatorUpdates(r EndBlockResponse) []abci.ValidatorUpdate {
+	validatorUpdates := make([]abci.ValidatorUpdate, len(r.ValidatorsUpdates))
+	for i, u := range r.ValidatorsUpdates {
+		var pwr int64
+		if u.Enabled {
+			pwr = 1
+		}
+
+		validatorUpdates[i] = abci.ValidatorUpdate{
 			PubKey: protocrypto.PublicKey{
 				Sum: &protocrypto.PublicKey_Ed25519{
-					Ed25519: key,
+					Ed25519: u.PubKey,
 				},
 			},
-			Power: 1,
+			Power: pwr,
 		}
 	}
-
-	return resp
+	return validatorUpdates
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.

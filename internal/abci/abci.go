@@ -14,6 +14,7 @@ package abci
 import (
 	"time"
 
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -27,9 +28,11 @@ const Version uint64 = 0x1
 
 // BeginBlockRequest is the input parameter to Chain.BeginBlock.
 type BeginBlockRequest struct {
-	IsLeader bool
-	Height   int64
-	Time     time.Time
+	IsLeader   bool
+	Height     int64
+	Time       time.Time
+	CommitInfo *types.LastCommitInfo
+	Evidence   []types.Evidence
 }
 
 // BeginBlockResponse is the return value of Chain.BeginBlock.
@@ -43,11 +46,16 @@ type SynthTxnReference struct {
 	TxRef [32]byte `json:"txRef,omitempty" form:"txRef" query:"txRef" validate:"required"`
 }
 
+type ValidatorUpdate struct {
+	PubKey  ed25519.PubKey
+	Enabled bool
+}
+
 // EndBlockRequest is the input parameter to Chain.EndBlock
 type EndBlockRequest struct{}
 
 type EndBlockResponse struct {
-	NewValidators []ed25519.PubKey
+	ValidatorsUpdates []ValidatorUpdate
 }
 
 // Chain is the interface for the Accumulate transaction (chain) validator.

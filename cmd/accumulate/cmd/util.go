@@ -357,13 +357,26 @@ func (a *ActionDataResponse) Print() (string, error) {
 }
 
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
-	return &ActionResponse{
+	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
 		EnvelopeHash:    r.EnvelopeHash,
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+		Result:          r.Result,
 	}
+	if r.Code != 0 {
+		return ar
+	}
+
+	result := new(protocol.TransactionStatus)
+	if Remarshal(r.Result, result) != nil {
+		return ar
+	}
+
+	ar.Code = types.String(fmt.Sprint(result.Code))
+	ar.Error = types.String(result.Message)
+	return ar
 }
 
 func (a *ActionResponse) Print() (string, error) {
@@ -582,6 +595,17 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	for i, txid := range res.SyntheticTxids {
 		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
 	}
+
+	for _, receipt := range res.Receipts {
+		out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		if receipt.Error != "" {
+			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
+		}
+		if !receipt.Receipt.Convert().Validate() {
+			out += fmt.Sprintf("  Invalid!!\n")
+		}
+	}
+
 	return out, nil
 }
 
