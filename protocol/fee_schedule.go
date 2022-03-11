@@ -100,6 +100,9 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeAddCredits, nil
 	case TransactionTypeUpdateKeyPage:
 		return FeeUpdateKeyPage, nil
+	case TransactionTypeUpdateManager, TransactionTypeRemoveManager:
+		// TODO Fee schedule for these transactions
+		return 0, nil
 	case TransactionTypeSignPending:
 		return FeeSignature, nil
 	default:
