@@ -314,8 +314,9 @@ validate:
    - ./scripts/matrix/test_case_6.6.sh
    - ./scripts/matrix/test_case_6.7.sh
 
-cleanup images:
+.cleanup images:
   # Once validation is done, delete the images
+  # Disabled because it doesn't appear to work, though it was copied from GitLab's docs
   stage: validate
   image: docker:20
   services: [ docker:20-dind ]
