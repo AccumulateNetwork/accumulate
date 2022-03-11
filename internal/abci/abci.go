@@ -32,6 +32,7 @@ type BeginBlockRequest struct {
 	Height     int64
 	Time       time.Time
 	CommitInfo *types.LastCommitInfo
+	Evidence   []types.Evidence
 }
 
 // BeginBlockResponse is the return value of Chain.BeginBlock.

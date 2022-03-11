@@ -109,6 +109,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		}
 		var dataRecords []DataRecord
 
+		//create a vote scratch chain
 		wd := new(protocol.WriteData)
 		lci := types.LastCommitInfo{}
 		wd.Entry.Data, err = json.Marshal(&lci)
@@ -121,6 +122,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		records = append(records, da)
 		urls = append(urls, da.Url)
 		dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+
+		//create an evidence scratch chain
+		da = new(protocol.DataAccount)
+		da.Scratch = true
+		da.Url = uAdi.JoinPath(protocol.Evidence)
+		da.KeyBook = uBook
+
+		records = append(records, da)
+		urls = append(urls, da.Url)
 
 		switch opts.Network.Type {
 		case config.Directory:
