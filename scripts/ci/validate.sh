@@ -1,8 +1,7 @@
-#!/bin/bash
+where#!/bin/bash
 
 # Stop immediately on error
 set -e
-set -x # TODO REMOVE AFTER DEBUG
 
 # section <name> - Print a section header
 function section {
@@ -135,7 +134,7 @@ ensure-key keytest-1-0
 ensure-key keytest-2-0
 ensure-key keytest-2-1
 ensure-key keytest-2-2
-ensure-key keytest-2-0
+ensure-key keytest-3-0
 ensure-key keytest-3-1
 echo
 
@@ -164,7 +163,7 @@ BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
-wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
+wait-for cli-tx page create keytest/book keytest-1-0 keytest-3-0
 accumulate page get keytest/book/2 1> /dev/null || die "Cannot find page keytest/book/2"
 accumulate page get keytest/book/3 1> /dev/null || die "Cannot find page keytest/book/3"
 success
@@ -378,12 +377,12 @@ RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
-wait-for cli-tx manager set keytest/book/3 keytest-2-0 keytest/book
+wait-for cli-tx manager set keytest/book/3 keytest-3-0 keytest/book
 RESULT=$(accumulate -j get keytest/book/3 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
-wait-for cli-tx manager remove keytest/book/4 keytest-2-0
+wait-for cli-tx manager remove keytest/book/4 keytest-1-0
 accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
 
 section "Query the lite identity"
