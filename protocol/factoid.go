@@ -23,7 +23,7 @@ func (r *RCD) Hash() []byte {
 	return h[:]
 }
 
-func GetRCDHashFromPublicKeyAndVersion(pubKey []byte, version byte) []byte {
+func GetRCDHashFromPublicKey(pubKey []byte, version byte) []byte {
 	r := RCD{}
 	r.Version = version
 	copy(r.PubKey[:], pubKey)
