@@ -181,6 +181,9 @@ const SignatureTypeLegacyED25519 SignatureType = 1
 // SignatureTypeED25519 represents an ED25519 signature.
 const SignatureTypeED25519 SignatureType = 2
 
+// SignatureTypeRCD1 represents an RCD1 signature.
+const SignatureTypeRCD1 SignatureType = 3
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 47
 
@@ -870,7 +873,7 @@ func (v SignatureType) ID() uint64 { return uint64(v) }
 func (v *SignatureType) Set(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1:
 		*v = u
 		return true
 	default:
@@ -887,6 +890,8 @@ func (v SignatureType) String() string {
 		return "legacyED25519"
 	case SignatureTypeED25519:
 		return "eD25519"
+	case SignatureTypeRCD1:
+		return "rCD1"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -901,6 +906,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeLegacyED25519, true
 	case "eD25519":
 		return SignatureTypeED25519, true
+	case "rCD1":
+		return SignatureTypeRCD1, true
 	default:
 		return 0, false
 	}
