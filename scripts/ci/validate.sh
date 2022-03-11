@@ -162,8 +162,8 @@ BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 60000 ] && success || die "keytest/book/1 should have 60000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
-wait-for cli-tx page create keytest/book keytest-1-0 keytest/book keytest-2-0
-wait-for cli-tx page create keytest/book keytest-1-0 keytest/book keytest-2-0
+wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
+wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
 accumulate page get keytest/book/2 1> /dev/null || die "Cannot find page keytest/book/2"
 accumulate page get keytest/book/3 1> /dev/null || die "Cannot find page keytest/book/3"
 success
