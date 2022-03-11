@@ -23,7 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 const chainWGSize = 4
@@ -152,11 +151,8 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	}
 	st.logger.L = m.logger
 
-	txPending := state.NewPendingTransaction(env)
-	txAccepted, txPending := state.NewTransaction(txPending)
-
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, nil)
 	if err != nil {
 		return nil, err
 	}
