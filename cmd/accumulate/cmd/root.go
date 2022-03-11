@@ -21,6 +21,8 @@ var (
 	WantJsonOutput = false
 	TxPretend      = false
 	TxProve        = false
+	Memo           string
+	Metadata       string
 )
 
 var currentUser = func() *user.User {
@@ -56,6 +58,8 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
 	flags.BoolVar(&TxNoWait, "no-wait", false, "Don't wait for the transaction to complete")
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
+	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")
+	flags.StringVarP(&Metadata, "metadata", "a", Metadata, "Transaction Metadata")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)
