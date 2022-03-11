@@ -151,6 +151,11 @@ func ComputeTransactionFee(tx *Envelope) (Fee, error) {
 		return 0, nil
 	}
 
+	// Don't charge for synthetic and internal transactions
+	if !tx.Transaction.Type().IsUser() {
+		return 0, nil
+	}
+
 	fee, err := BaseTransactionFee(tx.Transaction.Type())
 	if err != nil {
 		return 0, err
