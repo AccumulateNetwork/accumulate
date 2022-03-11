@@ -314,7 +314,7 @@ TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
 echo $JSON | jq -re .result.result.entryHash 1> /dev/null || die "Deliver response does not include the entry hash"
-accumulate -j tx get $TXID | jq -re .status.result.result.entryHash 1> /dev/null || die "Transaction query response does not include the entry hash"
+accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die "Transaction query response does not include the entry hash"
 success
 
 section "Create a sub ADI"
