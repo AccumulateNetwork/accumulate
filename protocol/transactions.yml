@@ -31,6 +31,12 @@ TransactionHeader:
       type: uvarint
     - name: Nonce
       type: uvarint
+    - name: Memo
+      type: string
+      optional: true
+    - name: Metadata
+      type: bytes
+      optional: true
 
 Transaction:
   embeddings:
@@ -44,12 +50,6 @@ Transaction:
     - name: hash
       type: bytes
       marshal-as: none
-    - name: Memo
-      type: string
-      optional: true
-    - name: Metadata
-      type: bytes
-      optional: true
 
 LegacyED25519Signature:
   kind: signature

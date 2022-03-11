@@ -459,10 +459,8 @@ type TokenRecipient struct {
 type Transaction struct {
 	fieldsSet []bool
 	TransactionHeader
-	Body     TransactionPayload `json:"body,omitempty" form:"body" query:"body" validate:"required"`
-	hash     []byte
-	Memo     string `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata []byte `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	Body TransactionPayload `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	hash []byte
 }
 
 type TransactionHeader struct {
@@ -471,6 +469,8 @@ type TransactionHeader struct {
 	KeyPageHeight uint64   `json:"keyPageHeight,omitempty" form:"keyPageHeight" query:"keyPageHeight" validate:"required"`
 	KeyPageIndex  uint64   `json:"keyPageIndex,omitempty" form:"keyPageIndex" query:"keyPageIndex" validate:"required"`
 	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Memo          string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata      []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TransactionSignature struct {
@@ -1718,12 +1718,6 @@ func (v *Transaction) Equal(u *Transaction) bool {
 	if !(v.Body == u.Body) {
 		return false
 	}
-	if !(v.Memo == u.Memo) {
-		return false
-	}
-	if !(bytes.Equal(v.Metadata, u.Metadata)) {
-		return false
-	}
 
 	return true
 }
@@ -1739,6 +1733,12 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 		return false
 	}
 	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(bytes.Equal(v.Metadata, u.Metadata)) {
 		return false
 	}
 
@@ -5002,8 +5002,6 @@ func (v *TokenRecipient) IsValid() error {
 var fieldNames_Transaction = []string{
 	1: "TransactionHeader",
 	2: "Body",
-	3: "Memo",
-	4: "Metadata",
 }
 
 func (v *Transaction) MarshalBinary() ([]byte, error) {
@@ -5013,12 +5011,6 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(1, &v.TransactionHeader)
 	if !(v.Body == (nil)) {
 		writer.WriteValue(2, v.Body)
-	}
-	if !(len(v.Memo) == 0) {
-		writer.WriteString(3, v.Memo)
-	}
-	if !(len(v.Metadata) == 0) {
-		writer.WriteBytes(4, v.Metadata)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Transaction)
@@ -5052,6 +5044,8 @@ var fieldNames_TransactionHeader = []string{
 	2: "KeyPageHeight",
 	3: "KeyPageIndex",
 	4: "Nonce",
+	5: "Memo",
+	6: "Metadata",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -5069,6 +5063,12 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Nonce == 0) {
 		writer.WriteUint(4, v.Nonce)
+	}
+	if !(len(v.Memo) == 0) {
+		writer.WriteString(5, v.Memo)
+	}
+	if !(len(v.Metadata) == 0) {
+		writer.WriteBytes(6, v.Metadata)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -7275,12 +7275,6 @@ func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-	if x, ok := reader.ReadString(3); ok {
-		v.Memo = x
-	}
-	if x, ok := reader.ReadBytes(4); ok {
-		v.Metadata = x
-	}
 
 	seen, err := reader.Reset(fieldNames_Transaction)
 	v.fieldsSet = seen
@@ -7305,6 +7299,12 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.Nonce = x
+	}
+	if x, ok := reader.ReadString(5); ok {
+		v.Memo = x
+	}
+	if x, ok := reader.ReadBytes(6); ok {
+		v.Metadata = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
@@ -8364,19 +8364,37 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
 		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
 		Nonce         uint64          `json:"nonce,omitempty"`
-		Body          json.RawMessage `json:"body,omitempty"`
 		Memo          string          `json:"memo,omitempty"`
 		Metadata      *string         `json:"metadata,omitempty"`
+		Body          json.RawMessage `json:"body,omitempty"`
 	}{}
 	u.Origin = v.TransactionHeader.Origin
 	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
 	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
 	u.Nonce = v.TransactionHeader.Nonce
+	u.Memo = v.TransactionHeader.Memo
+	u.Metadata = encoding.BytesToJSON(v.TransactionHeader.Metadata)
 	if x, err := json.Marshal(v.Body); err != nil {
 		return nil, fmt.Errorf("error encoding Body: %w", err)
 	} else {
 		u.Body = x
 	}
+	return json.Marshal(&u)
+}
+
+func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Origin        *url.URL `json:"origin,omitempty"`
+		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
+		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Memo          string   `json:"memo,omitempty"`
+		Metadata      *string  `json:"metadata,omitempty"`
+	}{}
+	u.Origin = v.Origin
+	u.KeyPageHeight = v.KeyPageHeight
+	u.KeyPageIndex = v.KeyPageIndex
+	u.Nonce = v.Nonce
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	return json.Marshal(&u)
@@ -9900,21 +9918,21 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
 		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
 		Nonce         uint64          `json:"nonce,omitempty"`
-		Body          json.RawMessage `json:"body,omitempty"`
 		Memo          string          `json:"memo,omitempty"`
 		Metadata      *string         `json:"metadata,omitempty"`
+		Body          json.RawMessage `json:"body,omitempty"`
 	}{}
 	u.Origin = v.TransactionHeader.Origin
 	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
 	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
 	u.Nonce = v.TransactionHeader.Nonce
+	u.Memo = v.TransactionHeader.Memo
+	u.Metadata = encoding.BytesToJSON(v.TransactionHeader.Metadata)
 	if x, err := json.Marshal(v.Body); err != nil {
 		return fmt.Errorf("error encoding Body: %w", err)
 	} else {
 		u.Body = x
 	}
-	u.Memo = v.Memo
-	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -9922,12 +9940,43 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	v.TransactionHeader.KeyPageHeight = u.KeyPageHeight
 	v.TransactionHeader.KeyPageIndex = u.KeyPageIndex
 	v.TransactionHeader.Nonce = u.Nonce
+	v.TransactionHeader.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
+		return fmt.Errorf("error decoding Metadata: %w", err)
+	} else {
+		v.TransactionHeader.Metadata = x
+	}
 	if x, err := UnmarshalTransactionJSON(u.Body); err != nil {
 		return fmt.Errorf("error decoding Body: %w", err)
 	} else {
 		v.Body = x
 	}
 
+	return nil
+}
+
+func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Origin        *url.URL `json:"origin,omitempty"`
+		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
+		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Memo          string   `json:"memo,omitempty"`
+		Metadata      *string  `json:"metadata,omitempty"`
+	}{}
+	u.Origin = v.Origin
+	u.KeyPageHeight = v.KeyPageHeight
+	u.KeyPageIndex = v.KeyPageIndex
+	u.Nonce = v.Nonce
+	u.Memo = v.Memo
+	u.Metadata = encoding.BytesToJSON(v.Metadata)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Origin = u.Origin
+	v.KeyPageHeight = u.KeyPageHeight
+	v.KeyPageIndex = u.KeyPageIndex
+	v.Nonce = u.Nonce
 	v.Memo = u.Memo
 	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
 		return fmt.Errorf("error decoding Metadata: %w", err)
