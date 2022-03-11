@@ -248,7 +248,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.TxType() != types.TxTypeSyntheticAnchor {
+		if txn.Transaction.Type() != types.TxTypeSyntheticAnchor {
 			count++
 			continue
 		}

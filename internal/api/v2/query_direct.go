@@ -94,11 +94,6 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, fmt.Errorf("invalid TX response: %v", err)
 		}
 
-		main, pend, pl, err := unmarshalTxResponse(res.TxState, res.TxPendingState)
-		if err != nil {
-			return nil, err
-		}
-
 		var ms *MerkleState
 		if res.Height >= 0 || len(res.ChainState) > 0 {
 			ms = new(MerkleState)
@@ -106,7 +101,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			ms.Roots = res.ChainState
 		}
 
-		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, main, pend, pl)
+		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, res.Envelope, res.Status)
 		if err != nil {
 			return nil, err
 		}
@@ -130,12 +125,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
-			if err != nil {
-				return nil, err
-			}
-
-			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
 			if err != nil {
 				return nil, err
 			}
@@ -344,12 +334,7 @@ query:
 		return nil, fmt.Errorf("invalid TX response: %v", err)
 	}
 
-	main, pend, pl, err := unmarshalTxResponse(res.TxState, res.TxPendingState)
-	if err != nil {
-		return nil, err
-	}
-
-	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
+	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, res.Envelope, res.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -399,12 +384,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
-		if err != nil {
-			return nil, err
-		}
-
-		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
 		if err != nil {
 			return nil, err
 		}
