@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -237,6 +239,31 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 		payload = new(protocol.SignPending)
 	}
 
+	si.Memo = Memo
+	if Metadata != "" {
+		if strings.Contains(Metadata, ":") {
+			dataSet := strings.Split(Metadata, ":")
+			switch dataSet[0] {
+			case "hex":
+				bytes, err := hex.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				si.Metadata = bytes
+			case "base64":
+				bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				si.Metadata = bytes
+			default:
+				si.Metadata = []byte(dataSet[1])
+			}
+		} else {
+			si.Metadata = []byte(Metadata)
+		}
+	}
+
 	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -257,6 +284,9 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 	if err != nil {
 		return nil, err
 	}
+
+	params.Memo = si.Memo
+	params.Metadata = si.Metadata
 
 	data, err = json.Marshal(params)
 	if err != nil {

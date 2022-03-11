@@ -50,7 +50,7 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.En
 		}
 
 		// Add the signature
-		gtx := txState.Restore()
+		gtx := txState
 		gtx.Signatures = []protocol.Signature{sig}
 
 		// Validate it
