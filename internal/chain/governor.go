@@ -269,7 +269,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			continue
 		}
 
-		typ := tx.Transaction.GetType()
+		typ := tx.Transaction.Body.GetType()
 		if typ != types.TxTypeSyntheticAnchor {
 			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
@@ -277,7 +277,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Sign it
 		ed := new(protocol.LegacyED25519Signature)
 		ed.PublicKey = g.Key[32:]
-		err = ed.Sign(tx.SigInfo.Nonce, g.Key, txid[:])
+		err = ed.Sign(tx.Transaction.Nonce, g.Key, txid[:])
 		if err != nil {
 			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid), "error", err)
 			continue
@@ -316,7 +316,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Convert it back to a transaction
-		env := pending.Restore()
+		env := pending
 		env.Signatures = signatures
 
 		// Marshal it

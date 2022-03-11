@@ -361,6 +361,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	qr := query.ResponseByChainId{}
 
 	// Look up record or transaction
+	var obj encoding.BinaryMarshaler
 	obj, err := batch.AccountByID(chainId).GetState()
 	if errors.Is(err, storage.ErrNotFound) {
 		obj, err = batch.Transaction(chainId).GetState()
@@ -433,10 +434,6 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
-	pending := new(state.PendingTransaction)
-	pending.Url = txState.Url
-	pending.TransactionState = &txState.TxState
-
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
@@ -446,38 +443,17 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
 	}
 
-	pending.Status, err = status.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	}
-
-	pending.Signature, err = tx.GetSignatures()
+	signatures, err := tx.GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
 	qr := query.ResponseByTxId{}
+	qr.Envelope = txState
+	qr.Status = status
+	qr.Envelope.Signatures = signatures
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
-
-	txObj := new(state.Object)
-	txObj.Entry, err = txState.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
-	qr.TxState, err = txObj.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
-
-	txObj.Entry, err = pending.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
-	qr.TxPendingState, err = txObj.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -489,7 +465,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, txState.SigInfo, status, &qr)
+	err = getPendingStatus(batch, &txState.Transaction.TransactionHeader, status, &qr)
 	if err != nil {
 		return nil, err
 	}
