@@ -32,6 +32,12 @@ const (
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
 
+	// Votes is the path to the scratch data account for subnet voting records
+	Votes = "votes"
+
+	// Evidence is the path to the scratch data account for subnet voting records
+	Evidence = "evidence"
+
 	// Oracle is the path to a node's anchor chain account.
 	Oracle = "oracle"
 

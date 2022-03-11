@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	types2 "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -53,12 +54,47 @@ func TestCreateLiteAccount(t *testing.T) {
 	}
 }
 
+func TestEvilNode(t *testing.T) {
+
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	//tell the TestNet that we have an evil node in the midst
+	dns := subnets[0]
+	bvn := subnets[1]
+	subnets[0] = "evil-" + subnets[0]
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+
+	dn := nodes[dns][0]
+	n := nodes[bvn][0]
+
+	var count = 11
+
+	originAddr, balances := n.testLiteTx(count)
+	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
+	for addr, bal := range balances {
+		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
+	}
+
+	batch := dn.db.Begin(true)
+	defer batch.Discard()
+	evData, err := batch.Account(dn.network.NodeUrl(protocol.Evidence)).Data()
+	require.NoError(t, err)
+	// Check each anchor
+	_, de, err := evData.GetLatest()
+	require.NoError(t, err)
+	var ev []types2.Evidence
+	err = json.Unmarshal(de.Data, &ev)
+	require.NoError(t, err)
+	require.Greaterf(t, len(ev), 0, "no evidence data")
+	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
+
+}
+
 func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 	_, sponsor, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(n.t, err)
 	sponsorAddr := acctesting.AcmeLiteAddressStdPriv(sponsor).String()
 
-	recipients := make([]string, 10)
+	recipients := make([]string, count)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key).String()
@@ -159,7 +195,7 @@ func TestAnchorChain(t *testing.T) {
 		require.NoError(t, err)
 
 		if meta.Name == "bpt" {
-			assert.Equal(t, root, batch.RootHash(), "wrong anchor for BPT")
+			assert.Equal(t, root, batch.BptRootHash(), "wrong anchor for BPT")
 			continue
 		}
 

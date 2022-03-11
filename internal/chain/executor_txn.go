@@ -153,6 +153,52 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	return result, nil
 }
 
+func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd *protocol.WriteData) error {
+	dataAccountUrl := m.Network.NodeUrl(internalAccountPath)
+
+	if wd == nil {
+		return fmt.Errorf("no internal data transaction provided")
+	}
+
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
+	env.Transaction.Origin = m.Network.NodeUrl()
+	env.Transaction.Body = wd
+
+	sw := protocol.SegWitDataEntry{}
+	sw.Cause = *(*[32]byte)(env.GetTxHash())
+	sw.EntryHash = *(*[32]byte)(wd.Entry.Hash())
+	sw.EntryUrl = env.Transaction.Origin
+	env.Transaction.Body = &sw
+
+	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(internalAccountPath), env)
+	if err != nil {
+		return err
+	}
+	st.logger.L = m.logger
+
+	da := new(protocol.DataAccount)
+	va := m.blockBatch.Account(dataAccountUrl)
+	err = va.GetStateAs(da)
+	if err != nil {
+		return err
+	}
+
+	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
+
+	txPending := state.NewPendingTransaction(env)
+	txAccepted, _ := state.NewTransaction(txPending)
+
+	status := &protocol.TransactionStatus{Delivered: true}
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	if err != nil {
+		return err
+	}
+	st.Commit()
+
+	return nil
+}
+
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
 func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
@@ -404,7 +450,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case ks.Nonce >= env.Transaction.Nonce:
+		case ks.Nonce >= env.Transaction.Nonce && !st.TxnExists(env.TxHash):
 			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, env.Transaction.Nonce)
 		default:
 			ks.Nonce = env.Transaction.Nonce
@@ -455,7 +501,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case account.Nonce >= env.Transaction.Nonce:
+		case account.Nonce >= env.Transaction.Nonce && !st.TxnExists(env.TxHash):
 			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, env.Transaction.Nonce)
 		default:
 			account.Nonce = env.Transaction.Nonce

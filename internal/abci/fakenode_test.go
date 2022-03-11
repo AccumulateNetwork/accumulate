@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,19 +58,29 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.Client{}
+	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
+		isEvil := false
+		if strings.HasPrefix(netName, evilNodePrefix) {
+			isEvil = true
+			netName = strings.TrimPrefix(netName, evilNodePrefix)
+		}
+
 		daemons := daemons[netName]
 		nodes := make([]*FakeNode, len(daemons))
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, isEvil)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
 	}
 	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
+		if strings.HasPrefix(netName, evilNodePrefix) {
+			netName = strings.TrimPrefix(netName, evilNodePrefix)
+		}
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
@@ -78,7 +89,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	return allNodes
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error)) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
 	pv, err := privval.LoadFilePV(
 		d.Config.PrivValidator.KeyFile(),
 		d.Config.PrivValidator.StateFile(),
@@ -117,7 +128,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
-	}, 100*time.Millisecond)
+	}, 100*time.Millisecond, isEvil)
 
 	return n, appChan
 }

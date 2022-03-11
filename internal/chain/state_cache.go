@@ -126,6 +126,12 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.Trans
 	return c.batch.Transaction(txid[:]).Get()
 }
 
+// TxnExists checks if the transaction already exists
+func (c *stateCache) TxnExists(txid []byte) bool {
+	_, err := c.batch.Transaction(txid).GetStatus()
+	return err == nil
+}
+
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
 	return AddDirectoryEntry(func(u *url.URL, key ...interface{}) Value {
 		return c.RecordIndex(u, key...)
