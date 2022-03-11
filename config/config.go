@@ -100,7 +100,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
-	c.Accumulate.API.TxMaxWaitTime = 20 * time.Second
+	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
