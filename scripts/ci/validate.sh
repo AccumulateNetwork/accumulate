@@ -35,7 +35,7 @@ function wait-for-tx {
 
     local TXID=$1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    local RESP=$(accumulate tx get -j --wait 10m $TXID)
+    local RESP=$(accumulate tx get -j --wait 1m $TXID)
     echo $RESP | jq -C --indent 0
 
     if [ -z "$NO_CHECK" ]; then

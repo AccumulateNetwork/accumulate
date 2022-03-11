@@ -224,6 +224,9 @@ func TestAnchorChain(t *testing.T) {
 			SignLegacyED25519(dn.key.Bytes()))
 	})
 
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
 	// Get the anchor chain manager for DN
 	batch = dn.db.Begin(true)
 	defer batch.Discard()
@@ -234,7 +237,7 @@ func TestAnchorChain(t *testing.T) {
 	ledgerState = protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, ledgerState.ActiveOracle, expected)
+	require.Equal(t, expected, ledgerState.ActiveOracle)
 
 	time.Sleep(2 * time.Second)
 	// Get the anchor chain manager for BVN
