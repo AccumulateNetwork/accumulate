@@ -97,7 +97,7 @@ const LiteEntryHeaderSize = 1 + // version
 	2 // total len
 
 // LiteEntryMaxTotalSize is the maximum encoded length of an Entry.
-const LiteEntryMaxTotalSize = WriteDataMax + LiteEntryHeaderSize
+const LiteEntryMaxTotalSize = TransactionSizeMax + LiteEntryHeaderSize
 
 // UnmarshalBinary unmarshal the LiteDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry

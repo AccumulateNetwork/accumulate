@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // Transaction manages a transaction.
@@ -23,7 +22,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // Get loads the transaction state, status, and signatures.
 //
 // See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (t *Transaction) Get() (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
 	state, err := t.GetState()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, nil, err
@@ -50,7 +49,7 @@ func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []
 // Put appends signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *state.Transaction, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
+func (t *Transaction) Put(state *protocol.Envelope, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
 	// Ensure the object metadata is stored. Transactions don't have chains, so
 	// we don't need to add chain metadata.
 	if _, err := t.batch.store.Get(t.key.Object()); errors.Is(err, storage.ErrNotFound) {
@@ -77,13 +76,13 @@ func (t *Transaction) Put(state *state.Transaction, status *protocol.Transaction
 }
 
 // GetState loads the transaction state.
-func (t *Transaction) GetState() (*state.Transaction, error) {
+func (t *Transaction) GetState() (*protocol.Envelope, error) {
 	data, err := t.batch.store.Get(t.key.State())
 	if err != nil {
 		return nil, err
 	}
 
-	state := new(state.Transaction)
+	state := new(protocol.Envelope)
 	err = state.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
@@ -93,7 +92,7 @@ func (t *Transaction) GetState() (*state.Transaction, error) {
 }
 
 // PutState stores the transaction state and adds the transaction to the BPT (as a hash).
-func (t *Transaction) PutState(state *state.Transaction) error {
+func (t *Transaction) PutState(state *protocol.Envelope) error {
 	data, err := state.MarshalBinary()
 	if err != nil {
 		return err
