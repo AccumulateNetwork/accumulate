@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -17,7 +18,7 @@ func (q *queryDispatch) direct(s string) *queryDirect {
 	return &queryDirect{q.Options, s}
 }
 
-func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) (interface{}, error) {
+func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), errNotFound error) (interface{}, error) {
 	resCh := make(chan interface{}) // Result channel
 	errCh := make(chan error)       // Error channel
 	doneCh := make(chan struct{})   // Completion channel
@@ -34,7 +35,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) 
 		// If all queries are done and no error or result has been produced, the
 		// record must not exist
 		select {
-		case errCh <- storage.ErrNotFound:
+		case errCh <- errNotFound:
 		case <-doneCh:
 		}
 	}()
@@ -95,7 +96,7 @@ func (q *queryDispatch) QueryKeyPageIndex(url *url.URL, key []byte) (*ChainQuery
 func (q *queryDispatch) QueryChain(id []byte) (*ChainQueryResponse, error) {
 	res, err := q.queryAll(func(q *queryDirect) (interface{}, error) {
 		return q.QueryChain(id)
-	})
+	}, fmt.Errorf("chain %X not found", id))
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (q *queryDispatch) QueryDirectory(url *url.URL, pagination QueryPagination,
 func (q *queryDispatch) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
 	res, err := q.queryAll(func(qdr *queryDirect) (interface{}, error) {
 		return qdr.QueryTx(id, wait, opts)
-	})
+	}, fmt.Errorf("transaction %X not found", id))
 	if err != nil {
 		return nil, err
 	}

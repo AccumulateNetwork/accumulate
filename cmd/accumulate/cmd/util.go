@@ -357,13 +357,26 @@ func (a *ActionDataResponse) Print() (string, error) {
 }
 
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
-	return &ActionResponse{
+	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
 		EnvelopeHash:    r.EnvelopeHash,
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+		Result:          r.Result,
 	}
+	if r.Code != 0 {
+		return ar
+	}
+
+	result := new(protocol.TransactionStatus)
+	if Remarshal(r.Result, result) != nil {
+		return ar
+	}
+
+	ar.Code = types.String(fmt.Sprint(result.Code))
+	ar.Error = types.String(result.Message)
+	return ar
 }
 
 func (a *ActionResponse) Print() (string, error) {

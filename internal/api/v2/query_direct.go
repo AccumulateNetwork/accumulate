@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/rpc/client"
@@ -50,6 +51,12 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 		return string(res.Response.Key), res.Response.Value, nil
 	}
 	if res.Response.Code == uint32(protocol.ErrorCodeNotFound) {
+		// If possible, preserve the error message while still being
+		// errors.Is(err, storage.ErrNotFound)
+		if strings.HasSuffix(res.Response.Info, storage.ErrNotFound.Error()) {
+			s := res.Response.Info[:len(res.Response.Info)-len(storage.ErrNotFound.Error())]
+			return "", nil, fmt.Errorf("%s%w", s, storage.ErrNotFound)
+		}
 		return "", nil, storage.ErrNotFound
 	}
 
