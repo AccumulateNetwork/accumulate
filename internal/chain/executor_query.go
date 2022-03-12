@@ -96,7 +96,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), start, end, protocol.MainChain)
+			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.MainChain)
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -153,7 +153,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), int64(start), int64(end), protocol.PendingChain)
+				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.PendingChain)
 				if perr != nil {
 					return nil, nil, perr
 				}
@@ -497,8 +497,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	return &qr, nil
 }
 
-func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, start, end int64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
-	chain, err := batch.AccountByID(id).ReadChain(chainName)
+func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
+	chain, err := batch.Account(account).ReadChain(chainName)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
@@ -506,9 +506,9 @@ func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, sta
 	thr := query.ResponseTxHistory{}
 	thr.Start = start
 	thr.End = end
-	thr.Total = chain.Height()
+	thr.Total = uint64(chain.Height())
 
-	txids, err := chain.Entries(start, end)
+	txids, err := chain.Entries(int64(start), int64(end))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
@@ -618,7 +618,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 		}
 
-		thr, perr := m.queryTxHistoryByChainId(batch, txh.ChainId[:], txh.Start, txh.Start+txh.Limit, protocol.MainChain)
+		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, protocol.MainChain)
 		if perr != nil {
 			return nil, nil, perr
 		}

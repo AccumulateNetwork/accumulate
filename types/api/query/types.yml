@@ -21,13 +21,13 @@ ResponseKeyPageIndex:
 ResponseTxHistory:
   fields:
     - name: Start
-      type: varint
+      type: uint
       keep-empty: true
     - name: End
-      type: varint
+      type: uint
       keep-empty: true
     - name: Total
-      type: varint
+      type: uint
       keep-empty: true
     - name: Transactions
       repeatable: true
@@ -129,3 +129,13 @@ MultiResponse:
     - name: Total
       type: uvarint
       keep-empty: true
+
+RequestTxHistory:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: Limit
+      type: uint

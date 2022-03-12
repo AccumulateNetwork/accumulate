@@ -30,6 +30,13 @@ type RequestKeyPageIndex struct {
 	Key       []byte   `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 }
 
+type RequestTxHistory struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+}
+
 type ResponseByTxId struct {
 	fieldsSet          []bool
 	TxId               [32]byte                    `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
@@ -72,9 +79,9 @@ type ResponsePending struct {
 
 type ResponseTxHistory struct {
 	fieldsSet    []bool
-	Start        int64            `json:"start" form:"start" query:"start" validate:"required"`
-	End          int64            `json:"end" form:"end" query:"end" validate:"required"`
-	Total        int64            `json:"total" form:"total" query:"total" validate:"required"`
+	Start        uint64           `json:"start" form:"start" query:"start" validate:"required"`
+	End          uint64           `json:"end" form:"end" query:"end" validate:"required"`
+	Total        uint64           `json:"total" form:"total" query:"total" validate:"required"`
 	Transactions []ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
@@ -91,6 +98,20 @@ func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Key, u.Key)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestTxHistory) Equal(u *RequestTxHistory) bool {
+	if !((v.Account).Equal(u.Account)) {
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.Limit == u.Limit) {
 		return false
 	}
 
@@ -345,6 +366,59 @@ func (v *RequestKeyPageIndex) IsValid() error {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
 		errs = append(errs, "field Key is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RequestTxHistory = []string{
+	1: "Account",
+	2: "Start",
+	3: "Limit",
+}
+
+func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(2, v.Start)
+	}
+	if !(v.Limit == 0) {
+		writer.WriteUint(3, v.Limit)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestTxHistory)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestTxHistory) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Limit is missing")
+	} else if v.Limit == 0 {
+		errs = append(errs, "field Limit is not set")
 	}
 
 	switch len(errs) {
@@ -676,9 +750,9 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteInt(1, v.Start)
-	writer.WriteInt(2, v.End)
-	writer.WriteInt(3, v.Total)
+	writer.WriteUint(1, v.Start)
+	writer.WriteUint(2, v.End)
+	writer.WriteUint(3, v.Total)
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(4, &v)
@@ -836,6 +910,28 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RequestTxHistory) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Limit = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestTxHistory)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *ResponseByTxId) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -988,13 +1084,13 @@ func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
 func (v *ResponseTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadInt(1); ok {
+	if x, ok := reader.ReadUint(1); ok {
 		v.Start = x
 	}
-	if x, ok := reader.ReadInt(2); ok {
+	if x, ok := reader.ReadUint(2); ok {
 		v.End = x
 	}
-	if x, ok := reader.ReadInt(3); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.Total = x
 	}
 	for {

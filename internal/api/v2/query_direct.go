@@ -365,9 +365,9 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	}
 
 	req := new(query.RequestTxHistory)
-	req.Start = int64(pagination.Start)
-	req.Limit = int64(pagination.Count)
-	copy(req.ChainId[:], u.AccountID())
+	req.Account = u
+	req.Start = pagination.Start
+	req.Limit = pagination.Count
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
