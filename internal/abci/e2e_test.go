@@ -155,6 +155,9 @@ func TestAnchorChain(t *testing.T) {
 	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+
 	batch := n.db.Begin(true)
 	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
 	require.NoError(t, batch.Commit())
@@ -162,8 +165,12 @@ func TestAnchorChain(t *testing.T) {
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
-		adi.KeyBookName = "book"
-		adi.KeyPageName = "page"
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
+		require.NoError(t, err)
+		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page", adi.Url))
+		require.NoError(t, err)
+		adi.PublicKey = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
@@ -262,8 +269,11 @@ func TestCreateADI(t *testing.T) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
 		adi.PublicKey = keyHash[:]
-		adi.KeyBookName = "foo-book"
-		adi.KeyPageName = "bar-page"
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
+		require.NoError(t, err)
+		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/bar-page", adi.Url))
+		require.NoError(t, err)
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
@@ -482,7 +492,6 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar").String(),
 			n.ParseUrl("FooBar/book0").String(),
 			n.ParseUrl("FooBar/page0").String(),
 			n.ParseUrl("FooBar/Baz").String(),
@@ -843,8 +852,11 @@ func TestSignatorHeight(t *testing.T) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("foo")
 		adi.PublicKey = fooKey.PubKey().Bytes()
-		adi.KeyBookName = "book"
-		adi.KeyPageName = "page0"
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
+		require.NoError(t, err)
+		adi.KeyPageUrl, err = url.Parse(fmt.Sprintf("%s/page0", adi.Url))
+		require.NoError(t, err)
 
 		send(newTxn(liteUrl.String()).
 			WithBody(adi).
