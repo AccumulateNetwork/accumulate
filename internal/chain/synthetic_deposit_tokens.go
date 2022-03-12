@@ -46,21 +46,27 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		lite.TokenUrl = body.Token
 		account = lite
 
+		originIdentity := tx.Transaction.Origin.Identity()
 		liteIdentity := protocol.NewLiteIdentity()
-		err := st.LoadUrlAs(tx.Transaction.Origin.Identity(), liteIdentity)
+		err := st.LoadUrlAs(originIdentity, liteIdentity)
 		switch {
 		case err == nil:
 			// OK
 		case errors.Is(err, storage.ErrNotFound):
-			liteIdentity.Url = tx.Transaction.Origin.Identity()
-			liteIdentity.KeyBook = tx.Transaction.Origin.Identity()
+			liteIdentity.Url = originIdentity
+			liteIdentity.KeyBook = originIdentity
 			st.Update(liteIdentity)
 		default:
 			return nil, err
 		}
-		err = st.AddDirectoryEntry(tx.Transaction.Origin)
+
+		rootIdentity := tx.Transaction.Origin.RootIdentity()
+		if rootIdentity.Equal(originIdentity) && !protocol.AcmeUrl().Equal(body.Token) {
+			return nil, fmt.Errorf("invalid origin, expecting origin format acc://lite-account/lite-identity/... but got %s", tx.Transaction.Origin.String())
+		}
+		err = st.AddDirectoryEntry(rootIdentity, tx.Transaction.Origin)
 		if err != nil {
-			return nil, fmt.Errorf("failed to add a directory entry for %s: %v", tx.Transaction.Origin, err)
+			return nil, fmt.Errorf("failed to add directory entries in lite token account %s: %v", tx.Transaction.Origin.RootIdentity(), err)
 		}
 	}
 
