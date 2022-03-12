@@ -124,7 +124,7 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 }
 
 // LoadTxn loads and unmarshals a saved transaction
-func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	return c.batch.Transaction(txid[:]).Get()
 }
 

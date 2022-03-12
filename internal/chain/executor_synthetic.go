@@ -22,7 +22,7 @@ func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction
 		*sub = *tx.Transaction
 
 		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx, status, nil)
+		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx.Transaction, status, nil)
 		if err != nil {
 			return err
 		}
