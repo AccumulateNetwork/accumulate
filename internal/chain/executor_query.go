@@ -393,8 +393,8 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	return &qr, nil
 }
 
-func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte, start uint64, limit uint64) (*protocol.DirectoryQueryResult, error) {
-	md, err := loadDirectoryMetadata(batch, chainId)
+func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.URL, start uint64, limit uint64) (*protocol.DirectoryQueryResult, error) {
+	md, err := loadDirectoryMetadata(batch, account)
 	if err != nil {
 		return nil, err
 	}
@@ -411,7 +411,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte
 	resp.Entries = make([]string, count)
 
 	for i := uint64(0); i < count; i++ {
-		resp.Entries[i], err = loadDirectoryEntry(batch, chainId, start+i)
+		resp.Entries[i], err = loadDirectoryEntry(batch, account, start+i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
@@ -658,7 +658,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
-		dir, err := m.queryDirectoryByChainId(batch, u.AccountID(), chr.Start, chr.Limit)
+		dir, err := m.queryDirectoryByChainId(batch, u, chr.Start, chr.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeDirectoryURL, Message: err}
 		}
