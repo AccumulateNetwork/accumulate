@@ -79,12 +79,11 @@ type ResponseTxHistory struct {
 }
 
 type TxReceipt struct {
-	fieldsSet      []bool
-	Account        *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Chain          string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
-	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
-	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
-	Error          string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	fieldsSet []bool
+	Account   *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain     string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	Receipt   protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Error     string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
@@ -235,9 +234,6 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 		return false
 	}
 	if !(v.Chain == u.Chain) {
-		return false
-	}
-	if !(v.DirectoryBlock == u.DirectoryBlock) {
 		return false
 	}
 	if !((&v.Receipt).Equal(&u.Receipt)) {
@@ -730,9 +726,8 @@ func (v *ResponseTxHistory) IsValid() error {
 var fieldNames_TxReceipt = []string{
 	1: "Account",
 	2: "Chain",
-	3: "DirectoryBlock",
-	4: "Receipt",
-	5: "Error",
+	3: "Receipt",
+	4: "Error",
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
@@ -745,14 +740,11 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Chain) == 0) {
 		writer.WriteString(2, v.Chain)
 	}
-	if !(v.DirectoryBlock == 0) {
-		writer.WriteUint(3, v.DirectoryBlock)
-	}
 	if !((v.Receipt).Equal(new(protocol.Receipt))) {
-		writer.WriteValue(4, &v.Receipt)
+		writer.WriteValue(3, &v.Receipt)
 	}
 	if !(len(v.Error) == 0) {
-		writer.WriteString(5, v.Error)
+		writer.WriteString(4, v.Error)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TxReceipt)
@@ -773,16 +765,11 @@ func (v *TxReceipt) IsValid() error {
 		errs = append(errs, "field Chain is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field DirectoryBlock is missing")
-	} else if v.DirectoryBlock == 0 {
-		errs = append(errs, "field DirectoryBlock is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Receipt is missing")
 	} else if (v.Receipt).Equal(new(protocol.Receipt)) {
 		errs = append(errs, "field Receipt is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Error is missing")
 	} else if len(v.Error) == 0 {
 		errs = append(errs, "field Error is not set")
@@ -1036,13 +1023,10 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(2); ok {
 		v.Chain = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.DirectoryBlock = x
-	}
-	if x := new(protocol.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(protocol.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Receipt = *x
 	}
-	if x, ok := reader.ReadString(5); ok {
+	if x, ok := reader.ReadString(4); ok {
 		v.Error = x
 	}
 
