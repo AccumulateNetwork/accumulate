@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"path"
 	"strings"
@@ -164,38 +163,6 @@ func (u *URL) RootIdentity() *URL {
 	v.Path = ""
 	return &v
 }
-
-// Identity returns a copy of the URL with the last section cut off the path.
-func (u *URL) Identity() *URL {
-	v := *u
-	if v.Path != "" {
-		if v.Path[len(v.Path)-1:] == "/" {
-			v.Path = v.Path[:len(v.Path)-1]
-		}
-
-		lsi := strings.LastIndex(v.Path, "/")
-		if lsi > -1 {
-			v.Path = v.Path[0:lsi]
-		}
-	}
-	return &v
-}
-
-// Parent gets the URL's parent path. When the path is empty it returns an error
-func (u *URL) Parent() (*URL, error) {
-	v := *u
-	if len(v.Path) == 0 {
-		return nil, fmt.Errorf("URL %s does not have a parent ADI", u.String())
-	}
-	slashIdx := strings.LastIndex(v.Path, "/")
-	if slashIdx == -1 {
-		v.Path = ""
-	} else {
-		v.Path = v.Path[:slashIdx]
-	}
-	return &v, nil
-}
-
 
 // Identity returns a copy of the URL with the last section cut off the path.
 func (u *URL) Identity() *URL {

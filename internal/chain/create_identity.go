@@ -96,9 +96,9 @@ func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 	if err != nil {
 		return fmt.Errorf("invalid KeyBook URL %s: %v", bookUrl.String(), err)
 	}
-	parent, err := bookUrl.Parent()
-	if err != nil {
-		return fmt.Errorf("invalid KeyBook URL: %v", err)
+	parent, ok := bookUrl.Parent()
+	if !ok {
+		return fmt.Errorf("invalid URL %s, the KeyBook URL must be adi_path/KeyBook", bookUrl)
 	}
 	if !parent.Equal(adiUrl) {
 		return fmt.Errorf("KeyBook %s must be a direct child of its ADI %s", bookUrl.String(), adiUrl.String())
@@ -107,9 +107,9 @@ func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 }
 
 func validateKeyPageUrl(pageUrl *url.URL, bookUrl *url.URL) error {
-	kpParentUrl, err := pageUrl.Parent()
-	if err != nil {
-		return fmt.Errorf("invalid KeyPage URL: %w\nthe KeyPage URL must be adi_path/KeyPage", err)
+	kpParentUrl, ok := pageUrl.Parent()
+	if !ok {
+		return fmt.Errorf("invalid URL: %s, the KeyPage URL must be adi_path/KeyPage", pageUrl)
 	}
 
 	bkParentUrl, _ := bookUrl.Parent()

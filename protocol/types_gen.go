@@ -7712,19 +7712,11 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 		PublicKey  *string         `json:"publicKey,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
-		Type       TransactionType `json:"type"`
-		Url        *url.URL        `json:"url,omitempty"`
-		PublicKey  *string         `json:"publicKey,omitempty"`
-		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
-		KeyPageUrl *url.URL        `json:"keyPageUrl,omitempty"`
-		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookUrl = v.KeyBookUrl
-	u.KeyBookUrl = v.KeyBookUrl
-	u.KeyPageUrl = v.KeyPageUrl
 	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
@@ -8779,18 +8771,16 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 
 func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType `json:"type"`
-		Url         *url.URL        `json:"url,omitempty"`
-		PublicKey   *string         `json:"publicKey,omitempty"`
-		KeyBookName string          `json:"keyBookName,omitempty"`
-		KeyPageName string          `json:"keyPageName,omitempty"`
-		Manager     *url.URL        `json:"manager,omitempty"`
+		Type       TransactionType `json:"type"`
+		Url        *url.URL        `json:"url,omitempty"`
+		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
+		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.KeyBookName = v.KeyBookName
-	u.KeyPageName = v.KeyPageName
+	u.KeyBookUrl = v.KeyBookUrl
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -8801,8 +8791,7 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	v.KeyBookName = u.KeyBookName
-	v.KeyPageName = u.KeyPageName
+	v.KeyBookUrl = u.KeyBookUrl
 	v.Manager = u.Manager
 	return nil
 }
