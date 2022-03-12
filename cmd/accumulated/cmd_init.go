@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -232,6 +234,9 @@ func initNamedNetwork(*cobra.Command, []string) {
 
 func nodeReset() {
 	ent, err := os.ReadDir(flagMain.WorkDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return
+	}
 	check(err)
 
 	for _, ent := range ent {

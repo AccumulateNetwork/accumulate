@@ -296,12 +296,16 @@ func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) 
 	}
 
 	var start time.Time
+	var sleepIncr time.Duration
+	var sleep time.Duration
 	if wait < time.Second/2 {
 		wait = 0
 	} else {
 		if wait > q.TxMaxWaitTime {
 			wait = q.TxMaxWaitTime
 		}
+		sleepIncr = wait / 50
+		sleep = sleepIncr
 		start = time.Now()
 	}
 
@@ -320,8 +324,9 @@ query:
 		// Not found, wait not specified or exceeded
 		return nil, err
 	default:
-		// Not found, try again
-		time.Sleep(time.Second / 2)
+		// Not found, try again, linearly increasing the wait time
+		time.Sleep(sleep)
+		sleep += sleepIncr
 		goto query
 	}
 	if k != "tx" {

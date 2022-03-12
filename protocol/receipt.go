@@ -19,3 +19,14 @@ func (r *Receipt) Convert() *managed.Receipt {
 
 	return m
 }
+
+func ReceiptFromManaged(src *managed.Receipt) *Receipt {
+	r := new(Receipt)
+	r.Start = src.Element
+	r.Result = src.MDRoot
+	r.Entries = make([]ReceiptEntry, len(src.Nodes))
+	for i, n := range src.Nodes {
+		r.Entries[i] = ReceiptEntry{Right: n.Right, Hash: n.Hash}
+	}
+	return r
+}
