@@ -31,6 +31,12 @@ TransactionHeader:
       type: uvarint
     - name: Nonce
       type: uvarint
+    - name: Memo
+      type: string
+      optional: true
+    - name: Metadata
+      type: bytes
+      optional: true
 
 Transaction:
   embeddings:
@@ -54,6 +60,15 @@ LegacyED25519Signature:
       type: bytes
     - name: Signature
       type: bytes
+
+RCD1Signature:
+  kind: signature
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+
 
 ED25519Signature:
   kind: signature
