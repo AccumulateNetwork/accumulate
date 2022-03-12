@@ -63,6 +63,12 @@ const (
 
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
+
+	// DefaultKeyBook is the default key book name when not specified
+	DefaultKeyBook = "book0"
+
+	// DefaultKeyPage is the default key page name when not specified
+	DefaultKeyPage = "page0"
 )
 
 // AcmeUrl returns `acc://ACME`.
@@ -257,9 +263,6 @@ func IsValidAdiUrl(u *url.URL) error {
 	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
 		errs = append(errs, "identity could be a lite token account key")
 	}
-	if u.Path != "" {
-		errs = append(errs, "path is not empty")
-	}
 	if u.Query != "" {
 		errs = append(errs, "query is not empty")
 	}
@@ -299,7 +302,7 @@ func IsValidAdiUrl(u *url.URL) error {
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
 	_, ok := ParseBvnUrl(u)
-	return ok || IsDnUrl(u)
+	return ok || BelongsToDn(u)
 }
 
 // DnUrl returns `acc://dn`.
@@ -314,7 +317,7 @@ func BvnUrl(subnet string) *url.URL {
 
 // IsDnUrl checks if the URL is the DN ADI URL.
 func IsDnUrl(u *url.URL) bool {
-	u = u.Identity()
+	u = u.RootIdentity()
 	return DnUrl().Equal(u)
 }
 
@@ -329,7 +332,7 @@ func ParseBvnUrl(u *url.URL) (string, bool) {
 
 // BelongsToDn checks if the give account belongs to the DN.
 func BelongsToDn(u *url.URL) bool {
-	return IsDnUrl(u) || u.Identity().Equal(AcmeUrl())
+	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
 }
 
 // BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.

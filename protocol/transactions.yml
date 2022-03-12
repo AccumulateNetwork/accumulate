@@ -131,11 +131,14 @@ CreateIdentity:
       pointer: true
     - name: PublicKey
       type: bytes
-    - name: KeyBookName
-      type: string
       optional: true
-    - name: KeyPageName
-      type: string
+    - name: KeyBookUrl
+      type: url
+      pointer: true
+      optional: true
+    - name: KeyPageUrl
+      type: url
+      pointer: true
       optional: true
     - name: Manager
       type: url
