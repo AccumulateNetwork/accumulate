@@ -2,6 +2,7 @@ package memory
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"sort"
 	"sync"
@@ -128,8 +129,8 @@ func (m *DB) get(key storage.Key) (value []byte, err error) {
 type jsonDB []jsonEntry
 
 type jsonEntry struct {
-	Key   [32]byte
-	Value []byte
+	Key   string
+	Value string
 }
 
 func (m *DB) MarshalJSON() ([]byte, error) {
@@ -152,7 +153,7 @@ func (m *DB) MarshalJSON() ([]byte, error) {
 	jdb := make(jsonDB, 0, size)
 	for _, key := range keys {
 		entry := m.entries[key]
-		jdb = append(jdb, jsonEntry{key, entry})
+		jdb = append(jdb, jsonEntry{hex.EncodeToString(key[:]), hex.EncodeToString(entry)})
 	}
 	return json.Marshal(jdb)
 }
@@ -170,7 +171,15 @@ func (m *DB) UnmarshalJSON(b []byte) error {
 	// Delete all entries first?
 
 	for _, e := range jdb {
-		m.entries[storage.Key(e.Key)] = e.Value
+		key, err := hex.DecodeString(e.Key)
+		if err != nil {
+			return err
+		}
+		value, err := hex.DecodeString(e.Value)
+		if err != nil {
+			return err
+		}
+		m.entries[*(*storage.Key)(key)] = value
 	}
 	return nil
 }

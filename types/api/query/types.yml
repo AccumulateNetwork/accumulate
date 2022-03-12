@@ -98,8 +98,8 @@ TxReceipt:
       pointer: true
     - name: Chain
       type: string
-    - name: DirectoryBlock
-      type: uvarint
+    # - name: DirectoryBlock
+    #   type: uvarint
     - name: Receipt
       type: protocol.Receipt
       marshal-as: reference
