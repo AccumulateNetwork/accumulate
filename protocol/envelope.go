@@ -15,7 +15,7 @@ func (e *Envelope) GetTxHash() []byte {
 	}
 
 	if e.Transaction != nil {
-		return e.Transaction.calculateHash()
+		return e.Transaction.GetHash()
 	}
 
 	if len(e.TxHash) == 0 {
@@ -61,11 +61,11 @@ func (e *Envelope) VerifyTxHash() bool {
 	if e.TxHash == nil {
 		return true
 	}
-	return bytes.Equal(e.TxHash, e.Transaction.calculateHash())
+	return bytes.Equal(e.TxHash, e.Transaction.GetHash())
 }
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
-func (t *Transaction) calculateHash() []byte {
+func (t *Transaction) GetHash() []byte {
 	// Already computed?
 	if t.hash != nil {
 		return t.hash
