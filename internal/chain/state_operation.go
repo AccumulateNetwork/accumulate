@@ -282,20 +282,26 @@ func (op *writeIndex) Execute(st *stateCache) ([]protocol.Account, error) {
 }
 
 type signTransaction struct {
-	txid      []byte
-	signature protocol.Signature
+	txid       []byte
+	signatures []protocol.Signature
 }
 
-func (m *stateCache) SignTransaction(txid []byte, signature protocol.Signature) {
+func (m *stateCache) SignTransaction(txid []byte, signatures ...protocol.Signature) {
 	m.operations = append(m.operations, &signTransaction{
-		txid:      txid,
-		signature: signature,
+		txid:       txid,
+		signatures: signatures,
 	})
 }
 
 func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
-	_, err := st.batch.Transaction(op.txid).AddSignatures(op.signature)
-	return nil, err
+	t := st.batch.Transaction(op.txid)
+	ss, err := st.batch.Transaction(op.txid).GetSignatures()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+
+	ss.Add(op.signatures...)
+	return nil, t.PutSignatures(ss)
 }
 
 type addSyntheticTxns struct {

@@ -449,7 +449,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	qr := query.ResponseByTxId{}
 	qr.Envelope = txState
 	qr.Status = status
-	qr.Envelope.Signatures = signatures
+	qr.Envelope.Signatures = signatures.Signatures
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
 

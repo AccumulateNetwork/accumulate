@@ -502,10 +502,16 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 		return false, err
 	}
 
-	sigCount, err := st.batch.Transaction(env.GetTxHash()).AddSignatures(env.Signatures...)
+	sigs, err := st.batch.Transaction(env.GetTxHash()).GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return false, fmt.Errorf("failed to add signatures: %v", err)
+		return false, fmt.Errorf("failed to get signatures: %v", err)
 	}
+
+	// Add to the sig set to get the resulting count
+	sigCount := sigs.Add(env.Signatures...)
+
+	// Queue a write
+	st.SignTransaction(env.GetTxHash(), env.Signatures...)
 
 	// If the number of signatures is less than the threshold, the transaction is pending
 	return sigCount >= int(page.Threshold), nil
