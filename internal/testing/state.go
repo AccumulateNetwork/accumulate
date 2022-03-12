@@ -15,8 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type DB = *database.Batch
@@ -38,7 +36,7 @@ func MustParseUrl(s string) *url.URL {
 	return u
 }
 
-func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
+func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*protocol.Envelope, error) {
 	recipientAdi := AcmeLiteAddressTmPriv(recipient)
 
 	//create a fake synthetic deposit for faucet.
@@ -47,8 +45,8 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
 
-	tx := new(transactions.Envelope)
-	tx.Transaction = new(transactions.Transaction)
+	tx := new(protocol.Envelope)
+	tx.Transaction = new(protocol.Transaction)
 	tx.Transaction.Body = deposit
 	tx.Transaction.Origin = recipientAdi
 	tx.Transaction.KeyPageHeight = 1
@@ -65,7 +63,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	return tx, nil
 }
 
-func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
+func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*protocol.Envelope, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	from := AcmeLiteAddressStdPriv(sponsor)
 
@@ -77,8 +75,8 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	gtx := new(transactions.Envelope)
-	gtx.Transaction = new(transactions.Transaction)
+	gtx := new(protocol.Envelope)
+	gtx.Transaction = new(protocol.Transaction)
 	gtx.Transaction.Body = &send
 	gtx.Transaction.Origin = from
 
@@ -95,7 +93,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	return gtx, nil
 }
 
-func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Envelope, error) {
+func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *protocol.Envelope, error) {
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 	//set destination url address
 	destAddress := AcmeLiteAddressStdPriv(privateKey)
@@ -110,8 +108,8 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
 	// deposit.TokenUrl = tokenUrl
 
-	gtx := new(transactions.Envelope)
-	gtx.Transaction = new(transactions.Transaction)
+	gtx := new(protocol.Envelope)
+	gtx.Transaction = new(protocol.Transaction)
 	gtx.Transaction.Body = deposit
 	gtx.Transaction.Origin = destAddress
 
@@ -153,18 +151,14 @@ func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, cre
 	return AddCredits(db, url, credits)
 }
 
-func WriteStates(db DB, chains ...state.Chain) error {
+func WriteStates(db DB, chains ...protocol.Account) error {
 	txid := sha256.Sum256([]byte("fake txid"))
 	urls := make([]*url.URL, len(chains))
 	for i, c := range chains {
-		u, err := c.Header().ParseUrl()
-		if err != nil {
-			return err
-		}
-		urls[i] = u
+		urls[i] = c.Header().Url
 
-		r := db.Account(u)
-		err = r.PutState(c)
+		r := db.Account(c.Header().Url)
+		err := r.PutState(c)
 		if err != nil {
 			return err
 		}
@@ -257,7 +251,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		return err
 	}
 
-	var chain state.Chain
+	var chain protocol.Account
 	if lite {
 		account := new(protocol.LiteTokenAccount)
 		account.Url = u

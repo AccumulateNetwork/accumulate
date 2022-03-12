@@ -98,8 +98,7 @@ func (t *Transaction) PutState(state *protocol.Envelope) error {
 		return err
 	}
 
-	t.batch.store.Put(t.key.State(), data)
-	return nil
+	return t.batch.store.Put(t.key.State(), data)
 }
 
 // GetStatus loads the transaction state.
@@ -129,8 +128,7 @@ func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
 		return err
 	}
 
-	t.batch.store.Put(t.key.Status(), data)
-	return nil
+	return t.batch.store.Put(t.key.Status(), data)
 }
 
 // GetSignatures loads the transaction's signatures.
@@ -182,7 +180,11 @@ func (t *Transaction) AddSignatures(newSignatures ...protocol.Signature) (count 
 		return 0, err
 	}
 
-	t.batch.store.Put(t.key.Signatures(), data)
+	err = t.batch.store.Put(t.key.Signatures(), data)
+	if err != nil {
+		return 0, err
+	}
+
 	return len(signatures), nil
 }
 
@@ -218,6 +220,5 @@ func (t *Transaction) AddSyntheticTxns(txids ...[32]byte) error {
 		return err
 	}
 
-	t.batch.store.Put(t.key.Synthetic(), data)
-	return nil
+	return t.batch.store.Put(t.key.Synthetic(), data)
 }

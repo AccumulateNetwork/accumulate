@@ -110,9 +110,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 		return fmt.Errorf("chain opened as read-only")
 	}
 
-	// TODO MerkleManager.AddHash really should return an error
-	c.merkle.AddHash(entry, unique)
-	return nil
+	return c.merkle.AddHash(entry, unique)
 }
 
 // Receipt builds a receipt from one index to another

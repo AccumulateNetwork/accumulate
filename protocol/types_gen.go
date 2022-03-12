@@ -382,8 +382,8 @@ type SendTokens struct {
 
 type SendTransaction struct {
 	fieldsSet []bool
-	Payload   TransactionPayload `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
-	Recipient *url.URL           `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	Payload   TransactionBody `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Recipient *url.URL        `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 }
 
 type SignPending struct {
@@ -494,7 +494,7 @@ type TokenRecipient struct {
 type Transaction struct {
 	fieldsSet []bool
 	TransactionHeader
-	Body TransactionPayload `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	Body TransactionBody `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash []byte
 }
 
@@ -533,7 +533,7 @@ type TransactionStatus struct {
 type TxState struct {
 	fieldsSet       []bool
 	SigInfo         *TransactionHeader `json:"sigInfo,omitempty" form:"sigInfo" query:"sigInfo" validate:"required"`
-	Transaction     TransactionPayload `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Transaction     TransactionBody    `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	TransactionHash [32]byte
 }
 

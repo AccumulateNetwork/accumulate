@@ -28,9 +28,8 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.NoError(t, err, "should be able to read the chain head")
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
-	var States []*MerkleState
 	for i := 0; i < numTests; i++ {
-		m.AddHash(randHash.Next(), false)
+		require.NoError(t, m.AddHash(randHash.Next(), false))
 		mState, err := m.MS.Marshal()
 		require.NoError(t, err, "must be able to marshal a MerkleState")
 		ms := new(MerkleState)
@@ -39,7 +38,6 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		require.True(t, ms.Equal(m.MS), " should get the same state back")
 		cState, e2 := m.GetChainState(m.key)
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
-		States = append(States, m.MS.Copy())
 		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
 	}
 }
@@ -53,7 +51,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
-		m.AddHash(randHash.Next(), false)
+		require.NoError(t, m.AddHash(randHash.Next(), false))
 		States = append(States, m.MS.Copy())
 	}
 	for i := int64(0); i < testnum; i++ {
@@ -94,7 +92,7 @@ func TestIndexing2(t *testing.T) {
 	for i := 0; i < testlen; i++ {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
-		MM1.AddHash(dataHash[:], false)
+		require.NoError(t, MM1.AddHash(dataHash[:], false))
 		dataI, e := MM1.Manager.Get(storage.MakeKey(Chain, "ElementIndex", dataHash))
 		if e != nil {
 			t.Fatalf("error")
@@ -136,7 +134,7 @@ func TestMerkleManager(t *testing.T) {
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testLen; i++ {
-		MM1.AddHash(hash[:], false)
+		require.NoError(t, MM1.AddHash(hash[:], false))
 		hash = sha256.Sum256(hash[:])
 	}
 
@@ -245,7 +243,7 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 	var r common.RandHash
 
 	for col := int64(0); col < 20; col++ {
-		m.AddHash(r.NextList(), false)
+		require.NoError(t, m.AddHash(r.NextList(), false))
 		m.MS.PadPending()
 		if col&1 == 1 {
 			s, _ := m.GetAnyState(col - 1)
@@ -276,8 +274,8 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 		m, _ := NewMerkleManager(storeTx, 4)
 		m.MS.InitSha256()
 
-		m.AddHash(hash, true)
-		m.AddHash(hash, true)
+		require.NoError(t, m.AddHash(hash, true))
+		require.NoError(t, m.AddHash(hash, true))
 		require.Equal(t, int64(1), m.MS.Count)
 	})
 
@@ -287,8 +285,8 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 		m, _ := NewMerkleManager(storeTx, 4)
 		m.MS.InitSha256()
 
-		m.AddHash(hash, false)
-		m.AddHash(hash, false)
+		require.NoError(t, m.AddHash(hash, false))
+		require.NoError(t, m.AddHash(hash, false))
 		require.Equal(t, int64(2), m.MS.Count)
 	})
 }

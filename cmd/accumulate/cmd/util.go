@@ -21,8 +21,6 @@ import (
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
@@ -54,7 +52,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Header, []byte, error) {
+func prepareSigner(origin *url2.URL, args []string) ([]string, *protocol.TransactionHeader, []byte, error) {
 	var privKey []byte
 	var err error
 
@@ -63,7 +61,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	hdr := transactions.Header{}
+	hdr := protocol.TransactionHeader{}
 	hdr.Origin = origin
 	hdr.KeyPageHeight = 1
 	hdr.KeyPageIndex = 0
@@ -105,7 +103,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	return args[ct:], &hdr, privKey, nil
 }
 
-func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
+func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
 	var typ struct {
 		Type protocol.AccountType
 	}
@@ -127,10 +125,10 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (protocol.Signature, error) {
-	env := new(transactions.Envelope)
+func signGenTx(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, hdr *protocol.TransactionHeader, privKey []byte, nonce uint64) (protocol.Signature, error) {
+	env := new(protocol.Envelope)
 	env.TxHash = txHash
-	env.Transaction = new(transactions.Transaction)
+	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Body = payload
 
 	hdr.Nonce = nonce
@@ -144,7 +142,7 @@ func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.
 	return ed, nil
 }
 
-func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+func prepareGenTxV2(payload protocol.TransactionBody, jsonPayload, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
 	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
@@ -234,7 +232,7 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (*api2.TxResponse, error) {
 	if payload == nil && txHash != nil {
 		payload = new(protocol.SignPending)
 	}
@@ -819,7 +817,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	switch string(res.Type) {
-	case types.TxTypeSendTokens.String():
+	case protocol.TransactionTypeSendTokens.String():
 		tx := new(api.TokenSend)
 		err := Remarshal(res.Data, &tx)
 		if err != nil {
@@ -838,7 +836,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case types.TxTypeSyntheticDepositTokens.String():
+	case protocol.TransactionTypeSyntheticDepositTokens.String():
 		deposit := new(protocol.SyntheticDepositTokens)
 		err := Remarshal(res.Data, &deposit)
 		if err != nil {
@@ -854,7 +852,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case types.TxTypeSyntheticCreateChain.String():
+	case protocol.TransactionTypeSyntheticCreateChain.String():
 		scc := new(protocol.SyntheticCreateChain)
 		err := Remarshal(res.Data, &scc)
 		if err != nil {
@@ -875,7 +873,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
 		}
 		return out, nil
-	case types.TxTypeCreateIdentity.String():
+	case protocol.TransactionTypeCreateIdentity.String():
 		id := protocol.CreateIdentity{}
 		err := Remarshal(res.Data, &id)
 		if err != nil {
@@ -906,9 +904,9 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	}
 }
 
-func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
+func getChainHeaderFromChainId(chainId []byte) (*protocol.AccountHeader, error) {
 	kb, err := GetByChainId(chainId)
-	header := state.ChainHeader{}
+	header := protocol.AccountHeader{}
 	err = Remarshal(kb.Data, &header)
 	if err != nil {
 		return nil, err

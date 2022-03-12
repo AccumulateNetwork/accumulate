@@ -6,17 +6,15 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type UpdateKeyPage struct{}
 
-func (UpdateKeyPage) Type() types.TxType {
-	return types.TxTypeUpdateKeyPage
+func (UpdateKeyPage) Type() protocol.TransactionType {
+	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
