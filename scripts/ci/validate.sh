@@ -342,13 +342,13 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Create a sub ADI"
-wait-for cli-tx adi create keytest keytest-0-0 keytest/sub1 keytest-1-0 keytest/sub1/book keytest/sub1/page0
+wait-for cli-tx adi create keytest keytest-1-0 keytest/sub1 keytest-1-0 keytest/sub1/book
 accumulate adi get keytest/sub1 1> /dev/null && success || die "Cannot find keytest/sub1"
 
 section "Add credits to the sub ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/sub1/page0 60000
-BALANCE=$(accumulate -j page get keytest/sub1/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/page0 should have 60000 credits but has ${BALANCE}"
+wait-for cli-tx credits ${LITE} keytest/sub1/book/1 60000
+BALANCE=$(accumulate -j page get keytest/sub1/book/1 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/book/1 should have 60000 credits but has ${BALANCE}"
 
 section "Create Data Account for sub ADI"
 wait-for cli-tx account create data --scratch keytest/sub1 keytest-1-0 keytest/sub1/data
