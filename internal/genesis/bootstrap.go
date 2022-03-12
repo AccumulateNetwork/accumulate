@@ -169,6 +169,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
 		}
 
-		return st.AddDirectoryEntry(urls...)
+		adiUrl, _ := adi.Header().ParseUrl()
+		return st.AddDirectoryEntry(adiUrl, urls...)
 	})
 }
