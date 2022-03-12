@@ -35,7 +35,7 @@ function wait-for-tx {
 
     local TXID=$1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    local RESP=$(accumulate tx get -j --wait 10s $TXID)
+    local RESP=$(accumulate tx get -j --wait 1m $TXID)
     echo $RESP | jq -C --indent 0
 
     if [ -z "$NO_CHECK" ]; then
@@ -394,7 +394,7 @@ TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
 [ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
 
 section "Create ADI Data Account with wait"
-cli-tx account create data --scratch --wait 10s keytest keytest-0-0 keytest/data1
+accumulate account create data --wait 1m keytest keytest-0-0 keytest/data1 1> /dev/null || die "Failed to create account"
 accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/data1"
 
 section "Query credits"
