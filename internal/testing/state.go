@@ -179,9 +179,10 @@ func WriteStates(db DB, chains ...state.Chain) error {
 		}
 	}
 
+	directory := urls[0].Identity()
 	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
 		return db.Account(u).Index(key...)
-	}, urls...)
+	}, directory, urls...)
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
@@ -203,7 +204,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
-	book.Url = bookUrl // TODO Allow override
+	book.Url = bookUrl
 	book.Pages = append(book.Pages, pageUrl)
 
 	adi := protocol.NewADI()
@@ -211,6 +212,23 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	adi.KeyBook = bookUrl
 
 	return WriteStates(db, adi, book, mss)
+}
+
+func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
+	originUrl, err := url.Parse(*originUrlStr.AsString())
+	if err != nil {
+		return err
+	}
+	identityUrl, err := url.Parse(*urlStr.AsString())
+	if err != nil {
+		return err
+	}
+
+	adi := protocol.NewADI()
+	adi.Url = identityUrl
+	adi.KeyBook = originUrl.JoinPath("book0")
+
+	return WriteStates(db, adi)
 }
 
 func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, credits float64) error {
