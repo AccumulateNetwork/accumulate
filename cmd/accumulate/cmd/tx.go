@@ -204,6 +204,11 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 
 	if wait > 0 {
 		params.Wait = wait
+
+		t := Client.Timeout
+		defer func() { Client.Timeout = t }()
+
+		Client.Timeout = TxWait * 2
 	}
 
 	data, err := json.Marshal(params)
@@ -223,13 +228,6 @@ func GetTX(hash string) (string, error) {
 	txid, err := hex.DecodeString(hash)
 	if err != nil {
 		return "", err
-	}
-
-	t := Client.Timeout
-	defer func() { Client.Timeout = t }()
-
-	if TxWait > 0 {
-		Client.Timeout = TxWait * 2
 	}
 
 	res, err := getTX(txid, TxWait)

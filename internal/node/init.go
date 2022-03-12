@@ -17,6 +17,7 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
@@ -125,7 +126,7 @@ func Init(opts InitOptions) (err error) {
 		genDoc = &types.GenesisDoc{
 			ChainID:         subnetID,
 			GenesisTime:     genTime,
-			InitialHeight:   2,
+			InitialHeight:   protocol.GenesisBlock + 1,
 			Validators:      genVals,
 			ConsensusParams: types.DefaultConsensusParams(),
 			AppState:        state,

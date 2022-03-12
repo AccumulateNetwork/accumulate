@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/hex"
 	"errors"
@@ -854,16 +853,14 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.C
 	}
 
 	// Finalize the receipt
-	dnBlock, r, err := m.getFullReceipt(batch, accountReceipt, rootReceipt, rootIndex.BlockIndex)
+	r, err := combineReceipts(nil, accountReceipt, rootReceipt)
 	if err != nil {
 		return receipt, err
 	}
-	receipt.DirectoryBlock = dnBlock
 
-	receipt.Receipt.Entries = make([]protocol.ReceiptEntry, len(r.Nodes))
-	for i, node := range r.Nodes {
-		receipt.Receipt.Entries[i] = protocol.ReceiptEntry{Hash: node.Hash, Right: node.Right}
-	}
+	// TODO Include the part of the receipt from the DN
+
+	receipt.Receipt = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
@@ -912,38 +909,4 @@ func (m *Executor) getIndexedChainReceipt(account *database.Account, name string
 
 	// Get the receipt
 	return m.getReceipt(chain, name, uint64(entryIndex), indexEntry.Source)
-}
-
-// combineReceipts combines multiple receipts and verifies the final value.
-func (m *Executor) combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Receipt, error) {
-	r := receipts[0]
-	var err error
-	for _, s := range receipts[1:] {
-		r, err = r.Combine(s)
-		if err != nil {
-			return nil, fmt.Errorf("failed to combine receipts: %v", err)
-		}
-	}
-
-	if !bytes.Equal(final, r.MDRoot) {
-		return nil, fmt.Errorf("invalid receipt end: want %X, got %X", final, r.MDRoot)
-	}
-
-	return r, nil
-}
-
-// getFullReceipt gets the DN block and constructs the full receipt.
-func (m *Executor) getFullReceipt(batch *database.Batch, accountReceipt, rootReceipt *managed.Receipt, block uint64) (uint64, *managed.Receipt, error) {
-	// Get the DN receipt
-	anchor, err := indexing.DirectoryAnchor(batch, m.Network.NodeUrl(protocol.Ledger)).AnchorForLocalBlock(block, false)
-	if err != nil {
-		return 0, nil, fmt.Errorf("unable to read anchor for block %d: %v", block, err)
-	}
-
-	r, err := m.combineReceipts(anchor.RootAnchor[:], accountReceipt, rootReceipt, anchor.Receipt.Convert())
-	if err != nil {
-		return 0, nil, err
-	}
-
-	return anchor.Block, r, nil
 }

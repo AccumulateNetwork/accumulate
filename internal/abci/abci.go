@@ -62,7 +62,7 @@ type EndBlockResponse struct {
 type Chain interface {
 	Query(q *apiQuery.Query, height int64, prove bool) (k, v []byte, err *protocol.Error)
 
-	InitChain(state []byte, time time.Time, blockIndex int64) ([]byte, error)
+	InitChain(state []byte, time time.Time) ([]byte, error)
 
 	BeginBlock(BeginBlockRequest) (BeginBlockResponse, error)
 	CheckTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
