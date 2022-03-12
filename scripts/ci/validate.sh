@@ -107,7 +107,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..10}
+for i in {1..20}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
@@ -120,10 +120,10 @@ done
 accumulate account get ${LITE} 1> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE} ${LITE} 1100)
+TXID=$(cli-tx credits ${LITE} ${LITE} 2200)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 1100 ] || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
+[ "$BALANCE" -ge 2200 ] || die "${LITE} should have at least 2200 credits but only has ${BALANCE}"
 TXID=$(accumulate -j tx get ${TXID} | jq -re .syntheticTxids[1]) # this depends on the burn coming last
 TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
 [ "$TYPE" == "syntheticBurnTokens" ] || die "Expected a syntheticBurnTokens, got ${TYPE}"
@@ -139,7 +139,7 @@ ensure-key keytest-2-1
 echo
 
 section "Create an ADI"
-wait-for cli-tx adi create ${LITE} keytest keytest-0-0 book page0
+wait-for cli-tx adi create ${LITE} keytest keytest-0-0 keytest/book keytest/page0
 accumulate adi get keytest 1> /dev/null && success || die "Cannot find keytest"
 
 section "Verify fee charge"
@@ -147,7 +147,7 @@ BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
 
 section "Recreating an ADI fails and the synthetic transaction is recorded"
-TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 book page1` || return 1
+TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book keytest/page1` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
@@ -317,6 +317,30 @@ echo $JSON | jq -re .result.result.entryHash 1> /dev/null || die "Deliver respon
 accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die "Transaction query response does not include the entry hash"
 success
 
+section "Create a sub ADI"
+wait-for cli-tx adi create keytest keytest-0-0 keytest/sub1 keytest-1-0 keytest/sub1/book keytest/sub1/page0
+accumulate adi get keytest/sub1 1> /dev/null && success || die "Cannot find keytest/sub1"
+
+section "Add credits to the sub ADI's key page 0"
+wait-for cli-tx credits ${LITE} keytest/sub1/page0 60000
+BALANCE=$(accumulate -j page get keytest/sub1/page0 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/page0 should have 60000 credits but has ${BALANCE}"
+
+section "Create Data Account for sub ADI"
+wait-for cli-tx account create data --scratch keytest/sub1 keytest-1-0 keytest/sub1/data
+accumulate account get keytest/sub1/data 1> /dev/null || die "Cannot find keytest/sub1/data"
+accumulate -j account get keytest/sub1/data | jq -re .data.scratch 1> /dev/null || die "keytest/sub1/data is not a scratch account"
+success
+
+section "Write data to sub ADI Data Account"
+JSON=$(accumulate -j data write keytest/sub1/data keytest-1-0 "foo" "bar")
+TXID=$(echo $JSON | jq -re .transactionHash)
+echo $JSON | jq -C --indent 0
+wait-for-tx $TXID
+echo $JSON | jq -re .result.result.entryHash 1> /dev/null || die "Deliver response does not include the entry hash"
+accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die "Transaction query response does not include the entry hash"
+success
+
 section "Issue a new token"
 JSON=$(accumulate -j token create keytest keytest-0-0 keytest/foocoin bar 8)
 TXID=$(echo $JSON | jq -re .transactionHash)
@@ -376,6 +400,12 @@ accumulate account get keytest/data1 1> /dev/null || die "Cannot find keytest/da
 section "Query credits"
 RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
+
+section "Transaction with Memo"
+TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
+wait-for-tx $TXID
+MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.memo)
+[ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Query votes chain"
 if [ -f "$NODE_PRIV_VAL" ]; then

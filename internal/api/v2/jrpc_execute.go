@@ -124,6 +124,8 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		env.Transaction.Nonce = req.Signer.Nonce
 		env.Transaction.KeyPageHeight = req.KeyPage.Height
 		env.Transaction.KeyPageIndex = req.KeyPage.Index
+		env.Transaction.Memo = req.Memo
+		env.Transaction.Metadata = req.Metadata
 		envs = append(envs, env)
 
 		ed := new(protocol.LegacyED25519Signature)
