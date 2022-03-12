@@ -1,4 +1,4 @@
-where#!/bin/bash
+#!/bin/bash
 
 # Stop immediately on error
 set -e
