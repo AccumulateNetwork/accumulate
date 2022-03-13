@@ -835,7 +835,8 @@ func TestRemoveKey(t *testing.T) {
 
 		send(newTxn("foo/book1/1").
 			WithBody(body).
-			SignLegacyED25519(testKey1))
+			SignLegacyED25519(testKey1).
+			Build())
 	})
 
 	n.Batch(func(send func(*transactions.Envelope)) {
