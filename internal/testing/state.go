@@ -3,6 +3,7 @@ package testing
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -186,26 +187,26 @@ func WriteStates(db DB, chains ...state.Chain) error {
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
-	keyHash := sha256.Sum256(key.PubKey().Bytes())
+	//keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
+	keyHash := key.PubKey().Bytes()
 	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	pageUrl := identityUrl.JoinPath("page0")
 	bookUrl := identityUrl.JoinPath("book0")
 
 	ss := new(protocol.KeySpec)
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.Url = pageUrl
+	mss.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 	mss.Keys = append(mss.Keys, ss)
 	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
 	book.Url = bookUrl
-	book.Pages = append(book.Pages, pageUrl)
+	book.PageCount = 1
 
 	adi := protocol.NewADI()
 	adi.Url = identityUrl
@@ -242,7 +243,7 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, cre
 		return err
 	}
 
-	return AddCredits(db, u.JoinPath("page0"), credits)
+	return AddCredits(db, u.JoinPath("book0/1"), credits)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
@@ -290,58 +291,57 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	return db.Account(u).PutState(issuer)
 }
 
-func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
-	u, err := url.Parse(*urlStr.AsString())
+func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) error {
+	bookUrl, err := url.Parse(*bookUrlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	mss := protocol.NewKeyPage()
-	mss.Url = u
-	mss.Threshold = 1
-	mss.Keys = make([]*protocol.KeySpec, len(keys))
+	account := db.Account(bookUrl)
+	state, err := account.GetState()
+	if err != nil {
+		return err
+	}
+	book := state.(*protocol.KeyBook)
+
+	page := protocol.NewKeyPage()
+	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
+	page.KeyBook = bookUrl
+	page.Threshold = 1
+	page.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
-		mss.Keys[i] = &protocol.KeySpec{
+		page.Keys[i] = &protocol.KeySpec{
 			PublicKey: key,
 		}
 	}
-
-	return WriteStates(db, mss)
+	book.PageCount++
+	return WriteStates(db, page, book)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
-	groupUrl, err := url.Parse(*urlStr.AsString())
+func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey) error {
+	bookUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	group := protocol.NewKeyBook()
-	group.Url = groupUrl
-	states := []state.Chain{group}
+	book := protocol.NewKeyBook()
+	book.Url = bookUrl
+	book.PageCount = 1
 
-	group.Pages = make([]*url.URL, len(pageUrls))
-	for i, s := range pageUrls {
-		u, err := url.Parse(s)
-		if err != nil {
-			return err
-		}
-		group.Pages[i] = u
+	page := new(protocol.KeyPage)
+	page.KeyBook = bookUrl
+	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
-		spec := new(protocol.KeyPage)
-		err = db.Account(u).GetStateAs(spec)
-		if err != nil {
-			return err
-		}
-
-		if spec.KeyBook != nil {
-			return fmt.Errorf("%q is already attached to a key book", s)
-		}
-
-		spec.KeyBook = groupUrl
-		states = append(states, spec)
+	if len(publicKeyHash) == 1 {
+		key := new(protocol.KeySpec)
+		key.PublicKey = publicKeyHash[0]
+		page.Keys = []*protocol.KeySpec{key}
+	} else if len(publicKeyHash) > 1 {
+		return errors.New("CreateKeyBook only supports one page key at the moment") // TOOO do we need to suport this? (Also in create_book.go)
 	}
 
-	return WriteStates(db, states...)
+	accounts := []protocol.Account{book, page}
+	return WriteStates(db, accounts...)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
