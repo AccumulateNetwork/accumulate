@@ -43,7 +43,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	err := scc.Update(book)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state: %v", err)
+		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
 	}
 
 	for _, sig := range body.Keys {
@@ -54,7 +54,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	err = scc.Create(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state: %v", err)
+		return nil, fmt.Errorf("failed to marshal state for KeyPage` %s: %v", page.Url, err)
 	}
 
 	return nil, nil

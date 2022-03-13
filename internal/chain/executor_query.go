@@ -269,21 +269,6 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
-func (m *Executor) queryByUrlAs(batch *database.Batch, u *url.URL, prove bool) (*query.ResponseByUrlAs, error) {
-	qr := query.ResponseByUrlAs{}
-
-	var obj encoding.BinaryMarshaler
-	_, obj, err := m.queryByUrl(batch, u, prove)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
-	}
-	qr.Object.Entry, err = obj.MarshalBinary()
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, u)}
-	}
-	return &qr, err
-}
-
 func parseRange(qv url.Values) (start, end int64, err error) {
 	if s := qv.Get("from"); s != "" {
 		start, err = strconv.ParseInt(s, 10, 64)

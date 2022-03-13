@@ -56,14 +56,14 @@ func PrintKeyPageGet() {
 }
 
 func PrintKeyPageCreate() {
-	fmt.Println("  accumulate page create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
+	fmt.Println("  accumulate page create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon/RedBook redKey5 redKey1 redKey2 redKey3")
 }
 func PrintKeyUpdate() {
 	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon/RedBook/1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key update acc://RedWagon/RedBook/1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
-	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedBook/1 redKey1 redKey2 ")
+	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedBook/2 redKey2 redKey1")
 	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
 	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedBook/1 redKey1 redKey2")
 }

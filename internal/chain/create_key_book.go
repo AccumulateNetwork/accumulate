@@ -40,7 +40,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	err := scc.Create(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyPage: %v", err)
+		return nil, fmt.Errorf("failed to marshal state for KeyPage %s: %v", page.Url, err)
 	}
 
 	book := protocol.NewKeyBook()
@@ -50,7 +50,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	err = scc.Create(book)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyBook: %v", err)
+		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
 	}
 
 	return nil, nil

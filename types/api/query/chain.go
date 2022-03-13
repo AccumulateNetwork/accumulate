@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
@@ -18,10 +17,6 @@ type RequestDirectory struct {
 	Start        uint64
 	Limit        uint64
 	ExpandChains bool
-}
-
-type ResponseByUrlAs struct {
-	protocol.Object
 }
 
 func (*RequestByUrl) Type() types.QueryType { return types.QueryTypeUrl }
