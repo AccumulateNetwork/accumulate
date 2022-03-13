@@ -42,8 +42,9 @@ func TestFee(t *testing.T) {
 			WithBody(new(protocol.SendTokens)).
 			SignLegacyED25519(acctesting.GenerateKey(t.Name())).
 			Build()
-		_, err := ComputeTransactionFee(env)
+		env.Transaction.Metadata = make([]byte, 1024)
+		fee, err := ComputeTransactionFee(env)
 		require.NoError(t, err)
-		// TODO REENABLE require.Equal(t, protocol.FeeSendTokens+protocol.FeeWriteData*4, fee)
+		require.Equal(t, protocol.FeeSendTokens+protocol.FeeWriteData*4, fee)
 	})
 }

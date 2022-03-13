@@ -85,10 +85,8 @@ function success {
 
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}../../bvn1/config/priv_validator_key.json"
-ls -l "${NODE_ROOT}"
-ls -l "${NODE_ROOT}/config"
-ls -l "${NODE_ROOT}../.."
-ls -l "${NODE_ROOT}../../bvn1/config"
+ls -l "${NODE_ROOT}/../.."
+ls -l "${NODE_ROOT}/../../bvn1/config"
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [-f "$NODE_PRIV_VAL0"] && [-f "$NODE_PRIV_VAL1"]; then
