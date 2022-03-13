@@ -74,7 +74,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 	}
 
-	isValidatorBook := st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl)
+	isValidatorBook := st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url)
 	switch body.Operation {
 	case protocol.KeyPageOperationAdd:
 		// Check that a NewKey was provided, and that the key isn't already on
