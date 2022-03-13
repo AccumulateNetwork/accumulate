@@ -2,7 +2,6 @@
 
 # Stop immediately on error
 set -e
-set -x
 
 # section <name> - Print a section header
 function section {
@@ -84,20 +83,15 @@ function success {
     echo
 }
 
-echo NODE_ROOT=${NODE_ROOT}
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-echo NODE_PRIV_VAL0=${NODE_PRIV_VAL0}
-NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/bvn0/Node0}/config/priv_validator_key.json"
-echo NODE_PRIV_VAL1=${NODE_PRIV_VAL1}
-ls -l "${NODE_ROOT:-~/.accumulate/dn}"
-ls -l "${NODE_ROOT:-~/.accumulate/dn/Node0}"
-ls -l "${NODE_ROOT:-~/.accumulate/dn/Node0/config}"
-ls -l "${NODE_ROOT:-~/.accumulate/bvn0}"
-ls -l "${NODE_ROOT:-~/.accumulate/bvn0/Node0}"
-ls -l "${NODE_ROOT:-~/.accumulate/bvn0/Node0/config}"
+NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}../../bvn1/config/priv_validator_key.json"
+ls -l "${NODE_ROOT}"
+ls -l "${NODE_ROOT}/config"
+ls -l "${NODE_ROOT}../.."
+ls -l "${NODE_ROOT}../../bvn1/config"
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL0"] && [-f "$NODE_PRIV_VAL1"]; then
+if [-f "$NODE_PRIV_VAL0"] && [-f "$NODE_PRIV_VAL1"]; then
     wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}'
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
     wait-for cli-tx-env tx sign keytest/tokens "$NODE_PRIV_VAL1" $TXID
