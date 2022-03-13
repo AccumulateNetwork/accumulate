@@ -105,7 +105,7 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 func testCase2_6a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000", liteAccounts[1])
 	require.NoError(t, err)
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://Redstone red2")
@@ -144,7 +144,7 @@ func testCase2_6b(t *testing.T, tc *testCmd) {
 func testCase2_7a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000", liteAccounts[1])
 	require.NoError(t, err)
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://RedWagon/sub1 red2")
@@ -156,17 +156,6 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 	r, err = tc.execute(t, "adi directory acc://RedWagon/sub1 0 10")
 	require.NoError(t, err)
 	t.Log(r)
-
-	/*	commandLine = fmt.Sprintf("adi create acc://RedWagon/sub1 red2 acc://RedWagon/sub1/sub2 red3")
-		r, err = tc.executeTx(t, commandLine)
-		require.NoError(t, err)
-		t.Log(r)
-
-		//if this doesn't fail, then adi is created
-		r, err = tc.execute(t, "adi directory acc://RedWagon/sub1/sub2 0 10")
-		require.NoError(t, err)
-		t.Log(r)
-	*/
 }
 
 //testCase2_7a
@@ -174,7 +163,7 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 func testCase2_7b(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000", liteAccounts[1])
 	require.NoError(t, err)
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://RedWagon/sub1/sub2 red2")

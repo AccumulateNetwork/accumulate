@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
@@ -26,6 +25,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.GetType())
+	}
+
+	if page.KeyBook == nil {
+		return nil, fmt.Errorf("invalid origin record: page %s does not have a KeyBook", page.Url)
 	}
 
 	// We're changing the height of the key page, so reset all the nonces
@@ -55,31 +58,20 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 	}
 
-	var book *protocol.KeyBook
-	var bookUrl *url.URL
-	var priority = -1
-	if page.KeyBook != nil {
-		book = new(protocol.KeyBook)
-		err := st.LoadUrlAs(page.KeyBook, book)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key book: %v", err)
-		}
+	book := new(protocol.KeyBook)
+	err := st.LoadUrlAs(page.KeyBook, book)
+	if err != nil {
+		return nil, fmt.Errorf("invalid key book: %v", err)
+	}
 
-		for i, p := range book.Pages {
-			if p.AccountID32() == st.OriginChainId {
-				priority = i
-			}
-		}
-		if priority < 0 {
-			return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
-		}
+	priority := getPriority(st, book)
+	if priority < 0 {
+		return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
+	}
 
-		// 0 is the highest priority, followed by 1, etc
-		if tx.Transaction.KeyPageIndex > uint64(priority) {
-			return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
-		}
-
-		bookUrl = book.Url
+	// 0 is the highest priority, followed by 1, etc
+	if tx.Transaction.KeyPageIndex > uint64(priority) {
+		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 	}
 
 	switch body.Operation {
@@ -101,8 +93,8 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 		page.Keys = append(page.Keys, key)
 
-		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.AddValidator(ed25519.PubKey(body.NewKey))
+		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
+			st.AddValidator(body.NewKey)
 		}
 
 	case protocol.KeyPageOperationUpdate:
@@ -120,7 +112,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			bodyKey.Owner = body.Owner
 		}
 
-		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
 			st.DisableValidator(body.Key)
 			st.AddValidator(body.NewKey)
 		}
@@ -141,7 +133,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			page.Threshold = uint64(len(page.Keys))
 		}
 
-		if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
+		if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
 			st.DisableValidator(body.Key)
 		}
 
@@ -158,4 +150,15 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	st.Update(page)
 	return nil, nil
+}
+
+func getPriority(st *StateManager, book *protocol.KeyBook) int {
+	var priority = -1
+	for i := uint64(0); i < book.PageCount; i++ {
+		pageUrl := protocol.FormatKeyPageUrl(book.Url, i)
+		if pageUrl.AccountID32() == st.OriginChainId {
+			priority = int(i)
+		}
+	}
+	return priority
 }
