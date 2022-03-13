@@ -84,10 +84,10 @@ function success {
 }
 
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}/../../bvn1/Node0/config/priv_validator_key.json"
+NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}/../Node1/config/priv_validator_key.json"
 ls -l "${NODE_ROOT}/.."
 ls -l "${NODE_ROOT}/../.."
-ls -l "${NODE_ROOT}/../../bvn1/config"
+ls -l "${NODE_ROOT}/../Node1"
 
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
