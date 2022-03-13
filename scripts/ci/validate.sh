@@ -85,11 +85,10 @@ function success {
 
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/bvn0/Node0}/config/priv_validator_key.json"
-ls -ln ${NODE_PRIV_VAL1}
-ls -ln ${NODE_PRIV_VAL1}/..
-ls -ln ${NODE_PRIV_VAL1}/../..
-ls -ln ${NODE_PRIV_VAL1}/../../..
-ls -ln ${NODE_PRIV_VAL1}/../../../..
+ls -ln ${NODE_ROOT:-~/.accumulate/dn/Node0}
+ls -ln ${NODE_ROOT:-~/.accumulate/dn}
+ls -ln ${NODE_ROOT:-~/.accumulate/bvn0}
+ls -ln ${NODE_ROOT:-~/.accumulate/bvn0/Node0}
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL0" && -f "$NODE_PRIV_VAL1"]; then
