@@ -83,11 +83,19 @@ function success {
     echo
 }
 
-NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node1}/config/priv_validator_key.json"
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
+if [ -f "$NODE_PRIV_VAL0" && -f "$NODE_PRIV_VAL1"]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}'
+    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+    wait-for cli-tx-env tx sign keytest/tokens "$NODE_PRIV_VAL1" $TXID
+    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+    wait-for-tx $TXID
+
+
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
     [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
