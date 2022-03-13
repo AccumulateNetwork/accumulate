@@ -2,6 +2,7 @@
 
 # Stop immediately on error
 set -e
+set -x
 
 # section <name> - Print a section header
 function section {
@@ -83,8 +84,11 @@ function success {
     echo
 }
 
+echo NODE_ROOT=${NODE_ROOT}
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+echo NODE_PRIV_VAL0=${NODE_PRIV_VAL0}
 NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/bvn0/Node0}/config/priv_validator_key.json"
+echo NODE_PRIV_VAL1=${NODE_PRIV_VAL1}
 ls -l "${NODE_ROOT:-~/.accumulate/dn}"
 ls -l "${NODE_ROOT:-~/.accumulate/dn/Node0}"
 ls -l "${NODE_ROOT:-~/.accumulate/dn/Node0/config}"
