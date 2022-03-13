@@ -86,13 +86,14 @@ function success {
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}/../Node1/config/priv_validator_key.json"
 ls -l "${NODE_ROOT}/.."
-ls -l "${NODE_ROOT}/../.."
 ls -l "${NODE_ROOT}/../Node1"
+ls -l "${NODE_ROOT}/../Node1/config"
 
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [-f "$NODE_PRIV_VAL0"] && [-f "$NODE_PRIV_VAL1"]; then
+if [ -f "$NODE_PRIV_VAL0"] && [ -f "$NODE_PRIV_VAL1"]; then
     wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}'
+    accumulate -j tx get $TXID
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
     wait-for cli-tx-env tx sign keytest/tokens "$NODE_PRIV_VAL1" $TXID
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
@@ -106,11 +107,6 @@ if [-f "$NODE_PRIV_VAL0"] && [-f "$NODE_PRIV_VAL1"]; then
 else
     echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
 fi
-
-accumulate book get acc://dn/validators
-accumulate page get acc://dn/validators/1
-accumulate page get acc://dn/validators/2
-accumulate page get acc://dn/validators/3
 
 section "Setup"
 if ! which accumulate > /dev/null ; then
