@@ -84,7 +84,7 @@ function success {
 }
 
 NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}../../bvn1/config/priv_validator_key.json"
+NODE_PRIV_VAL1="${NODE_ROOT:-~/.accumulate/dn/Node0}/../../bvn1/config/priv_validator_key.json"
 ls -l "${NODE_ROOT}/../.."
 ls -l "${NODE_ROOT}/../../bvn1/config"
 
