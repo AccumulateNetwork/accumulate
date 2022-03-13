@@ -455,11 +455,11 @@ func (m *Executor) validateUser(st *StateManager, env *protocol.Envelope, fee pr
 }
 
 func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope, book *protocol.KeyBook, fee protocol.Fee) (bool, error) {
-	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
+	if env.Transaction.KeyPageIndex >= book.PageCount {
 		return false, fmt.Errorf("invalid sig spec index")
 	}
 
-	st.SignatorUrl = book.Pages[env.Transaction.KeyPageIndex]
+	st.SignatorUrl = protocol.FormatKeyPageUrl(book.Url, env.Transaction.KeyPageIndex)
 	page := new(protocol.KeyPage)
 	st.Signator = page
 	err := st.LoadUrlAs(st.SignatorUrl, page)

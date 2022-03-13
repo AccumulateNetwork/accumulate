@@ -69,8 +69,8 @@ var adiCreateCmd = &cobra.Command{
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite token account")
-	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [public key page 1 (optional)]  Create new ADI from lite token account. When public key 1 is specified it will be assigned to the first page, otherwise the origin key is used.")
+	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [public key page 1 (optional)] Create new ADI for another ADI")
 }
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
@@ -137,7 +137,6 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 
 	var adiUrlStr string
 	var bookUrlStr string
-	var pageUrlStr string
 
 	//at this point :
 	//args[0] should be the new adi you are creating
@@ -176,20 +175,10 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		}
 	}
 
-	var pageUrl *url2.URL
-	if len(args) > 3 {
-		pageUrlStr = args[3]
-		pageUrl, err = url2.Parse(pageUrlStr)
-		if err != nil {
-			return "", fmt.Errorf("invalid page url %s, %v", pageUrlStr, err)
-		}
-	}
-
 	idc := protocol.CreateIdentity{}
 	idc.Url = adiUrl
 	idc.PublicKey = pubKey
 	idc.KeyBookUrl = bookUrl
-	idc.KeyPageUrl = pageUrl
 
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {

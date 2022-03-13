@@ -142,10 +142,6 @@ CreateIdentity:
       type: url
       pointer: true
       optional: true
-    - name: KeyPageUrl
-      type: url
-      pointer: true
-      optional: true
     - name: Manager
       type: url
       pointer: true
@@ -276,9 +272,6 @@ BurnTokens:
 CreateKeyPage:
   kind: tx
   fields:
-    - name: Url
-      type: url
-      pointer: true
     - name: Keys
       repeatable: true
       type: KeySpecParams
@@ -295,10 +288,8 @@ CreateKeyBook:
     - name: Url
       type: url
       pointer: true
-    - name: Pages
-      repeatable: true
-      type: url
-      pointer: true
+    - name: PublicKeyHash
+      type: bytes
     - name: Manager
       type: url
       pointer: true
