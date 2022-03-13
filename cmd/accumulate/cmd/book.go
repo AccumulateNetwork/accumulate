@@ -52,8 +52,8 @@ func PrintKeyBookGet() {
 }
 
 func PrintKeyBookCreate() {
-	fmt.Println("  accumulate book create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [key page url 1] ... [key page url n + 1] Create new key book and assign key pages 1 to N+1 to the book")
-	fmt.Println("\t\t example usage: accumulate book create acc://RedWagon redKey5 acc://RedWagon/RedBook acc://RedWagon/RedPage1")
+	fmt.Println("  accumulate book create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1] Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.")
+	fmt.Println("\t\t example usage: accumulate book create acc://RedWagon redKey5 acc://RedWagon/RedBook")
 }
 
 func PrintKeyBook() {
@@ -88,40 +88,43 @@ func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
 	return res, &kb, nil
 }
 
-// CreateKeyBook create a new key page
-func CreateKeyBook(book string, args []string) (string, error) {
-	bookUrl, err := url2.Parse(book)
+// CreateKeyBook create a new key book
+func CreateKeyBook(origin string, args []string) (string, error) {
+	originUrl, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
 	}
+	originKeyName := args[0]
 
-	args, si, privKey, err := prepareSigner(bookUrl, args)
+	args, si, privKey, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
 	newUrl, err := url2.Parse(args[0])
-
-	if newUrl.Authority != bookUrl.Authority {
-		return "", fmt.Errorf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
+	if newUrl.Authority != originUrl.Authority {
+		return "", fmt.Errorf("the authority of book url to create (%s) doesn't match the origin adi's authority (%s)", newUrl.Authority, originUrl.Authority)
 	}
 
 	keyBook := protocol.CreateKeyBook{}
 	keyBook.Url = newUrl
 
-	pageUrls := args[1:]
-	for i := range pageUrls {
-		u2, err := url2.Parse(pageUrls[i])
-		if err != nil {
-			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
-		}
-		keyBook.Pages = append(keyBook.Pages, u2)
+	var keyName string
+	if len(args) > 1 {
+		keyName = args[1]
+	} else {
+		keyName = originKeyName
 	}
+	publicKeyHash, err := resolvePublicKey(keyName)
+	if err != nil {
+		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
+	}
+	keyBook.PublicKeyHash = publicKeyHash
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, bookUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}
