@@ -765,8 +765,9 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		response := query.ResponseKeyPageIndex{
 			KeyBook: keyBook.Url,
 		}
-		for index, page := range keyBook.Pages {
-			pageObject, err := m.queryByChainId(batch, page.AccountID())
+		for index := uint64(0); index < keyBook.PageCount; index++ {
+			pageUrl := protocol.FormatKeyPageUrl(keyBook.Url, index)
+			pageObject, err := m.queryByChainId(batch, pageUrl.AccountID())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
@@ -774,9 +775,9 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			if err = pageObject.As(keyPage); err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("invalid object error")}
 			}
-			if keyPage.FindKey([]byte(chr.Key)) != nil {
+			if keyPage.FindKey(chr.Key) != nil {
 				response.KeyPage = keyPage.Url
-				response.Index = uint64(index)
+				response.Index = index
 				found = true
 				break
 			}

@@ -35,10 +35,9 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	batch := db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page0", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page2", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
 	for _, idx := range []uint64{0, 1, 2} {
@@ -48,7 +47,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			body.Key = testKey.PubKey().Bytes()
 			body.NewKey = newKey.PubKey().Bytes()
 
-			u, err := url.Parse("foo/page1")
+			u, err := url.Parse("foo/book/2")
 			require.NoError(t, err)
 
 			env := acctesting.NewTransaction().
@@ -65,7 +64,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, `cannot modify "acc://foo/page1" with a lower priority key page`)
+				require.EqualError(t, err, `cannot modify "acc://foo/book/2" with a lower priority key page`)
 			}
 
 			// Do not store state changes

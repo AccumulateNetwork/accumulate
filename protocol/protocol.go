@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -70,9 +71,6 @@ const (
 
 	// DefaultKeyBook is the default key book name when not specified
 	DefaultKeyBook = "book0"
-
-	// DefaultKeyPage is the default key page name when not specified
-	DefaultKeyPage = "page0"
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
@@ -376,4 +374,9 @@ func ParseAnchorChain(name string) (string, bool) {
 		return "", false
 	}
 	return name[7:], true
+}
+
+// FormatKeyPageUrl provides a global method to format the KeyPage URL which is currently acc://id/book/1
+func FormatKeyPageUrl(keyBookUrl *url.URL, pageNr uint64) *url.URL {
+	return keyBookUrl.JoinPath(strconv.FormatUint(pageNr+1, 10))
 }

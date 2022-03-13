@@ -13,14 +13,12 @@ type CreateKeyPage struct{}
 func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
 func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	var group *protocol.KeyBook
+	var book *protocol.KeyBook
 	switch origin := st.Origin.(type) {
-	case *protocol.ADI:
-		// Create an unbound sig spec
 	case *protocol.KeyBook:
-		group = origin
+		book = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook, origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.GetType())
 	}
 
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)
@@ -32,34 +30,20 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
-	if !body.Url.Identity().Equal(st.OriginUrl.Identity()) {
-		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
-	}
-
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()
-	page.Url = body.Url
+	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
+	page.KeyBook = book.Url
 	page.Threshold = 1 // Require one signature from the Key Page
 	page.ManagerKeyBook = body.Manager
+	book.PageCount++
 
-	if group != nil {
-		groupUrl, err := group.ParseUrl()
-		if err != nil {
-			// Failing here would require writing an invalid URL to the state.
-			// But stuff happens, so don't panic.
-			return nil, fmt.Errorf("invalid origin record URL: %v", err)
-		}
-
-		group.Pages = append(group.Pages, body.Url)
-		page.KeyBook = groupUrl
-
-		err = scc.Update(group)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal state: %v", err)
-		}
+	err := scc.Update(book)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
 	}
 
 	for _, sig := range body.Keys {
@@ -68,9 +52,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		page.Keys = append(page.Keys, ss)
 	}
 
-	err := scc.Create(page)
+	err = scc.Create(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state: %v", err)
+		return nil, fmt.Errorf("failed to marshal state for KeyPage` %s: %v", page.Url, err)
 	}
 
 	return nil, nil

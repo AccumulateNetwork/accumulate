@@ -46,7 +46,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
 		uBook := uAdi.JoinPath(protocol.ValidatorBook)
-		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 
 		adi := protocol.NewADI()
 		adi.Url = uAdi
@@ -55,11 +54,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		book := protocol.NewKeyBook()
 		book.Url = uBook
-		book.Pages = []*url.URL{uPage}
+		book.PageCount = 1
 		records = append(records, book)
 
 		page := protocol.NewKeyPage()
-		page.Url = uPage
+		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
 		page.KeyBook = uBook
 		page.Threshold = protocol.GetValidatorsMOfN(len(opts.Validators))
 		records = append(records, page)
