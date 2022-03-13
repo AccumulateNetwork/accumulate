@@ -135,9 +135,9 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", err
 	}
 
-	var adiUrl string
-	var book string
-	var page string
+	var adiUrlStr string
+	var bookUrlStr string
+	var pageUrlStr string
 
 	//at this point :
 	//args[0] should be the new adi you are creating
@@ -150,7 +150,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	if len(args) > 1 {
-		adiUrl = args[0]
+		adiUrlStr = args[0]
 	}
 	if len(args) < 2 {
 		return "", fmt.Errorf("invalid number of arguments")
@@ -161,28 +161,35 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) > 2 {
-		book = args[2]
-	} else {
-		book = "book0"
-	}
-
-	if len(args) > 3 {
-		page = args[3]
-	} else {
-		page = "page0"
-	}
-
-	u, err := url2.Parse(adiUrl)
+	adiUrl, err := url2.Parse(adiUrlStr)
 	if err != nil {
-		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
+		return "", fmt.Errorf("invalid adi url %s, %v", adiUrlStr, err)
+	}
+
+	var bookUrl *url2.URL
+	if len(args) > 2 {
+		bookUrlStr = args[2]
+
+		bookUrl, err = url2.Parse(bookUrlStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
+		}
+	}
+
+	var pageUrl *url2.URL
+	if len(args) > 3 {
+		pageUrlStr = args[3]
+		pageUrl, err = url2.Parse(pageUrlStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid page url %s, %v", pageUrlStr, err)
+		}
 	}
 
 	idc := protocol.CreateIdentity{}
-	idc.Url = u
+	idc.Url = adiUrl
 	idc.PublicKey = pubKey
-	idc.KeyBookName = book
-	idc.KeyPageName = page
+	idc.KeyBookUrl = bookUrl
+	idc.KeyPageUrl = pageUrl
 
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {
@@ -207,7 +214,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	//todo: turn around and query the ADI and store the results.
-	err = Db.Put(BucketAdi, []byte(u.Authority), pubKey)
+	err = Db.Put(BucketAdi, []byte(adiUrl.Authority), pubKey)
 	if err != nil {
 		return "", fmt.Errorf("DB: %v", err)
 	}

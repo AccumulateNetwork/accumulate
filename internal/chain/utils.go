@@ -1,7 +1,7 @@
 package chain
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -9,12 +9,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
+// addChainEntry adds an entry to a chain and records the chain update in the
+// block state.
+func addChainEntry(block *BlockState, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// Check if the account exists
 	_, err := batch.Account(account).GetState()
 	if err != nil {
@@ -34,10 +35,11 @@ func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, na
 	}
 
 	// Update the ledger
-	return didAddChainEntry(nodeUrl, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
+	return didAddChainEntry(block, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
 }
 
-func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
+// didAddChainEntry records a chain update in the block state.
+func didAddChainEntry(block *BlockState, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
 	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
 		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
 			Transaction: entry,
@@ -48,37 +50,20 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 		}
 	}
 
-	ledger := batch.Account(nodeUrl.JoinPath(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
-	switch {
-	case err == nil:
-		// OK
-	case errors.Is(err, storage.ErrNotFound):
-		// For genesis
-		return nil
-	default:
-		return err
-	}
-
-	s := u.String()
-	if u.Path == "/foo/tokens" {
-		println(s)
-	}
-
-	var meta protocol.AnchorMetadata
-	meta.Name = name
-	meta.Type = typ
-	meta.Account = u
-	meta.Index = index
-	meta.SourceIndex = sourceIndex
-	meta.SourceBlock = sourceBlock
-	meta.Entry = entry
-	ledgerState.Updates = append(ledgerState.Updates, meta)
-	return ledger.PutState(ledgerState)
+	var update ChainUpdate
+	update.Name = name
+	update.Type = typ
+	update.Account = u
+	update.Index = index
+	update.SourceIndex = sourceIndex
+	update.SourceBlock = sourceBlock
+	update.Entry = entry
+	block.DidUpdateChain(update)
+	return nil
 }
 
-func shouldIndexChain(account *url.URL, name string, typ protocol.ChainType) (bool, error) {
+// shouldIndexChain returns true if the given chain should be indexed.
+func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error) {
 	switch typ {
 	case protocol.ChainTypeIndex:
 		// Index chains are unindexed
@@ -102,6 +87,7 @@ func shouldIndexChain(account *url.URL, name string, typ protocol.ChainType) (bo
 	}
 }
 
+// addIndexChainEntry adds an entry to an index chain.
 func addIndexChainEntry(account *database.Account, name string, entry *protocol.IndexEntry) (uint64, error) {
 	// Load the index chain
 	indexChain, err := account.Chain(name, protocol.ChainTypeIndex)
@@ -137,6 +123,8 @@ func addIndexChainEntry(account *database.Account, name string, entry *protocol.
 	return uint64(indexChain.Height() - 1), nil
 }
 
+// addChainAnchor anchors the target chain into the root chain, adding an index
+// entry to the target chain's index chain, if appropriate.
 func addChainAnchor(rootChain *database.Chain, account *database.Account, accountUrl *url.URL, name string, typ protocol.ChainType) (indexIndex uint64, didIndex bool, err error) {
 	// Load the chain
 	accountChain, err := account.ReadChain(name)
@@ -214,7 +202,7 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 	return arec, nil
 }
 
-func buildProof(batch *database.Batch, u *protocol.AnchorMetadata, rootChain *database.Chain, rootIndex, rootHeight int64) (*managed.Receipt, error) {
+func buildProof(batch *database.Batch, u *ChainUpdate, rootChain *database.Chain, rootIndex, rootHeight int64) (*managed.Receipt, error) {
 	anchorChain, err := batch.Account(u.Account).ReadChain(u.Name)
 	if err != nil {
 		return nil, err
@@ -223,12 +211,12 @@ func buildProof(batch *database.Batch, u *protocol.AnchorMetadata, rootChain *da
 	anchorHeight := anchorChain.Height()
 	r1, err := anchorChain.Receipt(int64(u.Index), anchorHeight-1)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to construct a receipt for %s#chain/%s: %w", u.Account, u.Name, err)
 	}
 
 	r2, err := rootChain.Receipt(rootIndex, rootHeight-1)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to construct a receipt for the root chain: %w", err)
 	}
 
 	r, err := r1.Combine(r2)
@@ -248,7 +236,18 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.TxType() != types.TxTypeSyntheticAnchor {
+		if txn.Transaction.Type() != types.TxTypeSyntheticAnchor {
+			count++
+			continue
+		}
+	}
+	return count
+}
+
+func countExceptAnchors2(txns []*protocol.Transaction) int {
+	var count int
+	for _, txn := range txns {
+		if txn.Type() != types.TxTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -312,4 +311,42 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	// Set the threshold
 	resp.SignatureThreshold = keyPage.Threshold
 	return nil
+}
+
+func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
+	entry := new(protocol.IndexEntry)
+	err = chain.EntryAs(int64(index), entry)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("entry %d: %w", index, err)
+	}
+
+	if index == 0 {
+		return 0, entry.Source, entry.Anchor, nil
+	}
+
+	prev := new(protocol.IndexEntry)
+	err = chain.EntryAs(int64(index)-1, prev)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("entry %d: %w", index-1, err)
+	}
+
+	return prev.Source + 1, entry.Source, entry.Anchor, nil
+}
+
+// combineReceipts combines multiple receipts and verifies the final value.
+func combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Receipt, error) {
+	r := receipts[0]
+	var err error
+	for _, s := range receipts[1:] {
+		r, err = r.Combine(s)
+		if err != nil {
+			return nil, fmt.Errorf("failed to combine receipts: %v", err)
+		}
+	}
+
+	if final != nil && !bytes.Equal(final, r.MDRoot) {
+		return nil, fmt.Errorf("invalid receipt end: want %X, got %X", final, r.MDRoot)
+	}
+
+	return r, nil
 }

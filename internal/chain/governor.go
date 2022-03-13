@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync/atomic"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -27,19 +25,16 @@ type governor struct {
 
 type govStop struct{}
 
-type govDidBeginBlock struct {
-	height int64
-	time   time.Time
-}
-
 type govDidCommit struct {
-	mirrorAdi  bool
-	height     int64
-	time       time.Time
-	ledger     *protocol.InternalLedger
-	rootAnchor []byte
-	rootHeight int64
-	receipts   map[string]*receiptAndIndex
+	mirrorAdi   bool
+	blockMeta   BlockMeta
+	blockState  BlockState
+	anchor      *protocol.SyntheticAnchor
+	ledger      *protocol.InternalLedger
+	synthLedger *protocol.InternalSyntheticLedger
+	rootAnchor  []byte
+	rootHeight  int64
+	receipts    map[string]*receiptAndIndex
 }
 
 type receiptAndIndex struct {
@@ -70,40 +65,31 @@ func (g *governor) Start() error {
 	return nil
 }
 
-func (g *governor) DidBeginBlock(isLeader bool, height int64, time time.Time) {
-	g.logger.Debug("Block event", "type", "didBegin", "height", height, "time", time)
+func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, meta BlockMeta, state BlockState, anchor *protocol.SyntheticAnchor) error {
+	g.logger.Debug("Block event", "type", "didCommit", "height", meta.Index, "time", meta.Time)
 
-	if !isLeader {
-		// Nothing to do if we're not the leader
-		return
-	}
-
-	select {
-	case g.messages <- govDidBeginBlock{
-		height: height,
-		time:   time,
-	}:
-	case <-g.done:
-	}
-}
-
-func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, height int64, time time.Time) error {
-	g.logger.Debug("Block event", "type", "didCommit", "height", height, "time", time)
-
-	if !isLeader {
+	if !meta.IsLeader {
 		// Nothing to do if we're not the leader
 		return nil
 	}
 
 	msg := govDidCommit{
-		mirrorAdi: mirrorAdi,
-		height:    height,
-		time:      time,
+		mirrorAdi:  mirrorAdi,
+		blockMeta:  meta,
+		blockState: state,
+		anchor:     anchor,
 	}
 
-	ledger := batch.Account(g.Network.NodeUrl(protocol.Ledger))
-	msg.ledger = protocol.NewInternalLedger()
+	ledger := batch.Account(g.Network.Ledger())
+	msg.ledger = new(protocol.InternalLedger)
 	err := ledger.GetStateAs(msg.ledger)
+	if err != nil {
+		return err
+	}
+
+	synthLedger := batch.Account(g.Network.SyntheticLedger())
+	msg.synthLedger = new(protocol.InternalSyntheticLedger)
+	err = synthLedger.GetStateAs(msg.synthLedger)
 	if err != nil {
 		return err
 	}
@@ -115,54 +101,10 @@ func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, he
 	msg.rootAnchor = rootChain.Anchor()
 	msg.rootHeight = rootChain.Height()
 
-	// Find BVN anchor chains
-	err = g.buildProofs(&msg, batch, rootChain)
-	if err != nil {
-		return err
-	}
-
 	select {
 	case g.messages <- msg:
 	case <-g.done:
 	}
-	return nil
-}
-
-func (g *governor) buildProofs(msg *govDidCommit, batch *database.Batch, rootChain *database.Chain) error {
-	if g.Network.Type != config.Directory {
-		return nil
-	}
-
-	anchorUrl := g.Network.NodeUrl(protocol.AnchorPool)
-	baseIndex := msg.rootHeight - int64(len(msg.ledger.Updates))
-	msg.receipts = map[string]*receiptAndIndex{}
-
-	for i, u := range msg.ledger.Updates {
-		if u.Type != protocol.ChainTypeAnchor || !u.Account.Equal(anchorUrl) || !strings.HasPrefix(u.Name, "bvn-") {
-			continue
-		}
-
-		bvn := u.Name[4:]
-		if r := msg.receipts[bvn]; r != nil && r.Index > int64(u.Index) {
-			continue
-		}
-
-		rootIndex := baseIndex + int64(i)
-		r, err := buildProof(batch, &u, rootChain, rootIndex, msg.rootHeight)
-		if err != nil {
-			return err
-		}
-
-		var s protocol.Receipt
-		s.Start = r.Element
-		s.Entries = make([]protocol.ReceiptEntry, len(r.Nodes))
-		for i, n := range r.Nodes {
-			s.Entries[i] = protocol.ReceiptEntry{Right: n.Right, Hash: n.Hash}
-		}
-
-		msg.receipts[bvn] = &receiptAndIndex{s, int64(u.Index), int64(u.SourceIndex), uint64(msg.height), u.SourceBlock}
-	}
-
 	return nil
 }
 
@@ -196,9 +138,6 @@ func (g *governor) run() {
 		case govStop:
 			return
 
-		case govDidBeginBlock:
-			// Should we do anything at begin?
-
 		case govDidCommit:
 			g.runDidCommit(&msg)
 		}
@@ -213,18 +152,28 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	defer batch.Discard()
 
 	// TODO This will hit the database with a lot of queries, maybe we shouldn't do this
-	produced := countExceptAnchors(batch, msg.ledger.Synthetic.Produced)
-	unsigned := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
-	unsent := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
+	producedCount := countExceptAnchors2(msg.blockState.ProducedTxns)
+	unsignedCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
+	unsentCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
+
+	unsent := msg.ledger.Synthetic.Unsent
+	for _, entry := range msg.synthLedger.Pending {
+		if entry.NeedsReceipt {
+			unsignedCount++
+		} else {
+			unsent = append(unsent, entry.TransactionHash)
+			unsentCount++
+		}
+	}
 
 	g.logger.Info("Did commit",
-		"height", msg.height,
-		"time", msg.time,
+		"height", msg.blockMeta.Index,
+		"time", msg.blockMeta.Time,
 		"mirror", msg.mirrorAdi,
-		"updated", len(msg.ledger.Updates),
-		"produced", produced,
-		"unsigned", unsigned,
-		"unsent", unsent,
+		"updated", len(msg.blockState.ChainUpdates),
+		"produced", producedCount,
+		"unsigned", unsignedCount,
+		"unsent", unsentCount,
 	)
 
 	// Mirror the subnet's ADI
@@ -233,11 +182,11 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	}
 
 	// Create an anchor for the block
-	g.sendAnchor(batch, msg, produced)
+	g.sendAnchor(batch, msg, producedCount)
 
 	// Sign and send produced synthetic transactions
 	g.signTransactions(batch, msg.ledger)
-	g.sendTransactions(batch, msg.ledger)
+	g.sendTransactions(batch, unsent)
 
 	// Dispatch transactions asynchronously
 	errs := g.dispatcher.Send(context.Background())
@@ -269,7 +218,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			continue
 		}
 
-		typ := tx.Transaction.GetType()
+		typ := tx.Transaction.Body.GetType()
 		if typ != types.TxTypeSyntheticAnchor {
 			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
@@ -277,7 +226,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Sign it
 		ed := new(protocol.LegacyED25519Signature)
 		ed.PublicKey = g.Key[32:]
-		err = ed.Sign(tx.SigInfo.Nonce, g.Key, txid[:])
+		err = ed.Sign(tx.Transaction.Nonce, g.Key, txid[:])
 		if err != nil {
 			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid), "error", err)
 			continue
@@ -293,16 +242,16 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 	g.sendInternal(batch, body)
 }
 
-func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.InternalLedger) {
-	if len(ledger.Synthetic.Unsent) == 0 {
+func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
+	if len(unsent) == 0 {
 		return
 	}
 
 	body := new(protocol.InternalTransactionsSent)
-	body.Transactions = make([][32]byte, 0, len(ledger.Synthetic.Unsent))
+	body.Transactions = make([][32]byte, 0, len(unsent))
 
 	// For each unsent synthetic transaction
-	for _, id := range ledger.Synthetic.Unsent {
+	for _, id := range unsent {
 		// Load it
 		pending, _, signatures, err := batch.Transaction(id[:]).Get()
 		if err != nil {
@@ -316,7 +265,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Convert it back to a transaction
-		env := pending.Restore()
+		env := pending
 		env.Signatures = signatures
 
 		// Marshal it
@@ -345,18 +294,16 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced
-	if len(msg.ledger.Updates) == 0 && synthCountExceptAnchors == 0 {
+	if len(msg.blockState.ChainUpdates) == 0 && synthCountExceptAnchors == 0 {
 		return
 	}
 
-	body := new(protocol.SyntheticAnchor)
-	body.Source = g.Network.NodeUrl()
-	body.RootIndex = uint64(msg.rootHeight - 1)
-	body.Block = uint64(msg.ledger.Index)
-	copy(body.RootAnchor[:], msg.rootAnchor)
+	if msg.anchor == nil {
+		panic("TODO When is it OK for the anchor to be nil?")
+	}
 
-	kv := []interface{}{"root", logging.AsHex(body.RootAnchor)}
-	for i, c := range msg.ledger.Updates {
+	kv := []interface{}{"root", logging.AsHex(msg.anchor.RootAnchor)}
+	for i, c := range msg.blockState.ChainUpdates {
 		kv = append(kv, fmt.Sprintf("[%d]", i))
 		switch c.Name {
 		case "bpt":
@@ -372,23 +319,13 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 	txns := new(protocol.InternalSendTransactions)
 	switch g.Network.Type {
 	case config.Directory:
-		// If we are the dn, we need to include the ACME oracle price
-		body.AcmeOraclePrice = msg.ledger.PendingOracle
-
 		// Send anchors from DN to all BVNs
 		bvnNames := g.Network.GetBvnNames()
 		txns.Transactions = make([]protocol.SendTransaction, len(bvnNames))
 		for i, bvn := range bvnNames {
-			body := *body
-			if r := msg.receipts[bvn]; r != nil {
-				body.Receipt = r.Receipt
-				body.SourceIndex = uint64(r.SourceIndex)
-				body.SourceBlock = r.SourceBlock
-			}
-
 			txns.Transactions[i] = protocol.SendTransaction{
 				Recipient: protocol.BvnUrl(bvn).JoinPath(protocol.AnchorPool),
-				Payload:   &body,
+				Payload:   msg.anchor,
 			}
 		}
 
@@ -396,7 +333,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		// Send anchor from BVN to DN
 		txns.Transactions = []protocol.SendTransaction{{
 			Recipient: protocol.DnUrl().JoinPath(protocol.AnchorPool),
-			Payload:   body,
+			Payload:   msg.anchor,
 		}}
 	}
 

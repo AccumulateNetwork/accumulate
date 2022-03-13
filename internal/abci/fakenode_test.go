@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -154,11 +155,14 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Network: *n.network,
 		Address: n.key.PubKey().Address(),
 	})
-	appChan <- n.app
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()
 		n.Require().NoError(err)
 	})
+
+	// Notify FakeTendermint that we have created an ABCI, but don't notify it
+	// immediately, but make sure it definitely happens
+	defer func() { appChan <- n.app }()
 
 	n.api = api2.NewQueryDispatch(api2.Options{
 		Logger:        n.logger,
@@ -195,6 +199,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Time:          time.Now(),
 		ChainId:       n.network.LocalSubnetID,
 		AppStateBytes: state,
+		InitialHeight: protocol.GenesisBlock + 1,
 	})
 
 	return n
@@ -268,26 +273,35 @@ func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte 
 	// Submit all the transactions as a batch
 	n.client.SubmitTx(context.Background(), blob)
 
-	n.WaitForTxns32(ids...)
+	n.waitForTxns(nil, convertIds32(ids...)...)
 	return ids
 }
 
-func (n *FakeNode) WaitForTxns32(ids ...[32]byte) {
+func (n *FakeNode) WaitForTxns(ids ...[]byte) {
+	n.waitForTxns(nil, ids...)
+}
+
+func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) {
+	for _, id := range ids {
+		if cause == nil {
+			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id))
+		} else {
+			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
+		}
+		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
+		n.Require().NoErrorf(err, "Failed to query TX %X", id)
+		n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
+	}
+}
+
+func convertIds32(ids ...[32]byte) [][]byte {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
 		// Make a copy to avoid capturing the loop variable
 		id := id
 		ids2[i] = id[:]
 	}
-	n.WaitForTxns(ids2...)
-}
-
-func (n *FakeNode) WaitForTxns(ids ...[]byte) {
-	for _, id := range ids {
-		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
-		n.Require().NoErrorf(err, "Failed to query TX %X", id)
-		n.WaitForTxns32(res.SyntheticTxids...)
-	}
+	return ids2
 }
 
 func (n *FakeNode) ParseUrl(s string) *url.URL {
@@ -302,7 +316,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 
 	u := n.ParseUrl(adi)
 	record := batch.Account(u)
-	require.True(n.t, u.Identity().Equal(u))
+	require.True(n.t, u.RootIdentity().Equal(u))
 
 	md := new(protocol.DirectoryIndexMetadata)
 	err := record.Index("Directory", "Metadata").GetAs(md)

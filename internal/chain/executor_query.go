@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/hex"
 	"errors"
@@ -361,6 +360,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	qr := query.ResponseByChainId{}
 
 	// Look up record or transaction
+	var obj encoding.BinaryMarshaler
 	obj, err := batch.AccountByID(chainId).GetState()
 	if errors.Is(err, storage.ErrNotFound) {
 		obj, err = batch.Transaction(chainId).GetState()
@@ -433,10 +433,6 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
-	pending := new(state.PendingTransaction)
-	pending.Url = txState.Url
-	pending.TransactionState = &txState.TxState
-
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
@@ -446,38 +442,17 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
 	}
 
-	pending.Status, err = status.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	}
-
-	pending.Signature, err = tx.GetSignatures()
+	signatures, err := tx.GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
 	qr := query.ResponseByTxId{}
+	qr.Envelope = txState
+	qr.Status = status
+	qr.Envelope.Signatures = signatures
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
-
-	txObj := new(state.Object)
-	txObj.Entry, err = txState.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
-	qr.TxState, err = txObj.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
-
-	txObj.Entry, err = pending.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
-	qr.TxPendingState, err = txObj.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
-	}
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -489,7 +464,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, txState.SigInfo, status, &qr)
+	err = getPendingStatus(batch, &txState.Transaction.TransactionHeader, status, &qr)
 	if err != nil {
 		return nil, err
 	}
@@ -878,16 +853,14 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.C
 	}
 
 	// Finalize the receipt
-	dnBlock, r, err := m.getFullReceipt(batch, accountReceipt, rootReceipt, rootIndex.BlockIndex)
+	r, err := combineReceipts(nil, accountReceipt, rootReceipt)
 	if err != nil {
 		return receipt, err
 	}
-	receipt.DirectoryBlock = dnBlock
 
-	receipt.Receipt.Entries = make([]protocol.ReceiptEntry, len(r.Nodes))
-	for i, node := range r.Nodes {
-		receipt.Receipt.Entries[i] = protocol.ReceiptEntry{Hash: node.Hash, Right: node.Right}
-	}
+	// TODO Include the part of the receipt from the DN
+
+	receipt.Receipt = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
@@ -936,38 +909,4 @@ func (m *Executor) getIndexedChainReceipt(account *database.Account, name string
 
 	// Get the receipt
 	return m.getReceipt(chain, name, uint64(entryIndex), indexEntry.Source)
-}
-
-// combineReceipts combines multiple receipts and verifies the final value.
-func (m *Executor) combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Receipt, error) {
-	r := receipts[0]
-	var err error
-	for _, s := range receipts[1:] {
-		r, err = r.Combine(s)
-		if err != nil {
-			return nil, fmt.Errorf("failed to combine receipts: %v", err)
-		}
-	}
-
-	if !bytes.Equal(final, r.MDRoot) {
-		return nil, fmt.Errorf("invalid receipt end: want %X, got %X", final, r.MDRoot)
-	}
-
-	return r, nil
-}
-
-// getFullReceipt gets the DN block and constructs the full receipt.
-func (m *Executor) getFullReceipt(batch *database.Batch, accountReceipt, rootReceipt *managed.Receipt, block uint64) (uint64, *managed.Receipt, error) {
-	// Get the DN receipt
-	anchor, err := indexing.DirectoryAnchor(batch, m.Network.NodeUrl(protocol.Ledger)).AnchorForLocalBlock(block, false)
-	if err != nil {
-		return 0, nil, fmt.Errorf("unable to read anchor for block %d: %v", block, err)
-	}
-
-	r, err := m.combineReceipts(anchor.RootAnchor[:], accountReceipt, rootReceipt, anchor.Receipt.Convert())
-	if err != nil {
-		return 0, nil, err
-	}
-
-	return anchor.Block, r, nil
 }
