@@ -284,12 +284,12 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	}
 
 	// Sanity check
-	if header.KeyPageIndex >= uint64(len(keyBook.Pages)) {
-		return fmt.Errorf("invalid transaction: book has %d pages, transaction specifies page %d", len(keyBook.Pages), header.KeyPageIndex)
+	if header.KeyPageIndex >= keyBook.PageCount {
+		return fmt.Errorf("invalid transaction: book has %d pages, transaction specifies page %d", keyBook.PageCount, header.KeyPageIndex)
 	}
 
 	// Read the page's main chain
-	pageAcnt := batch.Account(keyBook.Pages[header.KeyPageIndex])
+	pageAcnt := batch.Account(protocol.FormatKeyPageUrl(keyBook.Url, header.KeyPageIndex))
 	pageChain, err := pageAcnt.ReadChain(protocol.MainChain)
 	if err != nil {
 		return fmt.Errorf("failed to load main chain of key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
