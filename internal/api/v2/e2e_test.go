@@ -96,8 +96,6 @@ func TestValidate(t *testing.T) {
 
 		bookUrl, err := url.Parse(fmt.Sprintf("%s/book", adiName))
 		require.NoError(t, err)
-		pageUrl, err := url.Parse(fmt.Sprintf("%s/page", adiName))
-		require.NoError(t, err)
 
 		executeTx(t, japi, "create-adi", true, execParams{
 			Origin: liteUrl.String(),
@@ -106,7 +104,6 @@ func TestValidate(t *testing.T) {
 				Url:        adiName,
 				PublicKey:  adiKey[32:],
 				KeyBookUrl: bookUrl,
-				KeyPageUrl: pageUrl,
 			},
 		})
 
@@ -166,7 +163,21 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, dataAccountUrl, dataAccount.Url)
 	})
 
-	keyPageUrl := adiName.JoinPath("/page1")
+	keyBookUrl := adiName.JoinPath("/book1")
+	t.Run("Create Key Book", func(t *testing.T) {
+		executeTx(t, japi, "create-key-book", true, execParams{
+			Origin: adiName.String(),
+			Key:    adiKey,
+			Payload: &CreateKeyBook{
+				Url: keyBookUrl,
+			},
+		})
+		keyBook := NewKeyBook()
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
+		assert.Equal(t, keyBookUrl, keyBook.Url)
+	})
+
+	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
@@ -174,31 +185,16 @@ func TestValidate(t *testing.T) {
 			PublicKey: adiKey[32:],
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
-			Origin: adiName.String(),
+			Origin: keyBookUrl.String(),
 			Key:    adiKey,
 			Payload: &CreateKeyPage{
-				Url:  keyPageUrl,
 				Keys: keys,
 			},
 		})
+
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, keyPageUrl, keyPage.Url)
-	})
-
-	keyBookUrl := adiName.JoinPath("/book1")
-	t.Run("Create Key Book", func(t *testing.T) {
-		executeTx(t, japi, "create-key-book", true, execParams{
-			Origin: adiName.String(),
-			Key:    adiKey,
-			Payload: &CreateKeyBook{
-				Url:   keyBookUrl,
-				Pages: []*url.URL{keyPageUrl},
-			},
-		})
-		keyBook := NewKeyBook()
-		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
-		assert.Equal(t, keyBookUrl, keyBook.Url)
 	})
 
 	t.Run("Key page credits 2", func(t *testing.T) {

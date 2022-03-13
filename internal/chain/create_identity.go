@@ -5,14 +5,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type CreateIdentity struct{}
 
-func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
+func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
 func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// *protocol.IdentityCreate, *url.URL, state.Chain
@@ -32,44 +31,32 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 		return nil, err
 	}
 
-	pageUrl := selectPageUrl(body)
-	validateKeyPageUrl(pageUrl, bookUrl)
-	if err != nil {
-		return nil, err
-	}
-	page := protocol.NewKeyPage()
-	var pageExists = st.LoadUrlAs(pageUrl, page) == nil
-	if !pageExists {
-		if len(body.PublicKey) == 0 {
-			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyPage")
-		}
-		page.Url = pageUrl
-		page.KeyBook = bookUrl
-		page.Threshold = 1 // Require one signature from the Key Page
-		keySpec := new(protocol.KeySpec)
-		keySpec.PublicKey = body.PublicKey
-		page.Keys = append(page.Keys, keySpec)
-	}
-
-	book := protocol.NewKeyBook()
-	bookExists := st.LoadUrlAs(bookUrl, book) == nil
-	if !bookExists {
-		book.Url = bookUrl
-		book.Pages = append(book.Pages, pageUrl)
-	}
-
 	identity := protocol.NewADI()
 	identity.Url = body.Url
 	identity.KeyBook = bookUrl
 	identity.ManagerKeyBook = body.Manager
 
 	accounts := []protocol.Account{identity}
+	book := protocol.NewKeyBook()
+	bookExists := st.LoadUrlAs(bookUrl, book) == nil
 	if !bookExists {
+		if len(body.PublicKey) == 0 {
+			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
+		}
+		book.Url = bookUrl
+		book.PageCount = 1
 		accounts = append(accounts, book)
-	}
-	if !pageExists {
+
+		page := protocol.NewKeyPage()
+		page.KeyBook = bookUrl
+		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
+		page.Threshold = 1 // Require one signature from the Key Page
+		keySpec := new(protocol.KeySpec)
+		keySpec.PublicKey = body.PublicKey
+		page.Keys = append(page.Keys, keySpec)
 		accounts = append(accounts, page)
 	}
+
 	st.Create(accounts...)
 	return nil, nil
 }
@@ -102,13 +89,6 @@ func selectBookUrl(body *protocol.CreateIdentity) *url.URL {
 		return body.Url.JoinPath(protocol.DefaultKeyBook)
 	}
 	return body.KeyBookUrl
-}
-
-func selectPageUrl(body *protocol.CreateIdentity) *url.URL {
-	if body.KeyPageUrl == nil {
-		return body.Url.JoinPath(protocol.DefaultKeyPage)
-	}
-	return body.KeyPageUrl
 }
 
 func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
