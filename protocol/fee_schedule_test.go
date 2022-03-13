@@ -27,7 +27,8 @@ func TestFee(t *testing.T) {
 			WithKeyPage(1, 1).
 			WithNonceTimestamp().
 			WithBody(new(protocol.SendTokens)).
-			SignLegacyED25519(acctesting.GenerateKey(t.Name()))
+			SignLegacyED25519(acctesting.GenerateKey(t.Name())).
+			Build()
 		fee, err := ComputeTransactionFee(env)
 		require.NoError(t, err)
 		require.Equal(t, protocol.FeeSendTokens, fee)
@@ -39,8 +40,8 @@ func TestFee(t *testing.T) {
 			WithKeyPage(1, 1).
 			WithNonceTimestamp().
 			WithBody(new(protocol.SendTokens)).
-			SignLegacyED25519(acctesting.GenerateKey(t.Name()))
-		env.Transaction.Metadata = make([]byte, 1024)
+			SignLegacyED25519(acctesting.GenerateKey(t.Name())).
+			Build()
 		fee, err := ComputeTransactionFee(env)
 		require.NoError(t, err)
 		require.Equal(t, protocol.FeeSendTokens+protocol.FeeWriteData*4, fee)
