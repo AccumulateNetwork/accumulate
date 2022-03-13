@@ -78,6 +78,12 @@ ED25519Signature:
     - name: Signature
       type: bytes
 
+ReceiptSignature:
+  kind: signature
+  embeddings:
+  - Receipt
+  fields: []
+
 TxState:
   fields:
     - name: SigInfo
@@ -359,24 +365,27 @@ SyntheticAnchor:
   kind: tx
   fields:
     - name: Source
+      description: is the subnet the anchor originates from
       type: url
       pointer: true
     - name: Major
+      description: indicates whether the anchor is a major block anchor
       type: bool
     - name: RootAnchor
+      description: is the anchor of the source's root anchor chain
       type: chain
     - name: RootIndex
+      description: is the index of the root anchor chain anchor
       type: uvarint
     - name: Block
-      type: uvarint
-    - name: SourceIndex
-      type: uvarint
-    - name: SourceBlock
+      description: is the index of the block
       type: uvarint
     - name: AcmeOraclePrice
       type: uvarint
-    - name: Receipt
+    - name: Receipts
+      description: are receipts for anchors from other subnets that were included in the block
       type: Receipt
+      repeatable: true
       marshal-as: reference
 
 SyntheticDepositCredits:

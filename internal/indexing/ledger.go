@@ -3,7 +3,6 @@ package indexing
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // BlockStateIndexer tracks transient state for a block.
@@ -41,43 +40,4 @@ func (x *BlockStateIndexer) DidProduceSynthTxn(entry *BlockStateSynthTxnEntry) e
 
 	state.ProducedSynthTxns = append(state.ProducedSynthTxns, entry)
 	return x.value.PutAs(state)
-}
-
-// DirectoryAnchorIndexer indexes directory anchors.
-type DirectoryAnchorIndexer struct {
-	account *database.Account
-}
-
-// DirectoryAnchor returns a directory anchor indexer.
-func DirectoryAnchor(batch *database.Batch, ledger *url.URL) *DirectoryAnchorIndexer {
-	return &DirectoryAnchorIndexer{batch.Account(ledger)}
-}
-
-// Add indexes a directory anchor.
-func (x *DirectoryAnchorIndexer) Add(anchor *protocol.SyntheticAnchor) error {
-	var v *database.Value
-	if anchor.Major {
-		v = x.account.Index("MajorDirectoryAnchor", anchor.SourceBlock)
-	} else {
-		v = x.account.Index("MinorDirectoryAnchor", anchor.SourceBlock)
-	}
-
-	return v.PutAs(anchor)
-}
-
-// AnchorForLocalBlock retrieves the directory anchor that anchors the given local block.
-func (x *DirectoryAnchorIndexer) AnchorForLocalBlock(block uint64, major bool) (*protocol.SyntheticAnchor, error) {
-	var v *database.Value
-	if major {
-		v = x.account.Index("MajorDirectoryAnchor", block)
-	} else {
-		v = x.account.Index("MinorDirectoryAnchor", block)
-	}
-
-	anchor := new(protocol.SyntheticAnchor)
-	err := v.GetAs(anchor)
-	if err != nil {
-		return nil, err
-	}
-	return anchor, nil
 }

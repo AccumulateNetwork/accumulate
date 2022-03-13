@@ -627,7 +627,9 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	}
 
 	for _, receipt := range res.Receipts {
-		out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		// // TODO Figure out how to include the directory receipt and block
+		// out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		out += fmt.Sprintf("Receipt from %v#chain/%s\n", receipt.Account, receipt.Chain)
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}

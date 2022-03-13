@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -28,6 +27,9 @@ const (
 
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
+
+	// SyntheticLedgerPath is the path to a node's internal synthetic transaction ledger.
+	SyntheticLedgerPath = "synth-ledger"
 
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
@@ -67,6 +69,9 @@ const (
 
 	// DefaultKeyBook is the default key book name when not specified
 	DefaultKeyBook = "book0"
+
+	// GenesisBlock is the block index of the first block.
+	GenesisBlock = 1
 )
 
 // AcmeUrl returns `acc://ACME`.
@@ -345,6 +350,20 @@ func IndexChain(name string, major bool) string {
 		return "major-" + name + "-index"
 	}
 	return "minor-" + name + "-index"
+}
+
+// AnchorChain returns the name of the intermediate anchor chain for the given
+// subnet.
+func AnchorChain(name string) string {
+	return "anchor-" + name
+}
+
+// ParseBvnUrl extracts the subnet name from a intermediate anchor chain name.
+func ParseAnchorChain(name string) (string, bool) {
+	if !strings.HasPrefix(strings.ToLower(name), "anchor-") {
+		return "", false
+	}
+	return name[7:], true
 }
 
 // FormatKeyPageUrl provides a global method to format the KeyPage URL which is currently acc://id/book/1

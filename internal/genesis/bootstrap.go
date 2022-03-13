@@ -81,7 +81,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		ledger.Synthetic.Nonce = 1
 		ledger.ActiveOracle = oraclePrice
 		ledger.PendingOracle = ledger.ActiveOracle
+		ledger.Index = protocol.GenesisBlock
 		records = append(records, ledger)
+
+		// Create the synth ledger
+		synthLedger := protocol.NewInternalSyntheticLedger()
+		synthLedger.Url = uAdi.JoinPath(protocol.SyntheticLedgerPath)
+		synthLedger.KeyBook = uBook
+		records = append(records, synthLedger)
 
 		// Create the anchor pool
 		anchors := protocol.NewAnchor()
