@@ -627,7 +627,9 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	}
 
 	for _, receipt := range res.Receipts {
-		out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		// // TODO Figure out how to include the directory receipt and block
+		// out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		out += fmt.Sprintf("Receipt from %v#chain/%s\n", receipt.Account, receipt.Chain)
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
@@ -765,10 +767,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		var out string
-		out += fmt.Sprintf("\n\tPage Index\t\tKey Page Url\n")
-		for i, v := range book.Pages {
-			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
-		}
+		out += fmt.Sprintf("\n\tPage Count\n")
+		out += fmt.Sprintf("\t%d\n", book.PageCount)
 		return out, nil
 	case protocol.AccountTypeKeyPage.String():
 		ss := protocol.KeyPage{}
@@ -883,9 +883,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		}
 
 		out := "\n"
-		out += fmt.Sprintf("ADI url \t\t:\t%s\n", id.Url)
-		out += fmt.Sprintf("Key Book \t\t:\t%s\n", id.KeyBookUrl)
-		out += fmt.Sprintf("Key Page URL \t\t:\t%s/%s\n", id.Url, id.KeyPageUrl)
+		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
+		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
 		keyName, err := FindLabelFromPubKey(id.PublicKey)
 		if err != nil {
