@@ -32,8 +32,8 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 
 /* === Receipt generation === */
 
-// createReceipt a receipt used to return the status of synthetic transactions to its senders
-func createReceipt(env *protocol.Envelope, status *protocol.TransactionStatus) *protocol.SyntheticReceipt {
+// CreateReceipt a receipt used to return the status of synthetic transactions to its senders
+func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus) *protocol.SyntheticReceipt {
 	sr := new(protocol.SyntheticReceipt)
 	sr.TxHash = (*[32]byte)(env.GetTxHash())
 
