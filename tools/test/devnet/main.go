@@ -68,7 +68,8 @@ func main() {
 	valCmd := exec.Command("./scripts/ci/validate.sh")
 	valCmd.Env = os.Environ()
 	valCmd.Env = append(valCmd.Env, "ACC_API=http://127.0.1.1:26660/v2") // won't work if --ip was passed
-	valCmd.Env = append(valCmd.Env, "NODE_ROOT=.nodes/dn/Node0")
+	valCmd.Env = append(valCmd.Env, "NODE_ROOT_0=.nodes/dn/Node0")
+	valCmd.Env = append(valCmd.Env, "NODE_ROOT_1=.nodes/dn/Node1")
 
 	// Forward output
 	valRd, valWr := io.Pipe()

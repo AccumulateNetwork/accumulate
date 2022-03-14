@@ -83,8 +83,8 @@ function success {
     echo
 }
 
-NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-NODE_PRIV_VAL1="/nodes/dn/Node1/config/priv_validator_key.json"
+NODE_PRIV_VAL0="${NODE_ROOT_0:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+NODE_PRIV_VAL1="${NODE_ROOT_1:-~/.accumulate/dn/Node1}/config/priv_validator_key.json"
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL0" ] && [ -f "$NODE_PRIV_VAL1" ]; then
@@ -92,10 +92,8 @@ if [ -f "$NODE_PRIV_VAL0" ] && [ -f "$NODE_PRIV_VAL1" ]; then
     wait-for-tx $TXID
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
     wait-for cli-tx-env tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
-    accumulate -j tx get $TXID # TODO REMOVE
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
     accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
-
 
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
