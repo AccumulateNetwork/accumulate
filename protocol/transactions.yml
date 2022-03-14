@@ -50,7 +50,7 @@ Transaction:
       marshal-as: none
 
 LegacyED25519Signature:
-  kind: signature
+  union: { type: signature }
   fields:
     - name: privateKey
       type: bytes
@@ -69,7 +69,7 @@ LegacyED25519Signature:
       type: uint
 
 RCD1Signature:
-  kind: signature
+  union: { type: signature }
   fields:
     - name: privateKey
       type: bytes
@@ -88,7 +88,7 @@ RCD1Signature:
       optional: true
 
 ED25519Signature:
-  kind: signature
+  union: { type: signature }
   fields:
     - name: privateKey
       type: bytes
@@ -107,7 +107,7 @@ ED25519Signature:
       optional: true
 
 ReceiptSignature:
-  kind: signature
+  union: { type: signature }
   embeddings:
   - Receipt
   fields: []
@@ -140,7 +140,7 @@ InternalSignature:
 ##### User #####
 
 CreateIdentity:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -158,7 +158,7 @@ CreateIdentity:
       optional: true
 
 CreateTokenAccount:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -179,7 +179,7 @@ CreateTokenAccount:
       optional: true
 
 SendTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Hash
       type: chain
@@ -194,7 +194,7 @@ SendTokens:
       pointer: true
 
 CreateDataAccount:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -212,14 +212,14 @@ CreateDataAccount:
       optional: true
 
 WriteData:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Entry
       type: DataEntry
       marshal-as: reference
 
 WriteDataTo:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Recipient
       type: url
@@ -229,14 +229,14 @@ WriteDataTo:
       marshal-as: reference
 
 AcmeFaucet:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
       pointer: true
 
 CreateToken:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -265,7 +265,7 @@ CreateToken:
       optional: true
 
 IssueTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Recipient
       type: url
@@ -274,13 +274,13 @@ IssueTokens:
       type: bigint
 
 BurnTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Amount
       type: bigint
 
 CreateKeyPage:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Keys
       repeatable: true
@@ -293,7 +293,7 @@ CreateKeyPage:
       optional: true
 
 CreateKeyBook:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -306,7 +306,7 @@ CreateKeyBook:
       optional: true
 
 AddCredits:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Recipient
       type: url
@@ -315,7 +315,7 @@ AddCredits:
       type: uvarint
 
 UpdateKeyPage:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Operation
       type: KeyPageOperation
@@ -335,18 +335,18 @@ UpdateKeyPage:
       optional: true
 
 UpdateManager:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: ManagerKeyBook
       type: url
       pointer: true
 
 RemoveManager:
-  kind: tx
+  union: { type: transaction }
   fields:
 
 AddValidator:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Key
       type: bytes
@@ -357,7 +357,7 @@ AddValidator:
       optional: true
 
 RemoveValidator:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Key
       type: bytes
@@ -368,7 +368,7 @@ RemoveValidator:
       optional: true
 
 UpdateValidatorKey:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: OldKey
       type: bytes
@@ -376,13 +376,13 @@ UpdateValidatorKey:
       type: bytes
 
 SignPending:
-  kind: tx
+  union: { type: transaction }
   fields: []
 
 ##### Synthetic #####
 
 SyntheticCreateChain:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -393,7 +393,7 @@ SyntheticCreateChain:
 
 
 SyntheticWriteData:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -402,7 +402,7 @@ SyntheticWriteData:
       marshal-as: reference
 
 SyntheticDepositTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -413,7 +413,7 @@ SyntheticDepositTokens:
       type: bigint
 
 SyntheticAnchor:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Source
       description: is the subnet the anchor originates from
@@ -440,7 +440,7 @@ SyntheticAnchor:
       marshal-as: reference
 
 SyntheticDepositCredits:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -448,7 +448,7 @@ SyntheticDepositCredits:
       type: uvarint
 
 SyntheticBurnTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -456,7 +456,7 @@ SyntheticBurnTokens:
       type: bigint
 
 SyntheticMirror:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Objects
       repeatable: true
@@ -464,7 +464,7 @@ SyntheticMirror:
       marshal-as: reference
 
 SegWitDataEntry:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -477,12 +477,11 @@ SegWitDataEntry:
 ##### Result Types #####
 
 EmptyResult:
-  kind: tx-result
-  tx-type: Unknown
+  union: { type: result, value: Unknown }
   fields: []
 
 WriteDataResult:
-  kind: tx-result
+  union: { type: result }
   fields:
     - name: EntryHash
       type: chain

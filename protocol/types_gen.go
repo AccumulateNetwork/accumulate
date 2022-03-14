@@ -624,74 +624,94 @@ func NewTokenIssuer() *TokenIssuer {
 
 func (*ADI) Type() AccountType { return AccountTypeIdentity }
 
+// Deprated: use Type
 func (*ADI) GetType() AccountType { return AccountTypeIdentity }
 
 func (*AcmeFaucet) Type() TransactionType { return TransactionTypeAcmeFaucet }
 
+// Deprated: use Type
 func (*AcmeFaucet) GetType() TransactionType { return TransactionTypeAcmeFaucet }
 
 func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
 
+// Deprated: use Type
 func (*AddCredits) GetType() TransactionType { return TransactionTypeAddCredits }
 
 func (*AddValidator) Type() TransactionType { return TransactionTypeAddValidator }
 
+// Deprated: use Type
 func (*AddValidator) GetType() TransactionType { return TransactionTypeAddValidator }
 
 func (*Anchor) Type() AccountType { return AccountTypeAnchor }
 
+// Deprated: use Type
 func (*Anchor) GetType() AccountType { return AccountTypeAnchor }
 
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
+// Deprated: use Type
 func (*BurnTokens) GetType() TransactionType { return TransactionTypeBurnTokens }
 
 func (*CreateDataAccount) Type() TransactionType { return TransactionTypeCreateDataAccount }
 
+// Deprated: use Type
 func (*CreateDataAccount) GetType() TransactionType { return TransactionTypeCreateDataAccount }
 
 func (*CreateIdentity) Type() TransactionType { return TransactionTypeCreateIdentity }
 
+// Deprated: use Type
 func (*CreateIdentity) GetType() TransactionType { return TransactionTypeCreateIdentity }
 
 func (*CreateKeyBook) Type() TransactionType { return TransactionTypeCreateKeyBook }
 
+// Deprated: use Type
 func (*CreateKeyBook) GetType() TransactionType { return TransactionTypeCreateKeyBook }
 
 func (*CreateKeyPage) Type() TransactionType { return TransactionTypeCreateKeyPage }
 
+// Deprated: use Type
 func (*CreateKeyPage) GetType() TransactionType { return TransactionTypeCreateKeyPage }
 
 func (*CreateToken) Type() TransactionType { return TransactionTypeCreateToken }
 
+// Deprated: use Type
 func (*CreateToken) GetType() TransactionType { return TransactionTypeCreateToken }
 
 func (*CreateTokenAccount) Type() TransactionType { return TransactionTypeCreateTokenAccount }
 
+// Deprated: use Type
 func (*CreateTokenAccount) GetType() TransactionType { return TransactionTypeCreateTokenAccount }
 
 func (*DataAccount) Type() AccountType { return AccountTypeDataAccount }
 
+// Deprated: use Type
 func (*DataAccount) GetType() AccountType { return AccountTypeDataAccount }
 
 func (*ED25519Signature) Type() SignatureType { return SignatureTypeED25519 }
 
+// Deprated: use Type
+func (*ED25519Signature) GetType() SignatureType { return SignatureTypeED25519 }
+
 func (*EmptyResult) Type() TransactionType { return TransactionTypeUnknown }
 
+// Deprated: use Type
 func (*EmptyResult) GetType() TransactionType { return TransactionTypeUnknown }
 
 func (*InternalGenesis) Type() TransactionType { return TransactionTypeInternalGenesis }
 
+// Deprated: use Type
 func (*InternalGenesis) GetType() TransactionType { return TransactionTypeInternalGenesis }
 
 func (*InternalLedger) Type() AccountType { return AccountTypeInternalLedger }
 
+// Deprated: use Type
 func (*InternalLedger) GetType() AccountType { return AccountTypeInternalLedger }
 
 func (*InternalSendTransactions) Type() TransactionType {
 	return TransactionTypeInternalSendTransactions
 }
 
+// Deprated: use Type
 func (*InternalSendTransactions) GetType() TransactionType {
 	return TransactionTypeInternalSendTransactions
 }
@@ -700,12 +720,14 @@ func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
 func (*InternalSyntheticLedger) Type() AccountType { return AccountTypeInternalSyntheticLedger }
 
+// Deprated: use Type
 func (*InternalSyntheticLedger) GetType() AccountType { return AccountTypeInternalSyntheticLedger }
 
 func (*InternalTransactionsSent) Type() TransactionType {
 	return TransactionTypeInternalTransactionsSent
 }
 
+// Deprated: use Type
 func (*InternalTransactionsSent) GetType() TransactionType {
 	return TransactionTypeInternalTransactionsSent
 }
@@ -714,124 +736,160 @@ func (*InternalTransactionsSigned) Type() TransactionType {
 	return TransactionTypeInternalTransactionsSigned
 }
 
+// Deprated: use Type
 func (*InternalTransactionsSigned) GetType() TransactionType {
 	return TransactionTypeInternalTransactionsSigned
 }
 
 func (*IssueTokens) Type() TransactionType { return TransactionTypeIssueTokens }
 
+// Deprated: use Type
 func (*IssueTokens) GetType() TransactionType { return TransactionTypeIssueTokens }
 
 func (*KeyBook) Type() AccountType { return AccountTypeKeyBook }
 
+// Deprated: use Type
 func (*KeyBook) GetType() AccountType { return AccountTypeKeyBook }
 
 func (*KeyPage) Type() AccountType { return AccountTypeKeyPage }
 
+// Deprated: use Type
 func (*KeyPage) GetType() AccountType { return AccountTypeKeyPage }
 
 func (*LegacyED25519Signature) Type() SignatureType { return SignatureTypeLegacyED25519 }
 
+// Deprated: use Type
+func (*LegacyED25519Signature) GetType() SignatureType { return SignatureTypeLegacyED25519 }
+
 func (*LiteDataAccount) Type() AccountType { return AccountTypeLiteDataAccount }
 
+// Deprated: use Type
 func (*LiteDataAccount) GetType() AccountType { return AccountTypeLiteDataAccount }
 
 func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 
+// Deprated: use Type
 func (*LiteIdentity) GetType() AccountType { return AccountTypeLiteIdentity }
 
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
 
+// Deprated: use Type
 func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAccount }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
+// Deprated: use Type
+func (*RCD1Signature) GetType() SignatureType { return SignatureTypeRCD1 }
+
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
+
+// Deprated: use Type
+func (*ReceiptSignature) GetType() SignatureType { return SignatureTypeReceipt }
 
 func (*RemoveManager) Type() TransactionType { return TransactionTypeRemoveManager }
 
+// Deprated: use Type
 func (*RemoveManager) GetType() TransactionType { return TransactionTypeRemoveManager }
 
 func (*RemoveValidator) Type() TransactionType { return TransactionTypeRemoveValidator }
 
+// Deprated: use Type
 func (*RemoveValidator) GetType() TransactionType { return TransactionTypeRemoveValidator }
 
 func (*SegWitDataEntry) Type() TransactionType { return TransactionTypeSegWitDataEntry }
 
+// Deprated: use Type
 func (*SegWitDataEntry) GetType() TransactionType { return TransactionTypeSegWitDataEntry }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
 
+// Deprated: use Type
 func (*SendTokens) GetType() TransactionType { return TransactionTypeSendTokens }
 
 func (*SignPending) Type() TransactionType { return TransactionTypeSignPending }
 
+// Deprated: use Type
 func (*SignPending) GetType() TransactionType { return TransactionTypeSignPending }
 
 func (*SyntheticAnchor) Type() TransactionType { return TransactionTypeSyntheticAnchor }
 
+// Deprated: use Type
 func (*SyntheticAnchor) GetType() TransactionType { return TransactionTypeSyntheticAnchor }
 
 func (*SyntheticBurnTokens) Type() TransactionType { return TransactionTypeSyntheticBurnTokens }
 
+// Deprated: use Type
 func (*SyntheticBurnTokens) GetType() TransactionType { return TransactionTypeSyntheticBurnTokens }
 
 func (*SyntheticCreateChain) Type() TransactionType { return TransactionTypeSyntheticCreateChain }
 
+// Deprated: use Type
 func (*SyntheticCreateChain) GetType() TransactionType { return TransactionTypeSyntheticCreateChain }
 
 func (*SyntheticDepositCredits) Type() TransactionType { return TransactionTypeSyntheticDepositCredits }
 
+// Deprated: use Type
 func (*SyntheticDepositCredits) GetType() TransactionType {
 	return TransactionTypeSyntheticDepositCredits
 }
 
 func (*SyntheticDepositTokens) Type() TransactionType { return TransactionTypeSyntheticDepositTokens }
 
+// Deprated: use Type
 func (*SyntheticDepositTokens) GetType() TransactionType {
 	return TransactionTypeSyntheticDepositTokens
 }
 
 func (*SyntheticMirror) Type() TransactionType { return TransactionTypeSyntheticMirror }
 
+// Deprated: use Type
 func (*SyntheticMirror) GetType() TransactionType { return TransactionTypeSyntheticMirror }
 
 func (*SyntheticSignature) Type() SignatureType { return SignatureTypeSynthetic }
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
+// Deprated: use Type
 func (*SyntheticWriteData) GetType() TransactionType { return TransactionTypeSyntheticWriteData }
 
 func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
 
+// Deprated: use Type
 func (*TokenAccount) GetType() AccountType { return AccountTypeTokenAccount }
 
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
 
+// Deprated: use Type
 func (*TokenIssuer) GetType() AccountType { return AccountTypeTokenIssuer }
 
 func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPage }
 
+// Deprated: use Type
 func (*UpdateKeyPage) GetType() TransactionType { return TransactionTypeUpdateKeyPage }
 
 func (*UpdateManager) Type() TransactionType { return TransactionTypeUpdateManager }
 
+// Deprated: use Type
 func (*UpdateManager) GetType() TransactionType { return TransactionTypeUpdateManager }
 
 func (*UpdateValidatorKey) Type() TransactionType { return TransactionTypeUpdateValidatorKey }
 
+// Deprated: use Type
 func (*UpdateValidatorKey) GetType() TransactionType { return TransactionTypeUpdateValidatorKey }
 
 func (*WriteData) Type() TransactionType { return TransactionTypeWriteData }
 
+// Deprated: use Type
 func (*WriteData) GetType() TransactionType { return TransactionTypeWriteData }
 
 func (*WriteDataResult) Type() TransactionType { return TransactionTypeWriteData }
 
+// Deprated: use Type
 func (*WriteDataResult) GetType() TransactionType { return TransactionTypeWriteData }
 
 func (*WriteDataTo) Type() TransactionType { return TransactionTypeWriteDataTo }
 
+// Deprated: use Type
 func (*WriteDataTo) GetType() TransactionType { return TransactionTypeWriteDataTo }
 
 func (v *ADI) Equal(u *ADI) bool {

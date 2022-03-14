@@ -19,7 +19,7 @@ func init() {
 }
 
 type goUnionTypeSpec struct {
-	Kind        string
+	Type        string
 	Enumeration string
 	Interface   string
 	NaturalName string
@@ -29,10 +29,13 @@ var goFuncs = template.FuncMap{
 	"_unionTypes": func() []goUnionTypeSpec {
 		// TODO This should not be hard coded
 		return []goUnionTypeSpec{
-			{"chain", "AccountType", "Account", "account type"},
-			{"tx", "TransactionType", "TransactionBody", "transaction type"},
+			{"account", "AccountType", "Account", "account type"},
+			{"transaction", "TransactionType", "TransactionBody", "transaction type"},
 			{"signature", "SignatureType", "Signature", "signature type"},
 		}
+	},
+	"isUnion": func(union *goUnionTypeSpec, typ *Type) bool {
+		return typ.Union.Type == union.Type
 	},
 	"isPkg": func(s string) bool {
 		return s == PackagePath

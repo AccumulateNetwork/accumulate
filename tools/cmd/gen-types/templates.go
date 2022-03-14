@@ -22,45 +22,42 @@ type Type struct {
 	Fields     []*Field
 }
 
-func (t *Type) IsChain() bool           { return t.Kind == "chain" }
-func (t *Type) IsAccount() bool         { return t.Kind == "chain" }
-func (t *Type) IsTransaction() bool     { return t.Kind == "tx" }
-func (t *Type) IsSignature() bool       { return t.Kind == "signature" }
-func (t *Type) IsTxResult() bool        { return t.Kind == "tx-result" }
-func (t *Type) IsBinary() bool          { return !t.NonBinary }
-func (t *Type) IsComparable() bool      { return !t.Incomparable }
-func (t *Type) MakeConstructor() bool   { return !t.OmitNewFunc }
-func (t *Type) AccountType() string     { return t.ChainType }
-func (t *Type) TransactionType() string { return t.TxType }
+func (t *Type) IsAccount() bool       { return t.Union.Type == "account" }
+func (t *Type) IsBinary() bool        { return !t.NonBinary }
+func (t *Type) IsComparable() bool    { return !t.Incomparable }
+func (t *Type) MakeConstructor() bool { return !t.OmitNewFunc }
+
+// Deprecated: use Union
+func (t *Type) Kind() string {
+	switch t.Union.Type {
+	case "account":
+		return "chain"
+	case "transaction":
+		return "tx"
+	case "result":
+		return "tx-result"
+	default:
+		return t.Union.Type
+	}
+}
 
 func (t *Type) IsUnion() bool {
-	return t.IsChain() || t.IsAccount() || t.IsTransaction() || t.IsTxResult() || t.IsSignature()
+	return t.Union.Type != ""
 }
 
 func (t *Type) UnionType() string {
-	switch t.Kind {
-	case "chain":
-		return "AccountType"
-	case "tx", "tx-result":
-		return "TransactionType"
-	case "signature":
-		return "SignatureType"
-	default:
+	if t.Union.Type == "" {
 		return ""
 	}
+	switch t.Union.Type {
+	case "result":
+		return "TransactionType"
+	}
+	return strings.Title(t.Union.Type) + "Type"
 }
 
 func (t *Type) UnionValue() string {
-	switch t.Kind {
-	case "chain":
-		return t.ChainType
-	case "tx", "tx-result":
-		return t.TxType
-	case "signature":
-		return t.SignatureType
-	default:
-		return ""
-	}
+	return t.Union.Value
 }
 
 type Embedding struct {

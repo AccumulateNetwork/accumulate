@@ -53,7 +53,8 @@ func New{{.Name}}() *{{.Name}} {
 
 {{range .Types}}{{if .IsUnion}}
 func (*{{.Name}}) Type() {{pkg "protocol"}}{{.UnionType}} { return {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}} }
-{{end}}{{if or .IsTransaction .IsTxResult .IsAccount }}
+
+// Deprated: use Type
 func (*{{.Name}}) GetType() {{pkg "protocol"}}{{.UnionType}} { return {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}} }
 {{end}}{{end}}
 
