@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -22,6 +23,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
+
+func runCmdFunc(fn func([]string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		out, err := fn(args)
+		printOutput(cmd, out, err)
+	}
+}
 
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	u, err := url2.Parse(urlStr)
@@ -101,6 +109,20 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *protocol.Transac
 	hdr.KeyPageHeight = ms.Height
 
 	return args[ct:], &hdr, privKey, nil
+}
+
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *protocol.TransactionHeader, []byte, error) {
+	principal, err := url2.Parse(args[0])
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	args, header, key, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	return args, principal, header, key, nil
 }
 
 func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
@@ -298,6 +320,15 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	}
 
 	return &res, nil
+}
+
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (string, error) {
+	res, err := dispatchTxRequest(action, payload, txHash, origin, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFrom(res).Print()
 }
 
 type ActionResponse struct {
