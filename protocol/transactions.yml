@@ -398,13 +398,15 @@ SyntheticReceipt:
   kind: tx
   fields:
     - name: TxHash
-      type: bytes
+      type: chain
+      pointer: true
+      marshal-as: none
     - name: Cause
       type: chain
+      pointer: true
       marshal-as: none
-    - name: Reason
-      type: string
-      optional: true
+    - name: Status
+      type: rawJson
 
 SegWitDataEntry:
   kind: tx

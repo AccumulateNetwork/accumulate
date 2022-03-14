@@ -528,7 +528,9 @@ func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelo
 	return failure
 }
 
-func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus, postCommit bool) error {
+func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAccepted *protocol.TransactionState, txPending *protocol.PendingTransactionState,
+	status *protocol.TransactionStatus, postCommit bool) error {
+
 	if txPending == nil {
 		txPending = state.NewPendingTransaction(env)
 	}
@@ -542,6 +544,16 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 	txt := env.Transaction.Type()
 	if txt.IsInternal() {
 		return nil
+	}
+
+	// When the transaction is synthetic, send a receipt to its sender
+	if txt.IsSynthetic() {
+		receipt := createReceipt(env, status)
+		submissions := []*submission{{st.OriginUrl, receipt}}
+		err := m.addSynthTxns(&st.stateCache, submissions)
+		if err != nil {
+			return fmt.Errorf("failed to add receipt: %v", err)
+		}
 	}
 
 	// Store against the transaction hash

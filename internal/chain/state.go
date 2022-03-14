@@ -115,8 +115,9 @@ func (m *StateManager) Commit() ([]*submission, error) {
 }
 
 // Submit queues a synthetic transaction for submission.
-func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
-	if m.txType.IsSynthetic() {
+func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
+	transactionType := body.GetType()
+	if m.txType.IsSynthetic() && transactionType != protocol.TransactionTypeSyntheticReceipt {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	m.submissions = append(m.submissions, &submission{url, body})

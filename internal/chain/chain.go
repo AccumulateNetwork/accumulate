@@ -19,6 +19,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 		return newExecutor(opts,
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
+			SyntheticReceipt{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
@@ -57,6 +58,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
 			SyntheticWriteData{},
+			SyntheticReceipt{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},

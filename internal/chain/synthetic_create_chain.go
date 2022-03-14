@@ -3,7 +3,6 @@ package chain
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -25,7 +24,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 	}
 
 	if body.Cause == [32]byte{} {
-		return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("cause is missing"))
+		return nil, fmt.Errorf("cause is missing")
 	}
 
 	// Do basic validation and add everything to the state manager
@@ -33,29 +32,34 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 	for i, cc := range body.Chains {
 		record, err := protocol.UnmarshalAccount(cc.Data)
 		if err != nil {
-			return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("invalid chain payload: %v", err))
+			return nil, fmt.Errorf("invalid chain payload: %v", err)
 		}
 
 		u, err := record.Header().ParseUrl()
 		if err != nil {
-			return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("invalid chain URL: %v", err))
+			return nil, fmt.Errorf("invalid chain URL: %v", err)
 		}
 
 		_, err = st.LoadUrl(u)
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
-			return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("error fetching %q: %v", u, err))
-		case cc.IsUpdate && errors.Is(err, storage.ErrNotFound):
-			return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("cannot update %q: does not exist", u))
-		case !cc.IsUpdate && err == nil:
-			return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("cannot create %q: already exists", u))
-		case !cc.IsUpdate:
+			// Unknown error
+			return nil, fmt.Errorf("error fetching %q: %v", u, err)
 
-			_, err := st.LoadUrl(u)
-			if err == nil {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("cannot create %q: already exists", u))
+		case cc.IsUpdate && err != nil:
+			// Attempted to update but the record does not exist
+			return nil, fmt.Errorf("cannot update %q: does not exist", u)
+
+		case !cc.IsUpdate && err == nil:
+			// Attempted to create but the record already exists
+			return nil, fmt.Errorf("cannot create %q: already exists", u)
+
+		case !cc.IsUpdate:
+			// Creating a record, add it to the directory
+			err = st.AddDirectoryEntry(u.Identity(), u)
+			if err != nil {
+				return nil, fmt.Errorf("failed to add a directory entry for %q: %v", u, err)
 			}
-			err = st.AddDirectoryEntry(u)
 		}
 
 		urls[i] = u
@@ -67,32 +71,19 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		record, err := st.LoadUrl(u)
 		if err != nil {
 			// This really shouldn't happen, but don't panic
-			return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("internal error: failed to fetch pending record"))
+			return nil, fmt.Errorf("internal error: failed to fetch pending record")
 		}
 
 		// Check the identity
 		switch record.GetType() {
 		case protocol.AccountTypeIdentity:
-			// An ADI must be its own identity
-			if !u.Identity().Equal(u) {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("ADI is not its own identity"))
-			}
 		default:
-			// Anything else must be a sub-path
-			if u.Identity().Equal(u) {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("account type %v cannot be its own identity", record.GetType()))
-			}
-
-			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.GetType()))
-			}
-
 			// Make sure the ADI actually exists
 			_, err = st.LoadUrl(u.Identity())
 			if errors.Is(err, storage.ErrNotFound) {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("missing identity for %s", u.String()))
+				return nil, fmt.Errorf("missing identity for %s", u.String())
 			} else if err != nil {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("error fetching %q: %v", u.String(), err))
+				return nil, fmt.Errorf("error fetching %q: %v", u.String(), err)
 			}
 
 		}
@@ -102,7 +93,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		case protocol.AccountTypeKeyBook:
 			// A key book does not itself have a key book
 			if record.Header().KeyBook != nil {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, errors.New("invalid key book: KeyBook is not empty"))
+				return nil, errors.New("invalid key book: KeyBook is not empty")
 			}
 
 		case protocol.AccountTypeKeyPage:
@@ -111,7 +102,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		default:
 			// Anything else must have a key book
 			if record.Header().KeyBook == nil {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("%q does not specify a key book", u))
+				return nil, fmt.Errorf("%q does not specify a key book", u)
 			}
 		}
 
@@ -120,7 +111,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 			book := new(protocol.KeyBook)
 			err = st.LoadUrlAs(record.Header().KeyBook, book)
 			if err != nil {
-				return nil, SendReceipt(st, tx.TxHash, body.Cause, fmt.Errorf("invalid key book %q for %q: %v", record.Header().KeyBook, u, err))
+				return nil, fmt.Errorf("invalid key book %q for %q: %v", record.Header().KeyBook, u, err)
 			}
 		}
 	}
