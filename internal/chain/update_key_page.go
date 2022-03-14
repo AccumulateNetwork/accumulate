@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -59,17 +60,25 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 			return nil, fmt.Errorf("cannot add an empty entry")
 		}
 
+		if len(op.Entry.KeyHash) > 0 && len(op.Entry.KeyHash) != sha256.Size {
+			return nil, fmt.Errorf("key hash is the wrong size for a SHA-256 hash")
+		}
+
 		_, _, found := findKeyPageEntry(page, &op.Entry)
 		if found {
 			return nil, fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
 		entry := new(protocol.KeySpec)
-		entry.PublicKey = op.Entry.PublicKey
+		entry.PublicKeyHash = op.Entry.KeyHash
 		entry.Owner = op.Entry.Owner
 		page.Keys = append(page.Keys, entry)
 
 	case *protocol.RemoveKeyOperation:
+		if len(op.Entry.KeyHash) > 0 && len(op.Entry.KeyHash) != sha256.Size {
+			return nil, fmt.Errorf("key hash is the wrong size for a SHA-256 hash")
+		}
+
 		index, _, found := findKeyPageEntry(page, &op.Entry)
 		if !found {
 			return nil, fmt.Errorf("entry to be removed not found on the key page")
@@ -90,6 +99,14 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 			return nil, fmt.Errorf("cannot add an empty entry")
 		}
 
+		if len(op.NewEntry.KeyHash) > 0 && len(op.NewEntry.KeyHash) != sha256.Size {
+			return nil, fmt.Errorf("key hash is the wrong size for a SHA-256 hash")
+		}
+
+		if len(op.OldEntry.KeyHash) > 0 && len(op.OldEntry.KeyHash) != sha256.Size {
+			return nil, fmt.Errorf("key hash is the wrong size for a SHA-256 hash")
+		}
+
 		_, entry, found := findKeyPageEntry(page, &op.OldEntry)
 		if !found {
 			return nil, fmt.Errorf("entry to be updated not found on the key page")
@@ -100,7 +117,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 			return nil, fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
-		entry.PublicKey = op.NewEntry.PublicKey
+		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Owner = op.NewEntry.Owner
 
 	case *protocol.SetThresholdKeyPageOperation:
@@ -160,8 +177,8 @@ func didUpdateKeyPage(page *protocol.KeyPage) {
 }
 
 func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (int, *protocol.KeySpec, bool) {
-	if len(search.PublicKey) > 0 {
-		return page.EntryByKeyHash(search.PublicKey)
+	if len(search.KeyHash) > 0 {
+		return page.EntryByKeyHash(search.KeyHash)
 	}
 
 	if search.Owner != nil {

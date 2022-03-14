@@ -153,8 +153,7 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
-	//keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
-	keyHash := key.PubKey().Bytes()
+	keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
 	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -163,7 +162,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	bookUrl := identityUrl.JoinPath("book0")
 
 	ss := new(protocol.KeySpec)
-	ss.PublicKey = keyHash[:]
+	ss.PublicKeyHash = keyHash[:]
 
 	mss := protocol.NewKeyPage()
 	mss.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
@@ -275,9 +274,11 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	page.KeyBook = bookUrl
 	page.Threshold = 1
 	page.Keys = make([]*protocol.KeySpec, len(keys))
+
 	for i, key := range keys {
+		hash := sha256.Sum256(key.Bytes())
 		page.Keys[i] = &protocol.KeySpec{
-			PublicKey: key,
+			PublicKeyHash: hash[:],
 		}
 	}
 	book.PageCount++
@@ -300,7 +301,8 @@ func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey
 
 	if len(publicKeyHash) == 1 {
 		key := new(protocol.KeySpec)
-		key.PublicKey = publicKeyHash[0]
+		hash := sha256.Sum256(publicKeyHash[0])
+		key.PublicKeyHash = hash[:]
 		page.Keys = []*protocol.KeySpec{key}
 	} else if len(publicKeyHash) > 1 {
 		return errors.New("CreateKeyBook only supports one page key at the moment") // TOOO do we need to suport this? (Also in create_book.go)

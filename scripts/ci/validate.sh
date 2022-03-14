@@ -137,7 +137,6 @@ ensure-key keytest-2-0
 ensure-key keytest-2-1
 ensure-key keytest-2-2
 ensure-key keytest-3-0
-ensure-key keytest-3-1
 echo
 
 section "Create an ADI"
@@ -198,9 +197,12 @@ wait-for cli-tx credits ${LITE} keytest/book/2 100
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "keytest/book/2 should have 100 credits but has ${BALANCE}"
 
-section "Add a key to page 2 using a key from page 3"
+section "Add a key to page 2 using a key from page 2"
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-1
-wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
+success
+
+section "Add a key to page 2 using a key from page 1"
+wait-for cli-tx page key add keytest/book/2 keytest-1-0 1 keytest-2-2
 success
 
 section "Set threshold to 2 of 2"

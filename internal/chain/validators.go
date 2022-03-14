@@ -39,7 +39,7 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 	}
 
 	// Add the key hash to the key page
-	key := &protocol.KeySpec{PublicKey: keyHash[:]}
+	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
 	page.Keys = append(page.Keys, key)
 
 	// Record the update
@@ -111,7 +111,7 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 	}
 
 	// Update the key hash
-	entry.PublicKey = newKeyHash[:]
+	entry.PublicKeyHash = newKeyHash[:]
 
 	// Record the update
 	didUpdateKeyPage(page)

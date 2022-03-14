@@ -145,7 +145,7 @@ CreateIdentity:
     - name: Url
       type: url
       pointer: true
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
       optional: true
     - name: KeyBookUrl
@@ -559,7 +559,7 @@ ChainParams:
 
 KeySpecParams:
   fields:
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
     - name: Owner
       type: url

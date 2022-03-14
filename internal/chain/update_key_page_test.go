@@ -38,8 +38,8 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
 			op := new(protocol.UpdateKeyOperation)
-			op.OldEntry.PublicKey = testKey.PubKey().Bytes()
-			op.NewEntry.PublicKey = newKey.PubKey().Bytes()
+			op.OldEntry.SetKey(testKey.PubKey().Bytes())
+			op.NewEntry.SetKey(newKey.PubKey().Bytes())
 			body := new(protocol.UpdateKeyPage)
 			body.Operation = op
 

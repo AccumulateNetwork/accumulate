@@ -37,19 +37,22 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 	book := protocol.NewKeyBook()
 	bookExists := st.LoadUrlAs(bookUrl, book) == nil
 	if !bookExists {
-		if len(body.PublicKey) == 0 {
+		if len(body.KeyHash) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
 		book.Url = bookUrl
 		book.PageCount = 1
 		accounts = append(accounts, book)
+		if len(body.KeyHash) > 0 && len(body.KeyHash) != 32 {
+			return nil, fmt.Errorf("Invalid Key Hash: length must be equal to 32 bytes")
+		}
 
 		page := protocol.NewKeyPage()
 		page.KeyBook = bookUrl
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 		page.Threshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
-		keySpec.PublicKey = body.PublicKey
+		keySpec.PublicKeyHash = body.KeyHash
 		page.Keys = append(page.Keys, keySpec)
 		accounts = append(accounts, page)
 	}

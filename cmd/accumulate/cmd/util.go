@@ -769,11 +769,11 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
-			name, err := FindLabelFromPubKey(k.PublicKey)
+			name, err := FindLabelFromPubKey(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t%x\t%s\n", i, k.Nonce, k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -874,11 +874,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyName, err := FindLabelFromPubKey(id.PublicKey)
+		keyName, err := FindLabelFromPubKey(id.KeyHash)
 		if err != nil {
-			out += fmt.Sprintf("Public Key \t:\t%x\n", id.PublicKey)
+			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {
-			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.PublicKey, keyName)
+			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.KeyHash, keyName)
 		}
 
 		out += printGeneralTransactionParameters(res)

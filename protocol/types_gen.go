@@ -105,7 +105,7 @@ type CreateDataAccount struct {
 type CreateIdentity struct {
 	fieldsSet  []bool
 	Url        *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
+	KeyHash    []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
@@ -260,15 +260,15 @@ type KeyPage struct {
 }
 
 type KeySpec struct {
-	fieldsSet []bool
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	fieldsSet     []bool
+	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
+	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Owner         *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
 	fieldsSet []bool
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyHash   []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
 }
 
@@ -1180,7 +1180,7 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
 		return false
 	}
 	switch {
@@ -1589,7 +1589,7 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 }
 
 func (v *KeySpec) Equal(u *KeySpec) bool {
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !(bytes.Equal(v.PublicKeyHash, u.PublicKeyHash)) {
 		return false
 	}
 	if !(v.Nonce == u.Nonce) {
@@ -1608,7 +1608,7 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 }
 
 func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
 		return false
 	}
 	switch {
@@ -2937,7 +2937,7 @@ func (v *CreateDataAccount) IsValid() error {
 var fieldNames_CreateIdentity = []string{
 	1: "Type",
 	2: "Url",
-	3: "PublicKey",
+	3: "KeyHash",
 	4: "KeyBookUrl",
 	5: "Manager",
 }
@@ -2950,8 +2950,8 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(3, v.PublicKey)
+	if !(len(v.KeyHash) == 0) {
+		writer.WriteBytes(3, v.KeyHash)
 	}
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(4, v.KeyBookUrl)
@@ -3976,7 +3976,7 @@ func (v *KeyPage) IsValid() error {
 }
 
 var fieldNames_KeySpec = []string{
-	1: "PublicKey",
+	1: "PublicKeyHash",
 	2: "Nonce",
 	3: "Owner",
 }
@@ -3985,8 +3985,8 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(1, v.PublicKey)
+	if !(len(v.PublicKeyHash) == 0) {
+		writer.WriteBytes(1, v.PublicKeyHash)
 	}
 	if !(v.Nonce == 0) {
 		writer.WriteUint(2, v.Nonce)
@@ -4003,9 +4003,9 @@ func (v *KeySpec) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
+		errs = append(errs, "field PublicKeyHash is missing")
+	} else if len(v.PublicKeyHash) == 0 {
+		errs = append(errs, "field PublicKeyHash is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Nonce is missing")
@@ -4029,7 +4029,7 @@ func (v *KeySpec) IsValid() error {
 }
 
 var fieldNames_KeySpecParams = []string{
-	1: "PublicKey",
+	1: "KeyHash",
 	2: "Owner",
 }
 
@@ -4037,8 +4037,8 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(1, v.PublicKey)
+	if !(len(v.KeyHash) == 0) {
+		writer.WriteBytes(1, v.KeyHash)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(2, v.Owner)
@@ -4052,9 +4052,9 @@ func (v *KeySpecParams) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
+		errs = append(errs, "field KeyHash is missing")
+	} else if len(v.KeyHash) == 0 {
+		errs = append(errs, "field KeyHash is not set")
 	}
 
 	switch len(errs) {
@@ -6607,7 +6607,7 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	if x, ok := reader.ReadUrl(4); ok {
 		v.KeyBookUrl = x
@@ -7219,7 +7219,7 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadBytes(1); ok {
-		v.PublicKey = x
+		v.PublicKeyHash = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
 		v.Nonce = x
@@ -7241,7 +7241,7 @@ func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadBytes(1); ok {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Owner = x
@@ -8602,13 +8602,13 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       TransactionType `json:"type"`
 		Url        *url.URL        `json:"url,omitempty"`
-		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyHash    *string         `json:"keyHash,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Manager = v.Manager
 	return json.Marshal(&u)
@@ -8899,11 +8899,13 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
+		PublicKey     *string  `json:"publicKey,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.Nonce = v.Nonce
 	u.Owner = v.Owner
 	return json.Marshal(&u)
@@ -8911,10 +8913,10 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		KeyHash *string  `json:"keyHash,omitempty"`
+		Owner   *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
@@ -9755,23 +9757,23 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type       TransactionType `json:"type"`
 		Url        *url.URL        `json:"url,omitempty"`
-		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyHash    *string         `json:"keyHash,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Url = u.Url
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
 	} else {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	v.KeyBookUrl = u.KeyBookUrl
 	v.Manager = u.Manager
@@ -10234,20 +10236,30 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
+		PublicKey     *string  `json:"publicKey,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.Nonce = v.Nonce
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
+	if u.PublicKeyHash != nil {
+		if x, err := encoding.BytesFromJSON(u.PublicKeyHash); err != nil {
+			return fmt.Errorf("error decoding PublicKeyHash: %w", err)
+		} else {
+			v.PublicKeyHash = x
+		}
 	} else {
-		v.PublicKey = x
+		if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+			return fmt.Errorf("error decoding PublicKeyHash: %w", err)
+		} else {
+			v.PublicKeyHash = x
+		}
 	}
 	v.Nonce = u.Nonce
 	v.Owner = u.Owner
@@ -10256,18 +10268,18 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		KeyHash *string  `json:"keyHash,omitempty"`
+		Owner   *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
 	} else {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	v.Owner = u.Owner
 	return nil

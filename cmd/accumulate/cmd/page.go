@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strconv"
@@ -163,12 +164,15 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		pk, err := LookupByLabel(keyLabels[i])
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
-			ksp.PublicKey, err = pubKeyFromString(keyLabels[i])
+			k, err := pubKeyFromString(keyLabels[i])
+
 			if err != nil {
 				return "", fmt.Errorf("key name %s, does not exist in wallet, nor is it a valid public key", keyLabels[i])
 			}
+			kh := sha256.Sum256(k)
+			ksp.KeyHash = kh[:]
 		} else {
-			ksp.PublicKey = pk[32:]
+			ksp.KeyHash = pk[32:]
 		}
 
 		ckp.Keys[i] = &ksp
@@ -204,9 +208,6 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		return "", err
 	}
 
-	var newKey []byte
-	var oldKey []byte
-
 	ukp := protocol.UpdateKeyPage{}
 
 	switch op {
@@ -214,40 +215,40 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		oldKey, err = resolvePublicKey(args[0])
+		oldKey, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
-		newKey, err = resolvePublicKey(args[1])
+		newKey, err := resolvePublicKey(args[1])
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.UpdateKeyOperation{
-			OldEntry: protocol.KeySpecParams{PublicKey: oldKey},
-			NewEntry: protocol.KeySpecParams{PublicKey: newKey},
-		}
+		op := new(protocol.UpdateKeyOperation)
+		op.NewEntry.SetKey(newKey)
+		op.OldEntry.SetKey(oldKey)
+		ukp.Operation = op
 	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		newKey, err = resolvePublicKey(args[0])
+		newKey, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.AddKeyOperation{
-			Entry: protocol.KeySpecParams{PublicKey: newKey},
-		}
+		op := new(protocol.AddKeyOperation)
+		op.Entry.SetKey(newKey)
+		ukp.Operation = op
 	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		oldKey, err = resolvePublicKey(args[0])
+		oldKey, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.RemoveKeyOperation{
-			Entry: protocol.KeySpecParams{PublicKey: oldKey},
-		}
+		op := new(protocol.AddKeyOperation)
+		op.Entry.SetKey(oldKey)
+		ukp.Operation = op
 	}
 
 	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)

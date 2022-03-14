@@ -91,9 +91,9 @@
         // "-j",
         // "97de5192c4e0b199a2bf978e7f4a88367bf03412c1ead814e0b4dc0803809ea6"
 
-        // "data",
-        // "write",
-        // "-j",
+         "data",
+         "write",
+         "-j",
         // "keytest/data",
         // "keytest-0-0",
         // "foo",

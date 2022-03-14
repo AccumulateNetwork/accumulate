@@ -47,7 +47,11 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
-		ss.PublicKey = sig.PublicKey
+		if len(sig.KeyHash) > 0 && len(sig.KeyHash) != 32 {
+			return nil, fmt.Errorf("Invalid Key Hash: length must be equal to 32 bytes")
+		}
+		ss.PublicKeyHash = sig.KeyHash
+
 		page.Keys = append(page.Keys, ss)
 	}
 
