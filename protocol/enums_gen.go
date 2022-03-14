@@ -289,7 +289,7 @@ const TransactionTypeInternalTransactionsSigned TransactionType = 98
 // TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
 const TransactionTypeInternalTransactionsSent TransactionType = 99
 
-// TransactionTypeSyntheticReceipt notifies the sender of synthetic transactions with the updated status
+// TransactionTypeSyntheticReceipt notifies the sender of synthetic transactions when a transaction has failed..
 const TransactionTypeSyntheticReceipt TransactionType = 100
 
 // ID returns the ID of the Account Type
