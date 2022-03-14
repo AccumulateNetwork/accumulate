@@ -154,13 +154,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), int64(start), int64(end), protocol.PendingChain)
+				txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), int64(start), int64(end), protocol.SignatureChain)
 				if perr != nil {
 					return nil, nil, perr
 				}
 				return []byte("tx-history"), txns, nil
 			} else {
-				chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
+				chain, err := batch.Account(u).ReadChain(protocol.SignatureChain)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 				}

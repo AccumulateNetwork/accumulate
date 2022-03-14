@@ -164,7 +164,7 @@ func (op *updateSignator) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addDataEntry struct {
@@ -242,7 +242,7 @@ type addChainEntryOp struct {
 func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// The main and pending chain cannot be updated this way
 	switch strings.ToLower(name) {
-	case protocol.MainChain, protocol.PendingChain:
+	case protocol.MainChain, protocol.SignatureChain:
 		return fmt.Errorf("invalid operation: cannot update %s chain with AddChainEntry", name)
 	}
 
