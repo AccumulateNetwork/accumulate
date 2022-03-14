@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -237,6 +239,31 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 		payload = new(protocol.SignPending)
 	}
 
+	si.Memo = Memo
+	if Metadata != "" {
+		if strings.Contains(Metadata, ":") {
+			dataSet := strings.Split(Metadata, ":")
+			switch dataSet[0] {
+			case "hex":
+				bytes, err := hex.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				si.Metadata = bytes
+			case "base64":
+				bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				si.Metadata = bytes
+			default:
+				si.Metadata = []byte(dataSet[1])
+			}
+		} else {
+			si.Metadata = []byte(Metadata)
+		}
+	}
+
 	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -257,6 +284,9 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 	if err != nil {
 		return nil, err
 	}
+
+	params.Memo = si.Memo
+	params.Metadata = si.Metadata
 
 	data, err = json.Marshal(params)
 	if err != nil {
@@ -597,7 +627,9 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	}
 
 	for _, receipt := range res.Receipts {
-		out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		// // TODO Figure out how to include the directory receipt and block
+		// out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		out += fmt.Sprintf("Receipt from %v#chain/%s\n", receipt.Account, receipt.Chain)
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
@@ -735,10 +767,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		var out string
-		out += fmt.Sprintf("\n\tPage Index\t\tKey Page Url\n")
-		for i, v := range book.Pages {
-			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
-		}
+		out += fmt.Sprintf("\n\tPage Count\n")
+		out += fmt.Sprintf("\t%d\n", book.PageCount)
 		return out, nil
 	case protocol.AccountTypeKeyPage.String():
 		ss := protocol.KeyPage{}
@@ -853,9 +883,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		}
 
 		out := "\n"
-		out += fmt.Sprintf("ADI url \t\t:\tacc://%s\n", id.Url)
-		out += fmt.Sprintf("Key Book \t\t:\tacc://%s/%s\n", id.Url, id.KeyBookName)
-		out += fmt.Sprintf("Key Page \t\t:\tacc://%s/%s\n", id.Url, id.KeyPageName)
+		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
+		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
 		keyName, err := FindLabelFromPubKey(id.PublicKey)
 		if err != nil {

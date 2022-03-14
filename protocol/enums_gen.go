@@ -52,6 +52,9 @@ const AccountTypeInternalLedger AccountType = 14
 // AccountTypeLiteIdentity is a lite identity account.
 const AccountTypeLiteIdentity AccountType = 15
 
+// AccountTypeInternalSyntheticLedger is a ledger that tracks the status of unsent synthetic transactions.
+const AccountTypeInternalSyntheticLedger AccountType = 16
+
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
 
@@ -181,6 +184,12 @@ const SignatureTypeLegacyED25519 SignatureType = 1
 // SignatureTypeED25519 represents an ED25519 signature.
 const SignatureTypeED25519 SignatureType = 2
 
+// SignatureTypeRCD1 represents an RCD1 signature.
+const SignatureTypeRCD1 SignatureType = 3
+
+// SignatureTypeReceipt represents a Merkle tree receipt.
+const SignatureTypeReceipt SignatureType = 4
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 47
 
@@ -290,7 +299,7 @@ func (v AccountType) ID() uint64 { return uint64(v) }
 func (v *AccountType) Set(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -329,6 +338,8 @@ func (v AccountType) String() string {
 		return "internalLedger"
 	case AccountTypeLiteIdentity:
 		return "liteIdentity"
+	case AccountTypeInternalSyntheticLedger:
+		return "internalSyntheticLedger"
 	default:
 		return fmt.Sprintf("AccountType:%d", v)
 	}
@@ -367,6 +378,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeInternalLedger, true
 	case "liteIdentity":
 		return AccountTypeLiteIdentity, true
+	case "internalSyntheticLedger":
+		return AccountTypeInternalSyntheticLedger, true
 	default:
 		return 0, false
 	}
@@ -873,7 +886,7 @@ func (v SignatureType) ID() uint64 { return uint64(v) }
 func (v *SignatureType) Set(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt:
 		*v = u
 		return true
 	default:
@@ -890,6 +903,10 @@ func (v SignatureType) String() string {
 		return "legacyED25519"
 	case SignatureTypeED25519:
 		return "eD25519"
+	case SignatureTypeRCD1:
+		return "rCD1"
+	case SignatureTypeReceipt:
+		return "receipt"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -904,6 +921,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeLegacyED25519, true
 	case "eD25519":
 		return SignatureTypeED25519, true
+	case "rCD1":
+		return SignatureTypeRCD1, true
+	case "receipt":
+		return SignatureTypeReceipt, true
 	default:
 		return 0, false
 	}
