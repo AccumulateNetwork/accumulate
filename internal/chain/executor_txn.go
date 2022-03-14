@@ -581,9 +581,12 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 
 	// When the transaction is synthetic, send a receipt to its sender
 	if txt.IsSynthetic() {
-		receipt := createReceipt(env, status)
-		submissions := []*submission{{st.OriginUrl, receipt}}
-		err := m.addSynthTxns(&st.stateCache, submissions)
+		txn := new(protocol.Transaction)
+		txn.Origin = st.OriginUrl
+		txn.Body = createReceipt(env, status)
+
+		produced := []*protocol.Transaction{txn}
+		err := m.addSynthTxns(&st.stateCache, produced)
 		if err != nil {
 			return fmt.Errorf("failed to add receipt: %v", err)
 		}
