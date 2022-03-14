@@ -463,8 +463,8 @@ type SyntheticMirror struct {
 
 type SyntheticReceipt struct {
 	fieldsSet []bool
-	TxHash    *[32]byte
-	Cause     *[32]byte
+	TxHash    [32]byte        `json:"txHash,omitempty" form:"txHash" query:"txHash" validate:"required"`
+	Cause     [32]byte        `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	Status    json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
@@ -1737,6 +1737,12 @@ func (v *SyntheticMirror) Equal(u *SyntheticMirror) bool {
 }
 
 func (v *SyntheticReceipt) Equal(u *SyntheticReceipt) bool {
+	if !(v.TxHash == u.TxHash) {
+		return false
+	}
+	if !(v.Cause == u.Cause) {
+		return false
+	}
 	if !(bytes.Equal(v.Status, u.Status)) {
 		return false
 	}
@@ -5035,7 +5041,9 @@ func (v *SyntheticMirror) IsValid() error {
 
 var fieldNames_SyntheticReceipt = []string{
 	1: "Type",
-	2: "Status",
+	2: "TxHash",
+	3: "Cause",
+	4: "Status",
 }
 
 func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
@@ -5043,8 +5051,14 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, TransactionTypeSyntheticReceipt.ID())
+	if !(v.TxHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.TxHash)
+	}
+	if !(v.Cause == ([32]byte{})) {
+		writer.WriteHash(3, &v.Cause)
+	}
 	if !(len(v.Status) == 0) {
-		writer.WriteBytes(2, v.Status)
+		writer.WriteBytes(4, v.Status)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticReceipt)
@@ -5055,6 +5069,16 @@ func (v *SyntheticReceipt) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TxHash is missing")
+	} else if v.TxHash == ([32]byte{}) {
+		errs = append(errs, "field TxHash is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == ([32]byte{}) {
+		errs = append(errs, "field Cause is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Status is missing")
 	} else if len(v.Status) == 0 {
 		errs = append(errs, "field Status is not set")
@@ -7524,7 +7548,13 @@ func (v *SyntheticReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticReceipt, typ)
 	}
 
-	if x, ok := reader.ReadBytes(2); ok {
+	if x, ok := reader.ReadHash(2); ok {
+		v.TxHash = *x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.Cause = *x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
 		v.Status = x
 	}
 
@@ -8729,9 +8759,13 @@ func (v *SyntheticMirror) MarshalJSON() ([]byte, error) {
 func (v *SyntheticReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   TransactionType `json:"type"`
+		TxHash string          `json:"txHash,omitempty"`
+		Cause  string          `json:"cause,omitempty"`
 		Status json.RawMessage `json:"status,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.TxHash = encoding.ChainToJSON(v.TxHash)
+	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Status = v.Status
 	return json.Marshal(&u)
 }
@@ -10341,12 +10375,26 @@ func (v *SyntheticMirror) UnmarshalJSON(data []byte) error {
 func (v *SyntheticReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type   TransactionType `json:"type"`
+		TxHash string          `json:"txHash,omitempty"`
+		Cause  string          `json:"cause,omitempty"`
 		Status json.RawMessage `json:"status,omitempty"`
 	}{}
 	u.Type = v.Type()
+	u.TxHash = encoding.ChainToJSON(v.TxHash)
+	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Status = v.Status
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.TxHash); err != nil {
+		return fmt.Errorf("error decoding TxHash: %w", err)
+	} else {
+		v.TxHash = x
+	}
+	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
+		return fmt.Errorf("error decoding Cause: %w", err)
+	} else {
+		v.Cause = x
 	}
 	v.Status = u.Status
 	return nil

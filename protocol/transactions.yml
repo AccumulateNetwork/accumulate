@@ -417,12 +417,8 @@ SyntheticReceipt:
   fields:
     - name: TxHash
       type: chain
-      pointer: true
-      marshal-as: none
     - name: Cause
       type: chain
-      pointer: true
-      marshal-as: none
     - name: Status
       type: rawJson
 

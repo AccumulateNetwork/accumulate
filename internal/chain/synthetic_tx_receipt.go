@@ -35,7 +35,7 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 // CreateReceipt a receipt used to return the status of synthetic transactions to its senders
 func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus) *protocol.SyntheticReceipt {
 	sr := new(protocol.SyntheticReceipt)
-	sr.TxHash = (*[32]byte)(env.GetTxHash())
+	sr.TxHash = *(*[32]byte)(env.GetTxHash())
 
 	var err error
 	sr.Status, err = status.MarshalJSON()
@@ -43,7 +43,7 @@ func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus) *
 		panic(fmt.Errorf("can't marshal transaction status: %w", err))
 	}
 
-	sr.Cause = getCause(env.Transaction)
+	sr.Cause = *getCause(env.Transaction)
 	return sr
 }
 
