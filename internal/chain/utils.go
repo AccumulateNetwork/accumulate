@@ -235,7 +235,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
