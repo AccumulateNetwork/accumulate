@@ -447,7 +447,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	}
 
 	qr := query.ResponseByTxId{}
-	qr.Envelope = txState
+	qr.Envelope = new(protocol.Envelope)
+	qr.Envelope.Transaction = txState
 	qr.Status = status
 	qr.Envelope.Signatures = signatures.Signatures
 	copy(qr.TxId[:], txid)
@@ -463,7 +464,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, &txState.Transaction.TransactionHeader, status, &qr)
+	err = getPendingStatus(batch, &txState.TransactionHeader, status, &qr)
 	if err != nil {
 		return nil, err
 	}
