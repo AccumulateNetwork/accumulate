@@ -29,10 +29,6 @@ func (m *stateCache) Create(record ...protocol.Account) {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
 	for _, r := range record {
-		if r.GetType().IsTransaction() {
-			panic("Called StateManager.Create with a transaction record!")
-		}
-
 		m.chains[r.Header().Url.AccountID32()] = r
 	}
 
