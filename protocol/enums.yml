@@ -183,12 +183,12 @@ AccountType:
   LiteTokenAccount:
     value: 5
     description: is a Lite Token Account
-  Transaction:
-    value: 7
-    description: is a completed transaction
-  PendingTransaction:
-    value: 8
-    description: is a pending transaction
+  # Transaction:
+  #   value: 7
+  #   description: is a completed transaction
+  # PendingTransaction:
+  #   value: 8
+  #   description: is a pending transaction
   KeyPage:
     value: 9
     description: is a Key Page account
