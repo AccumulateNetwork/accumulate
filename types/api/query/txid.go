@@ -34,6 +34,5 @@ func (t *RequestByTxId) UnmarshalBinary(data []byte) (err error) {
 	if len(data) < 32 {
 		return fmt.Errorf("insufficient data for txid in RequestByTxId")
 	}
-	t.TxId.FromBytes(data)
-	return nil
+	return t.TxId.FromBytes(data)
 }

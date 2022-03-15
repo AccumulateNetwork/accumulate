@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
@@ -111,14 +110,14 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// the pending chain which is purged after about 2 weeks
 	txPending := state.NewPendingTransaction(env)
 	txAccepted, txPending := state.NewTransaction(txPending)
-	txAcceptedObject := new(state.Object)
+	txAcceptedObject := new(protocol.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
 		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err})
 	}
 
-	txPendingObject := new(state.Object)
-	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
+	txPendingObject := new(protocol.Object)
+	txPending.Status = json.RawMessage("{\"code\":\"0\"}")
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
 		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err})
@@ -193,9 +192,9 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 	if err != nil {
 		return err
 	}
-	st.Commit()
 
-	return nil
+	err = st.Commit()
+	return err
 }
 
 // validate validates signatures, verifies they are authorized,
@@ -270,7 +269,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	// than "invalid signature" if the real error is the transaction got borked.
 	txt := env.Transaction.Type()
 	_, ok := m.executors[txt]
-	if !ok && txt != types.TxTypeSignPending {
+	if !ok && txt != protocol.TransactionTypeSignPending {
 		return fmt.Errorf("unsupported TX type: %v", txt)
 	}
 
@@ -282,7 +281,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	switch {
 	case len(env.TxHash) == 0:
 		// TxHash must be specified for signature transactions
-		if txt == types.TxTypeSignPending {
+		if txt == protocol.TransactionTypeSignPending {
 			return fmt.Errorf("invalid signature transaction: missing transaction hash")
 		}
 
@@ -292,7 +291,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 
 	case !env.VerifyTxHash():
 		// TxHash must match the transaction
-		if txt != types.TxTypeSignPending {
+		if txt != protocol.TransactionTypeSignPending {
 			return fmt.Errorf("invalid hash: does not match transaction")
 		}
 	}
@@ -303,7 +302,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	}
 
 	// TxHash must be specified for signature transactions
-	if txt == types.TxTypeSignPending && len(env.TxHash) == 0 {
+	if txt == protocol.TransactionTypeSignPending && len(env.TxHash) == 0 {
 		return fmt.Errorf("invalid signature transaction: missing transaction hash")
 	}
 
@@ -332,7 +331,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 			return fmt.Errorf("transaction has already been delivered")
 		}
 	case errors.Is(err, storage.ErrNotFound):
-		if txt == types.TxTypeSignPending {
+		if txt == protocol.TransactionTypeSignPending {
 			return fmt.Errorf("transaction not found")
 		}
 	default:
@@ -356,7 +355,10 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 	if err == nil {
 		return fmt.Errorf("duplicate synthetic transaction %X", env.GetTxHash())
 	} else if errors.Is(err, storage.ErrNotFound) {
-		v.Put([]byte{1})
+		err = v.Put([]byte{1})
+		if err != nil {
+			return err
+		}
 	} else {
 		return err
 	}
@@ -403,9 +405,9 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 
 	// Is it OK for the origin to be missing?
 	switch st.txType {
-	case types.TxTypeSyntheticCreateChain,
-		types.TxTypeSyntheticDepositTokens,
-		types.TxTypeSyntheticWriteData:
+	case protocol.TransactionTypeSyntheticCreateChain,
+		protocol.TransactionTypeSyntheticDepositTokens,
+		protocol.TransactionTypeSyntheticWriteData:
 		// These transactions allow for a missing origin
 		return nil
 
@@ -500,10 +502,16 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 		return false, err
 	}
 
-	sigCount, err := st.batch.Transaction(env.GetTxHash()).AddSignatures(env.Signatures...)
+	sigs, err := st.batch.Transaction(env.GetTxHash()).GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return false, fmt.Errorf("failed to add signatures: %v", err)
+		return false, fmt.Errorf("failed to get signatures: %v", err)
 	}
+
+	// Add to the sig set to get the resulting count
+	sigCount := sigs.Add(env.Signatures...)
+
+	// Queue a write
+	st.SignTransaction(env.GetTxHash(), env.Signatures...)
 
 	// If the number of signatures is less than the threshold, the transaction is pending
 	return sigCount >= int(page.Threshold), nil
@@ -549,7 +557,7 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 	return st.UpdateSignator(account)
 }
 
-func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
+func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, txAccepted *protocol.TransactionState, txPending *protocol.PendingTransactionState, postCommit bool, failure *protocol.Error) *protocol.Error {
 	status := &protocol.TransactionStatus{
 		Delivered: true,
 		Code:      uint64(failure.Code),
@@ -562,14 +570,7 @@ func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelo
 	return failure
 }
 
-func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus, postCommit bool) (err error) {
-	if txPending == nil {
-		txPending = state.NewPendingTransaction(env)
-	}
-	if txAccepted == nil {
-		txAccepted, txPending = state.NewTransaction(txPending)
-	}
-
+func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAccepted *protocol.TransactionState, txPending *protocol.PendingTransactionState, status *protocol.TransactionStatus, postCommit bool) (err error) {
 	// Don't add internal transactions to chains. Internal transactions are
 	// exclusively used for communication between the governor and the state
 	// machine.

@@ -18,7 +18,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 //go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go
@@ -65,8 +64,8 @@ type Chain interface {
 	InitChain(state []byte, time time.Time) ([]byte, error)
 
 	BeginBlock(BeginBlockRequest) (BeginBlockResponse, error)
-	CheckTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
-	DeliverTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
+	CheckTx(*protocol.Envelope) (protocol.TransactionResult, *protocol.Error)
+	DeliverTx(*protocol.Envelope) (protocol.TransactionResult, *protocol.Error)
 	EndBlock(EndBlockRequest) EndBlockResponse
 	Commit() ([]byte, error)
 }
