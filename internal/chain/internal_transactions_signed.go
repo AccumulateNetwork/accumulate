@@ -50,17 +50,18 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelo
 		}
 
 		// Add the signature
-		gtx := txState
-		gtx.Signatures = []protocol.Signature{sig}
+		env := new(protocol.Envelope)
+		env.Transaction = txState
+		env.Signatures = []protocol.Signature{sig}
 
 		// Validate it
-		if !gtx.Verify() {
+		if !env.Verify() {
 			return nil, fmt.Errorf("invalid signature for txn %X", id)
 		}
 
 		// Skip transactions that are already signed
 		if len(txSigs) > 0 {
-			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", gtx.Transaction.Type())
+			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", env.Transaction.Type())
 			continue
 		}
 
