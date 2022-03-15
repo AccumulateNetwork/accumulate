@@ -1001,11 +1001,11 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			}
 			txState, txStatus, txSigs, err := batch.Transaction(id32[:]).Get()
 			require.NoError(t, err)
-			if seen[*(*[32]byte)(txState.GetTxHash())] {
-				fmt.Printf("      TX: hash=%X\n", txState.TxHash)
+			if seen[*(*[32]byte)(txState.GetHash())] {
+				fmt.Printf("      TX: hash=%X\n", txState.GetHash())
 				continue
 			}
-			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.Transaction.Body.GetType(), txState.Transaction.Origin, txStatus, len(txSigs))
+			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.Body.GetType(), txState.Origin, txStatus, len(txSigs))
 			seen[id32] = true
 		}
 	}

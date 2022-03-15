@@ -84,49 +84,6 @@ ReceiptSignature:
   - Receipt
   fields: []
 
-TxState:
-  fields:
-    - name: SigInfo
-      type: TransactionHeader
-      marshal-as: reference
-      pointer: true
-    - name: Transaction
-      type: TransactionBody
-      unmarshal-with: UnmarshalTransaction
-      marshal-as: value
-      zero-value: nil
-    - name: TransactionHash
-      type: chain
-      marshal-as: none
-
-TransactionState:
-  kind: chain
-  chain-type: Transaction
-  omit-new-func: true
-  embeddings:
-    - AccountHeader
-    - TxState
-
-PendingTransactionState:
-  kind: chain
-  chain-type: PendingTransaction
-  omit-new-func: true
-  embeddings:
-  - AccountHeader
-  fields:
-    - name: Signature
-      repeatable: true
-      type: Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSignature
-    - name: TransactionState
-      type: TxState
-      marshal-as: reference
-      pointer: true
-    - name: Status
-      type: rawJson
-
 ##### User #####
 
 CreateIdentity:
