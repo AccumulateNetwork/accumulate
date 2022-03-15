@@ -4,13 +4,15 @@ import (
 	"crypto/sha256"
 	"math/rand"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // GetLeaf
 // Find a leaf node in the given BPT tree.  Take a random path
 // (But if you set the seed, you can get the same random path)
-func GetPath(bpt *BPT) (path []*BptNode) {
-	bpt.Update()
+func GetPath(t *testing.T, bpt *BPT) (path []*BptNode) {
+	require.NoError(t, bpt.Update())
 	here := bpt.GetRoot() //                                 Find a leaf node
 	for {
 		path = append(path, here)
@@ -46,9 +48,9 @@ func TestBPT_Equal(t *testing.T) {
 
 	for i := int64(0); i < 100; i++ {
 		rand.Seed(i)
-		p1 := GetPath(bpt1)
+		p1 := GetPath(t, bpt1)
 		rand.Seed(i)
-		p2 := GetPath(bpt2)
+		p2 := GetPath(t, bpt2)
 
 		leaf := p1[len(p1)-1]
 		if leaf.Left != nil && leaf.Left.T() == TNode {
@@ -68,7 +70,7 @@ func TestBPT_Equal(t *testing.T) {
 	}
 
 	rand.Seed(0)
-	p1 := GetPath(bpt1)
+	p1 := GetPath(t, bpt1)
 	leaf := p1[len(p1)-1]
 	_ = leaf
 	var v *Value
@@ -85,9 +87,9 @@ func TestBPT_Equal(t *testing.T) {
 	var equalCnt, unequalCnt int
 	for i := int64(0); i < 100; i++ {
 		rand.Seed(i)
-		p1 := GetPath(bpt1)
+		p1 := GetPath(t, bpt1)
 		rand.Seed(i)
-		p2 := GetPath(bpt2)
+		p2 := GetPath(t, bpt2)
 
 		leaf := p1[len(p1)-1]
 		if leaf.Left != nil && leaf.Left.T() == TNode {

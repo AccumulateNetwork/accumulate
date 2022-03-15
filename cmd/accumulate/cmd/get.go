@@ -130,7 +130,7 @@ func Get(urlStr string) (string, error) {
 	}
 
 	// Is it a transaction?
-	if json.Unmarshal(res, new(struct{ Type types.TransactionType })) == nil {
+	if json.Unmarshal(res, new(struct{ Type protocol.TransactionType })) == nil {
 		qr := new(api2.TransactionQueryResponse)
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil

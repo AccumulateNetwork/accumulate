@@ -5,14 +5,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type CreateKeyBook struct{}
 
-func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
+func (CreateKeyBook) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyBook }
 
-func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
 		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.GetType())
 	}

@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type governor struct {
@@ -219,7 +218,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		typ := tx.Transaction.Body.GetType()
-		if typ != types.TxTypeSyntheticAnchor {
+		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
 
@@ -277,7 +276,7 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 
 		// Send it
 		typ := env.Transaction.Type()
-		if typ != types.TxTypeSyntheticAnchor {
+		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
 		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
@@ -400,7 +399,7 @@ func (g *governor) sendMirror(batch *database.Batch) {
 	g.sendInternal(batch, txns)
 }
 
-func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionPayload) {
+func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionBody) {
 	// Construct the signature transaction
 	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
 	env, err := g.buildSynthTxn(st, g.Network.NodeUrl(protocol.Ledger), body)
