@@ -37,7 +37,7 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 	return m.execute(ctx, req, data)
 }
 
-func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
+func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionBody, validateFields ...string) interface{} {
 	var raw json.RawMessage
 	req := new(TxRequest)
 	req.Payload = &raw
@@ -67,8 +67,8 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	}
 
 	faucet := protocol.Faucet.Signer()
-	tx := new(transactions.Envelope)
-	tx.Transaction = new(transactions.Transaction)
+	tx := new(protocol.Envelope)
+	tx.Transaction = new(protocol.Transaction)
 	tx.Transaction.Origin = protocol.FaucetUrl
 	tx.Transaction.Nonce = faucet.Nonce()
 	tx.Transaction.KeyPageHeight = 1
@@ -102,7 +102,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		return validatorError(err)
 	}
 
-	var envs []*transactions.Envelope
+	var envs []*protocol.Envelope
 	if req.IsEnvelope {
 		// Unmarshal all the envelopes
 		envs, err = transactions.UnmarshalAll(payload)
@@ -116,14 +116,16 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		}
 
 		// Build the envelope
-		env := new(transactions.Envelope)
+		env := new(protocol.Envelope)
 		env.TxHash = req.TxHash
-		env.Transaction = new(transactions.Transaction)
+		env.Transaction = new(protocol.Transaction)
 		env.Transaction.Body = body
 		env.Transaction.Origin = req.Origin
 		env.Transaction.Nonce = req.Signer.Nonce
 		env.Transaction.KeyPageHeight = req.KeyPage.Height
 		env.Transaction.KeyPageIndex = req.KeyPage.Index
+		env.Transaction.Memo = req.Memo
+		env.Transaction.Metadata = req.Metadata
 		envs = append(envs, env)
 
 		ed := new(protocol.LegacyED25519Signature)

@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type InitOpts struct {
@@ -22,14 +21,6 @@ type InitOpts struct {
 	Validators  []tmtypes.GenesisValidator
 	GenesisTime time.Time
 	Logger      log.Logger
-}
-
-func mustParseUrl(s string) *url.URL {
-	u, err := url.Parse(s)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
@@ -41,12 +32,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	}
 
 	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
-		var records []state.Chain
+		var records []protocol.Account
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
 		uBook := uAdi.JoinPath(protocol.ValidatorBook)
-		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 
 		adi := protocol.NewADI()
 		adi.Url = uAdi
@@ -55,11 +45,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		book := protocol.NewKeyBook()
 		book.Url = uBook
-		book.Pages = []*url.URL{uPage}
+		book.PageCount = 1
 		records = append(records, book)
 
 		page := protocol.NewKeyPage()
-		page.Url = uPage
+		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
 		page.KeyBook = uBook
 		page.Threshold = 1
 		records = append(records, page)
@@ -82,7 +72,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		ledger.Synthetic.Nonce = 1
 		ledger.ActiveOracle = oraclePrice
 		ledger.PendingOracle = ledger.ActiveOracle
+		ledger.Index = protocol.GenesisBlock
 		records = append(records, ledger)
+
+		// Create the synth ledger
+		synthLedger := protocol.NewInternalSyntheticLedger()
+		synthLedger.Url = uAdi.JoinPath(protocol.SyntheticLedgerPath)
+		synthLedger.KeyBook = uBook
+		records = append(records, synthLedger)
 
 		// Create the anchor pool
 		anchors := protocol.NewAnchor()
@@ -93,7 +90,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))
 		for i, r := range records {
-			urls[i], _ = r.Header().ParseUrl()
+			urls[i] = r.Header().Url
 		}
 
 		acme := new(protocol.TokenIssuer)
@@ -169,6 +166,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
 		}
 
-		return st.AddDirectoryEntry(urls...)
+		adiUrl, _ := adi.Header().ParseUrl()
+		return st.AddDirectoryEntry(adiUrl, urls...)
 	})
 }

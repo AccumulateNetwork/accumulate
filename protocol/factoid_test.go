@@ -16,6 +16,7 @@ func TestFactoidAddress(t *testing.T) {
 	t.Logf("FACTOID LITE ACCOUNT ADDRESS FROM FACTOID ADDRESS: %s", u.String())
 
 	u2, err := GetLiteAccountFromFactoidAddress(faAddress)
+	require.NoError(t, err)
 	require.Equal(t, u.String(), u2.String())
 
 }

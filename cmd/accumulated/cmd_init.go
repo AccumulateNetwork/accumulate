@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -124,13 +126,13 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
-	cmdInit.MarkFlagRequired("network")
+	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
-	cmdInitNode.MarkFlagRequired("listen")
+	_ = cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
@@ -145,7 +147,7 @@ func init() {
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 }
 
-func listNamedNetworkConfig(_ *cobra.Command, args []string) {
+func listNamedNetworkConfig(*cobra.Command, []string) {
 	n := Network{}
 	n.Network = "TestNet"
 	for _, subnet := range networks.TestNet {
@@ -232,6 +234,9 @@ func initNamedNetwork(*cobra.Command, []string) {
 
 func nodeReset() {
 	ent, err := os.ReadDir(flagMain.WorkDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return
+	}
 	check(err)
 
 	for _, ent := range ent {
@@ -471,7 +476,7 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(cfg.Directory, nodeType, 0, i, compose)
 		dnNodes[i] = config.Node{
 			Type:    nodeType,
-			Address: fmt.Sprintf(fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort)),
+			Address: fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort),
 		}
 		dnConfig[i].Accumulate.Network.Subnets = subnets
 		dnConfig[i].Accumulate.Network.LocalAddress = parseHost(dnNodes[i].Address)

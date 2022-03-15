@@ -110,18 +110,25 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 		return fmt.Errorf("chain opened as read-only")
 	}
 
-	// TODO MerkleManager.AddHash really should return an error
-	c.merkle.AddHash(entry, unique)
-	return nil
+	return c.merkle.AddHash(entry, unique)
 }
 
 // Receipt builds a receipt from one index to another
 func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
-	if from < 0 || to < 0 || from > c.Height() || to > c.Height() {
-		return nil, fmt.Errorf("index out of range")
+	if from < 0 {
+		return nil, fmt.Errorf("invalid range: from (%d) < 0", from)
+	}
+	if to < 0 {
+		return nil, fmt.Errorf("invalid range: to (%d) < 0", to)
+	}
+	if from > c.Height() {
+		return nil, fmt.Errorf("invalid range: from (%d) > height (%d)", from, c.Height())
+	}
+	if to > c.Height() {
+		return nil, fmt.Errorf("invalid range: to (%d) > height (%d)", to, c.Height())
 	}
 	if from > to {
-		return nil, fmt.Errorf("from is greater than to")
+		return nil, fmt.Errorf("invalid range: from (%d) > to (%d)", from, to)
 	}
 
 	var err error

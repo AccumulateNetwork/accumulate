@@ -26,7 +26,11 @@ func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %v", err)
 	}
-	d.batch.store.Put(d.record.Data(hash), data)
+
+	err = d.batch.store.Put(d.record.Data(hash), data)
+	if err != nil {
+		return err
+	}
 
 	// Add entry to the chain
 	err = d.chain.AddEntry(hash, false)
