@@ -4,21 +4,16 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
+func packStateResponse(obj *protocol.Object, chain protocol.Account) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
 	res.Type = chain.GetType().String()
 	res.MainChain = new(MerkleState)
 	res.MainChain.Height = obj.Height
 	res.MainChain.Roots = obj.Roots
 	res.Data = chain
-
-	u, err := chain.Header().ParseUrl()
-	if err == nil {
-		res.ChainId = u.AccountID()
-	}
+	res.ChainId = chain.Header().Url.AccountID()
 	return res, nil
 }
 

@@ -4,22 +4,21 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type SyntheticWriteData struct{}
 
-func (SyntheticWriteData) Type() types.TransactionType { return types.TxTypeSyntheticWriteData }
+func (SyntheticWriteData) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticWriteData
+}
 
-func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticWriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
-	var account state.Chain
+	var account protocol.Account
 	result := new(protocol.WriteDataResult)
 	if st.Origin != nil {
 

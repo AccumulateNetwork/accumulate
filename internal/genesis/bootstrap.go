@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type InitOpts struct {
@@ -22,14 +21,6 @@ type InitOpts struct {
 	Validators  []tmtypes.GenesisValidator
 	GenesisTime time.Time
 	Logger      log.Logger
-}
-
-func mustParseUrl(s string) *url.URL {
-	u, err := url.Parse(s)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
@@ -41,7 +32,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	}
 
 	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
-		var records []state.Chain
+		var records []protocol.Account
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
@@ -99,7 +90,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))
 		for i, r := range records {
-			urls[i], _ = r.Header().ParseUrl()
+			urls[i] = r.Header().Url
 		}
 
 		acme := new(protocol.TokenIssuer)

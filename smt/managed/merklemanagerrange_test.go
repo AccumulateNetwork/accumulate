@@ -41,7 +41,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		err = mm.SetKey(storage.MakeKey("try"))
 		require.NoError(t, err, "should be able to set a key")
 		for i := int64(0); i < NumTests; i++ {
-			mm.AddHash(rh.NextList(), false)
+			require.NoError(t, mm.AddHash(rh.NextList(), false))
 		}
 		for begin := int64(-1); begin < NumTests+1; begin++ {
 			for end := begin - 1; end < NumTests+2; end++ {
