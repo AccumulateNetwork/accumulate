@@ -39,6 +39,13 @@ var cmdInit = &cobra.Command{
 	Args:  cobra.NoArgs,
 }
 
+var cmdInitDualNode = &cobra.Command{
+	Use:   "dual <url|ip> <dn base port> <bvn base port>",
+	Short: "Initialize a dual run from seed IP, DN base port, and BVN base port",
+	Run:   initDualNode,
+	Args:  cobra.ExactArgs(3),
+}
+
 var cmdInitNode = &cobra.Command{
 	Use:   "node <network-name|url>",
 	Short: "Initialize a node",
@@ -63,8 +70,15 @@ var flagInit struct {
 }
 
 var flagInitNode struct {
+	Seed             string
 	GenesisDoc       string
 	ListenIP         string
+	Follower         bool
+	SkipVersionCheck bool
+}
+
+var flagInitNodeFromSeed struct {
+	GenesisDoc       string
 	Follower         bool
 	SkipVersionCheck bool
 }
@@ -85,7 +99,7 @@ var flagInitDevnet struct {
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitDualNode)
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
@@ -95,11 +109,16 @@ func init() {
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.MarkFlagRequired("network")
 
+	cmdInitNode.Flags().StringVar(&flagInitNode.Seed, "seed", "", "seed configuration from this network")
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.MarkFlagRequired("listen")
+
+	cmdInitDualNode.Flags().BoolVarP(&flagInitNodeFromSeed.Follower, "follow", "f", false, "Do not participate in voting")
+	cmdInitDualNode.Flags().StringVar(&flagInitNodeFromSeed.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitDualNode.Flags().BoolVar(&flagInitNodeFromSeed.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
@@ -271,10 +290,16 @@ func initNode(cmd *cobra.Command, args []string) {
 					}
 					if netAddr != nodeHost {
 						tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", nodeHost, netPort+networks.TmRpcPortOffset))
-						warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+						if err != nil {
+							warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+							continue
+						}
 
 						status, err := tmClient.Status(context.Background())
-						warnf("failed to get status of %s with error %v", n.Address, err)
+						if err != nil {
+							warnf("failed to get status of %s with error %v", n.Address, err)
+							continue
+						}
 
 						peers := config.P2P.PersistentPeers
 						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
