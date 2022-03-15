@@ -48,12 +48,6 @@ func (m *JrpcMethods) Querier_TESTONLY() Querier {
 	return m.querier
 }
 
-func (m *JrpcMethods) logDebug(msg string, keyVals ...interface{}) {
-	if m.logger != nil {
-		m.logger.Debug(msg, keyVals...)
-	}
-}
-
 func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	if m.logger != nil {
 		m.logger.Error(msg, keyVals...)

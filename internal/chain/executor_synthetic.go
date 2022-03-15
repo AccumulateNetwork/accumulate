@@ -6,29 +6,23 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
-func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error {
-	// Need to pass this to a threaded batcher / dispatcher to do both signing
-	// and sending of synth tx. No need to spend valuable time here doing that.
-	ids := make([][32]byte, len(submissions))
-	for i, sub := range submissions {
+func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction) error {
+	ids := make([][32]byte, len(produced))
+	for i, sub := range produced {
 		// Generate a synthetic tx and send to the router. Need to track txid to
 		// make sure they get processed.
 
-		tx, err := m.buildSynthTxn(st, sub.Url, sub.Body)
+		tx, err := m.buildSynthTxn(st, sub.Origin, sub.Body)
 		if err != nil {
 			return err
 		}
-
-		txPending := state.NewPendingTransaction(tx)
-		txState, txPending := state.NewTransaction(txPending)
+		*sub = *tx.Transaction
 
 		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(txState, status, nil)
+		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx, status, nil)
 		if err != nil {
 			return err
 		}
@@ -41,22 +35,14 @@ func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error
 		copy(ids[i][:], tx.GetTxHash())
 	}
 
-	ledgerState := protocol.NewInternalLedger()
-	err := st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), ledgerState)
-	if err != nil {
-		return err
-	}
-
-	ledgerState.Synthetic.Produced = append(ledgerState.Synthetic.Produced, ids...)
-	st.Update(ledgerState)
 	st.AddSyntheticTxns(st.txHash[:], ids)
 	return nil
 }
 
-func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionPayload) (*transactions.Envelope, error) {
+func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionBody) (*protocol.Envelope, error) {
 	// Build the transaction
-	env := new(transactions.Envelope)
-	env.Transaction = new(transactions.Transaction)
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Origin = dest
 	env.Transaction.KeyPageHeight = 1
 	env.Transaction.KeyPageIndex = 0
@@ -83,8 +69,10 @@ func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body p
 	ledgerState.Synthetic.Nonce++
 
 	// Append the ID
-	txid := types.Bytes(env.GetTxHash()).AsBytes32()
-	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
+	if body.Type() == protocol.TransactionTypeSyntheticAnchor {
+		txid := types.Bytes(env.GetTxHash()).AsBytes32()
+		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
+	}
 
 	st.Update(ledgerState)
 	return env, nil

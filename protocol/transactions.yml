@@ -31,13 +31,19 @@ TransactionHeader:
       type: uvarint
     - name: Nonce
       type: uvarint
+    - name: Memo
+      type: string
+      optional: true
+    - name: Metadata
+      type: bytes
+      optional: true
 
 Transaction:
   embeddings:
     - TransactionHeader
   fields:
     - name: Body
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil
@@ -55,6 +61,15 @@ LegacyED25519Signature:
     - name: Signature
       type: bytes
 
+RCD1Signature:
+  kind: signature
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+
+
 ED25519Signature:
   kind: signature
   fields:
@@ -63,6 +78,12 @@ ED25519Signature:
     - name: Signature
       type: bytes
 
+ReceiptSignature:
+  kind: signature
+  embeddings:
+  - Receipt
+  fields: []
+
 TxState:
   fields:
     - name: SigInfo
@@ -70,7 +91,7 @@ TxState:
       marshal-as: reference
       pointer: true
     - name: Transaction
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil
@@ -116,11 +137,10 @@ CreateIdentity:
       pointer: true
     - name: PublicKey
       type: bytes
-    - name: KeyBookName
-      type: string
       optional: true
-    - name: KeyPageName
-      type: string
+    - name: KeyBookUrl
+      type: url
+      pointer: true
       optional: true
     - name: Manager
       type: url
@@ -252,9 +272,6 @@ BurnTokens:
 CreateKeyPage:
   kind: tx
   fields:
-    - name: Url
-      type: url
-      pointer: true
     - name: Keys
       repeatable: true
       type: KeySpecParams
@@ -271,10 +288,8 @@ CreateKeyBook:
     - name: Url
       type: url
       pointer: true
-    - name: Pages
-      repeatable: true
-      type: url
-      pointer: true
+    - name: PublicKeyHash
+      type: bytes
     - name: Manager
       type: url
       pointer: true
@@ -350,24 +365,27 @@ SyntheticAnchor:
   kind: tx
   fields:
     - name: Source
+      description: is the subnet the anchor originates from
       type: url
       pointer: true
     - name: Major
+      description: indicates whether the anchor is a major block anchor
       type: bool
     - name: RootAnchor
+      description: is the anchor of the source's root anchor chain
       type: chain
     - name: RootIndex
+      description: is the index of the root anchor chain anchor
       type: uvarint
     - name: Block
-      type: uvarint
-    - name: SourceIndex
-      type: uvarint
-    - name: SourceBlock
+      description: is the index of the block
       type: uvarint
     - name: AcmeOraclePrice
       type: uvarint
-    - name: Receipt
+    - name: Receipts
+      description: are receipts for anchors from other subnets that were included in the block
       type: Receipt
+      repeatable: true
       marshal-as: reference
 
 SyntheticDepositCredits:

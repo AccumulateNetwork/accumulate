@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/rpc/client"
@@ -50,6 +51,12 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 		return string(res.Response.Key), res.Response.Value, nil
 	}
 	if res.Response.Code == uint32(protocol.ErrorCodeNotFound) {
+		// If possible, preserve the error message while still being
+		// errors.Is(err, storage.ErrNotFound)
+		if strings.HasSuffix(res.Response.Info, storage.ErrNotFound.Error()) {
+			s := res.Response.Info[:len(res.Response.Info)-len(storage.ErrNotFound.Error())]
+			return "", nil, fmt.Errorf("%s%w", s, storage.ErrNotFound)
+		}
 		return "", nil, storage.ErrNotFound
 	}
 
@@ -87,11 +94,6 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, fmt.Errorf("invalid TX response: %v", err)
 		}
 
-		main, pend, pl, err := unmarshalTxResponse(res.TxState, res.TxPendingState)
-		if err != nil {
-			return nil, err
-		}
-
 		var ms *MerkleState
 		if res.Height >= 0 || len(res.ChainState) > 0 {
 			ms = new(MerkleState)
@@ -99,7 +101,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			ms.Roots = res.ChainState
 		}
 
-		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, main, pend, pl)
+		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, res.Envelope, res.Status)
 		if err != nil {
 			return nil, err
 		}
@@ -123,12 +125,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
-			if err != nil {
-				return nil, err
-			}
-
-			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
 			if err != nil {
 				return nil, err
 			}
@@ -299,12 +296,16 @@ func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) 
 	}
 
 	var start time.Time
+	var sleepIncr time.Duration
+	var sleep time.Duration
 	if wait < time.Second/2 {
 		wait = 0
 	} else {
 		if wait > q.TxMaxWaitTime {
 			wait = q.TxMaxWaitTime
 		}
+		sleepIncr = wait / 50
+		sleep = sleepIncr
 		start = time.Now()
 	}
 
@@ -323,8 +324,9 @@ query:
 		// Not found, wait not specified or exceeded
 		return nil, err
 	default:
-		// Not found, try again
-		time.Sleep(time.Second / 2)
+		// Not found, try again, linearly increasing the wait time
+		time.Sleep(sleep)
+		sleep += sleepIncr
 		goto query
 	}
 	if k != "tx" {
@@ -337,12 +339,7 @@ query:
 		return nil, fmt.Errorf("invalid TX response: %v", err)
 	}
 
-	main, pend, pl, err := unmarshalTxResponse(res.TxState, res.TxPendingState)
-	if err != nil {
-		return nil, err
-	}
-
-	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
+	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, res.Envelope, res.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -392,12 +389,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
-		if err != nil {
-			return nil, err
-		}
-
-		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
 		if err != nil {
 			return nil, err
 		}

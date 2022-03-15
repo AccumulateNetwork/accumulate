@@ -12,7 +12,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func init() {
@@ -69,8 +68,8 @@ var adiCreateCmd = &cobra.Command{
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite token account")
-	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [public key page 1 (optional)]  Create new ADI from lite token account. When public key 1 is specified it will be assigned to the first page, otherwise the origin key is used.")
+	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [public key page 1 (optional)] Create new ADI for another ADI")
 }
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
@@ -126,7 +125,7 @@ func GetADI(url string) (string, error) {
 }
 
 func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
-	var si *transactions.Header
+	var si *protocol.TransactionHeader
 	var privKey []byte
 	var err error
 
@@ -135,9 +134,8 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", err
 	}
 
-	var adiUrl string
-	var book string
-	var page string
+	var adiUrlStr string
+	var bookUrlStr string
 
 	//at this point :
 	//args[0] should be the new adi you are creating
@@ -150,7 +148,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	if len(args) > 1 {
-		adiUrl = args[0]
+		adiUrlStr = args[0]
 	}
 	if len(args) < 2 {
 		return "", fmt.Errorf("invalid number of arguments")
@@ -161,28 +159,25 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) > 2 {
-		book = args[2]
-	} else {
-		book = "book0"
-	}
-
-	if len(args) > 3 {
-		page = args[3]
-	} else {
-		page = "page0"
-	}
-
-	u, err := url2.Parse(adiUrl)
+	adiUrl, err := url2.Parse(adiUrlStr)
 	if err != nil {
-		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
+		return "", fmt.Errorf("invalid adi url %s, %v", adiUrlStr, err)
+	}
+
+	var bookUrl *url2.URL
+	if len(args) > 2 {
+		bookUrlStr = args[2]
+
+		bookUrl, err = url2.Parse(bookUrlStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
+		}
 	}
 
 	idc := protocol.CreateIdentity{}
-	idc.Url = u
+	idc.Url = adiUrl
 	idc.PublicKey = pubKey
-	idc.KeyBookName = book
-	idc.KeyPageName = page
+	idc.KeyBookUrl = bookUrl
 
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {
@@ -207,7 +202,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	//todo: turn around and query the ADI and store the results.
-	err = Db.Put(BucketAdi, []byte(u.Authority), pubKey)
+	err = Db.Put(BucketAdi, []byte(adiUrl.Authority), pubKey)
 	if err != nil {
 		return "", fmt.Errorf("DB: %v", err)
 	}

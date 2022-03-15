@@ -119,12 +119,13 @@ methods:
                 publicKey:
                   description: Public key of the ADI (base64 encoded)
                   type: string
-                keyBookName:
-                  description: Override the default key book name
-                  type: string
-                keyPageName:
-                  description: Override the default key page name
-                  type: string
+                keyBookUrl:
+                  description: Requested key book URL
+                  $ref: '#/components/schemas/url'
+                keyPageUrl:
+                  description: Override the default key page URL
+                  $ref: '#/components/schemas/url'
+
     result:
       name: ADI
       schema:
