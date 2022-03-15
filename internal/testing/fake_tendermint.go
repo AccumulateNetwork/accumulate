@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	acctypes "gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -57,7 +56,7 @@ type FakeTendermint struct {
 }
 
 type txStatus struct {
-	Envelopes     []*transactions.Envelope
+	Envelopes     []*protocol.Envelope
 	Tx            []byte
 	Hash          [32]byte
 	Height        int64
@@ -456,14 +455,14 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}, nil
 }
 
-func (c *FakeTendermint) logTxns(msg string, env ...*transactions.Envelope) {
+func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
 	if !debugTX {
 		return
 	}
 
 	for _, env := range env {
 		txt := env.Transaction.Type()
-		if !txt.IsInternal() && txt != acctypes.TxTypeSyntheticAnchor {
+		if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor {
 			c.logger.Debug(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
 		}
 	}

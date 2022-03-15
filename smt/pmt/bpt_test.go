@@ -51,16 +51,16 @@ func LoadBpt() *BPT { //                                                LoadBpt 
 func TestBPT_Marshal(t *testing.T) {
 
 	bpt1 := LoadBpt()
-	bpt1.Update()
+	require.NoError(t, bpt1.Update())
 	bpt2 := LoadBpt()
-	bpt2.Update()
+	require.NoError(t, bpt2.Update())
 
 	if !bpt1.Equal(bpt2) {
 		t.Errorf("Two test BPTs that should be equal are not")
 	}
 
 	bpt1.Insert(sha256.Sum256([]byte{1}), sha256.Sum256([]byte{2}))
-	bpt1.Update()
+	require.NoError(t, bpt1.Update())
 	if bpt1.Equal(bpt2) {
 		t.Errorf("Two test BPTs should not be equal and they are")
 	}
@@ -79,7 +79,7 @@ func TestInsert(t *testing.T) {
 		for j := 0; j < numElements; j++ { //     For each element
 			bpt.Insert(rh.NextA(), rh.NextA()) //   Insert the key value pair
 		}
-		bpt.Update() //                             Update hashes so far
+		require.NoError(t, bpt.Update()) //                             Update hashes so far
 	}
 	CheckOrder(t, bpt)
 
@@ -144,8 +144,8 @@ func TestInsertOrder(t *testing.T) {
 	for _, v := range pair { //        for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //    into the PBT
 	}
-	b.Update()              // update the BPT to get the correct summary hash
-	one := b.GetRoot().Hash //
+	require.NoError(t, b.Update()) // update the BPT to get the correct summary hash
+	one := b.GetRoot().Hash        //
 	//tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
 	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
@@ -159,8 +159,8 @@ func TestInsertOrder(t *testing.T) {
 	for _, v := range pair { //                                         Insert the scrambled pairs
 		b.Insert(v.key, v.value) //                                     into the BPT
 	} //
-	b.Update()              // Update the summary hash
-	two := b.GetRoot().Hash //
+	require.NoError(t, b.Update()) // Update the summary hash
+	two := b.GetRoot().Hash        //
 	//tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
 	//	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
@@ -179,13 +179,13 @@ func TestInsertOrder(t *testing.T) {
 	//start = time.Now()       //                                         Reset the clock
 	for _, v := range pair { //                                         Insert the scrambled pairs
 		b.Insert(v.key, v.value) //                                     into the BPT
-		b.Update()
+		require.NoError(t, b.Update())
 		now := b.GetRoot().Hash
 		if bytes.Equal(now[:], last[:]) {
 			t.Fatal("Every Insert should change state.")
 		}
 	}
-	b.Update()
+	require.NoError(t, b.Update())
 	three := b.GetRoot().Hash
 	//tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
@@ -232,7 +232,7 @@ func TestUpdateValues(t *testing.T) {
 	for _, v := range pair { //                for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //  it into the PBT
 	}
-	b.Update()
+	require.NoError(t, b.Update())
 	one := b.GetRoot().Hash // update the BPT to get the correct summary hash
 	//	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
@@ -241,7 +241,7 @@ func TestUpdateValues(t *testing.T) {
 		updatePair := pair[numElements/2]                   //                Pick a pair out in the middle of the list
 		updatePair.key = sha256.Sum256(updatePair.value[:]) //                  change the value,
 		b.Insert(updatePair.key, updatePair.value)          //                  then insert it into BPT
-		b.Update()                                          //
+		require.NoError(t, b.Update())                      //
 		onePrime := b.GetRoot().Hash                        //                Update and get the summary hash
 
 		if bytes.Equal(one[:], onePrime[:]) {
@@ -253,10 +253,10 @@ func TestUpdateValues(t *testing.T) {
 
 func TestUpdateValue(t *testing.T) {
 	bft := LoadBpt()
-	p := GetPath(bft)
+	p := GetPath(t, bft)
 	leaf := p[len(p)-1]
 
-	bft.Update()
+	require.NoError(t, bft.Update())
 	oldHash := bft.GetRoot().Hash
 
 	var v *Value
@@ -269,7 +269,7 @@ func TestUpdateValue(t *testing.T) {
 	newH := v.Hash
 	newH[0]++
 	bft.Insert(v.Key, newH)
-	bft.Update()
+	require.NoError(t, bft.Update())
 	if bytes.Equal(bft.GetRoot().Hash[:], oldHash[:]) {
 		t.Errorf("root should not be the same after modifying a value")
 	}
@@ -393,7 +393,7 @@ func TestBPTByteSizes(t *testing.T) {
 	}
 }
 
-func LoadBptCnt1(seed int64, NodeCnt int64, freq int64) *BPT {
+func LoadBptCnt1(t testing.TB, seed int64, NodeCnt int64, freq int64) *BPT {
 
 	rnd := rand.New(rand.NewSource(seed)) //                            Using our own instance of rand makes us concurrency safe
 	bpt := NewBPT()                       //                            Allocate a new bpt
@@ -410,7 +410,7 @@ func LoadBptCnt1(seed int64, NodeCnt int64, freq int64) *BPT {
 		byte(b >> 32), byte(b >> 40), byte(b >> 48), byte(b >> 56)}) //
 	for i := int64(0); i < NodeCnt; i++ { //                            Now for the specified NodeCnt,
 		if i%freq == 0 {
-			bpt.Update()
+			require.NoError(t, bpt.Update())
 		}
 		bpt.Insert(key, hash)         //                                Insert our current key and hash
 		key = sha256.Sum256(key[:])   //                                Then roll them forward by hashing the
@@ -425,14 +425,16 @@ func LoadBptCnt1(seed int64, NodeCnt int64, freq int64) *BPT {
 // 10,000,000 @ 226.023,584,148 every 1
 // 10,000,000 @ 161.706,478,227 every 10000
 func BenchmarkBPT_Update1(b *testing.B) {
-	bpt := LoadBptCnt1(1, 10000000, 1)
-	bpt.Update()
+	bpt := LoadBptCnt1(b, 1, 10000000, 1)
+	require.NoError(b, bpt.Update())
 	b.StopTimer()
+	// BUG This benchmark does not depend on b.N
 }
 
 func BenchmarkBPT_Update2(b *testing.B) {
-	bpt := LoadBptCnt1(1, 10000000, 10000)
-	bpt.Update()
+	bpt := LoadBptCnt1(b, 1, 10000000, 10000)
+	require.NoError(b, bpt.Update())
+	// BUG This benchmark does not depend on b.N
 }
 
 func TestNodeKey(t *testing.T) {
@@ -445,7 +447,7 @@ func TestNodeKey(t *testing.T) {
 		height, key, ok := GetHtKey(nh)
 		require.True(t, ok, "should be able to compute the height and key")
 		require.True(t, height == i, "Height should be the same")
-		left, right, ok := GetChildrenNodeKeys(nh)
+		left, right, _ := GetChildrenNodeKeys(nh)
 
 		require.True(t, bytes.Equal(key[:i>>3], left[:i>>3]), "key must be part of child key")
 		require.True(t, bytes.Equal(key[:i>>3], right[:i>>3]), "key must be part of child key")
