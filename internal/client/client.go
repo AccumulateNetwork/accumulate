@@ -10,7 +10,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
-//go:generate go run ../../tools/cmd/gensdk --package client --out api_v2_sdk_gen.go ../api/v2/methods.yml
+//go:generate go run ../../tools/cmd/gen-sdk --package client --out api_v2_sdk_gen.go ../api/v2/methods.yml
 
 type Client struct {
 	jsonrpc2.Client
