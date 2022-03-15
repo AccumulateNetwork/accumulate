@@ -166,7 +166,7 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
 
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env.Transaction, status, nil)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	switch {
 	case err == nil:
 		// Populate the transaction from the database
-		env.Transaction = txState.Transaction
+		env.Transaction = txState
 		txt = env.Transaction.Type()
 
 	case !errors.Is(err, storage.ErrNotFound):
@@ -558,13 +558,13 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 	}
 
 	// Store against the transaction hash
-	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, env.Signatures)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env.Transaction, status, env.Signatures)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
 
 	// Store against the envelope hash
-	err = m.blockBatch.Transaction(env.EnvHash()).Put(env, status, env.Signatures)
+	err = m.blockBatch.Transaction(env.EnvHash()).Put(env.Transaction, status, env.Signatures)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
