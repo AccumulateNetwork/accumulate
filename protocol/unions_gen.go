@@ -34,14 +34,10 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteIdentity), nil
 	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
-	case AccountTypePendingTransaction:
-		return new(PendingTransactionState), nil
 	case AccountTypeTokenAccount:
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
-	case AccountTypeTransaction:
-		return new(TransactionState), nil
 	default:
 		return nil, fmt.Errorf("unknown account type %v", typ)
 	}
