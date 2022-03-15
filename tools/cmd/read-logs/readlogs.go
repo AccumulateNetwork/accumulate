@@ -36,7 +36,7 @@ func init() {
 }
 
 func main() {
-	cmd.Execute()
+	_ = cmd.Execute()
 }
 
 func fatalf(format string, args ...interface{}) {

@@ -28,12 +28,12 @@ func getIP(hash []byte) net.IP {
 	return ip
 }
 
-// getPort calculates a port number between 1001 and 65535 from bytes 4-5 of the
-// hash.
-func getPort(hash []byte) int {
-	v := int(hash[3])<<8 | int(hash[4])
-	return v%(1<<16-1002) + 1002
-}
+// // getPort calculates a port number between 1001 and 65535 from bytes 4-5 of the
+// // hash.
+// func getPort(hash []byte) int {
+// 	v := int(hash[3])<<8 | int(hash[4])
+// 	return v%(1<<16-1002) + 1002
+// }
 
 func GetIP() net.IP {
 	return getIP(hashCaller(1, ""))

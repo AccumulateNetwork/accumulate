@@ -43,7 +43,7 @@ Transaction:
     - TransactionHeader
   fields:
     - name: Body
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil
@@ -91,7 +91,7 @@ TxState:
       marshal-as: reference
       pointer: true
     - name: Transaction
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil

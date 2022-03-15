@@ -6,17 +6,15 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticDepositTokens struct{}
 
-func (SyntheticDepositTokens) Type() types.TxType {
-	return types.TxTypeSyntheticDepositTokens
+func (SyntheticDepositTokens) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticDepositTokens
 }
 
-func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// *big.Int, tokenChain, *url.URL
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
 	if !ok {

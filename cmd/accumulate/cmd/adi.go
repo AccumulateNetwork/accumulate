@@ -12,7 +12,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func init() {
@@ -126,7 +125,7 @@ func GetADI(url string) (string, error) {
 }
 
 func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
-	var si *transactions.Header
+	var si *protocol.TransactionHeader
 	var privKey []byte
 	var err error
 

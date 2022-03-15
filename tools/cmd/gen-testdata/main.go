@@ -160,7 +160,7 @@ func parseUrl(s string) *url.URL {
 	return u
 }
 
-func txnTest1(origin string, body TransactionPayload) *TC {
+func txnTest1(origin string, body TransactionBody) *TC {
 	return txnTest(&TransactionHeader{
 		Origin:        parseUrl(origin),
 		KeyPageHeight: 1,
@@ -168,7 +168,7 @@ func txnTest1(origin string, body TransactionPayload) *TC {
 	}, body)
 }
 
-func txnTest(header *TransactionHeader, body TransactionPayload) *TC {
+func txnTest(header *TransactionHeader, body TransactionBody) *TC {
 	env := new(Envelope)
 	txn := new(Transaction)
 	sig := new(LegacyED25519Signature)
