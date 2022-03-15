@@ -58,12 +58,12 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(s.generateKey())
 }
 
-func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body protocol.TransactionPayload) *transactions.Envelope {
+func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, timestamp uint64, body protocol.TransactionPayload) *transactions.Envelope {
 	s.T().Helper()
 	return testing.NewTransaction().
 		WithOrigin(sponsor).
 		WithKeyPage(0, s.dut.GetRecordHeight(sponsor.String())).
-		WithNonce(nonce).
+		WithTimestamp(timestamp).
 		WithBody(body).
 		SignLegacyED25519(key)
 }

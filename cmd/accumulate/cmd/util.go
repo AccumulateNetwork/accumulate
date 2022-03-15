@@ -127,25 +127,25 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (protocol.Signature, error) {
+func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, timestamp uint64) (protocol.Signature, error) {
 	env := new(transactions.Envelope)
 	env.TxHash = txHash
 	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Body = payload
 
-	hdr.Nonce = nonce
+	hdr.Timestamp = timestamp
 	env.Transaction.TransactionHeader = *hdr
 
 	ed := new(protocol.LegacyED25519Signature)
-	err := ed.Sign(nonce, privKey, env.GetTxHash())
+	err := ed.Sign(timestamp, privKey, env.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
 	return ed, nil
 }
 
-func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
+func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, timestamp uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(payload, txHash, origin, si, privKey, timestamp)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []b
 
 	// TODO The payload field can be set equal to the struct, without marshalling first
 	params.Payload = json.RawMessage(jsonPayload)
-	params.Signer.Nonce = nonce
+	params.Signer.Timestamp = timestamp
 	params.Origin = origin
 	params.KeyPage.Height = si.KeyPageHeight
 	params.KeyPage.Index = si.KeyPageIndex
@@ -725,7 +725,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", amountToString(2, &ata.CreditBalance))
-		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
+		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
 
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
@@ -785,7 +785,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKey, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():

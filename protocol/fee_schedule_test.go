@@ -25,7 +25,7 @@ func TestFee(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithOrigin(protocol.AcmeUrl()).
 			WithKeyPage(1, 1).
-			WithNonceTimestamp().
+			WithCurrentTimestamp().
 			WithBody(new(protocol.SendTokens)).
 			SignLegacyED25519(acctesting.GenerateKey(t.Name()))
 		fee, err := ComputeTransactionFee(env)
@@ -37,7 +37,7 @@ func TestFee(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithOrigin(protocol.AcmeUrl()).
 			WithKeyPage(1, 1).
-			WithNonceTimestamp().
+			WithCurrentTimestamp().
 			WithBody(new(protocol.SendTokens)).
 			SignLegacyED25519(acctesting.GenerateKey(t.Name()))
 		env.Transaction.Metadata = make([]byte, 1024)

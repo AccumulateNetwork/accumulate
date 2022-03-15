@@ -243,10 +243,10 @@ type KeyPage struct {
 }
 
 type KeySpec struct {
-	fieldsSet []bool
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	fieldsSet  []bool
+	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	LastUsedOn uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
+	Owner      *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
@@ -256,7 +256,7 @@ type KeySpecParams struct {
 
 type LegacyED25519Signature struct {
 	fieldsSet []bool
-	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Timestamp uint64 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 }
@@ -277,7 +277,7 @@ type LiteTokenAccount struct {
 	AccountHeader
 	TokenUrl      *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	CreditBalance big.Int  `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 }
 
@@ -503,7 +503,7 @@ type TransactionHeader struct {
 	Origin        *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	KeyPageHeight uint64   `json:"keyPageHeight,omitempty" form:"keyPageHeight" query:"keyPageHeight" validate:"required"`
 	KeyPageIndex  uint64   `json:"keyPageIndex,omitempty" form:"keyPageIndex" query:"keyPageIndex" validate:"required"`
-	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	Memo          string   `json:"memo,omitempty" form:"memo" query:"memo"`
 	Metadata      []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
@@ -1296,7 +1296,7 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
 	if !((v.Owner).Equal(u.Owner)) {
@@ -1315,7 +1315,7 @@ func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
 }
 
 func (v *LegacyED25519Signature) Equal(u *LegacyED25519Signature) bool {
-	if !(v.Nonce == u.Nonce) {
+	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
@@ -1357,7 +1357,7 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
 	if !((&v.CreditBalance).Cmp(&u.CreditBalance) == 0) {
@@ -1808,7 +1808,7 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	if !(v.KeyPageIndex == u.KeyPageIndex) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 	if !(v.Memo == u.Memo) {
@@ -3494,7 +3494,7 @@ func (v *KeyPage) IsValid() error {
 
 var fieldNames_KeySpec = []string{
 	1: "PublicKey",
-	2: "Nonce",
+	2: "LastUsedOn",
 	3: "Owner",
 }
 
@@ -3505,8 +3505,8 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(1, v.PublicKey)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(2, v.Nonce)
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(2, v.LastUsedOn)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
@@ -3525,9 +3525,9 @@ func (v *KeySpec) IsValid() error {
 		errs = append(errs, "field PublicKey is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Owner is missing")
@@ -3582,7 +3582,7 @@ func (v *KeySpecParams) IsValid() error {
 
 var fieldNames_LegacyED25519Signature = []string{
 	1: "Type",
-	2: "Nonce",
+	2: "Timestamp",
 	3: "PublicKey",
 	4: "Signature",
 }
@@ -3592,8 +3592,8 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, SignatureTypeLegacyED25519.ID())
-	if !(v.Nonce == 0) {
-		writer.WriteUint(2, v.Nonce)
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(2, v.Timestamp)
 	}
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(3, v.PublicKey)
@@ -3610,9 +3610,9 @@ func (v *LegacyED25519Signature) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field Timestamp is missing")
+	} else if v.Timestamp == 0 {
+		errs = append(errs, "field Timestamp is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field PublicKey is missing")
@@ -3715,7 +3715,7 @@ var fieldNames_LiteTokenAccount = []string{
 	2: "AccountHeader",
 	3: "TokenUrl",
 	4: "Balance",
-	5: "Nonce",
+	5: "LastUsedOn",
 	6: "CreditBalance",
 }
 
@@ -3731,8 +3731,8 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Balance)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(5, v.Nonce)
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(5, v.LastUsedOn)
 	}
 	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(6, &v.CreditBalance)
@@ -3759,9 +3759,9 @@ func (v *LiteTokenAccount) IsValid() error {
 		errs = append(errs, "field Balance is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field CreditBalance is missing")
@@ -5271,7 +5271,7 @@ var fieldNames_TransactionHeader = []string{
 	1: "Origin",
 	2: "KeyPageHeight",
 	3: "KeyPageIndex",
-	4: "Nonce",
+	4: "Timestamp",
 	5: "Memo",
 	6: "Metadata",
 }
@@ -5289,8 +5289,8 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(v.KeyPageIndex == 0) {
 		writer.WriteUint(3, v.KeyPageIndex)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(4, v.Nonce)
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(4, v.Timestamp)
 	}
 	if !(len(v.Memo) == 0) {
 		writer.WriteString(5, v.Memo)
@@ -5322,9 +5322,9 @@ func (v *TransactionHeader) IsValid() error {
 		errs = append(errs, "field KeyPageIndex is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field Timestamp is missing")
+	} else if v.Timestamp == 0 {
+		errs = append(errs, "field Timestamp is not set")
 	}
 
 	switch len(errs) {
@@ -6665,7 +6665,7 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.PublicKey = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
-		v.Nonce = x
+		v.LastUsedOn = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
@@ -6707,7 +6707,7 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	if x, ok := reader.ReadUint(2); ok {
-		v.Nonce = x
+		v.Timestamp = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
 		v.PublicKey = x
@@ -6790,7 +6790,7 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Balance = *x
 	}
 	if x, ok := reader.ReadUint(5); ok {
-		v.Nonce = x
+		v.LastUsedOn = x
 	}
 	if x, ok := reader.ReadBigInt(6); ok {
 		v.CreditBalance = *x
@@ -7606,7 +7606,7 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.KeyPageIndex = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
-		v.Nonce = x
+		v.Timestamp = x
 	}
 	if x, ok := reader.ReadString(5); ok {
 		v.Memo = x
@@ -8259,12 +8259,14 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKey  *string  `json:"publicKey,omitempty"`
+		LastUsedOn uint64   `json:"lastUsedOn,omitempty"`
+		Nonce      uint64   `json:"nonce,omitempty"`
+		Owner      *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
@@ -8280,12 +8282,14 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      SignatureType `json:"type"`
+		Timestamp uint64        `json:"timestamp,omitempty"`
 		Nonce     uint64        `json:"nonce,omitempty"`
 		PublicKey *string       `json:"publicKey,omitempty"`
 		Signature *string       `json:"signature,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	return json.Marshal(&u)
@@ -8329,6 +8333,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
+		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
 		CreditBalance  *string     `json:"creditBalance,omitempty"`
 	}{}
@@ -8338,7 +8343,8 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
 	return json.Marshal(&u)
 }
@@ -8718,6 +8724,7 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 		Origin        *url.URL        `json:"origin,omitempty"`
 		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
 		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
+		Timestamp     uint64          `json:"timestamp,omitempty"`
 		Nonce         uint64          `json:"nonce,omitempty"`
 		Memo          string          `json:"memo,omitempty"`
 		Metadata      *string         `json:"metadata,omitempty"`
@@ -8726,7 +8733,8 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 	u.Origin = v.TransactionHeader.Origin
 	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
 	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
-	u.Nonce = v.TransactionHeader.Nonce
+	u.Timestamp = v.TransactionHeader.Timestamp
+	u.Nonce = v.TransactionHeader.Timestamp
 	u.Memo = v.TransactionHeader.Memo
 	u.Metadata = encoding.BytesToJSON(v.TransactionHeader.Metadata)
 	if x, err := json.Marshal(v.Body); err != nil {
@@ -8742,6 +8750,7 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 		Origin        *url.URL `json:"origin,omitempty"`
 		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
 		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
+		Timestamp     uint64   `json:"timestamp,omitempty"`
 		Nonce         uint64   `json:"nonce,omitempty"`
 		Memo          string   `json:"memo,omitempty"`
 		Metadata      *string  `json:"metadata,omitempty"`
@@ -8749,7 +8758,8 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u.Origin = v.Origin
 	u.KeyPageHeight = v.KeyPageHeight
 	u.KeyPageIndex = v.KeyPageIndex
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	return json.Marshal(&u)
@@ -9536,12 +9546,14 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKey  *string  `json:"publicKey,omitempty"`
+		LastUsedOn uint64   `json:"lastUsedOn,omitempty"`
+		Nonce      uint64   `json:"nonce,omitempty"`
+		Owner      *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -9551,7 +9563,11 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	v.Nonce = u.Nonce
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
+	} else {
+		v.LastUsedOn = u.Nonce
+	}
 	v.Owner = u.Owner
 	return nil
 }
@@ -9575,18 +9591,24 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      SignatureType `json:"type"`
+		Timestamp uint64        `json:"timestamp,omitempty"`
 		Nonce     uint64        `json:"nonce,omitempty"`
 		PublicKey *string       `json:"publicKey,omitempty"`
 		Signature *string       `json:"signature,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Nonce = u.Nonce
+	if u.Timestamp != 0 {
+		v.Timestamp = u.Timestamp
+	} else {
+		v.Timestamp = u.Nonce
+	}
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -9655,6 +9677,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
+		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
 		CreditBalance  *string     `json:"creditBalance,omitempty"`
 	}{}
@@ -9664,7 +9687,8 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -9678,7 +9702,11 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
-	v.Nonce = u.Nonce
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
+	} else {
+		v.LastUsedOn = u.Nonce
+	}
 	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
 		return fmt.Errorf("error decoding CreditBalance: %w", err)
 	} else {
@@ -10366,6 +10394,7 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 		Origin        *url.URL        `json:"origin,omitempty"`
 		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
 		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
+		Timestamp     uint64          `json:"timestamp,omitempty"`
 		Nonce         uint64          `json:"nonce,omitempty"`
 		Memo          string          `json:"memo,omitempty"`
 		Metadata      *string         `json:"metadata,omitempty"`
@@ -10374,7 +10403,8 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	u.Origin = v.TransactionHeader.Origin
 	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
 	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
-	u.Nonce = v.TransactionHeader.Nonce
+	u.Timestamp = v.TransactionHeader.Timestamp
+	u.Nonce = v.TransactionHeader.Timestamp
 	u.Memo = v.TransactionHeader.Memo
 	u.Metadata = encoding.BytesToJSON(v.TransactionHeader.Metadata)
 	if x, err := json.Marshal(v.Body); err != nil {
@@ -10388,7 +10418,11 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	v.TransactionHeader.Origin = u.Origin
 	v.TransactionHeader.KeyPageHeight = u.KeyPageHeight
 	v.TransactionHeader.KeyPageIndex = u.KeyPageIndex
-	v.TransactionHeader.Nonce = u.Nonce
+	if u.Timestamp != 0 {
+		v.TransactionHeader.Timestamp = u.Timestamp
+	} else {
+		v.TransactionHeader.Timestamp = u.Nonce
+	}
 	v.TransactionHeader.Memo = u.Memo
 	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
 		return fmt.Errorf("error decoding Metadata: %w", err)
@@ -10409,6 +10443,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		Origin        *url.URL `json:"origin,omitempty"`
 		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
 		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
+		Timestamp     uint64   `json:"timestamp,omitempty"`
 		Nonce         uint64   `json:"nonce,omitempty"`
 		Memo          string   `json:"memo,omitempty"`
 		Metadata      *string  `json:"metadata,omitempty"`
@@ -10416,7 +10451,8 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u.Origin = v.Origin
 	u.KeyPageHeight = v.KeyPageHeight
 	u.KeyPageIndex = v.KeyPageIndex
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -10425,7 +10461,11 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	v.Origin = u.Origin
 	v.KeyPageHeight = u.KeyPageHeight
 	v.KeyPageIndex = u.KeyPageIndex
-	v.Nonce = u.Nonce
+	if u.Timestamp != 0 {
+		v.Timestamp = u.Timestamp
+	} else {
+		v.Timestamp = u.Nonce
+	}
 	v.Memo = u.Memo
 	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
 		return fmt.Errorf("error decoding Metadata: %w", err)

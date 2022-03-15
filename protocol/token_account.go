@@ -123,19 +123,19 @@ func (acct *LiteTokenAccount) ParseTokenUrl() (*url.URL, error) {
 	return acct.TokenUrl, nil
 }
 
-func (acct *LiteTokenAccount) SetNonce(key []byte, nonce uint64) error {
+func (acct *LiteTokenAccount) SetLastUsedOn(key []byte, lastUsedOn uint64) error {
 	// TODO Check the key hash?
-	acct.Nonce = nonce
+	acct.LastUsedOn = lastUsedOn
 	return nil
 }
 
-func (page *KeyPage) SetNonce(key []byte, nonce uint64) error {
+func (page *KeyPage) SetLastUsedOn(key []byte, lastUsedOn uint64) error {
 	ks := page.FindKey(key)
 	if ks == nil {
 		// Should never happen
 		return errors.New("failed to find key spec")
 	}
 
-	ks.Nonce = nonce
+	ks.LastUsedOn = lastUsedOn
 	return nil
 }

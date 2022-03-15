@@ -118,14 +118,14 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	env := acctesting.NewTransaction().
 		WithOrigin(u).
 		WithKeyPage(keyPageIndex, qr.MainChain.Height).
-		WithNonceTimestamp().
+		WithCurrentTimestamp().
 		WithBody(params.Payload).
 		SignLegacyED25519(params.Key)
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction.Origin
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
-	req.Signer.Nonce = env.Transaction.Nonce
+	req.Signer.Timestamp = env.Transaction.Timestamp
 	req.Signature = env.Signatures[0].GetSignature()
 	req.KeyPage.Index = env.Transaction.KeyPageIndex
 	req.KeyPage.Height = env.Transaction.KeyPageHeight
@@ -156,14 +156,14 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIn
 	env := acctesting.NewTransaction().
 		WithOrigin(u).
 		WithKeyPage(keyPageIndex, keyPageHeight).
-		WithNonceTimestamp().
+		WithCurrentTimestamp().
 		WithBody(params.Payload).
 		SignLegacyED25519(params.Key)
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction.Origin
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
-	req.Signer.Nonce = env.Transaction.Nonce
+	req.Signer.Timestamp = env.Transaction.Timestamp
 	req.Signature = env.Signatures[0].GetSignature()
 	req.KeyPage.Index = env.Transaction.KeyPageIndex
 	req.KeyPage.Height = env.Transaction.KeyPageHeight
@@ -223,7 +223,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
 	pl.Origin = tx.Transaction.Origin
-	pl.Signer.Nonce = tx.Transaction.Nonce
+	pl.Signer.Timestamp = tx.Transaction.Timestamp
 	pl.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	pl.Signature = tx.Signatures[0].GetSignature()
 	pl.KeyPage.Index = tx.Transaction.KeyPageIndex

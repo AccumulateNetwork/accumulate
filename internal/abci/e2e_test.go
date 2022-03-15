@@ -139,7 +139,7 @@ func TestFaucet(t *testing.T) {
 		faucet := protocol.Faucet.Signer()
 		send(acctesting.NewTransaction().
 			WithOrigin(protocol.FaucetUrl).
-			WithNonce(faucet.Nonce()).
+			WithTimestamp(faucet.Timestamp()).
 			WithBody(body).
 			Sign(protocol.SignWithFaucet))
 	})
@@ -645,7 +645,6 @@ func TestCreateKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/book0/1")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, fooKey.PubKey().Bytes(), key.PublicKey)
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -662,7 +661,6 @@ func TestCreateKeyPage(t *testing.T) {
 	spec = n.GetKeyPage("foo/book0/2")
 	require.Len(t, spec.Keys, 1)
 	key = spec.Keys[0]
-	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
 
@@ -731,7 +729,6 @@ func TestAddKeyPage(t *testing.T) {
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
 	require.Equal(t, u.String(), spec.KeyBook.String())
-	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
 

@@ -44,7 +44,7 @@ func (faucet) Signer() faucetSigner {
 
 type faucetSigner uint64
 
-func (s faucetSigner) Nonce() uint64 {
+func (s faucetSigner) Timestamp() uint64 {
 	return uint64(s)
 }
 

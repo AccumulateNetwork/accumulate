@@ -93,7 +93,7 @@ type TxExecutor interface {
 
 type creditChain interface {
 	state.Chain
-	SetNonce(key []byte, nonce uint64) error
+	// SetNonce(key []byte, nonce uint64) error
 	protocol.CreditHolder
 }
 

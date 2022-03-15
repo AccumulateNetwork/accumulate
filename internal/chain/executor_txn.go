@@ -484,10 +484,10 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case ks.Nonce >= env.Transaction.Nonce && !st.TxnExists(env.TxHash):
-			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, env.Transaction.Nonce)
+		case ks.LastUsedOn >= env.Transaction.Timestamp && !st.TxnExists(env.TxHash):
+			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.LastUsedOn, env.Transaction.Timestamp)
 		default:
-			ks.Nonce = env.Transaction.Nonce
+			ks.LastUsedOn = env.Transaction.Timestamp
 		}
 	}
 
@@ -535,10 +535,10 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 		switch {
 		case i > 0:
 			// Only check the nonce of the first key
-		case account.Nonce >= env.Transaction.Nonce && !st.TxnExists(env.TxHash):
-			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, env.Transaction.Nonce)
+		case account.LastUsedOn >= env.Transaction.Timestamp && !st.TxnExists(env.TxHash):
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.LastUsedOn, env.Transaction.Timestamp)
 		default:
-			account.Nonce = env.Transaction.Nonce
+			account.LastUsedOn = env.Transaction.Timestamp
 		}
 	}
 
@@ -661,11 +661,11 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 		return err
 	}
 
-	sig := env.Signatures[0]
-	err = st.Signator.SetNonce(sig.GetPublicKey(), env.Transaction.Nonce)
-	if err != nil {
-		return err
-	}
+	// sig := env.Signatures[0]
+	// err = st.Signator.SetTimestamp(sig.GetPublicKey(), env.Transaction.Timestamp)
+	// if err != nil {
+	// 	return err
+	// }
 
 	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil || fee > protocol.FeeFailedMaximum {

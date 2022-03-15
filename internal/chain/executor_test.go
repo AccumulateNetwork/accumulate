@@ -97,7 +97,7 @@ func BenchmarkHighTps(b *testing.B) {
 			for i := 0; i < size; i++ {
 				env := acctesting.NewTransaction().
 					WithOrigin(liteAddr).
-					WithNonceTimestamp().
+					WithCurrentTimestamp().
 					WithBody(deposit).
 					Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
 						ed := new(protocol.ED25519Signature)
@@ -115,7 +115,7 @@ func BenchmarkHighTps(b *testing.B) {
 			b.Run("DeliverTx", func(b *testing.B) {
 				env := acctesting.NewTransaction().
 					WithOrigin(liteAddr).
-					WithNonceTimestamp().
+					WithCurrentTimestamp().
 					WithBody(deposit).
 					Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
 						ed := new(protocol.ED25519Signature)
@@ -184,7 +184,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	// Create a synthetic transaction where the origin does not exist
 	env := acctesting.NewTransaction().
 		WithOrigin(url.MustParse("acc://account-that-does-not-exist")).
-		WithNonceTimestamp().
+		WithCurrentTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
 			Cause:  [32]byte{1},
 			Amount: 1,

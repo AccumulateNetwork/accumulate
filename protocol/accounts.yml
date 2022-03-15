@@ -22,8 +22,9 @@ LiteTokenAccount:
       pointer: true
     - name: Balance
       type: bigint
-    - name: Nonce
+    - name: LastUsedOn
       type: uvarint
+      alternative: Nonce
     - name: CreditBalance
       type: bigint
 
@@ -119,8 +120,9 @@ KeySpec:
   fields:
     - name: PublicKey
       type: bytes
-    - name: Nonce
+    - name: LastUsedOn
       type: uvarint
+      alternative: Nonce
     - name: Owner
       type: url
       pointer: true

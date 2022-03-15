@@ -117,8 +117,9 @@ Signer:
   fields:
   - name: PublicKey
     type: bytes
-  - name: Nonce
+  - name: Timestamp
     type: uvarint
+    alternative: Nonce
 
 TokenSend:
   non-binary: true

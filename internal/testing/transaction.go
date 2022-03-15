@@ -44,18 +44,18 @@ func (tb TransactionBuilder) WithKeyPage(index, height uint64) TransactionBuilde
 	return tb
 }
 
-func (tb TransactionBuilder) WithNonce(nonce uint64) TransactionBuilder {
-	tb.Transaction.Nonce = nonce
+func (tb TransactionBuilder) WithTimestamp(timestamp uint64) TransactionBuilder {
+	tb.Transaction.Timestamp = timestamp
 	return tb
 }
 
-func (tb TransactionBuilder) WithNonceVar(nonce *uint64) TransactionBuilder {
-	tb.Transaction.Nonce = atomic.AddUint64(nonce, 1)
+func (tb TransactionBuilder) WithNonceVar(timestamp *uint64) TransactionBuilder {
+	tb.Transaction.Timestamp = atomic.AddUint64(timestamp, 1)
 	return tb
 }
 
-func (tb TransactionBuilder) WithNonceTimestamp() TransactionBuilder {
-	tb.Transaction.Nonce = uint64(time.Now().UTC().UnixNano())
+func (tb TransactionBuilder) WithCurrentTimestamp() TransactionBuilder {
+	tb.Transaction.Timestamp = uint64(time.Now().UTC().UnixNano())
 	return tb
 }
 
@@ -69,8 +69,8 @@ func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
 	return tb
 }
 
-func (tb TransactionBuilder) Sign(signer func(nonce uint64, hash []byte) (protocol.Signature, error)) *protocol.Envelope {
-	sig, err := signer(tb.Transaction.Nonce, tb.GetTxHash())
+func (tb TransactionBuilder) Sign(signer func(timestamp uint64, hash []byte) (protocol.Signature, error)) *protocol.Envelope {
+	sig, err := signer(tb.Transaction.Timestamp, tb.GetTxHash())
 	if err != nil {
 		panic(err)
 	}

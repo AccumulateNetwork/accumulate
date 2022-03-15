@@ -70,7 +70,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	tx := new(transactions.Envelope)
 	tx.Transaction = new(transactions.Transaction)
 	tx.Transaction.Origin = protocol.FaucetUrl
-	tx.Transaction.Nonce = faucet.Nonce()
+	tx.Transaction.Timestamp = faucet.Timestamp()
 	tx.Transaction.KeyPageHeight = 1
 	tx.Transaction.Body = req
 
@@ -82,7 +82,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	txrq := new(TxRequest)
 	txrq.Origin = tx.Transaction.Origin
-	txrq.Signer.Nonce = tx.Transaction.Nonce
+	txrq.Signer.Timestamp = tx.Transaction.Timestamp
 	txrq.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	txrq.KeyPage.Height = tx.Transaction.KeyPageHeight
 	txrq.Signature = tx.Signatures[0].GetSignature()
@@ -121,7 +121,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		env.Transaction = new(transactions.Transaction)
 		env.Transaction.Body = body
 		env.Transaction.Origin = req.Origin
-		env.Transaction.Nonce = req.Signer.Nonce
+		env.Transaction.Timestamp = req.Signer.Timestamp
 		env.Transaction.KeyPageHeight = req.KeyPage.Height
 		env.Transaction.KeyPageIndex = req.KeyPage.Index
 		env.Transaction.Memo = req.Memo
@@ -129,7 +129,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		envs = append(envs, env)
 
 		ed := new(protocol.LegacyED25519Signature)
-		ed.Nonce = req.Signer.Nonce
+		ed.Timestamp = req.Signer.Timestamp
 		ed.PublicKey = req.Signer.PublicKey
 		ed.Signature = req.Signature
 		env.Signatures = append(env.Signatures, ed)

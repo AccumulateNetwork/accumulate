@@ -34,7 +34,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithOriginStr("foo").
 		WithKeyPage(0, 1).
-		WithNonce(1).
+		WithCurrentTimestamp().
 		WithBody(body).
 		SignLegacyED25519(fooKey)
 
@@ -69,7 +69,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithOriginStr("foo").
 		WithKeyPage(0, 1).
-		WithNonce(1).
+		WithCurrentTimestamp().
 		WithBody(body).
 		SignLegacyED25519(fooKey)
 

@@ -226,7 +226,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Sign it
 		ed := new(protocol.LegacyED25519Signature)
 		ed.PublicKey = g.Key[32:]
-		err = ed.Sign(tx.Transaction.Nonce, g.Key, txid[:])
+		err = ed.Sign(tx.Transaction.Timestamp, g.Key, txid[:])
 		if err != nil {
 			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid), "error", err)
 			continue
@@ -413,7 +413,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	ed := new(protocol.LegacyED25519Signature)
 	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
-	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())
+	err = ed.Sign(env.Transaction.Timestamp, g.Key, env.GetTxHash())
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return

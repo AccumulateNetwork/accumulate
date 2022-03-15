@@ -29,8 +29,9 @@ TransactionHeader:
       type: uvarint
     - name: KeyPageIndex
       type: uvarint
-    - name: Nonce
+    - name: Timestamp
       type: uvarint
+      alternative: Nonce
     - name: Memo
       type: string
       optional: true
@@ -54,8 +55,9 @@ Transaction:
 LegacyED25519Signature:
   kind: signature
   fields:
-    - name: Nonce
-      type: uint
+    - name: Timestamp
+      type: uvarint
+      alternative: Nonce
     - name: PublicKey
       type: bytes
     - name: Signature
