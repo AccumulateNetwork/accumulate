@@ -7,17 +7,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticCreateChain struct{}
 
-func (SyntheticCreateChain) Type() types.TxType {
-	return types.TxTypeSyntheticCreateChain
+func (SyntheticCreateChain) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticCreateChain
 }
 
-func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateChain)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateChain), tx.Transaction.Body)
@@ -35,11 +33,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 			return nil, fmt.Errorf("invalid chain payload: %v", err)
 		}
 
-		u, err := record.Header().ParseUrl()
-		if err != nil {
-			return nil, fmt.Errorf("invalid chain URL: %v", err)
-		}
-
+		u := record.Header().Url
 		_, err = st.LoadUrl(u)
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):

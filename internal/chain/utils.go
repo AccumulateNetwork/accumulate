@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -236,7 +235,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.Transaction.Type() != types.TxTypeSyntheticAnchor {
+		if txn.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -247,7 +246,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 func countExceptAnchors2(txns []*protocol.Transaction) int {
 	var count int
 	for _, txn := range txns {
-		if txn.Type() != types.TxTypeSyntheticAnchor {
+		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}

@@ -20,9 +20,7 @@ var _ io.Writer = (*testLogger)(nil)
 
 func (l *testLogger) Write(b []byte) (int, error) {
 	s := string(b)
-	if strings.HasSuffix(s, "\n") {
-		s = s[:len(s)-1]
-	}
+	s = strings.TrimSuffix(s, "\n")
 	l.Test.Log(s)
 	return len(b), nil
 }

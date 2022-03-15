@@ -55,15 +55,22 @@ func (m *Manager) LoadNode(node *BptNode) {
 
 // FlushNode
 // Flushes the Byte Block to disk
-func (m *Manager) FlushNode(node *BptNode) { //   Flush a Byte Block
+func (m *Manager) FlushNode(node *BptNode) error { //   Flush a Byte Block
 	if node.Height&7 == 0 {
-		data := m.Bpt.MarshalByteBlock(node)                //
-		m.DBManager.Put(kBpt.Append(node.NodeKey[:]), data) //
+		data := m.Bpt.MarshalByteBlock(node)                       //
+		err := m.DBManager.Put(kBpt.Append(node.NodeKey[:]), data) //
+		if err != nil {
+			return err
+		}
 		if node.Height == 0 {
 			data = m.Bpt.Marshal()
-			m.DBManager.Put(kBptRoot, data)
+			err = m.DBManager.Put(kBptRoot, data)
+			if err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // InsertKV

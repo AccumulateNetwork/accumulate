@@ -21,16 +21,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
-
-const chainWGSize = 4
 
 type Executor struct {
 	ExecutorOptions
 
-	executors map[types.TxType]TxExecutor
+	executors map[protocol.TransactionType]TxExecutor
 	governor  *governor
 	logger    log.Logger
 
@@ -56,7 +52,7 @@ type ExecutorOptions struct {
 func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts
-	m.executors = map[types.TxType]TxExecutor{}
+	m.executors = map[protocol.TransactionType]TxExecutor{}
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "executor")
@@ -138,8 +134,8 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	m.blockBatch = m.DB.Begin(true)
 	defer m.blockBatch.Discard()
 
-	env := new(transactions.Envelope)
-	env.Transaction = new(transactions.Transaction)
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Origin = protocol.AcmeUrl()
 	env.Transaction.Body = new(protocol.InternalGenesis)
 
@@ -231,7 +227,10 @@ func (m *Executor) InitChain(data []byte, time time.Time) ([]byte, error) {
 	// Dump the genesis state into the key-value store
 	batch := m.DB.Begin(true)
 	defer batch.Discard()
-	batch.Import(src)
+	err = batch.Import(src)
+	if err != nil {
+		return nil, fmt.Errorf("failed to import database: %v", err)
+	}
 
 	// Commit the database batch
 	err = batch.Commit()
@@ -643,7 +642,10 @@ func (m *Executor) anchorSynthChain(ledger *database.Account, ledgerUrl *url.URL
 
 // anchorBPT anchors the BPT after ensuring any pending changes have been flushed.
 func (m *Executor) anchorBPT(ledgerState *protocol.InternalLedger, rootChain *database.Chain) error {
-	m.blockBatch.UpdateBpt()
+	err := m.blockBatch.UpdateBpt()
+	if err != nil {
+		return err
+	}
 
 	m.blockState.DidUpdateChain(ChainUpdate{
 		Name:    "bpt",

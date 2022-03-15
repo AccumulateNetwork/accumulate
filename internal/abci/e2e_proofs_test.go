@@ -9,7 +9,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func TestProofADI(t *testing.T) {
@@ -48,7 +47,7 @@ func TestProofADI(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = n.ParseUrl("RoadRunner/Baz")
 		tac.TokenUrl = protocol.AcmeUrl()

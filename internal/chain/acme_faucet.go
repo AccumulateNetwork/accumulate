@@ -7,15 +7,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type AcmeFaucet struct{}
 
-func (AcmeFaucet) Type() types.TxType { return types.TxTypeAcmeFaucet }
+func (AcmeFaucet) Type() protocol.TransactionType { return protocol.TransactionTypeAcmeFaucet }
 
-func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
 	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
 	if !ok {
@@ -29,12 +27,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	switch {
 	case err == nil:
 		// If the recipient exists, it must be an ACME lite token account
-		u, err := account.ParseTokenUrl()
-		if err != nil {
-			return nil, fmt.Errorf("invalid record: bad token URL: %v", err)
-		}
-
-		if !protocol.AcmeUrl().Equal(u) {
+		if !protocol.AcmeUrl().Equal(account.GetTokenUrl()) {
 			return nil, fmt.Errorf("invalid recipient: %q is not an ACME account", u)
 		}
 
