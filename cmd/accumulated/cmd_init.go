@@ -53,7 +53,7 @@ var cmdInitDualNode = &cobra.Command{
 	Use:   "dual <url|ip> <dn base port> <bvn base port>",
 	Short: "Initialize a dual run from seed IP, DN base port, and BVN base port",
 	Run:   initDualNode,
-	Args:  cobra.ExactArgs(3),
+	Args:  cobra.ExactArgs(2),
 }
 
 var cmdInitNode = &cobra.Command{
