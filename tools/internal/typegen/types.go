@@ -56,7 +56,7 @@ type DataType struct {
 }
 
 func (typ *DataType) GoTxType() string {
-	return "types.TxType" + typ.TxType
+	return "protocol.TransactionType" + typ.TxType
 }
 
 func (typ *DataType) GoChainType() string {

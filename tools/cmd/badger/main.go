@@ -8,12 +8,12 @@ import (
 )
 
 func main() {
-	cmd.Run = func(cmd *cobra.Command, _ []string) { cmd.Usage() }
+	cmd.Run = func(cmd *cobra.Command, _ []string) { _ = cmd.Usage() }
 	cmdTruncate.Run = truncate
 	cmdCompact.Run = compact
 
 	cmd.AddCommand(cmdTruncate, cmdCompact)
-	cmd.Execute()
+	_ = cmd.Execute()
 }
 
 var cmd = &cobra.Command{

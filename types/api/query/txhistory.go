@@ -39,6 +39,5 @@ func (t *RequestTxHistory) UnmarshalBinary(data []byte) (err error) {
 
 	t.Start = int64(binary.LittleEndian.Uint64(data[:]))
 	t.Limit = int64(binary.LittleEndian.Uint64(data[8:]))
-	t.ChainId.FromBytes(data[16:])
-	return nil
+	return t.ChainId.FromBytes(data[16:])
 }

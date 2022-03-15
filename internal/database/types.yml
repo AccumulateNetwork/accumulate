@@ -1,4 +1,4 @@
-txSignatures:
+SignatureSet:
   fields:
     - name: Signatures
       repeatable: true
