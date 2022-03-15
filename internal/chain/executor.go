@@ -3,7 +3,6 @@ package chain
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -581,44 +580,12 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) (*protocol.Syn
 // updateAccountBPT updates the BPT entry of an account.
 func (m *Executor) updateAccountBPT(account *database.Account) (err error) {
 	// Load the state
-	state, err := account.GetState()
+	entry, err := account.StateHash()
 	if err != nil {
 		return err
 	}
 
-	// Marshal it
-	data, err := state.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	// Hash it
-	var hashes []byte
-	h := sha256.Sum256(data)
-	hashes = append(hashes, h[:]...)
-
-	// Load the object metadata
-	objMeta, err := account.GetObject()
-	if err != nil {
-		return err
-	}
-
-	// For each chain
-	for _, chainMeta := range objMeta.Chains {
-		// Load the chain
-		recordChain, err := account.ReadChain(chainMeta.Name)
-		if err != nil {
-			return err
-		}
-
-		// Get the anchor
-		anchor := recordChain.Anchor()
-		h := sha256.Sum256(anchor)
-		hashes = append(hashes, h[:]...)
-	}
-
-	// Write the hash of the hashes to the BPT
-	account.PutBpt(sha256.Sum256(hashes))
+	account.PutBpt(*(*[32]byte)(entry))
 
 	return nil
 }
