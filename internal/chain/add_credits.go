@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -89,6 +90,15 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 	if credits == big.NewInt(0) {
 		return nil, fmt.Errorf("%v credits", credits)
+	}
+
+	params := api.DataEntryQuery{}
+	params.Url = protocol.PriceOracle()
+	var acmeOracle protocol.AcmeOracle
+	body.Oracle = acmeOracle.Price
+
+	if body.Oracle != ledgerState.ActiveOracle {
+		return nil, fmt.Errorf("oracle doesn't match")
 	}
 	st.Update(account)
 

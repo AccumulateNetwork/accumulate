@@ -288,6 +288,9 @@ AddCredits:
       pointer: true
     - name: Amount
       type: bigint
+    - name: Oracle
+      type: uvarint
+      optional: true
 
 UpdateKeyPage:
   kind: tx

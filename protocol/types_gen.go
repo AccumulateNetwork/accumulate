@@ -42,6 +42,7 @@ type AddCredits struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle"`
 }
 
 type Anchor struct {
@@ -826,6 +827,9 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 		return false
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	if !(v.Oracle == u.Oracle) {
 		return false
 	}
 
@@ -2016,6 +2020,7 @@ var fieldNames_AddCredits = []string{
 	1: "Type",
 	2: "Recipient",
 	3: "Amount",
+	4: "Oracle",
 }
 
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
@@ -2028,6 +2033,9 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
+	}
+	if !(v.Oracle == 0) {
+		writer.WriteUint(4, v.Oracle)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddCredits)
@@ -5624,6 +5632,9 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Oracle = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AddCredits)
 	v.fieldsSet = seen
@@ -7559,10 +7570,12 @@ func (v *AddCredits) MarshalJSON() ([]byte, error) {
 		Type      TransactionType `json:"type"`
 		Recipient *url.URL        `json:"recipient,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		Oracle    uint64          `json:"oracle,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Oracle = v.Oracle
 	return json.Marshal(&u)
 }
 
@@ -8531,10 +8544,12 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 		Type      TransactionType `json:"type"`
 		Recipient *url.URL        `json:"recipient,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		Oracle    uint64          `json:"oracle,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Oracle = v.Oracle
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8544,6 +8559,7 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.Oracle = u.Oracle
 	return nil
 }
 
