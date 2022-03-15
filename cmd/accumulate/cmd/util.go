@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -322,7 +321,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	return &res, nil
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (string, error) {
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (string, error) {
 	res, err := dispatchTxRequest(action, payload, txHash, origin, si, privKey)
 	if err != nil {
 		return "", err
