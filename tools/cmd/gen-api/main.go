@@ -40,13 +40,13 @@ func readFile(file string) typegen.API {
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gensdk [file]",
+		Use:  "gen-api [file]",
 		Args: cobra.ExactArgs(1),
 		Run:  run,
 	}
 
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
-	cmd.Flags().StringVarP(&flags.Out, "out", "o", "sdk_gen.go", "Output file")
+	cmd.Flags().StringVarP(&flags.Out, "out", "o", "api_gen.go", "Output file")
 
 	_ = cmd.Execute()
 }
