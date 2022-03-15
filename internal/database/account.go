@@ -1,6 +1,7 @@
 package database
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -197,4 +198,38 @@ func (r *Account) Data() (*Data, error) {
 	}
 
 	return &Data{r.batch, r.key, chain}, nil
+}
+
+// StateHash derives a hash from the full state of an account.
+func (r *Account) StateHash() ([]byte, error) {
+	var hashes [][]byte
+
+	state, err := r.GetState()
+	if err != nil {
+		return nil, fmt.Errorf("load account state: %w", err)
+	}
+
+	data, err := state.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("marshal account state: %w", err)
+	}
+
+	h := sha256.Sum256(data)
+	hashes = append(hashes, h[:])
+
+	obj, err := r.GetObject()
+	if err != nil {
+		return nil, fmt.Errorf("load object metadata: %w", err)
+	}
+
+	for _, chainMeta := range obj.Chains {
+		chain, err := r.ReadChain(chainMeta.Name)
+		if err != nil {
+			return nil, fmt.Errorf("load account chain: %w", err)
+		}
+
+		hashes = append(hashes, chain.Anchor())
+	}
+
+	return protocol.ComputeEntryHash(hashes), nil
 }
