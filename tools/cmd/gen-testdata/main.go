@@ -96,7 +96,7 @@ var txnTests = []*TCG{
 		txnTest1("adi", &CreateKeyPage{Keys: []*KeySpecParams{{PublicKey: key[32:]}}}),
 	}},
 	{Name: "CreateKeyBook", Cases: []*TC{
-		txnTest1("adi", &CreateKeyBook{Url: parseUrl("adi/book")}),
+		txnTest1("adi", &CreateKeyBook{Url: parseUrl("adi/book"), PublicKeyHash: key[32:]}),
 	}},
 	{Name: "AddCredits", Cases: []*TC{
 		txnTest1("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: 100}),
