@@ -171,6 +171,12 @@ func (b *Batch) AccountByID(id []byte) *Account {
 	return &Account{b, accountByID(id)}
 }
 
+// AccountByKey returns an Account for the given storage key. This is used for
+// creating snapshots from the BPT.
+func (b *Batch) AccountByKey(key storage.Key) *Account {
+	return &Account{b, accountBucket{objectBucket(key)}}
+}
+
 // Transaction returns a Transaction for the given transaction ID.
 func (b *Batch) Transaction(id []byte) *Transaction {
 	return &Transaction{b, transaction(id)}
