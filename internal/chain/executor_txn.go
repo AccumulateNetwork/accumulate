@@ -3,7 +3,6 @@ package chain
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -13,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // CheckTx implements ./abci.Chain
@@ -77,18 +75,18 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// Set up the state manager and validate the signatures
 	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
 	if err != nil {
-		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return nil, m.recordTransactionError(nil, env, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	if !hasEnoughSigs {
 		// Write out changes to the nonce and credit balance
 		err = st.Commit()
 		if err != nil {
-			return nil, m.recordTransactionError(st, env, nil, nil, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
+			return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 		}
 
 		status := &protocol.TransactionStatus{Pending: true}
-		err = m.putTransaction(st, env, nil, nil, status, false)
+		err = m.putTransaction(st, env, status, false)
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
 		}
@@ -97,41 +95,21 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 
 	result, err := executor.Validate(st, env)
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.ErrorCodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		return nil, m.recordTransactionError(st, env, false, &protocol.Error{Code: protocol.ErrorCodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 	if result == nil {
 		result = new(protocol.EmptyResult)
 	}
 
-	// If we get here, we were successful in validating.  So, we need to
-	// split the transaction in 2, the body (i.e. TxAccepted), and the
-	// validation material (i.e. TxPending).  The body of the transaction
-	// gets put on the main chain, and the validation material gets put on
-	// the pending chain which is purged after about 2 weeks
-	txPending := state.NewPendingTransaction(env)
-	txAccepted, txPending := state.NewTransaction(txPending)
-	txAcceptedObject := new(protocol.Object)
-	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
-	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err})
-	}
-
-	txPendingObject := new(protocol.Object)
-	txPending.Status = json.RawMessage("{\"code\":\"0\"}")
-	txPendingObject.Entry, err = txPending.MarshalBinary()
-	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err})
-	}
-
 	// Store pending state updates, queue state creates for synthetic transactions
 	err = st.Commit()
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
+		return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 	}
 
 	// Store the tx state
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	err = m.putTransaction(st, env, txAccepted, txPending, status, false)
+	err = m.putTransaction(st, env, status, false)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
 	}
@@ -147,7 +125,7 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	}
 	err = st.Commit()
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
+		return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 	}
 
 	m.blockState.Delivered++
@@ -557,20 +535,20 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 	return st.UpdateSignator(account)
 }
 
-func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, txAccepted *protocol.TransactionState, txPending *protocol.PendingTransactionState, postCommit bool, failure *protocol.Error) *protocol.Error {
+func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, postCommit bool, failure *protocol.Error) *protocol.Error {
 	status := &protocol.TransactionStatus{
 		Delivered: true,
 		Code:      uint64(failure.Code),
 		Message:   failure.Error(),
 	}
-	err := m.putTransaction(st, env, txAccepted, txPending, status, postCommit)
+	err := m.putTransaction(st, env, status, postCommit)
 	if err != nil {
 		m.logError("Failed to store transaction", "txid", logging.AsHex(env.GetTxHash()), "origin", env.Transaction.Origin, "error", err)
 	}
 	return failure
 }
 
-func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAccepted *protocol.TransactionState, txPending *protocol.PendingTransactionState, status *protocol.TransactionStatus, postCommit bool) (err error) {
+func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, status *protocol.TransactionStatus, postCommit bool) (err error) {
 	// Don't add internal transactions to chains. Internal transactions are
 	// exclusively used for communication between the governor and the state
 	// machine.

@@ -28,12 +28,6 @@ const AccountTypeTokenAccount AccountType = 4
 // AccountTypeLiteTokenAccount is a Lite Token Account.
 const AccountTypeLiteTokenAccount AccountType = 5
 
-// AccountTypeTransaction is a completed transaction.
-const AccountTypeTransaction AccountType = 7
-
-// AccountTypePendingTransaction is a pending transaction.
-const AccountTypePendingTransaction AccountType = 8
-
 // AccountTypeKeyPage is a Key Page account.
 const AccountTypeKeyPage AccountType = 9
 
@@ -296,7 +290,7 @@ func (v AccountType) ID() uint64 { return uint64(v) }
 func (v *AccountType) Set(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeTransaction, AccountTypePendingTransaction, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -319,10 +313,6 @@ func (v AccountType) String() string {
 		return "tokenAccount"
 	case AccountTypeLiteTokenAccount:
 		return "liteTokenAccount"
-	case AccountTypeTransaction:
-		return "transaction"
-	case AccountTypePendingTransaction:
-		return "pendingTransaction"
 	case AccountTypeKeyPage:
 		return "keyPage"
 	case AccountTypeKeyBook:
@@ -359,10 +349,6 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeTokenAccount, true
 	case "liteTokenAccount":
 		return AccountTypeLiteTokenAccount, true
-	case "transaction":
-		return AccountTypeTransaction, true
-	case "pendingTransaction":
-		return AccountTypePendingTransaction, true
 	case "keyPage":
 		return AccountTypeKeyPage, true
 	case "keyBook":
