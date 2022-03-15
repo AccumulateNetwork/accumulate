@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // Account manages a record.
@@ -82,7 +81,7 @@ func (r *Account) GetObject() (*protocol.ObjectMetadata, error) {
 }
 
 // GetState loads the record state.
-func (r *Account) GetState() (state.Chain, error) {
+func (r *Account) GetState() (protocol.Account, error) {
 	data, err := r.batch.store.Get(r.key.State())
 	if err != nil {
 		return nil, err
@@ -97,7 +96,7 @@ func (r *Account) GetState() (state.Chain, error) {
 }
 
 // GetStateAs loads the record state and unmarshals into the given value.
-func (r *Account) GetStateAs(state state.Chain) error {
+func (r *Account) GetStateAs(state protocol.Account) error {
 	data, err := r.batch.store.Get(r.key.State())
 	if err != nil {
 		return err
@@ -112,21 +111,15 @@ func (r *Account) GetStateAs(state state.Chain) error {
 }
 
 // PutState stores the record state and adds the record to the BPT (as a hash).
-func (r *Account) PutState(accountState state.Chain) error {
+func (r *Account) PutState(accountState protocol.Account) error {
 	// Does the record state have a URL?
 	if accountState.Header().Url == nil {
 		return errors.New("invalid URL: empty")
 	}
 
-	// Is the URL valid?
-	u, err := accountState.Header().ParseUrl()
-	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
-	}
-
 	// Is this the right URL - does it match the record's key?
-	if account(u) != r.key {
-		return fmt.Errorf("invalid URL: %v", err)
+	if account(accountState.Header().Url) != r.key {
+		return fmt.Errorf("mismatched url: key is %X, URL is %v", r.key.objectBucket, accountState.Header().Url)
 	}
 
 	// Make sure the key book is set
@@ -147,8 +140,7 @@ func (r *Account) PutState(accountState state.Chain) error {
 	}
 
 	// Store the state
-	r.batch.store.Put(r.key.State(), stateData)
-	return nil
+	return r.batch.store.Put(r.key.State(), stateData)
 }
 
 // PutBpt writes the record's BPT entry.
