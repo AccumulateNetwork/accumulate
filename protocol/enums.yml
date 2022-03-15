@@ -72,6 +72,7 @@ TransactionMax:
     description: is the highest number reserved for internal transactions
 
 TransactionType:
+# ======================== USER TRANSACTIONS ==========================
   Unknown:
     value: 0
     description: represents an unknown transaction type
@@ -123,6 +124,8 @@ TransactionType:
   RemoveManager:
     value: 0x11
     description: remove manager from existing chain
+
+# ======================= SYNTHETIC TRANSACTIONS ======================
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
@@ -150,6 +153,11 @@ TransactionType:
   SegWitDataEntry:
     value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
+  SyntheticReceipt:
+    value: 0x40
+    description: notifies the sender of synthetic transactions when a transaction has failed.
+
+# ======================= INTERNAL TRANSACTIONS =======================
   InternalGenesis:
     value: 0x60
     description: initializes system chains
@@ -162,9 +170,6 @@ TransactionType:
   InternalTransactionsSent:
     value: 0x63
     description: notifies the executor of synthetic transactions that have been sent
-  SyntheticReceipt:
-    value: 0x64
-    description: notifies the sender of synthetic transactions when a transaction has failed.
 
 AccountType:
   Unknown:

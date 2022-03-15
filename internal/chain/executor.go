@@ -672,8 +672,10 @@ func (m *Executor) buildSynthReceipts(rootAnchor []byte, synthIndexIndex, rootIn
 	height := synthChain.Height()
 	offset := height - int64(len(m.blockState.ProducedTxns))
 	for i, txn := range m.blockState.ProducedTxns {
-		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
-			// Do not generate a receipt for the anchor
+		if txn.Type() == protocol.TransactionTypeSyntheticAnchor ||
+			txn.Type() == protocol.TransactionTypeSyntheticMirror ||
+			txn.Type() == protocol.TransactionTypeSyntheticReceipt {
+			// Do not generate a ledger entry for the anchor & receipt txs
 			continue
 		}
 

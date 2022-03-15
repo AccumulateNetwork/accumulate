@@ -25,6 +25,8 @@ type DB = *database.Batch
 const TokenMx = protocol.AcmePrecision
 const TestTokenAmount = 5e5
 
+var FakeBvn = MustParseUrl("acc://bvn0")
+
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
@@ -43,6 +45,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Source = FakeBvn
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
@@ -102,6 +105,7 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Source = FakeBvn
 	deposit.Cause = sha256.Sum256([]byte("fake txid"))
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)

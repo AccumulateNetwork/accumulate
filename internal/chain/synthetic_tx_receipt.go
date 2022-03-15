@@ -1,7 +1,10 @@
 package chain
 
 import (
+	"bytes"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -19,23 +22,80 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
 	}
+	newStatus := new(protocol.TransactionStatus)
+	newStatus.UnmarshalJSON(body.Status)
 
-	newTxStatus := new(protocol.TransactionStatus)
-	newTxStatus.UnmarshalJSON(body.Status)
-
-	// Load the transaction
+	// Load the transaction status & state
 	synthTx := st.batch.Transaction(body.TxHash[:])
-	synthTx.PutStatus(newTxStatus)
+	curStatus, err := synthTx.GetStatus()
+	if err != nil {
+		st.logger.Error("received SyntheticReceipt from", body.Source.URL(), "but the status for tx", logging.AsHex(body.TxHash),
+			"could not be retrieved:", err)
+	}
 
+	// Update the status when changed
+	if curStatus == nil || !statusEqual(curStatus, newStatus) {
+		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.TxHash),
+			"and the status was changed. Updating status")
+		synthTx.PutStatus(newStatus)
+	} else {
+		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.TxHash),
+			"and the status was not changed. Skipping status update")
+	}
 	return nil, nil
+}
+
+func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
+	if !(v.Remote == u.Remote) {
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+	if !(v.Pending == u.Pending) {
+		return false
+	}
+	if !(v.Code == u.Code) {
+		return false
+	}
+	if !(v.Message == u.Message) {
+		return false
+	}
+	if !(v.Result.Type() == u.Result.Type()) {
+		return false
+	}
+
+	rv, _ := v.Result.MarshalBinary()
+	ru, _ := u.Result.MarshalBinary()
+	if bytes.Compare(rv, ru) != 0 {
+		return false
+	}
+
+	return true
 }
 
 /* === Receipt generation === */
 
-// CreateReceipt a receipt used to return the status of synthetic transactions to its senders
-func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus) *protocol.SyntheticReceipt {
+// NeedsReceipt selects which synth txs need / don't a receipt
+func NeedsReceipt(txt protocol.TransactionType) bool {
+	switch txt {
+	case protocol.TransactionTypeSyntheticReceipt,
+		protocol.TransactionTypeSyntheticAnchor,
+		protocol.TransactionTypeSyntheticMirror,
+		protocol.TransactionTypeSegWitDataEntry,
+		protocol.TransactionTypeSignPending:
+		return false
+	}
+	return true
+}
+
+// CreateReceipt creates a receipt used to return the status of synthetic transactions to its sender
+func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, nodeUrl *url.URL) (*protocol.SyntheticReceipt, *url.URL) {
 	sr := new(protocol.SyntheticReceipt)
 	sr.TxHash = *(*[32]byte)(env.GetTxHash())
+	sr.Source = nodeUrl
+	synthOrigin := getSyntheticOrigin(env.Transaction)
+	sr.Cause = synthOrigin.Cause
 
 	var err error
 	sr.Status, err = status.MarshalJSON()
@@ -43,43 +103,39 @@ func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus) *
 		panic(fmt.Errorf("can't marshal transaction status: %w", err))
 	}
 
-	sr.Cause = *getCause(env.Transaction)
-	return sr
+	return sr, synthOrigin.Source
 }
 
-// getCause gets the synth tx cause when it can. Only specific tx bodies contain that field
-func getCause(tx *protocol.Transaction) *[32]byte {
+// getSyntheticOrigin goes into the body of the synthetic transaction to extract the SyntheticOrigin we need for the receipt
+func getSyntheticOrigin(tx *protocol.Transaction) protocol.SyntheticOrigin {
 	switch tx.Type() {
 	case protocol.TransactionTypeSyntheticCreateChain:
 		body, ok := tx.Body.(*protocol.SyntheticCreateChain)
 		if ok {
-			return &body.Cause
+			return body.SyntheticOrigin
 		}
 	case protocol.TransactionTypeSyntheticWriteData:
 		body, ok := tx.Body.(*protocol.SyntheticWriteData)
 		if ok {
-			return &body.Cause
+			return body.SyntheticOrigin
 		}
 	case protocol.TransactionTypeSyntheticDepositTokens:
 		body, ok := tx.Body.(*protocol.SyntheticDepositTokens)
 		if ok {
-			return &body.Cause
+			return body.SyntheticOrigin
 		}
 	case protocol.TransactionTypeSyntheticDepositCredits:
 		body, ok := tx.Body.(*protocol.SyntheticDepositCredits)
 		if ok {
-			return &body.Cause
+			return body.SyntheticOrigin
 		}
 	case protocol.TransactionTypeSyntheticBurnTokens:
 		body, ok := tx.Body.(*protocol.SyntheticBurnTokens)
 		if ok {
-			return &body.Cause
+			return body.SyntheticOrigin
 		}
-	case protocol.TransactionTypeSegWitDataEntry:
-		body, ok := tx.Body.(*protocol.SegWitDataEntry)
-		if ok {
-			return &body.Cause
-		}
+	default:
+		panic(fmt.Errorf("transcation type %v does not embed a SyntheticOrigin", tx.Type()))
 	}
-	return nil
+	return protocol.SyntheticOrigin{} // Unreachable
 }

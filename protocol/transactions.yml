@@ -330,11 +330,20 @@ SignPending:
 
 ##### Synthetic #####
 
-SyntheticCreateChain:
-  kind: tx
+SyntheticOrigin:
   fields:
+    - name: Source
+      description: is the subnet the anchor originates from
+      type: url
+      pointer: true
     - name: Cause
       type: chain
+
+SyntheticCreateChain:
+  kind: tx
+  embeddings:
+    - SyntheticOrigin
+  fields:
     - name: Chains
       repeatable: true
       type: ChainParams
@@ -343,18 +352,18 @@ SyntheticCreateChain:
 
 SyntheticWriteData:
   kind: tx
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Entry
       type: DataEntry
       marshal-as: reference
 
 SyntheticDepositTokens:
   kind: tx
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Token
       type: url
       pointer: true
@@ -390,17 +399,17 @@ SyntheticAnchor:
 
 SyntheticDepositCredits:
   kind: tx
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: uvarint
 
 SyntheticBurnTokens:
   kind: tx
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: bigint
 
@@ -414,19 +423,19 @@ SyntheticMirror:
 
 SyntheticReceipt:
   kind: tx
+  embeddings:
+    - SyntheticOrigin
   fields:
     - name: TxHash
-      type: chain
-    - name: Cause
       type: chain
     - name: Status
       type: rawJson
 
 SegWitDataEntry:
   kind: tx
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: EntryUrl
       type: url
       pointer: true

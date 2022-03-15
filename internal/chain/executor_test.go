@@ -67,6 +67,7 @@ func BenchmarkHighTps(b *testing.B) {
 	require.NoError(b, err)
 
 	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Source = network.NodeUrl()
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *big.NewInt(1)
 	deposit.Cause[0] = 1
@@ -186,8 +187,8 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 		WithOrigin(url.MustParse("acc://account-that-does-not-exist")).
 		WithNonceTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
-			Cause:  [32]byte{1},
-			Amount: 1,
+			SyntheticOrigin: protocol.SyntheticOrigin{Cause: [32]byte{1}, Source: acctesting.FakeBvn},
+			Amount:          1,
 		}).
 		Sign(func(nonce uint64, hash []byte) (protocol.Signature, error) {
 			ed := new(protocol.ED25519Signature)

@@ -28,6 +28,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
+	body.Source = acctesting.FakeBvn
 	body.Cause[0] = 1
 	require.NoError(t, body.Create(account))
 
@@ -46,7 +47,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
 
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	receipt := CreateReceipt(env, status)
+	receipt, _ := CreateReceipt(env, status, nil)
 	originUrl := env.Transaction.Origin.String()
 	env = acctesting.NewTransaction().
 		WithOriginStr(originUrl).
@@ -77,6 +78,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
+	body.Source = acctesting.FakeBvn
 	body.Cause[0] = 1
 	require.NoError(t, body.Create(account))
 

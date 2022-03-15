@@ -53,6 +53,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
+		deposit.Source = st.nodeUrl
 		copy(deposit.Cause[:], tx.GetTxHash())
 		deposit.Token = tokenUrl
 		deposit.Amount = body.To[i].Amount

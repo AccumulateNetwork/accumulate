@@ -27,6 +27,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
+	scc.Source = st.nodeUrl
 	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 

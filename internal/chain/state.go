@@ -96,6 +96,7 @@ func (m *StateManager) Commit() error {
 		}
 
 		scc = new(protocol.SyntheticCreateChain)
+		scc.Source = m.nodeUrl
 		scc.Cause = m.txHash
 		scc.Chains = []protocol.ChainParams{params}
 		create[id.String()] = scc
@@ -107,8 +108,7 @@ func (m *StateManager) Commit() error {
 
 // Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
-	transactionType := body.GetType()
-	if m.txType.IsSynthetic() && transactionType != protocol.TransactionTypeSyntheticReceipt {
+	if m.txType.IsSynthetic() && body.GetType() != protocol.TransactionTypeSyntheticReceipt {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 

@@ -23,6 +23,7 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)
+	writeThis.Source = st.nodeUrl
 	writeThis.Cause = *(*[32]byte)(tx.GetTxHash())
 	writeThis.Entry = body.Entry
 

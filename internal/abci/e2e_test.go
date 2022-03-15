@@ -963,6 +963,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
+		body.Source = n.network.NodeUrl()
 		body.Token = n.ParseUrl("foo2/tokens")
 		body.Amount.SetUint64(123)
 

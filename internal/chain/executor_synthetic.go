@@ -70,7 +70,7 @@ func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body p
 	ledgerState.Synthetic.Nonce++
 
 	// Append the ID
-	if body.Type() == protocol.TransactionTypeSyntheticAnchor {
+	if body.Type() == protocol.TransactionTypeSyntheticAnchor || body.Type() == protocol.TransactionTypeSyntheticReceipt {
 		txid := types.Bytes(env.GetTxHash()).AsBytes32()
 		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
 	}

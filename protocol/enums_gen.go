@@ -277,6 +277,9 @@ const TransactionTypeSyntheticMirror TransactionType = 56
 // TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
 const TransactionTypeSegWitDataEntry TransactionType = 57
 
+// TransactionTypeSyntheticReceipt notifies the sender of synthetic transactions when a transaction has failed..
+const TransactionTypeSyntheticReceipt TransactionType = 64
+
 // TransactionTypeInternalGenesis initializes system chains.
 const TransactionTypeInternalGenesis TransactionType = 96
 
@@ -288,9 +291,6 @@ const TransactionTypeInternalTransactionsSigned TransactionType = 98
 
 // TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
 const TransactionTypeInternalTransactionsSent TransactionType = 99
-
-// TransactionTypeSyntheticReceipt notifies the sender of synthetic transactions when a transaction has failed..
-const TransactionTypeSyntheticReceipt TransactionType = 100
 
 // ID returns the ID of the Account Type
 func (v AccountType) ID() uint64 { return uint64(v) }
@@ -1064,7 +1064,7 @@ func (v TransactionType) ID() uint64 { return uint64(v) }
 func (v *TransactionType) Set(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent, TransactionTypeSyntheticReceipt:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
 		*v = u
 		return true
 	default:
@@ -1127,6 +1127,8 @@ func (v TransactionType) String() string {
 		return "syntheticMirror"
 	case TransactionTypeSegWitDataEntry:
 		return "segWitDataEntry"
+	case TransactionTypeSyntheticReceipt:
+		return "syntheticReceipt"
 	case TransactionTypeInternalGenesis:
 		return "internalGenesis"
 	case TransactionTypeInternalSendTransactions:
@@ -1135,8 +1137,6 @@ func (v TransactionType) String() string {
 		return "internalTransactionsSigned"
 	case TransactionTypeInternalTransactionsSent:
 		return "internalTransactionsSent"
-	case TransactionTypeSyntheticReceipt:
-		return "syntheticReceipt"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1197,6 +1197,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticMirror, true
 	case "segWitDataEntry":
 		return TransactionTypeSegWitDataEntry, true
+	case "syntheticReceipt":
+		return TransactionTypeSyntheticReceipt, true
 	case "internalGenesis":
 		return TransactionTypeInternalGenesis, true
 	case "internalSendTransactions":
@@ -1205,8 +1207,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeInternalTransactionsSigned, true
 	case "internalTransactionsSent":
 		return TransactionTypeInternalTransactionsSent, true
-	case "syntheticReceipt":
-		return TransactionTypeSyntheticReceipt, true
 	default:
 		return 0, false
 	}

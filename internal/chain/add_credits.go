@@ -103,12 +103,14 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
+	sdc.Source = st.nodeUrl
 	copy(sdc.Cause[:], tx.GetTxHash())
 	sdc.Amount = body.Amount
 	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token
 	burnAcme := new(protocol.SyntheticBurnTokens)
+	burnAcme.Source = st.nodeUrl
 	copy(sdc.Cause[:], tx.GetTxHash())
 	burnAcme.Amount = amount.Int
 	st.Submit(tokenUrl, burnAcme)

@@ -34,6 +34,7 @@ func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 
 	burn := new(protocol.SyntheticBurnTokens)
+	burn.Source = st.nodeUrl
 	copy(burn.Cause[:], tx.GetTxHash())
 	burn.Amount = body.Amount
 	st.Submit(tokenUrl, burn)
