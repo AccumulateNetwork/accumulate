@@ -56,7 +56,7 @@ type DataType struct {
 }
 
 func (typ *DataType) GoTxType() string {
-	return "protocol.TransactionType" + typ.TxType
+	return "types.TxType" + typ.TxType
 }
 
 func (typ *DataType) GoChainType() string {
@@ -80,15 +80,13 @@ type Field struct {
 type API map[string]Method
 
 type Method struct {
-	Kind        string
-	Description string
-	Deprecated  string
-	RPC         string
-	Input       string
-	Output      string
-	Call        string
-	CallParams  []string `yaml:"call-params"`
-	Validate    []string `yaml:"validate"`
+	Kind       string
+	RPC        string
+	Input      string
+	Output     string
+	Call       string
+	CallParams []string `yaml:"call-params"`
+	Validate   []string `yaml:"validate"`
 }
 
 type Type map[string]*TypeValue

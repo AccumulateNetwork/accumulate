@@ -121,7 +121,7 @@ func TestTransactionState(t *testing.T) {
 
 }
 
-func txBodyEqual(v, u protocol.TransactionBody) bool {
+func txBodyEqual(v, u protocol.TransactionPayload) bool {
 	switch v := v.(type) {
 	case *protocol.CreateIdentity:
 		u, ok := u.(*protocol.CreateIdentity)

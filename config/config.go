@@ -7,12 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
+	accurl "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -38,60 +39,7 @@ const (
 	EtcdStorage   StorageType = "etcd"
 )
 
-// LogLevel defines the default and per-module log level for Accumulate's
-// logging.
-type LogLevel struct {
-	Default string
-	Modules [][2]string
-}
-
-// Parse parses a string such as "error;accumulate=info" into a LogLevel.
-func (l LogLevel) Parse(s string) LogLevel {
-	for _, s := range strings.Split(s, ";") {
-		s := strings.SplitN(s, "=", 2)
-		if len(s) == 1 {
-			l.Default = s[0]
-		} else {
-			l.Modules = append(l.Modules, *(*[2]string)(s))
-		}
-	}
-	return l
-}
-
-// SetDefault sets the default log level.
-func (l LogLevel) SetDefault(level string) LogLevel {
-	l.Default = level
-	return l
-}
-
-// SetModule sets the log level for a module.
-func (l LogLevel) SetModule(module, level string) LogLevel {
-	l.Modules = append(l.Modules, [2]string{module, level})
-	return l
-}
-
-// String convers the log level into a string, for example
-// "error;accumulate=debug".
-func (l LogLevel) String() string {
-	s := new(strings.Builder)
-	s.WriteString(l.Default)
-	for _, m := range l.Modules {
-		fmt.Fprintf(s, ";%s=%s", m[0], m[1])
-	}
-	return s.String()
-}
-
-var DefaultLogLevels = LogLevel{}.
-	SetDefault("error").
-	SetModule("accumulate", "info").
-	// SetModule("main", "info").
-	// SetModule("state", "info").
-	// SetModule("statesync", "info").
-	// SetModule("accumulate", "debug").
-	// SetModule("executor", "info").
-	// SetModule("disk-monitor", "info").
-	// SetModule("init", "info").
-	String()
+const DefaultLogLevels = "error;accumulate=info" // main=info;state=info;statesync=info;accumulate=debug;executor=info;disk-monitor=info;init=info
 
 func Default(net NetworkType, node NodeType, netId string) *Config {
 	c := new(Config)
@@ -100,7 +48,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
-	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
+	c.Accumulate.API.TxMaxWaitTime = 10 * time.Second
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
@@ -191,6 +139,14 @@ func OffsetPort(addr string, offset int) (*url.URL, error) {
 	port += int64(offset)
 	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
 	return u, nil
+}
+
+func (n *Network) NodeUrl(path ...string) *accurl.URL {
+	if n.Type == Directory {
+		return protocol.DnUrl().JoinPath(path...)
+	}
+
+	return protocol.BvnUrl(n.LocalSubnetID).JoinPath(path...)
 }
 
 func (n *Network) GetBvnNames() []string {

@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type stateCache struct {
@@ -19,7 +20,6 @@ type stateCache struct {
 	txType  protocol.TransactionType
 	txHash  types.Bytes32
 
-	blockState BlockState
 	batch      *database.Batch
 	operations []stateOperation
 	chains     map[[32]byte]protocol.Account
@@ -31,10 +31,8 @@ func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]b
 	c.nodeUrl = nodeUrl
 	c.txType = txtype
 	c.txHash = txid
+
 	c.batch = batch
-
-	_ = c.logger // Get static analsis to shut up
-
 	c.Reset()
 	return c
 }
@@ -58,7 +56,7 @@ func (c *stateCache) Commit() ([]protocol.Account, error) {
 	return create, nil
 }
 
-func (c *stateCache) load(id [32]byte, r *database.Account) (protocol.Account, error) {
+func (c *stateCache) load(id [32]byte, r *database.Account) (state.Chain, error) {
 	st, ok := c.chains[id]
 	if ok {
 		return st, nil
@@ -99,7 +97,7 @@ func (c *stateCache) loadAs(id [32]byte, r *database.Account, v interface{}) (er
 }
 
 // LoadUrl loads a chain by URL and unmarshals it.
-func (c *stateCache) LoadUrl(u *url.URL) (protocol.Account, error) {
+func (c *stateCache) LoadUrl(u *url.URL) (state.Chain, error) {
 	return c.load(u.AccountID32(), c.batch.Account(u))
 }
 
@@ -124,7 +122,7 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 }
 
 // LoadTxn loads and unmarshals a saved transaction
-func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	return c.batch.Transaction(txid[:]).Get()
 }
 
@@ -134,23 +132,20 @@ func (c *stateCache) TxnExists(txid []byte) bool {
 	return err == nil
 }
 
-func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
+func (c *stateCache) AddDirectoryEntry(u ...*url.URL) error {
 	return AddDirectoryEntry(func(u *url.URL, key ...interface{}) Value {
 		return c.RecordIndex(u, key...)
-	}, directory, u...)
+	}, u...)
 }
 
 type Value interface {
 	Get() ([]byte, error)
-	Put([]byte) error
+	Put([]byte)
 }
 
-func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory *url.URL, u ...*url.URL) error {
-	if len(u) == 0 {
-		return fmt.Errorf("no URLs supplied to register in directory %s", directory.String())
-	}
-
-	mdi := getIndex(directory, "Directory", "Metadata")
+func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, u ...*url.URL) error {
+	identity := u[0].Identity()
+	mdi := getIndex(identity, "Directory", "Metadata")
 	md := new(protocol.DirectoryIndexMetadata)
 	data, err := mdi.Get()
 	if err == nil {
@@ -161,10 +156,8 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 	}
 
 	for _, u := range u {
-		if !u.Equal(directory) {
-			getIndex(directory, "Directory", md.Count).Put([]byte(u.String()))
-			md.Count++
-		}
+		getIndex(identity, "Directory", md.Count).Put([]byte(u.String()))
+		md.Count++
 	}
 
 	data, err = md.MarshalBinary()
@@ -172,5 +165,6 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 		return fmt.Errorf("failed to marshal metadata: %v", err)
 	}
 
-	return mdi.Put(data)
+	mdi.Put(data)
+	return nil
 }

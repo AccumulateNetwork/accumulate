@@ -17,6 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func newKey(seed []byte) ed25519.PrivateKey {
@@ -80,7 +82,7 @@ func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, r
 type execParams struct {
 	Origin  string
 	Key     ed25519.PrivateKey
-	Payload protocol.TransactionBody
+	Payload protocol.TransactionPayload
 }
 
 func recode(t *testing.T, from, to interface{}) {
@@ -190,7 +192,7 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 	return d.daemon.Jrpc_TESTONLY()
 }
 
-func (d *e2eDUT) GetRecordAs(s string, target protocol.Account) {
+func (d *e2eDUT) GetRecordAs(s string, target state.Chain) {
 	d.T().Helper()
 	u, err := url.Parse(s)
 	d.Require().NoError(err)
@@ -213,7 +215,7 @@ func (d *e2eDUT) GetRecordHeight(s string) uint64 {
 	return qr.MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	data, err := tx.Transaction.Body.MarshalBinary()
 	d.Require().NoError(err)
 

@@ -39,7 +39,7 @@ type Network struct {
 
 func loadNetworkConfiguration(file string) (ret Network, err error) {
 	jsonFile, err := os.Open(file)
-	defer func() { _ = jsonFile.Close() }()
+	defer jsonFile.Close()
 	// if we os.Open returns an error then handle it
 	if err != nil {
 		return ret, err
@@ -81,7 +81,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	if directory == nil {
 		check(fmt.Errorf("cannot find directory configuration in %v", networkConfigFile))
-		panic("not reached") // For static analysis
 	}
 
 	if directory.Name != "Directory" {
@@ -153,7 +152,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	//need to configure the dn for each BVN assuming 1 bvn
-	for i := range directory.Nodes {
+	for i, _ := range directory.Nodes {
 		var remotes []string
 		dnConfig[i], remotes, dnListen[i] = initNetworkNode(network.Network, directory.Name, directory.Nodes, cfg.Directory,
 			cfg.Validator, i, i, compose)
@@ -189,7 +188,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	bvnRemote := make([][]string, len(bvnSubnet)) //numBvns)
 
 	for i, v := range bvnSubnet {
-		for j := range v.Nodes {
+		for j, _ := range v.Nodes {
 			bvnConfig[i][j], bvnRemote[i], bvnListen[i][j] = initNetworkNode(network.Network, v.Name, v.Nodes, cfg.BlockValidator,
 				cfg.Validator, i, j, compose)
 			if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
@@ -219,7 +218,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	for i, v := range bvnSubnet {
-		for j := range v.Nodes {
+		for j, _ := range v.Nodes {
 			c := bvnConfig[i][j]
 			if flagInit.NoEmptyBlocks {
 				c.Consensus.CreateEmptyBlocks = false
@@ -250,7 +249,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			Logger:   logger.With("subnet", protocol.Directory),
 		}))
 
-		for i := range bvnSubnet {
+		for i, _ := range bvnSubnet {
 			check(node.Init(node.InitOptions{
 				WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:     bvns[i].Port,

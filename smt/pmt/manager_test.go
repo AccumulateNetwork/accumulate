@@ -55,7 +55,7 @@ func Check(t *testing.T, bpt *BPT, node *BptNode) {
 
 	bpt.LoadNext(BIdx, bit, node, key)
 
-	keyLeft, keyRight, _ := GetChildrenNodeKeys(node.NodeKey)
+	keyLeft, keyRight, ok := GetChildrenNodeKeys(node.NodeKey)
 
 	if lNode, ok := node.Left.(*BptNode); ok {
 		require.Truef(t, keyLeft == lNode.NodeKey, "Left branch is broken key %x ht %d", key, ht)
@@ -112,7 +112,7 @@ func TestManager(t *testing.T) {
 			v := values.NextA()       //
 			bptManager.InsertKV(k, v) //
 		}
-		require.NoError(t, bptManager.Bpt.Update())
+		bptManager.Bpt.Update()
 		Check(t, bptManager.Bpt, bptManager.Bpt.GetRoot())
 		bptManager = NewBPTManager(storeTx)
 	}
@@ -185,14 +185,14 @@ func TestManagerSeries(t *testing.T) {
 					}
 				}
 				priorRoot := bptManager.GetRootHash()          //        Get the prior root (cause no update yet)
-				require.NoError(t, bptManager.Bpt.Update())    //        Update the value
+				bptManager.Bpt.Update()                        //        Update the value
 				currentRoot := bptManager.GetRootHash()        //        Get the Root Hash.  Note this is in memory
 				if bytes.Equal(priorRoot[:], currentRoot[:]) { //        Prior should be different, cause we added stuff
 					t.Error("added stuff, hash should not be equal") //
 				} //
 				//fmt.Printf("%x %x\n", priorRoot, currentRoot)
 				previous = currentRoot //                                Make previous track current state of database
-				require.NoError(t, bptManager.Bpt.Update())
+				bptManager.Bpt.Update()
 			}
 		}
 		bptManager := NewBPTManager(storeTx)    //  One more check that previous is the same as current when
@@ -223,7 +223,7 @@ func TestManagerPersist(t *testing.T) {
 			bptManager.Bpt.Insert(k, v)
 		}
 
-		require.NoError(t, bptManager.Bpt.Update())
+		bptManager.Bpt.Update()
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
 		storeTx = store.Begin(true)
@@ -242,7 +242,7 @@ func TestManagerPersist(t *testing.T) {
 			bptManager.Bpt.Insert(keys.GetAElement(i), values.NextA())
 		}
 
-		require.NoError(t, bptManager.Bpt.Update())
+		bptManager.Bpt.Update()
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
 		storeTx = store.Begin(true)
@@ -274,7 +274,7 @@ func TestBptGet(t *testing.T) {
 		bpt.Insert(keys.GetAElement(i), values.NextAList())
 	}
 
-	require.NoError(t, bpt.Update())
+	bpt.Update()
 
 	for i := 0; i < numberTests; i++ {
 		idx := i

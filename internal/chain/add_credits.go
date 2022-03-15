@@ -7,13 +7,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type AddCredits struct{}
 
-func (AddCredits) Type() protocol.TransactionType { return protocol.TransactionTypeAddCredits }
+func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
@@ -81,9 +82,14 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("not an account: %q", tx.Transaction.Origin)
 	}
 
+	tokenUrl, err := account.ParseTokenUrl()
+	if err != nil {
+		return nil, fmt.Errorf("invalid token account: %v", err)
+	}
+
 	// Only ACME tokens can be converted into credits
-	if !protocol.AcmeUrl().Equal(account.GetTokenUrl()) {
-		return nil, fmt.Errorf("%q tokens cannot be converted into credits", account.GetTokenUrl())
+	if !protocol.AcmeUrl().Equal(tokenUrl) {
+		return nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
 	}
 
 	if !account.CanDebitTokens(&amount.Int) {
@@ -105,7 +111,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	burnAcme := new(protocol.SyntheticBurnTokens)
 	copy(sdc.Cause[:], tx.GetTxHash())
 	burnAcme.Amount = amount.Int
-	st.Submit(account.GetTokenUrl(), burnAcme)
+	st.Submit(tokenUrl, burnAcme)
 
 	return nil, nil
 }

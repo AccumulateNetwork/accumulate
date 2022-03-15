@@ -29,7 +29,7 @@ func TestRestart(t *testing.T) {
 				}
 			}
 			for rand.Int()%3 > 0 { //                                       Add 0 or more random hashes
-				require.NoError(t, MM1.AddHash(Sha256(common.Int64Bytes(rand.Int63())), false)) // Generate and add one random hash
+				MM1.AddHash(Sha256(common.Int64Bytes(rand.Int63())), false) // Generate and add one random hash
 			}
 		}
 	}
@@ -58,7 +58,7 @@ func TestRestartCache(t *testing.T) {
 			for k := uint(0); k < uint(rand.Int())%4; k++ { //  Add 0 or more random hashes
 				h := rh.Next()
 				cached = append(cached, h)
-				require.NoError(t, MM1.AddHash(h, false)) // Generate and add one random hash
+				MM1.AddHash(h, false) // Generate and add one random hash
 			}
 
 			ended := rand.Int()%30 > 0 && len(cached) > 0 // Every so often we are going to write to disk
@@ -83,7 +83,7 @@ func TestRestartCache(t *testing.T) {
 				}
 
 				for _, h := range cached {
-					require.NoError(t, MM2.AddHash(h, false))
+					MM2.AddHash(h, false)
 				}
 
 				if !MM1.MS.Equal(MM2.MS) { // MM2 should be the same as MM1

@@ -242,7 +242,6 @@ validate docker:
   needs: [ build images ]
   image: docker
   services: [ docker:dind ]
-  allow_failure: true
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
@@ -256,18 +255,8 @@ validate docker:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT="${NODE_ROOT}" --rm tools /scripts/ci/validate.sh
   - docker-compose down
 
-validate devnet:
-  stage: validate
-  extends: .go
-  needs: []
-  variables:
-    MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
-  script:
-  - go run ./tools/test/devnet/ -v 1 -b 1 --reset
-
 validate:
   extends: .validate
-  allow_failure: true
   script:
   - apt-get -y update && apt-get -y install jq xxd
   - ./scripts/ci/validate.sh

@@ -142,13 +142,14 @@ func (b *Batch) putAs(key storage.Key, value encoding.BinaryMarshaler) error {
 		return err
 	}
 
-	return b.store.Put(key, data)
+	b.store.Put(key, data)
+	return nil
 }
 
 // UpdateBpt updates the Patricia Tree hashes with the values from the updates
 // since the last update.
-func (b *Batch) UpdateBpt() error {
-	return b.bpt.Bpt.Update()
+func (b *Batch) UpdateBpt() {
+	b.bpt.Bpt.Update()
 }
 
 // BptRootHash returns the root hash of the BPT.
@@ -170,38 +171,22 @@ func (b *Batch) AccountByID(id []byte) *Account {
 	return &Account{b, accountByID(id)}
 }
 
-// AccountByKey returns an Account for the given storage key. This is used for
-// creating snapshots from the BPT.
-func (b *Batch) AccountByKey(key storage.Key) *Account {
-	return &Account{b, accountBucket{objectBucket(key)}}
-}
-
 // Transaction returns a Transaction for the given transaction ID.
 func (b *Batch) Transaction(id []byte) *Transaction {
 	return &Transaction{b, transaction(id)}
 }
 
 // Import imports values from another database.
-func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
-	err := b.bpt.Bpt.Update()
-	if err != nil {
-		return err
-	}
-	err = b.store.PutAll(db.Export())
-	if err != nil {
-		return err
-	}
+func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) {
+	b.bpt.Bpt.Update()
+	b.store.PutAll(db.Export())
 	b.bpt = pmt.NewBPTManager(b.store)
-	return nil
 }
 
 // Commit commits pending writes to the key-value store. Attempting to use the
 // Batch after calling Commit will result in a panic.
 func (b *Batch) Commit() error {
-	err := b.UpdateBpt()
-	if err != nil {
-		return err
-	}
+	b.UpdateBpt()
 	return b.store.Commit()
 }
 

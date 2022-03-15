@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	stdlog "log"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
@@ -66,7 +68,7 @@ func (n *Node) Start() error {
 		website := http.Server{Addr: u.Host, Handler: http.FileServer(http.FS(web.FS))}
 		go func() {
 			<-n.Quit()
-			_ = website.Shutdown(context.Background())
+			website.Shutdown(context.Background())
 		}()
 		go func() {
 			n.logger.Info("Listening", "host", u.Host, "module", "website")
@@ -89,4 +91,29 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 			return client
 		}
 	}
+}
+
+func isConnectionError(err error) bool {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return false
+	}
+
+	var netOpErr *net.OpError
+	if !errors.As(urlErr.Err, &netOpErr) {
+		return false
+	}
+
+	// Assume any syscall error is a connection error
+	var syscallErr *os.SyscallError
+	if errors.As(netOpErr.Err, &syscallErr) {
+		return true
+	}
+
+	var netErr net.Error
+	if errors.As(netOpErr.Err, &netErr) {
+		return netErr.Timeout() || netErr.Temporary()
+	}
+
+	return false
 }

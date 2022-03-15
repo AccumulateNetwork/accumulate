@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -28,9 +27,6 @@ const (
 
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
-
-	// SyntheticLedgerPath is the path to a node's internal synthetic transaction ledger.
-	SyntheticLedgerPath = "synth-ledger"
 
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
@@ -67,12 +63,6 @@ const (
 
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
-
-	// DefaultKeyBook is the default key book name when not specified
-	DefaultKeyBook = "book0"
-
-	// GenesisBlock is the block index of the first block.
-	GenesisBlock = 1
 )
 
 // AcmeUrl returns `acc://ACME`.
@@ -267,6 +257,9 @@ func IsValidAdiUrl(u *url.URL) error {
 	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
 		errs = append(errs, "identity could be a lite token account key")
 	}
+	if u.Path != "" {
+		errs = append(errs, "path is not empty")
+	}
 	if u.Query != "" {
 		errs = append(errs, "query is not empty")
 	}
@@ -306,7 +299,7 @@ func IsValidAdiUrl(u *url.URL) error {
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
 	_, ok := ParseBvnUrl(u)
-	return ok || BelongsToDn(u)
+	return ok || IsDnUrl(u)
 }
 
 // DnUrl returns `acc://dn`.
@@ -321,7 +314,7 @@ func BvnUrl(subnet string) *url.URL {
 
 // IsDnUrl checks if the URL is the DN ADI URL.
 func IsDnUrl(u *url.URL) bool {
-	u = u.RootIdentity()
+	u = u.Identity()
 	return DnUrl().Equal(u)
 }
 
@@ -336,7 +329,7 @@ func ParseBvnUrl(u *url.URL) (string, bool) {
 
 // BelongsToDn checks if the give account belongs to the DN.
 func BelongsToDn(u *url.URL) bool {
-	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
+	return IsDnUrl(u) || u.Identity().Equal(AcmeUrl())
 }
 
 // BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.
@@ -351,23 +344,4 @@ func IndexChain(name string, major bool) string {
 		return "major-" + name + "-index"
 	}
 	return "minor-" + name + "-index"
-}
-
-// AnchorChain returns the name of the intermediate anchor chain for the given
-// subnet.
-func AnchorChain(name string) string {
-	return "anchor-" + name
-}
-
-// ParseBvnUrl extracts the subnet name from a intermediate anchor chain name.
-func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasPrefix(strings.ToLower(name), "anchor-") {
-		return "", false
-	}
-	return name[7:], true
-}
-
-// FormatKeyPageUrl provides a global method to format the KeyPage URL which is currently acc://id/book/1
-func FormatKeyPageUrl(keyBookUrl *url.URL, pageNr uint64) *url.URL {
-	return keyBookUrl.JoinPath(strconv.FormatUint(pageNr+1, 10))
 }

@@ -32,7 +32,7 @@ func GoOutputVar(typ string) string {
 	case strings.Contains(typ, "|"):
 		return "interface{}"
 	case strings.Contains(typ, "."):
-		return typ
+		return fmt.Sprintf("%s", typ)
 	default:
 		return fmt.Sprintf("api.%s", typ)
 	}

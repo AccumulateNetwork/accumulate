@@ -59,7 +59,7 @@ func BenchmarkHighTps(b *testing.B) {
 
 	state, err := kv.MarshalJSON()
 	require.NoError(b, err)
-	_, err = exec.InitChain(state, time.Now())
+	_, err = exec.InitChain(state, time.Now(), 0)
 	require.NoError(b, err)
 
 	liteKey := acctesting.GenerateKey(b.Name(), "Lite")
@@ -170,7 +170,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	state, err := temp.MarshalJSON()
 	require.NoError(t, err)
 
-	_, err = chain.InitChain(state, time.Now())
+	_, err = chain.InitChain(state, time.Now(), 1)
 	require.NoError(t, err)
 
 	// Start a block

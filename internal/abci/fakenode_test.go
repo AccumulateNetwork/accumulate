@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -32,6 +31,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type FakeNode struct {
@@ -76,7 +78,9 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
-		netName = strings.TrimPrefix(netName, evilNodePrefix)
+		if strings.HasPrefix(netName, evilNodePrefix) {
+			netName = strings.TrimPrefix(netName, evilNodePrefix)
+		}
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
@@ -150,14 +154,11 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Network: *n.network,
 		Address: n.key.PubKey().Address(),
 	})
+	appChan <- n.app
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()
 		n.Require().NoError(err)
 	})
-
-	// Notify FakeTendermint that we have created an ABCI, but don't notify it
-	// immediately, but make sure it definitely happens
-	defer func() { appChan <- n.app }()
 
 	n.api = api2.NewQueryDispatch(api2.Options{
 		Logger:        n.logger,
@@ -194,7 +195,6 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Time:          time.Now(),
 		ChainId:       n.network.LocalSubnetID,
 		AppStateBytes: state,
-		InitialHeight: protocol.GenesisBlock + 1,
 	})
 
 	return n
@@ -251,12 +251,12 @@ func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
 	n.Require().NoError(json.Unmarshal(data, result))
 }
 
-func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
+func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte {
 	n.t.Helper()
 
 	var ids [][32]byte
 	var blob []byte
-	inBlock(func(tx *protocol.Envelope) {
+	inBlock(func(tx *transactions.Envelope) {
 		var id [32]byte
 		copy(id[:], tx.GetTxHash())
 		ids = append(ids, id)
@@ -268,35 +268,26 @@ func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
 	// Submit all the transactions as a batch
 	n.client.SubmitTx(context.Background(), blob)
 
-	n.waitForTxns(nil, convertIds32(ids...)...)
+	n.WaitForTxns32(ids...)
 	return ids
 }
 
-func (n *FakeNode) WaitForTxns(ids ...[]byte) {
-	n.waitForTxns(nil, ids...)
-}
-
-func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) {
-	for _, id := range ids {
-		if cause == nil {
-			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id))
-		} else {
-			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
-		}
-		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
-		n.Require().NoErrorf(err, "Failed to query TX %X", id)
-		n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
-	}
-}
-
-func convertIds32(ids ...[32]byte) [][]byte {
+func (n *FakeNode) WaitForTxns32(ids ...[32]byte) {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
 		// Make a copy to avoid capturing the loop variable
 		id := id
 		ids2[i] = id[:]
 	}
-	return ids2
+	n.WaitForTxns(ids2...)
+}
+
+func (n *FakeNode) WaitForTxns(ids ...[]byte) {
+	for _, id := range ids {
+		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
+		n.Require().NoErrorf(err, "Failed to query TX %X", id)
+		n.WaitForTxns32(res.SyntheticTxids...)
+	}
 }
 
 func (n *FakeNode) ParseUrl(s string) *url.URL {
@@ -311,7 +302,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 
 	u := n.ParseUrl(adi)
 	record := batch.Account(u)
-	require.True(n.t, u.RootIdentity().Equal(u))
+	require.True(n.t, u.Identity().Equal(u))
 
 	md := new(protocol.DirectoryIndexMetadata)
 	err := record.Index("Directory", "Metadata").GetAs(md)
@@ -340,7 +331,7 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)
 
-	var typ protocol.TransactionType
+	var typ types.TransactionType
 	require.NoError(n.t, typ.UnmarshalJSON([]byte(strconv.Quote(resp.Type))))
 
 	resp.Data, err = protocol.NewTransaction(typ)
@@ -403,7 +394,7 @@ type e2eDUT struct {
 	*FakeNode
 }
 
-func (d *e2eDUT) GetRecordAs(url string, target protocol.Account) {
+func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	d.QueryAccountAs(url, target)
 }
 
@@ -411,7 +402,7 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.QueryAccount(url).MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	d.client.SubmitTx(context.Background(), b)

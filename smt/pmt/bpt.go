@@ -3,10 +3,13 @@ package pmt
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
+
+const debug = false
 
 // BPT
 // Binary Patricia Tree.
@@ -272,7 +275,7 @@ func GetHash(e Entry) []byte {
 
 // Update the Patricia Tree hashes with the values from the
 // updates since the last update
-func (b *BPT) Update() error {
+func (b *BPT) Update() {
 	for len(b.DirtyMap) > 0 { //                            While the DirtyMap has nodes to process
 		dirtyList := b.GetDirtyList() //                    Get the Dirty List. Note sorted by height, High to low
 
@@ -282,10 +285,7 @@ func (b *BPT) Update() error {
 				break //                                    bap out
 			} //
 			if h&b.mask == 0 && b.manager != nil { //       Sort and see if at the root node for a byte block
-				err := b.manager.FlushNode(n) //            If so, flush the byte block; it has already been updated
-				if err != nil {
-					return err
-				}
+				b.manager.FlushNode(n) //                   If so, flush the byte block; it has already been updated
 			} //
 			L := GetHash(n.Left)  //                        Get the Left Branch
 			R := GetHash(n.Right) //                        Get the Right Branch
@@ -304,13 +304,9 @@ func (b *BPT) Update() error {
 		}
 	}
 	if b.manager != nil { //                                Root doesn't get flushed (has no parent)
-		err := b.manager.FlushNode(b.GetRoot()) //          So flush it special
-		if err != nil {
-			return err
-		}
+		b.manager.FlushNode(b.GetRoot()) //                 So flush it special
 	} //
 	b.RootHash = b.GetRoot().Hash //                        Set the root hash (so we don't have to load Root)
-	return nil
 }
 
 func (b *BPT) EnsureRootHash() {
@@ -413,7 +409,7 @@ func (b *BPT) UnMarshalEntry(parent *BptNode, data []byte) (Entry, []byte) { //
 		return v, data           //             Return the value object and updated data slice
 	case TNotLoaded: //                         If not loaded
 		if parent.Height&b.mask != 0 {
-			panic("writing a TNotLoaded node on a non-boundary node")
+			panic(fmt.Sprintf("writing a TNotLoaded node on a non-boundary node"))
 		}
 		return new(NotLoaded), data //          Create the NotLoaded stub and updated pointer
 	case TNode: //                              If a Node

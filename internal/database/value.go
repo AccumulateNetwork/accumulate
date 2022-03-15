@@ -33,8 +33,8 @@ func (v *Value) GetAs(u encoding.BinaryUnmarshaler) error {
 }
 
 // Put stores the value.
-func (v *Value) Put(data []byte) error {
-	return v.batch.store.Put(v.key, data)
+func (v *Value) Put(data []byte) {
+	v.batch.store.Put(v.key, data)
 }
 
 // PutAs marshals the given value and stores it.
@@ -44,5 +44,6 @@ func (v *Value) PutAs(u encoding.BinaryMarshaler) error {
 		return err
 	}
 
-	return v.Put(data)
+	v.Put(data)
+	return nil
 }

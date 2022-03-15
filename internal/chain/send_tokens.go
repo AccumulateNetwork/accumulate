@@ -6,13 +6,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SendTokens struct{}
 
-func (SendTokens) Type() protocol.TransactionType { return protocol.TransactionTypeSendTokens }
+func (SendTokens) Type() types.TxType { return types.TxTypeSendTokens }
 
-func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SendTokens), tx.Transaction.Body)
@@ -33,6 +34,11 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("invalid origin record: want %v or %v, got %v", protocol.AccountTypeTokenAccount, protocol.AccountTypeLiteTokenAccount, st.Origin.GetType())
 	}
 
+	tokenUrl, err := account.ParseTokenUrl()
+	if err != nil {
+		return nil, fmt.Errorf("invalid token URL: %v", err)
+	}
+
 	//now check to see if we can transact
 	//really only need to provide one input...
 	//now check to see if the account is good to send tokens from
@@ -48,7 +54,7 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
 		copy(deposit.Cause[:], tx.GetTxHash())
-		deposit.Token = account.GetTokenUrl()
+		deposit.Token = tokenUrl
 		deposit.Amount = body.To[i].Amount
 		st.Submit(u, deposit)
 	}

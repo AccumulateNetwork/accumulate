@@ -12,7 +12,9 @@ type TokenHolder interface {
 	CreditTokens(amount *big.Int) bool
 	CanDebitTokens(amount *big.Int) bool
 	DebitTokens(amount *big.Int) bool
-	GetTokenUrl() *url.URL
+
+	// Deprecated: use TokenUrl field
+	ParseTokenUrl() (*url.URL, error)
 }
 
 type CreditHolder interface {
@@ -51,8 +53,9 @@ func (acct *TokenAccount) DebitTokens(amount *big.Int) bool {
 	return true
 }
 
-func (acct *TokenAccount) GetTokenUrl() *url.URL {
-	return acct.TokenUrl
+// Deprecated: use TokenUrl field
+func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
+	return acct.TokenUrl, nil
 }
 
 func (ms *KeyPage) CreditCredits(amount uint64) {
@@ -115,8 +118,9 @@ func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
 	return true
 }
 
-func (acct *LiteTokenAccount) GetTokenUrl() *url.URL {
-	return acct.TokenUrl
+// Deprecated: use TokenUrl field
+func (acct *LiteTokenAccount) ParseTokenUrl() (*url.URL, error) {
+	return acct.TokenUrl, nil
 }
 
 func (acct *LiteTokenAccount) SetNonce(key []byte, nonce uint64) error {

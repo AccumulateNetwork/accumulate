@@ -56,16 +56,16 @@ func PrintKeyPageGet() {
 }
 
 func PrintKeyPageCreate() {
-	fmt.Println("  accumulate page create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
-	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon/RedBook redKey5 redKey1 redKey2 redKey3")
+	fmt.Println("  accumulate page create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
+	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 func PrintKeyUpdate() {
 	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate page key update acc://RedWagon/RedBook/1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
-	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedBook/2 redKey2 redKey1")
+	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedPage1 redKey1 redKey2 ")
 	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
-	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedBook/1 redKey1 redKey2")
+	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedPage1 redKey1 redKey2")
 }
 
 func PrintPage() {
@@ -102,24 +102,30 @@ func GetKeyPage(url string) (*QueryResponse, *protocol.KeyPage, error) {
 }
 
 // CreateKeyPage create a new key page
-func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
-	bookUrl, err := url2.Parse(bookUrlStr)
+func CreateKeyPage(page string, args []string) (string, error) {
+	pageUrl, err := url2.Parse(page)
 	if err != nil {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(bookUrl, args)
+	args, si, privKey, err := prepareSigner(pageUrl, args)
 	if err != nil {
 		return "", err
 	}
 
-	if len(args) < 1 {
+	if len(args) < 2 {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
-	keyLabels := args
+	newUrl, err := url2.Parse(args[0])
+	keyLabels := args[1:]
+	//when creating a key page you need to have the keys already generated and labeled.
+	if newUrl.Authority != pageUrl.Authority {
+		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
+	}
 
 	ckp := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
+	ckp.Url = newUrl
 	ckp.Keys = ksp
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
@@ -138,7 +144,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	res, err := dispatchTxRequest("create-key-page", &ckp, nil, bookUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-page", &ckp, nil, pageUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}

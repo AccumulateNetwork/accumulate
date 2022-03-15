@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -20,37 +21,28 @@ type MerkleManager struct {
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
-func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
+func (m *MerkleManager) AddHash(hash Hash, unique bool) {
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed
 	_, err := m.GetElementIndex(hash)        // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
-		err = m.Manager.Put(m.key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
-		if err != nil {
-			return err
-		}
+		m.Manager.Put(m.key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
 	} else if err != nil {
-		return err
+		panic(err) // TODO Panics are bad, but I don't want to change the signature now
 	} else if unique {
-		return nil // Don't add duplicates
+		return // Don't add duplicates
 	}
 
-	err = m.Manager.Put(m.key.Append("Element", m.MS.Count), hash)
-	if err != nil {
-		return err
-	}
+	m.Manager.Put(m.key.Append("Element", m.MS.Count), hash)
 	switch (m.MS.Count + 1) & m.MarkMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., m.MarkFreq-1
 		m.MS.AddToMerkleTree(hash)                      // Add the hash to the Merkle Tree
 		if MSState, err := m.MS.Marshal(); err != nil { // Get the current state
-			return fmt.Errorf("could not marshal MerkleState: %v", err)
+			panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
 		} else {
-			err = m.Manager.Put(m.key.Append("States", m.GetElementCount()-1), MSState) // Save Merkle State at n*MarkFreq-1
-			if err != nil {
-				return err
-			}
+			m.Manager.Put(m.key.Append("States", m.GetElementCount()-1), MSState) // Save Merkle State at n*MarkFreq-1
 		}
 		if err := m.WriteChainHead(m.key); err != nil {
-			return fmt.Errorf("error writing chain head: %v", err)
+			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	case 1: //                              After MarkFreq elements are written
 		m.MS.HashList = m.MS.HashList[:0] // then clear the HashList
@@ -58,11 +50,9 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 	default:
 		m.MS.AddToMerkleTree(hash) // 0 to m.MarkFeq-2, always add to the merkle tree
 		if err := m.WriteChainHead(m.key); err != nil {
-			return fmt.Errorf("error writing chain head: %v", err)
+			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	}
-
-	return nil
 }
 
 // GetElementIndex
@@ -95,7 +85,8 @@ func (m *MerkleManager) WriteChainHead(key storage.Key) error {
 	if err != nil {
 		return err
 	}
-	return m.Manager.Put(key.Append("Head"), state)
+	m.Manager.Put(key.Append("Head"), state)
+	return nil
 }
 
 // GetChainState
@@ -334,4 +325,14 @@ func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash
 		hash = v.Combine(s.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
 	}
 	return nil, nil, fmt.Errorf("no values found at height %d", height)
+}
+
+// AddHashString
+// Often instead of a hash, we have a hex string, but that's okay too.
+func (m *MerkleManager) AddHashString(hash string, unique bool) {
+	if h, err := hex.DecodeString(hash); err != nil { //                             Convert to a binary slice
+		panic(fmt.Sprintf("failed to decode a hash %s with error %v", hash, err)) // If this fails, panic; no recovery
+	} else {
+		m.AddHash(h, unique) // Add the hash
+	}
 }

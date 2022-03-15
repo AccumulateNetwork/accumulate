@@ -2,13 +2,12 @@ package abci_test
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func TestProofADI(t *testing.T) {
@@ -30,9 +29,8 @@ func TestProofADI(t *testing.T) {
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
-		var err error
-		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
-		require.NoError(t, err)
+		adi.KeyBookName = "book0"
+		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
@@ -40,14 +38,14 @@ func TestProofADI(t *testing.T) {
 	})
 
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
-	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKey)
+	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/book0/1"), initialCredits))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/page0"), initialCredits))
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
-	n.Batch(func(send func(*protocol.Envelope)) {
+	n.Batch(func(send func(*transactions.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = n.ParseUrl("RoadRunner/Baz")
 		tac.TokenUrl = protocol.AcmeUrl()
@@ -56,7 +54,7 @@ func TestProofADI(t *testing.T) {
 			SignLegacyED25519(adiKey))
 	})
 
-	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
 	n.GetADI("RoadRunner")
 	n.GetTokenAccount("RoadRunner/Baz")
 

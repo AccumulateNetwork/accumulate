@@ -218,7 +218,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	app.logger.Info("Initializing")
-	root, err := app.Chain.InitChain(req.AppStateBytes, req.Time)
+	root, err := app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}

@@ -16,6 +16,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -53,7 +55,7 @@ func (d *e2eDUT) queryAccount(s string) *apiv2.ChainQueryResponse {
 	return r.(*apiv2.ChainQueryResponse)
 }
 
-func (d *e2eDUT) GetRecordAs(url string, target protocol.Account) {
+func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	r := d.queryAccount(url)
 	data, err := json.Marshal(r.Data)
 	d.Require().NoError(err)
@@ -64,7 +66,7 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.queryAccount(url).MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	d.T().Helper()
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)

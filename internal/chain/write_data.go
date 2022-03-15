@@ -4,13 +4,15 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type WriteData struct{}
 
-func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
+func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
 
-func (WriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)

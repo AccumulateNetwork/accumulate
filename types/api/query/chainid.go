@@ -3,8 +3,8 @@ package query
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type RequestByChainId struct {
@@ -12,7 +12,7 @@ type RequestByChainId struct {
 }
 
 type ResponseByChainId struct {
-	protocol.Object
+	state.Object
 }
 
 func (*RequestByChainId) Type() types.QueryType { return types.QueryTypeChainId }
@@ -31,8 +31,9 @@ func (r *RequestByChainId) UnmarshalBinary(data []byte) (err error) {
 	if len(data) < 32 {
 		return fmt.Errorf("insufficient data for chain id")
 	}
+	r.ChainId.FromBytes(data)
 
-	return r.ChainId.FromBytes(data)
+	return nil
 }
 
 func (r *ResponseByChainId) MarshalBinary() ([]byte, error) {

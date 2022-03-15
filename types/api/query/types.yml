@@ -64,14 +64,10 @@ ResponseByTxId:
   fields:
     - name: TxId
       type: chain
-    - name: Envelope
-      type: protocol.Envelope
-      marshal-as: reference
-      pointer: true
-    - name: Status
-      type: protocol.TransactionStatus
-      marshal-as: reference
-      pointer: true
+    - name: TxState
+      type: bytes
+    - name: TxPendingState
+      type: bytes
     - name: TxSynthTxIds
       type: bytes
     - name: Height
@@ -98,8 +94,8 @@ TxReceipt:
       pointer: true
     - name: Chain
       type: string
-    # - name: DirectoryBlock
-    #   type: uvarint
+    - name: DirectoryBlock
+      type: uvarint
     - name: Receipt
       type: protocol.Receipt
       marshal-as: reference

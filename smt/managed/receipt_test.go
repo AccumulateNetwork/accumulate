@@ -36,7 +36,7 @@ func TestReceipt(t *testing.T) {
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
-		require.NoError(t, manager.AddHash(v, false))
+		manager.AddHash(v, false)
 		fmt.Printf("e%-6d %x %v\n", i, v, v[:3])
 	}
 	e0 := GetHash(0)
@@ -86,8 +86,10 @@ func TestReceiptAll(t *testing.T) {
 
 	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
 	var rh common.RandHash                     // A source of random hashes
+	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
 	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
-		require.NoError(t, manager.AddHash(rh.NextList(), false)) // Add a hash
+		manager.AddHash(rh.NextList(), false)             // Add a hash
+		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
 	}
 
 	for i := 0; i < testMerkleTreeSize; i++ {
@@ -127,12 +129,12 @@ func TestReceiptAll(t *testing.T) {
 	fmt.Println("Ran ", cnt, " tests")
 }
 
-func PopulateDatabase(t *testing.T, manager *MerkleManager, treeSize int64) {
+func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	// populate the database
 	startCount := manager.MS.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
-		require.NoError(t, manager.AddHash(v, false))
+		manager.AddHash(v, false)
 	}
 }
 
@@ -171,7 +173,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 			t := atomic.LoadInt64(total)
 			if t-atomic.LoadInt64(printed) >= 100000 {
 				atomic.StoreInt64(printed, t)
-				seconds := int64(time.Since(start).Seconds()) + 1
+				seconds := int64(time.Now().Sub(start).Seconds()) + 1
 				fmt.Printf("Element: %7d     Receipts generated: %12s     Rate: %8d/s\n",
 					i, humanize.Comma(t), t/seconds)
 			}
@@ -206,7 +208,7 @@ func TestBadgerReceipts(t *testing.T) {
 	manager, err := NewMerkleManager(badger.Begin(true), 2)
 	require.NoError(t, err)
 
-	PopulateDatabase(t, manager, 700)
+	PopulateDatabase(manager, 700)
 
 	GenerateReceipts(manager, 1500, t)
 
@@ -214,6 +216,7 @@ func TestBadgerReceipts(t *testing.T) {
 
 func TestReceipt_Combine(t *testing.T) {
 	testCnt := int64(50)
+	var m1Roots, m2Roots []Hash
 	var rh common.RandHash
 	var m1, m2 *MerkleManager
 	store := memory.NewDB()
@@ -228,9 +231,12 @@ func TestReceipt_Combine(t *testing.T) {
 	require.NoError(t, err, "should be able to set a key")
 
 	for i := int64(0); i < testCnt; i++ {
-		require.NoError(t, m1.AddHash(rh.NextList(), false))
+		m1.AddHash(rh.NextList(), false)
 		root1 := m1.MS.GetMDRoot()
-		require.NoError(t, m2.AddHash(root1, false))
+		m1Roots = append(m1Roots, root1)
+		m2.AddHash(root1, false)
+		root2 := m2.MS.GetMDRoot()
+		m2Roots = append(m2Roots, root2)
 	}
 	for i := int64(0); i < testCnt; i++ {
 		for j := i; j < testCnt; j++ {

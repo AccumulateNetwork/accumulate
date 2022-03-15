@@ -31,10 +31,6 @@ func init() {
 	cmdRun.AddCommand(cmdRunDevnet)
 
 	cmdRunDevnet.Flags().StringArrayVarP(&flagRunDevnet.Except, "except", "x", nil, "Nodes that should not be launched, e.g. bvn0.0")
-
-	if os.Getenv("FORCE_COLOR") != "" {
-		color.NoColor = false
-	}
 }
 
 var colors = []*color.Color{

@@ -1,8 +1,6 @@
 package database
 
 import (
-	"strings"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -50,8 +48,6 @@ func accountByID(id []byte) accountBucket {
 
 // Chain returns the storage key for the given chain of the record.
 func (b *accountBucket) Chain(name string) storage.Key {
-	// Ensure chain names are case insensitive
-	name = strings.ToLower(name)
 	return b.Object().Append("Chain", name)
 }
 
@@ -68,9 +64,8 @@ func (b *transactionBucket) Status() storage.Key {
 	return b.Object().Append("Status")
 }
 
-// Signatures returns the storage key for the transaction's signatures.
+// Signatures returns the storage key for the transaction's status.
 func (b *transactionBucket) Signatures() storage.Key {
-	// TODO Handle this through signature chains.
 	return b.Object().Append("Signatures")
 }
 

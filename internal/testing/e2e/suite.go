@@ -9,6 +9,8 @@ import (
 	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 	"golang.org/x/exp/rand"
 )
 
@@ -16,9 +18,9 @@ type NewDUT func(*Suite) DUT
 
 // DUT are the parameters needed to test the Device Under Test.
 type DUT interface {
-	GetRecordAs(url string, target protocol.Account)
+	GetRecordAs(url string, target state.Chain)
 	GetRecordHeight(url string) uint64
-	SubmitTxn(*protocol.Envelope)
+	SubmitTxn(*transactions.Envelope)
 	WaitForTxns(...[]byte)
 }
 
@@ -56,7 +58,7 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(s.generateKey())
 }
 
-func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body protocol.TransactionBody) *protocol.Envelope {
+func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body protocol.TransactionPayload) *transactions.Envelope {
 	s.T().Helper()
 	return testing.NewTransaction().
 		WithOrigin(sponsor).

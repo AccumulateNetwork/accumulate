@@ -22,8 +22,6 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(DataAccount), nil
 	case AccountTypeInternalLedger:
 		return new(InternalLedger), nil
-	case AccountTypeInternalSyntheticLedger:
-		return new(InternalSyntheticLedger), nil
 	case AccountTypeKeyBook:
 		return new(KeyBook), nil
 	case AccountTypeKeyPage:
@@ -288,8 +286,6 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
 		return new(RCD1Signature), nil
-	case SignatureTypeReceipt:
-		return new(ReceiptSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", typ)
 	}

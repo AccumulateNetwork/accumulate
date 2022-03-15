@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/dgraph-io/badger"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDatabase(t *testing.T) {
@@ -32,21 +31,24 @@ func TestDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if i%1000 == 0 {
+			//	println(i)
+		}
 	}
 	//fmt.Println("Reads")
 	for i := 0; i < 10000; i++ {
 		var val []byte
 		err = db.View(func(txn *badger.Txn) error {
 			item, err := txn.Get([]byte(fmt.Sprintf("answer %d", i)))
-			require.NoError(t, err)
+			if err != nil {
+				t.Fatal(err)
+			}
 			err = item.Value(func(v []byte) error {
 				val = append(val, v...)
 				return nil
 			})
-			require.NoError(t, err)
 			return nil
 		})
-		require.NoError(t, err)
 
 		if string(val) != fmt.Sprintf("%x this much data ", i) {
 			t.Error("Did not read data properly")
@@ -73,6 +75,9 @@ func TestDatabase2(t *testing.T) {
 		if err := txn.Set([]byte(fmt.Sprintf("answer %d", i)), []byte(fmt.Sprintf("%x this much data ", i))); err != nil {
 			t.Fatal(err)
 		}
+		if i%1000 == 0 {
+			//	println(i)
+		}
 	}
 	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
@@ -82,15 +87,15 @@ func TestDatabase2(t *testing.T) {
 		var val []byte
 		err = db.View(func(txn *badger.Txn) error {
 			item, err := txn.Get([]byte(fmt.Sprintf("answer %d", i)))
-			require.NoError(t, err)
+			if err != nil {
+				t.Fatal(err)
+			}
 			err = item.Value(func(v []byte) error {
 				val = append(val, v...)
 				return nil
 			})
-			require.NoError(t, err)
 			return nil
 		})
-		require.NoError(t, err)
 
 		if string(val) != fmt.Sprintf("%x this much data ", i) {
 			t.Error("Did not read data properly")

@@ -104,8 +104,6 @@ Receipt:
   fields:
     - name: Start
       type: bytes
-    - name: Result
-      type: bytes
     - name: Entries
       repeatable: true
       type: ReceiptEntry

@@ -8,6 +8,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -39,7 +40,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 				"principal", env.Transaction.Origin)
 			status.Code = err.Code.ID()
 			status.Message = err.Error()
-		} else if !typ.IsInternal() && typ != protocol.TransactionTypeSyntheticAnchor {
+		} else if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
 			logger.Debug("Transaction succeeded",
 				"type", typ,
 				"txid", logging.AsHex(txid),

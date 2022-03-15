@@ -24,7 +24,7 @@ func init() {
 	cmdConfig.AddCommand(cmdConfigSentry)
 }
 
-func setSentryDsn(_ *cobra.Command, args []string) {
+func setSentryDsn(cmd *cobra.Command, args []string) {
 	entries, err := os.ReadDir(flagMain.WorkDir)
 	checkf(err, "reading %q", flagMain.WorkDir)
 

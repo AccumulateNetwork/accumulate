@@ -6,6 +6,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
+// Deprecated: use TransactionBody
+type TransactionPayload = TransactionBody
+
 func NewTransaction(typ TransactionType) (TransactionBody, error) {
 	return NewTransactionBody(typ)
 }
@@ -34,7 +37,7 @@ func (t TransactionType) IsInternal() bool {
 }
 
 type SyntheticTransaction interface {
-	TransactionBody
+	TransactionPayload
 	GetCause() [32]byte
 }
 

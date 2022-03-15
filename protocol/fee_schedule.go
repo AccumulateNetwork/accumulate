@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"encoding"
 	"fmt"
 )
 
@@ -62,16 +61,27 @@ const (
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
 
-	// FeeWriteScratchData $0.0001 / 256 bytes
+	//FeeWriteScratchData $0.0001 / 256 bytes
 	FeeWriteScratchData Fee = 1
 
-	// FeeSignature $0.001
-	FeeSignature Fee = 10
+	// FeeSignPending $0.001
+	FeeSignPending Fee = 10
 )
 
-func BaseTransactionFee(typ TransactionType) (Fee, error) {
-	// TODO Handle scratch accounts
-	switch typ {
+func ComputeFee(tx *Envelope) (Fee, error) {
+	// Do not charge fees for the DN or BVNs
+	if IsDnUrl(tx.Transaction.Origin) {
+		return 0, nil
+	}
+	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
+		return 0, nil
+	}
+
+	txType := tx.Transaction.Type()
+	if txType == TransactionTypeUnknown {
+		return 0, fmt.Errorf("cannot compute fee with no data defined for transaction")
+	}
+	switch TransactionType(txType) {
 	case TransactionTypeCreateIdentity:
 		return FeeCreateIdentity, nil
 	case TransactionTypeCreateTokenAccount:
@@ -81,7 +91,19 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 	case TransactionTypeCreateDataAccount:
 		return FeeCreateDataAccount, nil
 	case TransactionTypeWriteData:
-		return FeeWriteData, nil
+		// TODO Include the header?
+		body, err := tx.Transaction.Body.MarshalBinary()
+		if err != nil {
+			return 0, err
+		}
+		size := len(body)
+		if size > WriteDataMax {
+			return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
+		}
+		if size <= 0 {
+			return 0, fmt.Errorf("insufficient data provided for %v needed to compute cost", txType)
+		}
+		return FeeWriteData * Fee(size/256+1), nil
 	case TransactionTypeWriteDataTo:
 		return FeeWriteDataTo, nil
 	case TransactionTypeAcmeFaucet:
@@ -100,76 +122,10 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeAddCredits, nil
 	case TransactionTypeUpdateKeyPage:
 		return FeeUpdateKeyPage, nil
-	case TransactionTypeUpdateManager, TransactionTypeRemoveManager:
-		// TODO Fee schedule for these transactions
-		return 0, nil
 	case TransactionTypeSignPending:
-		return FeeSignature, nil
+		return FeeSignPending, nil
 	default:
-		// All user transactions must have a defined fee amount, even if it's zero
-		return 0, fmt.Errorf("unknown transaction type: %v", typ)
-	}
-}
-
-func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
-	// Check the transaction size (including signatures)
-	data, err := obj.MarshalBinary()
-	if err != nil {
-		return 0, 0, err
-	}
-
-	// count the number of 256-byte chunks
-	size := len(data)
-	count := size / 256
-	if size%256 != 0 {
-		count++
-	}
-
-	return count, size, nil
-}
-
-func ComputeSignatureFee(sig Signature) (Fee, error) {
-	// Check the transaction size
-	count, size, err := dataCount(sig)
-	if err != nil {
-		return 0, err
-	}
-	if size > SignatureSizeMax {
-		return 0, fmt.Errorf("signature size exceeds %v byte entry limit", SignatureSizeMax)
-	}
-
-	// If the signature is larger than 256 B, charge extra
-	return FeeSignature * Fee(count), nil
-}
-
-func ComputeTransactionFee(tx *Envelope) (Fee, error) {
-	// Do not charge fees for the DN or BVNs
-	if IsDnUrl(tx.Transaction.Origin) {
+		//by default assume if type isn't specified, there is no charge for tx
 		return 0, nil
 	}
-	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
-		return 0, nil
-	}
-
-	// Don't charge for synthetic and internal transactions
-	if !tx.Transaction.Type().IsUser() {
-		return 0, nil
-	}
-
-	fee, err := BaseTransactionFee(tx.Transaction.Type())
-	if err != nil {
-		return 0, err
-	}
-
-	// Check the transaction size
-	count, size, err := dataCount(tx.Transaction)
-	if err != nil {
-		return 0, err
-	}
-	if size > TransactionSizeMax {
-		return 0, fmt.Errorf("transaction size exceeds %v byte entry limit", TransactionSizeMax)
-	}
-
-	// Charge an extra data fee per 256 B past the initial 256 B
-	return fee + FeeWriteData*Fee(count-1), nil
 }

@@ -48,7 +48,7 @@ func (t *Query) UnmarshalBinary(data []byte) (err error) {
 
 	t.Type = types.QueryType(binary.LittleEndian.Uint64(data))
 	t.RouteId = binary.LittleEndian.Uint64(data[8:])
-	t.Content, _ = common.BytesSlice(data[16:])
+	t.Content, data = common.BytesSlice(data[16:])
 
 	return nil
 }

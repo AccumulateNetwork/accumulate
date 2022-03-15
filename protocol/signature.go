@@ -104,20 +104,3 @@ func (e *RCD1Signature) Sign(nonce uint64, privateKey []byte, hash []byte) error
 func (e *RCD1Signature) Verify(hash []byte) bool {
 	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
 }
-
-func (s *ReceiptSignature) GetPublicKey() []byte {
-	return nil
-}
-
-func (s *ReceiptSignature) GetSignature() []byte {
-	b, _ := s.Receipt.MarshalBinary()
-	return b
-}
-
-func (s *ReceiptSignature) Sign(nonce uint64, privateKey []byte, hash []byte) error {
-	panic("invalid operation")
-}
-
-func (s *ReceiptSignature) Verify(hash []byte) bool {
-	return bytes.Equal(s.Start, hash) && s.Receipt.Convert().Validate()
-}

@@ -157,36 +157,11 @@ func ensurePath(s string) string {
 	return "/" + s
 }
 
-// RootIdentity returns a copy of the URL with an empty path.
-func (u *URL) RootIdentity() *URL {
+// Identity returns a copy of the URL with an empty path.
+func (u *URL) Identity() *URL {
 	v := *u
 	v.Path = ""
 	return &v
-}
-
-// Identity returns a copy of the URL with the last section cut off the path.
-func (u *URL) Identity() *URL {
-	v, _ := u.Parent()
-	return v
-}
-
-// Parent gets the URL's parent path, or returns the original URL and false.
-func (u *URL) Parent() (*URL, bool) {
-	v := *u
-	// Canonicalize the path
-	if strings.HasSuffix(v.Path, "/") {
-		v.Path = v.Path[:len(v.Path)-1]
-	}
-	if len(v.Path) == 0 {
-		return &v, false
-	}
-	slashIdx := strings.LastIndex(v.Path, "/")
-	if slashIdx == -1 {
-		v.Path = ""
-	} else {
-		v.Path = v.Path[:slashIdx]
-	}
-	return &v, true
 }
 
 // IdentityAccountID constructs an account identifier from the lower case

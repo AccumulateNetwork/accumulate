@@ -11,12 +11,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type StateManager struct {
 	stateCache
+	submissions      []*submission
+	validatorUpdates []abci.ValidatorUpdate
 
-	Origin        protocol.Account
+	Origin        state.Chain
 	OriginUrl     *url.URL
 	OriginChainId [32]byte
 
@@ -24,10 +28,15 @@ type StateManager struct {
 	SignatorUrl *url.URL
 }
 
+type submission struct {
+	Url  *url.URL
+	Body protocol.TransactionPayload
+}
+
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.Envelope) (*StateManager, error) {
 	m := new(StateManager)
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
@@ -57,14 +66,14 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Enve
 
 func (m *StateManager) Reset() {
 	m.stateCache.Reset()
-	m.blockState = BlockState{}
+	m.submissions = m.submissions[:0]
 }
 
 // commit writes pending records to the database.
-func (m *StateManager) Commit() error {
+func (m *StateManager) Commit() ([]*submission, error) {
 	records, err := m.stateCache.Commit()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Group synthetic create chain transactions per identity. All of the
@@ -74,14 +83,21 @@ func (m *StateManager) Commit() error {
 	// identities will route the same, so grouping by route is not safe.
 
 	create := map[string]*protocol.SyntheticCreateChain{}
+	submitted := make([]*submission, 0, len(m.submissions)+len(records))
+	submitted = append(submitted, m.submissions...)
 	for _, record := range records {
+		u, err := record.Header().ParseUrl()
+		if err != nil {
+			return nil, err
+		}
+
 		data, err := record.MarshalBinary()
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := record.Header().Url.RootIdentity()
+		id := u.Identity()
 		scc, ok := create[id.String()]
 		if ok {
 			scc.Chains = append(scc.Chains, params)
@@ -92,26 +108,22 @@ func (m *StateManager) Commit() error {
 		scc.Cause = m.txHash
 		scc.Chains = []protocol.ChainParams{params}
 		create[id.String()] = scc
-		m.Submit(id, scc)
+		submitted = append(submitted, &submission{id, scc})
 	}
 
-	return nil
+	return submitted, nil
 }
 
 // Submit queues a synthetic transaction for submission.
-func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
+func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
-
-	txn := new(protocol.Transaction)
-	txn.Origin = url
-	txn.Body = body
-	m.blockState.DidProduceTxn(txn)
+	m.submissions = append(m.submissions, &submission{url, body})
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, abci.ValidatorUpdate{
+	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: true,
 	})
@@ -119,7 +131,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, abci.ValidatorUpdate{
+	m.validatorUpdates = append(m.validatorUpdates, abci.ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: false,
 	})

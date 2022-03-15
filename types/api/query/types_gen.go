@@ -32,15 +32,15 @@ type RequestKeyPageIndex struct {
 
 type ResponseByTxId struct {
 	fieldsSet          []bool
-	TxId               [32]byte                    `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	Envelope           *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	Status             *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	TxSynthTxIds       []byte                      `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
-	Height             int64                       `json:"height" form:"height" query:"height" validate:"required"`
-	ChainState         [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
-	Receipts           []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	SignatureThreshold uint64                      `json:"signatureThreshold,omitempty" form:"signatureThreshold" query:"signatureThreshold" validate:"required"`
-	Invalidated        bool                        `json:"invalidated,omitempty" form:"invalidated" query:"invalidated" validate:"required"`
+	TxId               [32]byte     `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	TxState            []byte       `json:"txState,omitempty" form:"txState" query:"txState" validate:"required"`
+	TxPendingState     []byte       `json:"txPendingState,omitempty" form:"txPendingState" query:"txPendingState" validate:"required"`
+	TxSynthTxIds       []byte       `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
+	Height             int64        `json:"height" form:"height" query:"height" validate:"required"`
+	ChainState         [][]byte     `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	Receipts           []*TxReceipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	SignatureThreshold uint64       `json:"signatureThreshold,omitempty" form:"signatureThreshold" query:"signatureThreshold" validate:"required"`
+	Invalidated        bool         `json:"invalidated,omitempty" form:"invalidated" query:"invalidated" validate:"required"`
 }
 
 type ResponseChainEntry struct {
@@ -79,11 +79,12 @@ type ResponseTxHistory struct {
 }
 
 type TxReceipt struct {
-	fieldsSet []bool
-	Account   *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Chain     string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
-	Receipt   protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
-	Error     string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	fieldsSet      []bool
+	Account        *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain          string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Error          string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
@@ -101,10 +102,10 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 	if !(v.TxId == u.TxId) {
 		return false
 	}
-	if !((v.Envelope).Equal(u.Envelope)) {
+	if !(bytes.Equal(v.TxState, u.TxState)) {
 		return false
 	}
-	if !((v.Status).Equal(u.Status)) {
+	if !(bytes.Equal(v.TxPendingState, u.TxPendingState)) {
 		return false
 	}
 	if !(bytes.Equal(v.TxSynthTxIds, u.TxSynthTxIds)) {
@@ -236,6 +237,9 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 	if !(v.Chain == u.Chain) {
 		return false
 	}
+	if !(v.DirectoryBlock == u.DirectoryBlock) {
+		return false
+	}
 	if !((&v.Receipt).Equal(&u.Receipt)) {
 		return false
 	}
@@ -359,8 +363,8 @@ func (v *RequestKeyPageIndex) IsValid() error {
 
 var fieldNames_ResponseByTxId = []string{
 	1: "TxId",
-	2: "Envelope",
-	3: "Status",
+	2: "TxState",
+	3: "TxPendingState",
 	4: "TxSynthTxIds",
 	5: "Height",
 	6: "ChainState",
@@ -376,11 +380,11 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	if !(v.TxId == ([32]byte{})) {
 		writer.WriteHash(1, &v.TxId)
 	}
-	if !(v.Envelope == nil) {
-		writer.WriteValue(2, v.Envelope)
+	if !(len(v.TxState) == 0) {
+		writer.WriteBytes(2, v.TxState)
 	}
-	if !(v.Status == nil) {
-		writer.WriteValue(3, v.Status)
+	if !(len(v.TxPendingState) == 0) {
+		writer.WriteBytes(3, v.TxPendingState)
 	}
 	if !(len(v.TxSynthTxIds) == 0) {
 		writer.WriteBytes(4, v.TxSynthTxIds)
@@ -416,14 +420,14 @@ func (v *ResponseByTxId) IsValid() error {
 		errs = append(errs, "field TxId is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Envelope is missing")
-	} else if v.Envelope == nil {
-		errs = append(errs, "field Envelope is not set")
+		errs = append(errs, "field TxState is missing")
+	} else if len(v.TxState) == 0 {
+		errs = append(errs, "field TxState is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Status is missing")
-	} else if v.Status == nil {
-		errs = append(errs, "field Status is not set")
+		errs = append(errs, "field TxPendingState is missing")
+	} else if len(v.TxPendingState) == 0 {
+		errs = append(errs, "field TxPendingState is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field TxSynthTxIds is missing")
@@ -726,8 +730,9 @@ func (v *ResponseTxHistory) IsValid() error {
 var fieldNames_TxReceipt = []string{
 	1: "Account",
 	2: "Chain",
-	3: "Receipt",
-	4: "Error",
+	3: "DirectoryBlock",
+	4: "Receipt",
+	5: "Error",
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
@@ -740,11 +745,14 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Chain) == 0) {
 		writer.WriteString(2, v.Chain)
 	}
+	if !(v.DirectoryBlock == 0) {
+		writer.WriteUint(3, v.DirectoryBlock)
+	}
 	if !((v.Receipt).Equal(new(protocol.Receipt))) {
-		writer.WriteValue(3, &v.Receipt)
+		writer.WriteValue(4, &v.Receipt)
 	}
 	if !(len(v.Error) == 0) {
-		writer.WriteString(4, v.Error)
+		writer.WriteString(5, v.Error)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TxReceipt)
@@ -765,11 +773,16 @@ func (v *TxReceipt) IsValid() error {
 		errs = append(errs, "field Chain is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field DirectoryBlock is missing")
+	} else if v.DirectoryBlock == 0 {
+		errs = append(errs, "field DirectoryBlock is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Receipt is missing")
 	} else if (v.Receipt).Equal(new(protocol.Receipt)) {
 		errs = append(errs, "field Receipt is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Error is missing")
 	} else if len(v.Error) == 0 {
 		errs = append(errs, "field Error is not set")
@@ -846,11 +859,11 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(1); ok {
 		v.TxId = *x
 	}
-	if x := new(protocol.Envelope); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Envelope = x
+	if x, ok := reader.ReadBytes(2); ok {
+		v.TxState = x
 	}
-	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Status = x
+	if x, ok := reader.ReadBytes(3); ok {
+		v.TxPendingState = x
 	}
 	if x, ok := reader.ReadBytes(4); ok {
 		v.TxSynthTxIds = x
@@ -1023,10 +1036,13 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(2); ok {
 		v.Chain = x
 	}
-	if x := new(protocol.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x, ok := reader.ReadUint(3); ok {
+		v.DirectoryBlock = x
+	}
+	if x := new(protocol.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Receipt = *x
 	}
-	if x, ok := reader.ReadString(4); ok {
+	if x, ok := reader.ReadString(5); ok {
 		v.Error = x
 	}
 
@@ -1047,19 +1063,19 @@ func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId               string                      `json:"txId,omitempty"`
-		Envelope           *protocol.Envelope          `json:"envelope,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds       *string                     `json:"txSynthTxIds,omitempty"`
-		Height             int64                       `json:"height"`
-		ChainState         []*string                   `json:"chainState,omitempty"`
-		Receipts           []*TxReceipt                `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
+		TxId               string       `json:"txId,omitempty"`
+		TxState            *string      `json:"txState,omitempty"`
+		TxPendingState     *string      `json:"txPendingState,omitempty"`
+		TxSynthTxIds       *string      `json:"txSynthTxIds,omitempty"`
+		Height             int64        `json:"height"`
+		ChainState         []*string    `json:"chainState,omitempty"`
+		Receipts           []*TxReceipt `json:"receipts,omitempty"`
+		SignatureThreshold uint64       `json:"signatureThreshold,omitempty"`
+		Invalidated        bool         `json:"invalidated,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.TxId)
-	u.Envelope = v.Envelope
-	u.Status = v.Status
+	u.TxState = encoding.BytesToJSON(v.TxState)
+	u.TxPendingState = encoding.BytesToJSON(v.TxPendingState)
 	u.TxSynthTxIds = encoding.BytesToJSON(v.TxSynthTxIds)
 	u.Height = v.Height
 	u.ChainState = make([]*string, len(v.ChainState))
@@ -1136,19 +1152,19 @@ func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId               string                      `json:"txId,omitempty"`
-		Envelope           *protocol.Envelope          `json:"envelope,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds       *string                     `json:"txSynthTxIds,omitempty"`
-		Height             int64                       `json:"height"`
-		ChainState         []*string                   `json:"chainState,omitempty"`
-		Receipts           []*TxReceipt                `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
+		TxId               string       `json:"txId,omitempty"`
+		TxState            *string      `json:"txState,omitempty"`
+		TxPendingState     *string      `json:"txPendingState,omitempty"`
+		TxSynthTxIds       *string      `json:"txSynthTxIds,omitempty"`
+		Height             int64        `json:"height"`
+		ChainState         []*string    `json:"chainState,omitempty"`
+		Receipts           []*TxReceipt `json:"receipts,omitempty"`
+		SignatureThreshold uint64       `json:"signatureThreshold,omitempty"`
+		Invalidated        bool         `json:"invalidated,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.TxId)
-	u.Envelope = v.Envelope
-	u.Status = v.Status
+	u.TxState = encoding.BytesToJSON(v.TxState)
+	u.TxPendingState = encoding.BytesToJSON(v.TxPendingState)
 	u.TxSynthTxIds = encoding.BytesToJSON(v.TxSynthTxIds)
 	u.Height = v.Height
 	u.ChainState = make([]*string, len(v.ChainState))
@@ -1166,8 +1182,16 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TxId = x
 	}
-	v.Envelope = u.Envelope
-	v.Status = u.Status
+	if x, err := encoding.BytesFromJSON(u.TxState); err != nil {
+		return fmt.Errorf("error decoding TxState: %w", err)
+	} else {
+		v.TxState = x
+	}
+	if x, err := encoding.BytesFromJSON(u.TxPendingState); err != nil {
+		return fmt.Errorf("error decoding TxPendingState: %w", err)
+	} else {
+		v.TxPendingState = x
+	}
 	if x, err := encoding.BytesFromJSON(u.TxSynthTxIds); err != nil {
 		return fmt.Errorf("error decoding TxSynthTxIds: %w", err)
 	} else {
