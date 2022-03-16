@@ -89,7 +89,8 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("chain-entry"), res, nil
 		}
 
-	case "tx", "txn", "transaction":
+	case "tx", "txn", "transaction", "signature":
+		chainName := chainNameFor(fragment[0])
 		switch len(fragment) {
 		case 1:
 			start, end, err := parseRange(qv)
@@ -97,7 +98,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), start, end, protocol.MainChain)
+			txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), start, end, chainName)
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -105,7 +106,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Account(u).ReadChain(protocol.MainChain)
+			chain, err := batch.Account(u).ReadChain(chainName)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -130,7 +131,6 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			for i, h := range state.Pending {
 				res.ChainState[i] = h.Copy()
 			}
-
 			return []byte("tx"), res, nil
 		}
 	case "pending":
@@ -266,6 +266,14 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		}
 	}
 	return nil, nil, fmt.Errorf("invalid fragment")
+}
+
+func chainNameFor(entity string) string {
+	switch entity {
+	case "signature":
+		return protocol.SignatureChain
+	}
+	return protocol.MainChain
 }
 
 func parseRange(qv url.Values) (start, end int64, err error) {

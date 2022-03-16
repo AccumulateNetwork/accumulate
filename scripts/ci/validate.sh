@@ -214,6 +214,7 @@ success
 
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
+accumulate -j get keytest/tokens#signature | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve signature transactions"
 
 
 section "Query pending chain at height 0 by URL"
