@@ -89,6 +89,11 @@ func (c *Chain) State(height int64) (*managed.MerkleState, error) {
 	return c.merkle.GetAnyState(height)
 }
 
+// CurrentState returns the current state of the chain.
+func (c *Chain) CurrentState() *managed.MerkleState {
+	return c.merkle.MS
+}
+
 // HeightOf returns the height of the given entry in the chain.
 func (c *Chain) HeightOf(hash []byte) (int64, error) {
 	return c.merkle.GetElementIndex(hash)
