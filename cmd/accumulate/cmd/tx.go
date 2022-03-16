@@ -14,7 +14,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -204,6 +203,11 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 
 	if wait > 0 {
 		params.Wait = wait
+
+		t := Client.Timeout
+		defer func() { Client.Timeout = t }()
+
+		Client.Timeout = TxWait * 2
 	}
 
 	data, err := json.Marshal(params)
@@ -223,13 +227,6 @@ func GetTX(hash string) (string, error) {
 	txid, err := hex.DecodeString(hash)
 	if err != nil {
 		return "", err
-	}
-
-	t := Client.Timeout
-	defer func() { Client.Timeout = t }()
-
-	if TxWait > 0 {
-		Client.Timeout = TxWait * 2
 	}
 
 	res, err := getTX(txid, TxWait)
@@ -399,7 +396,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 	}
 
 	var typ struct {
-		Type types.TransactionType
+		Type protocol.TransactionType
 	}
 	err = json.Unmarshal([]byte(args[0]), &typ)
 	if err != nil {

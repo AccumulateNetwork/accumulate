@@ -3,22 +3,19 @@ package chain
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticCreateChain struct{}
 
-func (SyntheticCreateChain) Type() types.TxType {
-	return types.TxTypeSyntheticCreateChain
+func (SyntheticCreateChain) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticCreateChain
 }
 
-func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateChain)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateChain), tx.Transaction.Body)
@@ -36,26 +33,27 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 			return nil, fmt.Errorf("invalid chain payload: %v", err)
 		}
 
-		u, err := record.Header().ParseUrl()
-		if err != nil {
-			return nil, fmt.Errorf("invalid chain URL: %v", err)
-		}
-
+		u := record.Header().Url
 		_, err = st.LoadUrl(u)
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
+			// Unknown error
 			return nil, fmt.Errorf("error fetching %q: %v", u, err)
-		case cc.IsUpdate && errors.Is(err, storage.ErrNotFound):
-			return nil, fmt.Errorf("cannot update %q: does not exist", u)
-		case !cc.IsUpdate && err == nil:
-			return nil, fmt.Errorf("cannot create %q: already exists", u)
-		case !cc.IsUpdate:
 
-			_, err := st.LoadUrl(u)
-			if err == nil {
-				return nil, fmt.Errorf("cannot create %q: already exists", u)
+		case cc.IsUpdate && err != nil:
+			// Attempted to update but the record does not exist
+			return nil, fmt.Errorf("cannot update %q: does not exist", u)
+
+		case !cc.IsUpdate && err == nil:
+			// Attempted to create but the record already exists
+			return nil, fmt.Errorf("cannot create %q: already exists", u)
+
+		case !cc.IsUpdate:
+			// Creating a record, add it to the directory
+			err = st.AddDirectoryEntry(u.Identity(), u)
+			if err != nil {
+				return nil, fmt.Errorf("failed to add a directory entry for %q: %v", u, err)
 			}
-			err = st.AddDirectoryEntry(u)
 		}
 
 		urls[i] = u
@@ -73,20 +71,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		// Check the identity
 		switch record.GetType() {
 		case protocol.AccountTypeIdentity:
-			// An ADI must be its own identity
-			if !u.Identity().Equal(u) {
-				return nil, fmt.Errorf("ADI is not its own identity")
-			}
 		default:
-			// Anything else must be a sub-path
-			if u.Identity().Equal(u) {
-				return nil, fmt.Errorf("account type %v cannot be its own identity", record.GetType())
-			}
-
-			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return nil, fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.GetType())
-			}
-
 			// Make sure the ADI actually exists
 			_, err = st.LoadUrl(u.Identity())
 			if errors.Is(err, storage.ErrNotFound) {

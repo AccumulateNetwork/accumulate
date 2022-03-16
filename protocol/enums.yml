@@ -36,6 +36,12 @@ SignatureType:
   ED25519:
     value: 2
     description: represents an ED25519 signature
+  RCD1:
+    value: 3
+    description: represents an RCD1 signature
+  Receipt:
+    value: 4
+    description: represents a Merkle tree receipt
 
 KeyPageOperation:
   Unknown:
@@ -177,12 +183,12 @@ AccountType:
   LiteTokenAccount:
     value: 5
     description: is a Lite Token Account
-  Transaction:
-    value: 7
-    description: is a completed transaction
-  PendingTransaction:
-    value: 8
-    description: is a pending transaction
+  # Transaction:
+  #   value: 7
+  #   description: is a completed transaction
+  # PendingTransaction:
+  #   value: 8
+  #   description: is a pending transaction
   KeyPage:
     value: 9
     description: is a Key Page account
@@ -201,4 +207,6 @@ AccountType:
   LiteIdentity:
     value: 15
     description: is a lite identity account
-
+  InternalSyntheticLedger:
+    value: 16
+    description: is a ledger that tracks the status of unsent synthetic transactions
