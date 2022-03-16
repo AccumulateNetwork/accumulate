@@ -63,6 +63,10 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Amount = *amt
 	credits.Oracle = acmeOracle.Price
 
+	ledgerState := protocol.NewInternalLedger()
+	if credits.Oracle != ledgerState.ActiveOracle {
+		return "", fmt.Errorf("oracle doesn't match")
+	}
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {
 		return "", err
