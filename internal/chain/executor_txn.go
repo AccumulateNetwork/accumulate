@@ -78,7 +78,7 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// Set up the state manager and validate the signatures
 	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
 	if err != nil {
-		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return nil, m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	if !hasEnoughSigs {
@@ -580,14 +580,8 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 	}
 
 	// When the transaction is synthetic, send a receipt back to its origin
-	if txt.IsSynthetic() && NeedsReceipt(txt) {
-		if st == nil {
-			panic(fmt.Errorf("tx type %v has no state manager", txt))
-		}
-		if st.nodeUrl == nil {
-			panic(fmt.Errorf("tx type %v has no st.nodeUrl", txt))
-		}
-		receipt, sourceUrl := CreateReceipt(env, status, st.nodeUrl)
+	if txt.IsSynthetic() && st != nil && NeedsReceipt(txt) { // recordTransactionError can pass in a nil state manager
+		receipt, sourceUrl := CreateReceipt(env, status, m.Network.NodeUrl())
 		st.logger.Debug("Submitting synth receipt for", st.OriginUrl, " to ", sourceUrl)
 		st.Submit(sourceUrl, receipt)
 	}
