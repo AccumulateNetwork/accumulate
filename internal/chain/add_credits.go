@@ -7,7 +7,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type AddCredits struct{}
@@ -99,7 +98,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	burnAcme := new(protocol.SyntheticBurnTokens)
 	copy(sdc.Cause[:], tx.GetTxHash())
 	burnAcme.Amount = body.Amount
-	st.Submit(tokenUrl, burnAcme)
+	st.Submit(account.GetTokenUrl(), burnAcme)
 
 	return nil, nil
 }

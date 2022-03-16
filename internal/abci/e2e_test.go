@@ -608,10 +608,10 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 	require.NoError(t, batch.Commit())
 
-	acmeToSpendOncredits := int64(10.0 * protocol.AcmePrecision)
+	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
 	n.Batch(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
-		ac.Amount = *big.NewInt(acmeToSpendOncredits)
+		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
 		ac.Recipient = n.ParseUrl("foo/book0/1")
 
 		send(newTxn("foo/tokens").
