@@ -45,6 +45,7 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 	return nil, nil
 }
 
+// statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
 func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
 	if !(v.Remote == u.Remote) {
 		return false
