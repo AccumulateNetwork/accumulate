@@ -123,6 +123,15 @@ TransactionType:
   RemoveManager:
     value: 0x11
     description: remove manager from existing chain
+  AddValidator:
+    value: 0x12
+    description: add a validator
+  RemoveValidator:
+    value: 0x13
+    description: remove a validator
+  UpdateValidatorKey:
+    value: 0x14
+    description: update a validator key
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
