@@ -25,7 +25,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 
 	issuer.Issued.Add(&issuer.Issued, &body.Amount)
 
-	if issuer.SupplyLimit == nil || issuer.Issued.Cmp(issuer.SupplyLimit) > 0 {
+	if issuer.SupplyLimit != nil && issuer.Issued.Cmp(issuer.SupplyLimit) > 0 {
 		return nil, fmt.Errorf("can't issue more than the limited supply")
 	}
 
