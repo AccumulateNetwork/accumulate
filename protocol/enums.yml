@@ -66,13 +66,13 @@ TransactionMax:
     description: is the highest number reserved for user transactions
   Synthetic:
     value: 0x5F
-    description:  is the highest number reserved for synthetic transactions
+    description: is the highest number reserved for synthetic transactions
   Internal:
     value: 0xFF
     description: is the highest number reserved for internal transactions
 
 TransactionType:
-# ======================== USER TRANSACTIONS ==========================
+  ##### USER TRANSACTIONS #####
   Unknown:
     value: 0
     description: represents an unknown transaction type
@@ -125,7 +125,7 @@ TransactionType:
     value: 0x11
     description: remove manager from existing chain
 
-# ======================= SYNTHETIC TRANSACTIONS ======================
+  ##### SYNTHETIC TRANSACTIONS #####
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
@@ -157,7 +157,7 @@ TransactionType:
     value: 0x40
     description: notifies the sender of synthetic transactions when a transaction has failed.
 
-# ======================= INTERNAL TRANSACTIONS =======================
+  ##### INTERNAL TRANSACTIONS #####
   InternalGenesis:
     value: 0x60
     description: initializes system chains
