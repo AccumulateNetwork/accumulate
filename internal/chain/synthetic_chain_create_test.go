@@ -47,7 +47,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
 
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	receipt, _ := CreateReceipt(env, status, nil)
+	receipt, _ := CreateReceipt(env, status, acctesting.FakeBvn)
 	originUrl := env.Transaction.Origin.String()
 	env = acctesting.NewTransaction().
 		WithOriginStr(originUrl).
