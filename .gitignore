@@ -11,6 +11,7 @@ tools/cmd/gen-enum/go_build*
 *.exe
 *.test
 .testdata
+*__debug_bin
 
 # Temp and log files
 *~
@@ -32,7 +33,3 @@ tools/cmd/gen-enum/go_build*
 .terraform
 .terraform.lock.hcl
 /.vscode/settings.json
-
-
-
-cmd/accumulate/cmd/__debug_bin
