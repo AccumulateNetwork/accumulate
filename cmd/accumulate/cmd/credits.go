@@ -57,10 +57,11 @@ func AddCredits(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
-
+	var acmeOracle protocol.AcmeOracle
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
 	credits.Amount = *amt
+	credits.Oracle = acmeOracle.Price
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {

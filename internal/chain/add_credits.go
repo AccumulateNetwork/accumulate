@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -31,7 +30,9 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	if ledgerState.ActiveOracle == 0 {
 		return nil, fmt.Errorf("cannot purchase credits: acme oracle price has not been set")
 	}
-
+	if body.Oracle != ledgerState.ActiveOracle {
+		return nil, fmt.Errorf("oracle doesn't match")
+	}
 	// If specifying amount of acme to spend
 	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
@@ -92,14 +93,6 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 		return nil, fmt.Errorf("%v credits", credits)
 	}
 
-	params := api.DataEntryQuery{}
-	params.Url = protocol.PriceOracle()
-	var acmeOracle protocol.AcmeOracle
-	body.Oracle = acmeOracle.Price
-
-	if body.Oracle != ledgerState.ActiveOracle {
-		return nil, fmt.Errorf("oracle doesn't match")
-	}
 	st.Update(account)
 
 	// Create the synthetic transaction
