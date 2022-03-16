@@ -12,12 +12,13 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 30)
+		m.methods = make(jsonrpc2.MethodMap, 33)
 	}
 
 	m.methods["describe"] = m.Describe
 	m.methods["execute"] = m.Execute
 	m.methods["add-credits"] = m.ExecuteAddCredits
+	m.methods["add-validator"] = m.ExecuteAddValidator
 	m.methods["burn-tokens"] = m.ExecuteBurnTokens
 	m.methods["create-adi"] = m.ExecuteCreateAdi
 	m.methods["create-data-account"] = m.ExecuteCreateDataAccount
@@ -28,9 +29,11 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
 	m.methods["issue-tokens"] = m.ExecuteIssueTokens
 	m.methods["remove-manager"] = m.ExecuteRemoveManager
+	m.methods["remove-validator"] = m.ExecuteRemoveValidator
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["update-manager"] = m.ExecuteUpdateManager
+	m.methods["update-validator-key"] = m.ExecuteUpdateValidatorKey
 	m.methods["write-data"] = m.ExecuteWriteData
 	m.methods["write-data-to"] = m.ExecuteWriteDataTo
 	m.methods["faucet"] = m.Faucet
@@ -80,6 +83,10 @@ func jrpcFormatResponse(res interface{}, err error) interface{} {
 // ExecuteAddCredits submits an AddCredits transaction.
 func (m *JrpcMethods) ExecuteAddCredits(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.AddCredits))
+}
+
+func (m *JrpcMethods) ExecuteAddValidator(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.AddValidator))
 }
 
 // ExecuteBurnTokens submits a BurnTokens transaction.
@@ -132,6 +139,10 @@ func (m *JrpcMethods) ExecuteRemoveManager(ctx context.Context, params json.RawM
 	return m.executeWith(ctx, params, new(protocol.RemoveManager))
 }
 
+func (m *JrpcMethods) ExecuteRemoveValidator(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.RemoveValidator))
+}
+
 // ExecuteSendTokens submits a SendTokens transaction.
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
@@ -145,6 +156,10 @@ func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawM
 // ExecuteUpdateManager submits an UpdateManager transaction.
 func (m *JrpcMethods) ExecuteUpdateManager(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateManager))
+}
+
+func (m *JrpcMethods) ExecuteUpdateValidatorKey(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.UpdateValidatorKey))
 }
 
 // ExecuteWriteData submits a WriteData transaction.
