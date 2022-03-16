@@ -67,7 +67,7 @@ docker buildx:
   services: [ 'docker:20-dind' ]
   script:
     - export DOCKER_BUILDKIT=1
-    - git clone git://github.com/docker/buildx ./docker-buildx
+    - git clone https://github.com/docker/buildx ./docker-buildx
     - docker build --platform=local -o . ./docker-buildx
 
 build images:
