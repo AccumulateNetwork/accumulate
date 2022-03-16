@@ -281,6 +281,47 @@ UpdateKeyPage:
       type: uvarint
       optional: true
 
+UpdateManager:
+  kind: tx
+  fields:
+    - name: ManagerKeyBook
+      type: url
+      pointer: true
+
+RemoveManager:
+  kind: tx
+  fields:
+
+AddValidator:
+  kind: tx
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+RemoveValidator:
+  kind: tx
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+UpdateValidatorKey:
+  kind: tx
+  fields:
+    - name: OldKey
+      type: bytes
+    - name: NewKey
+      type: bytes
+
 SignPending:
   kind: tx
   fields: []
@@ -426,14 +467,3 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
-
-UpdateManager:
-  kind: tx
-  fields:
-    - name: ManagerKeyBook
-      type: url
-      pointer: true
-
-RemoveManager:
-  kind: tx
-  fields:
