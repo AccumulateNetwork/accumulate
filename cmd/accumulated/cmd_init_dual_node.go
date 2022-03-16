@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"net"
 	"net/url"
 	"path"
 	"strconv"
+
+	"github.com/spf13/cobra"
+	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 )
 
 // initDualNode accumulate init dual BVN0 http://ip:dnport
