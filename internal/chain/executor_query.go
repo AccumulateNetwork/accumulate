@@ -52,16 +52,16 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 		switch len(fragment) {
 		case 2:
-			start, end, err := parseRange(qv)
+			start, count, err := parseRange(qv)
 			if err != nil {
 				return nil, nil, err
 			}
 
 			res := new(query.ResponseChainRange)
 			res.Start = start
-			res.End = end
+			res.End = start + count
 			res.Total = chain.Height()
-			res.Entries, err = chain.Entries(start, end)
+			res.Entries, err = chain.Entries(start, start+count)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
 			}
@@ -93,12 +93,12 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		chainName := chainNameFor(fragment[0])
 		switch len(fragment) {
 		case 1:
-			start, end, err := parseRange(qv)
+			start, count, err := parseRange(qv)
 			if err != nil {
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), start, end, chainName)
+			txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), start, start+count, chainName)
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -276,8 +276,8 @@ func chainNameFor(entity string) string {
 	return protocol.MainChain
 }
 
-func parseRange(qv url.Values) (start, end int64, err error) {
-	if s := qv.Get("from"); s != "" {
+func parseRange(qv url.Values) (start, count int64, err error) {
+	if s := qv.Get("start"); s != "" {
 		start, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return 0, 0, fmt.Errorf("invalid start: %v", err)
@@ -286,16 +286,16 @@ func parseRange(qv url.Values) (start, end int64, err error) {
 		start = 0
 	}
 
-	if s := qv.Get("from"); s != "" {
-		end, err = strconv.ParseInt(s, 10, 64)
+	if s := qv.Get("count"); s != "" {
+		count, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			return 0, 0, fmt.Errorf("invalid end: %v", err)
+			return 0, 0, fmt.Errorf("invalid count: %v", err)
 		}
 	} else {
-		end = 10
+		count = 10
 	}
 
-	return start, end, nil
+	return start, count, nil
 }
 
 func getChainEntry(chain *database.Chain, s string) (int64, []byte, error) {
