@@ -19,6 +19,15 @@ func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
 	return nil
 }
 
+func (p *KeyPage) FindKeyHash(hash []byte) (int, *KeySpec, bool) {
+	for i, key := range p.Keys {
+		if bytes.Equal(key.PublicKey, hash) {
+			return i, key, true
+		}
+	}
+	return -1, nil, false
+}
+
 // GetMofN
 // return the signature requirements of the Key Page.  Each Key Page requires
 // m of n signatures, where m <= n, and n is the number of keys on the key page.
