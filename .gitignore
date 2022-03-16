@@ -34,3 +34,5 @@ tools/cmd/gen-enum/go_build*
 /.vscode/settings.json
 
 
+
+cmd/accumulate/cmd/__debug_bin
