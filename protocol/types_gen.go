@@ -516,6 +516,11 @@ type TransactionStatus struct {
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
 }
 
+type UpdateKey struct {
+	fieldsSet []bool
+	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+}
+
 type UpdateKeyPage struct {
 	fieldsSet []bool
 	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
@@ -783,6 +788,10 @@ func (*TokenAccount) GetType() AccountType { return AccountTypeTokenAccount }
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
 
 func (*TokenIssuer) GetType() AccountType { return AccountTypeTokenIssuer }
+
+func (*UpdateKey) Type() TransactionType { return TransactionTypeUpdateKey }
+
+func (*UpdateKey) GetType() TransactionType { return TransactionTypeUpdateKey }
 
 func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPage }
 
@@ -1798,6 +1807,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	if !(v.Result == u.Result) {
+		return false
+	}
+
+	return true
+}
+
+func (v *UpdateKey) Equal(u *UpdateKey) bool {
+	if !(bytes.Equal(v.Key, u.Key)) {
 		return false
 	}
 
@@ -5321,6 +5338,43 @@ func (v *TransactionStatus) IsValid() error {
 	}
 }
 
+var fieldNames_UpdateKey = []string{
+	1: "Type",
+	2: "Key",
+}
+
+func (v *UpdateKey) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, TransactionTypeUpdateKey.ID())
+	if !(len(v.Key) == 0) {
+		writer.WriteBytes(2, v.Key)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateKey)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateKey) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Key is missing")
+	} else if len(v.Key) == 0 {
+		errs = append(errs, "field Key is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_UpdateKeyPage = []string{
 	1: "Type",
 	2: "Operation",
@@ -7421,6 +7475,29 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *UpdateKey) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeUpdateKey {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateKey, typ)
+	}
+
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Key = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateKey)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8458,6 +8535,16 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	} else {
 		u.Result = x
 	}
+	return json.Marshal(&u)
+}
+
+func (v *UpdateKey) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type TransactionType `json:"type"`
+		Key  *string         `json:"key,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Key = encoding.BytesToJSON(v.Key)
 	return json.Marshal(&u)
 }
 
@@ -10087,6 +10174,24 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		v.Result = x
 	}
 
+	return nil
+}
+
+func (v *UpdateKey) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type TransactionType `json:"type"`
+		Key  *string         `json:"key,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Key = encoding.BytesToJSON(v.Key)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		v.Key = x
+	}
 	return nil
 }
 

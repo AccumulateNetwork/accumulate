@@ -179,6 +179,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticMirror), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeUpdateKey:
+		return new(UpdateKey), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
 	case TransactionTypeUpdateManager:

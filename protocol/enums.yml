@@ -123,6 +123,9 @@ TransactionType:
   RemoveManager:
     value: 0x11
     description: remove manager from existing chain
+  UpdateKey:
+    value: 0x12
+    description: update key for existing keys
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction

@@ -285,6 +285,13 @@ SignPending:
   kind: tx
   fields: []
 
+UpdateKey:
+  kind: tx
+  fields: 
+    - name: Key
+      type: bytes
+  
+
 ##### Synthetic #####
 
 SyntheticCreateChain:
