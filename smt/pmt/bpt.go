@@ -3,13 +3,10 @@ package pmt
 import (
 	"bytes"
 	"crypto/sha256"
-	"fmt"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
-
-const debug = false
 
 // BPT
 // Binary Patricia Tree.
@@ -20,34 +17,34 @@ const debug = false
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
+	RootHash  [32]byte              // Root hash of the BPT
 	Root      *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
 	DirtyMap  map[[32]byte]*BptNode // Map of dirty nodes.
 	MaxHeight int                   // Highest height of any node in the BPT
-	MaxNodeID uint64                // Maximum node id assigned to any node
+	NumNodes  uint64                // number of nodes in the BPT
 	power     int                   // Power
 	mask      int                   // Mask used to detect Byte Block boundaries
 	manager   *Manager              // Pointer to the manager for access to the database
 }
 
-// String
-func (b *BPT) String() (str string) {
-	buff := "                                                                                                        "
-	fmt.Printf("DirtyMap len %d\n", len(b.DirtyMap))
-	fmt.Printf("MaxHeight    %d\n", b.MaxHeight)
-	fmt.Printf("MaxNodeID    %d\n", b.MaxNodeID)
-	fmt.Printf("power        %d\n", b.power)
-	fmt.Printf("mask         %x\n", b.mask)
-	depth := 0
-	width := 5
-	prt := func(depth, width int, node *BptNode) {
-		fmt.Printf("\r%s %x", buff[:depth*width], node.Hash[:4])
-		if node.Left != nil {
+// GetRoot
+// Get the Root node for the BPT.  This may load the BPT Root node from disk if not loaded yet.
+func (b *BPT) GetRoot() (root *BptNode) {
+	if b.Root == nil {
+		rootNodeKey, _ := GetNodeKey(0, [32]byte{})
+		if b.manager == nil {
+			return nil
+		}
 
+		if data, err := b.manager.DBManager.Get(kBpt.Append(rootNodeKey)); err != nil {
+			return nil
+		} else {
+			root := new(BptNode)
+			root.UnMarshal(data)
+			b.RootHash = root.Hash
 		}
 	}
-	prt(depth, width, b.Root)
-	return str
-
+	return b.Root
 }
 
 // Equal
@@ -59,13 +56,13 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 		}
 	}()
 
-	if !b.Root.Equal(b2.Root) {
+	if !b.GetRoot().Equal(b2.GetRoot()) {
 		return false
 	}
 	if b.MaxHeight != b2.MaxHeight {
 		return false
 	}
-	if b.MaxNodeID != b2.MaxNodeID {
+	if b.NumNodes != b2.NumNodes {
 		return false
 	}
 	return true
@@ -76,10 +73,10 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, common.Uint64Bytes(b.MaxNodeID)...)
+	data = append(data, common.Uint64Bytes(b.NumNodes)...)
 	data = append(data, byte(b.power>>8), byte(b.power))
 	data = append(data, byte(b.mask>>8), byte(b.mask))
-	data = append(data, b.Root.Marshal()...)
+	data = append(data, b.RootHash[:]...)
 	return data
 }
 
@@ -89,10 +86,11 @@ func (b *BPT) Marshal() (data []byte) {
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.DirtyMap = make(map[[32]byte]*BptNode)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.MaxNodeID, data = common.BytesUint64(data)
+	b.NumNodes, data = common.BytesUint64(data)
 	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
 	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
-	data = b.Root.UnMarshal(data)
+	copy(b.RootHash[:], data[:32])
+	data = data[:32]
 	return data
 }
 
@@ -260,7 +258,7 @@ func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
 func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
-	b.insertAtNode(b.Root, key, hash) //          in that location is the hash.  We start at byte 0, lowest
+	b.insertAtNode(b.GetRoot(), key, hash) //          in that location is the hash.  We start at byte 0, lowest
 } //                                                   significant bit. (which is masked with a 1)
 
 // GetHash
@@ -274,41 +272,49 @@ func GetHash(e Entry) []byte {
 
 // Update the Patricia Tree hashes with the values from the
 // updates since the last update
-func (b *BPT) Update() {
-	for len(b.DirtyMap) > 0 { //                          While the DirtyMap has nodes to process
-		dirtyList := b.GetDirtyList() //                   Get the Dirty List. Note sorted by height, High to low
+func (b *BPT) Update() error {
+	for len(b.DirtyMap) > 0 { //                            While the DirtyMap has nodes to process
+		dirtyList := b.GetDirtyList() //                    Get the Dirty List. Note sorted by height, High to low
 
-		h := dirtyList[0].Height      //                   Get current height so we do one pass at one height at a time.
-		for _, n := range dirtyList { //                   go through the list, and add parents to the dirty map
+		h := dirtyList[0].Height      //                    Get current height so we do one pass at one height at a time.
+		for _, n := range dirtyList { //                    go through the list, and add parents to the dirty map
 			if n.Height != h { //                           Note when the height is done,
-				break //                                     bap out
+				break //                                    bap out
 			} //
-			if h&b.mask == 0 && b.manager != nil { //      Sort and see if at the root node for a byte block
-				b.manager.FlushNode(n) //                   If so, flush the byte block; it has already been updated
+			if h&b.mask == 0 && b.manager != nil { //       Sort and see if at the root node for a byte block
+				err := b.manager.FlushNode(n) //            If so, flush the byte block; it has already been updated
+				if err != nil {
+					return err
+				}
 			} //
-			L := GetHash(n.Left)  //                       Get the Left Branch
-			R := GetHash(n.Right) //                       Get the Right Branch
-			switch {              //                       Sort four conditions:
-			case L != nil && R != nil: //                  If we have both L and R then combine
+			L := GetHash(n.Left)  //                        Get the Left Branch
+			R := GetHash(n.Right) //                        Get the Right Branch
+			switch {              //                        Sort four conditions:
+			case L != nil && R != nil: //                   If we have both L and R then combine
 				n.Hash = sha256.Sum256(append(L, R...)) //  Take the hash of L+R
-			case L != nil: //                              The next condition is where we only have L
+			case L != nil: //                               The next condition is where we only have L
 				copy(n.Hash[:], L) //                       Just use L.  No hash required
-			case R != nil: //                              Just have R.  Again, just use R.
+			case R != nil: //                               Just have R.  Again, just use R.
 				copy(n.Hash[:], R) //                       No Hash Required
-			default: //                                    The fourth condition never happens, and bad if it does.
-				panic("dead nodes should not exist") //      This is a node without a child somewhere up the tree.
+			default: //                                     The fourth condition never happens, and bad if it does.
+				panic("dead nodes should not exist") //     This is a node without a child somewhere up the tree.
 			}
-			b.Clean(n)        //                           Node has been updated, so it is clean
-			b.Dirty(n.Parent) //                           The Parent is dirty cause it must consider this new state
+			b.Clean(n)        //                            Node has been updated, so it is clean
+			b.Dirty(n.Parent) //                            The Parent is dirty cause it must consider this new state
 		}
 	}
-	if b.manager != nil { //                             Root doesn't get flushed (has no parent)
-		b.manager.FlushNode(b.Root) //                    So flush it special
+	if b.manager != nil { //                                Root doesn't get flushed (has no parent)
+		err := b.manager.FlushNode(b.GetRoot()) //          So flush it special
+		if err != nil {
+			return err
+		}
 	} //
+	b.RootHash = b.GetRoot().Hash //                        Set the root hash (so we don't have to load Root)
+	return nil
 }
 
 func (b *BPT) EnsureRootHash() {
-	n := b.Root
+	n := b.GetRoot()      //                       Get the Root node
 	L := GetHash(n.Left)  //                       Get the Left Branch
 	R := GetHash(n.Right) //                       Get the Right Branch
 	switch {              //                       Sort four conditions:
@@ -407,7 +413,7 @@ func (b *BPT) UnMarshalEntry(parent *BptNode, data []byte) (Entry, []byte) { //
 		return v, data           //             Return the value object and updated data slice
 	case TNotLoaded: //                         If not loaded
 		if parent.Height&b.mask != 0 {
-			panic(fmt.Sprintf("writing a TNotLoaded node on a non-boundary node"))
+			panic("writing a TNotLoaded node on a non-boundary node")
 		}
 		return new(NotLoaded), data //          Create the NotLoaded stub and updated pointer
 	case TNode: //                              If a Node

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	types2 "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -19,13 +19,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	randpkg "golang.org/x/exp/rand"
 )
 
 var rand = randpkg.New(randpkg.NewSource(0))
 
-type Tx = transactions.Envelope
+type Tx = protocol.Envelope
 
 func TestEndToEndSuite(t *testing.T) {
 	t.Skip("This is failing and may be more trouble than it's worth")
@@ -53,18 +52,53 @@ func TestCreateLiteAccount(t *testing.T) {
 	}
 }
 
+func TestEvilNode(t *testing.T) {
+
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	//tell the TestNet that we have an evil node in the midst
+	dns := subnets[0]
+	bvn := subnets[1]
+	subnets[0] = "evil-" + subnets[0]
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+
+	dn := nodes[dns][0]
+	n := nodes[bvn][0]
+
+	var count = 11
+
+	originAddr, balances := n.testLiteTx(count)
+	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
+	for addr, bal := range balances {
+		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
+	}
+
+	batch := dn.db.Begin(true)
+	defer batch.Discard()
+	evData, err := batch.Account(dn.network.NodeUrl(protocol.Evidence)).Data()
+	require.NoError(t, err)
+	// Check each anchor
+	_, de, err := evData.GetLatest()
+	require.NoError(t, err)
+	var ev []types2.Evidence
+	err = json.Unmarshal(de.Data, &ev)
+	require.NoError(t, err)
+	require.Greaterf(t, len(ev), 0, "no evidence data")
+	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
+
+}
+
 func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 	_, sponsor, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(n.t, err)
 	sponsorAddr := acctesting.AcmeLiteAddressStdPriv(sponsor).String()
 
-	recipients := make([]string, 10)
+	recipients := make([]string, count)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key).String()
 	}
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		send(gtx)
 	})
 
@@ -97,7 +131,7 @@ func TestFaucet(t *testing.T) {
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
 
@@ -119,6 +153,9 @@ func TestAnchorChain(t *testing.T) {
 	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+
 	batch := n.db.Begin(true)
 	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
 	require.NoError(t, batch.Commit())
@@ -126,8 +163,10 @@ func TestAnchorChain(t *testing.T) {
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
-		adi.KeyBookName = "book"
-		adi.KeyPageName = "page"
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
+		require.NoError(t, err)
+		adi.PublicKey = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
@@ -143,29 +182,31 @@ func TestAnchorChain(t *testing.T) {
 	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
-	// Check each anchor
-	ledgerState := protocol.NewInternalLedger()
-	require.NoError(t, ledger.GetStateAs(ledgerState))
-	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
-	require.NoError(t, err)
-	first := rootChain.Height() - int64(len(ledgerState.Updates))
-	for i, meta := range ledgerState.Updates {
-		root, err := rootChain.Entry(first + int64(i))
-		require.NoError(t, err)
+	// // Check each anchor
+	// // TODO FIX This is broken because the ledger no longer has a list of updates
+	// ledgerState := protocol.NewInternalLedger()
+	// require.NoError(t, ledger.GetStateAs(ledgerState))
+	// rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	// require.NoError(t, err)
+	// first := rootChain.Height() - int64(len(ledgerState.Updates))
+	// for i, meta := range ledgerState.Updates {
+	// 	root, err := rootChain.Entry(first + int64(i))
+	// 	require.NoError(t, err)
 
-		if meta.Name == "bpt" {
-			assert.Equal(t, root, batch.BptRootHash(), "wrong anchor for BPT")
-			continue
-		}
+	// 	if meta.Name == "bpt" {
+	// 		assert.Equal(t, root, batch.BptRootHash(), "wrong anchor for BPT")
+	// 		continue
+	// 	}
 
-		mgr, err := batch.Account(meta.Account).ReadChain(meta.Name)
-		require.NoError(t, err)
+	// 	mgr, err := batch.Account(meta.Account).ReadChain(meta.Name)
+	// 	require.NoError(t, err)
 
-		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
-	}
+	// 	assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
+	// }
 
 	//set price of acme to $445.00 / token
 	price := 445.00
+	var err error
 	dn.Batch(func(send func(*Tx)) {
 		ao := new(protocol.AcmeOracle)
 		ao.Price = uint64(price * protocol.AcmeOraclePrecision)
@@ -180,15 +221,20 @@ func TestAnchorChain(t *testing.T) {
 			SignLegacyED25519(dn.key.Bytes()))
 	})
 
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
 	// Get the anchor chain manager for DN
 	batch = dn.db.Begin(true)
 	defer batch.Discard()
 	ledger = batch.Account(dn.network.NodeUrl(protocol.Ledger))
 	// Check each anchor
+	ledgerState := protocol.NewInternalLedger()
+	require.NoError(t, ledger.GetStateAs(ledgerState))
 	ledgerState = protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, ledgerState.ActiveOracle, expected)
+	require.Equal(t, expected, ledgerState.ActiveOracle)
 
 	time.Sleep(2 * time.Second)
 	// Get the anchor chain manager for BVN
@@ -226,8 +272,9 @@ func TestCreateADI(t *testing.T) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
 		adi.PublicKey = keyHash[:]
-		adi.KeyBookName = "foo-book"
-		adi.KeyPageName = "bar-page"
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
+		require.NoError(t, err)
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		send(newTxn(sponsorUrl).
@@ -239,9 +286,9 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, "acc://RoadRunner", r.Url.String())
 
 	kg := n.GetKeyBook("RoadRunner/foo-book")
-	require.Len(t, kg.Pages, 1)
+	require.Equal(t, uint64(1), kg.PageCount)
 
-	ks := n.GetKeyPage("RoadRunner/bar-page")
+	ks := n.GetKeyPage("RoadRunner/foo-book/1")
 	require.Len(t, ks.Keys, 1)
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
@@ -279,7 +326,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			wdt := new(protocol.WriteDataTo)
 			wdt.Recipient = liteDataAddress
 			wdt.Entry = firstEntry
@@ -310,7 +357,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = n.ParseUrl("FooBar/oof")
 			send(newTxn("FooBar").
@@ -332,13 +379,13 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", "acc://FooBar/foo/page1"))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", "acc://FooBar/mgr/page1"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
+		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
 		require.NoError(t, batch.Commit())
 
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
 			cda.Url = n.ParseUrl("FooBar/oof")
 			cda.KeyBookUrl = n.ParseUrl("acc://FooBar/foo/book1")
@@ -367,7 +414,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = n.ParseUrl("FooBar/oof")
 			send(newTxn("FooBar").
@@ -380,7 +427,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
 		wd := new(protocol.WriteData)
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			for i := 0; i < 10; i++ {
 				wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("test id %d", i)))
 			}
@@ -432,7 +479,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
@@ -446,9 +493,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar").String(),
 			n.ParseUrl("FooBar/book0").String(),
-			n.ParseUrl("FooBar/page0").String(),
+			n.ParseUrl("FooBar/book0/1").String(),
 			n.ParseUrl("FooBar/Baz").String(),
 		}, n.GetDirectory("FooBar"))
 	})
@@ -461,11 +507,11 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"))
+		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book1", pageKey.PubKey().Bytes()))
 		require.NoError(t, batch.Commit())
 
-		n.Batch(func(send func(*transactions.Envelope)) {
+		n.Batch(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
@@ -500,7 +546,7 @@ func TestLiteAccountTx(t *testing.T) {
 	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob).String()
 	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
 		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
@@ -529,7 +575,7 @@ func TestAdiAccountTx(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
 	require.NoError(t, batch.Commit())
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
 
@@ -554,10 +600,10 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 	require.NoError(t, batch.Commit())
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = 55
-		ac.Recipient = n.ParseUrl("foo/page0")
+		ac.Recipient = n.ParseUrl("foo/book0/1")
 
 		send(newTxn("foo/tokens").
 			WithBody(ac).
@@ -577,7 +623,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	expected := uint64(acmeAmount*protocol.AcmePrecision) - amount.Uint64()
 
-	ks := n.GetKeyPage("foo/page0")
+	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
 	balance := acct.Balance.Int64()
 
@@ -595,22 +641,26 @@ func TestCreateKeyPage(t *testing.T) {
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, batch.Commit())
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	spec := n.GetKeyPage("foo/book0/1")
+	require.Len(t, spec.Keys, 1)
+	key := spec.Keys[0]
+	require.Equal(t, uint64(0), key.Nonce)
+	require.Equal(t, fooKey.PubKey().Bytes(), key.PublicKey)
+
+	n.Batch(func(send func(*protocol.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = n.ParseUrl("foo/keyset1")
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey.PubKey().Bytes(),
 		})
 
-		send(newTxn("foo").
+		send(newTxn("foo/book0").
 			WithBody(cms).
 			SignLegacyED25519(fooKey))
 	})
 
-	spec := n.GetKeyPage("foo/keyset1")
+	spec = n.GetKeyPage("foo/book0/2")
 	require.Len(t, spec.Keys, 1)
-	key := spec.Keys[0]
-	require.Nil(t, spec.KeyBook)
+	key = spec.Keys[0]
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
@@ -623,29 +673,28 @@ func TestCreateKeyBook(t *testing.T) {
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
-	specUrl := n.ParseUrl("foo/page1")
+	bookUrl := n.ParseUrl("foo/book1")
+	specUrl := n.ParseUrl("foo/book1/1")
 
-	groupUrl := n.ParseUrl("foo/book1")
-
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		csg := new(protocol.CreateKeyBook)
 		csg.Url = n.ParseUrl("foo/book1")
-		csg.Pages = append(csg.Pages, specUrl)
+		csg.PublicKeyHash = testKey.PubKey().Bytes()
 
 		send(newTxn("foo").
 			WithBody(csg).
 			SignLegacyED25519(fooKey))
 	})
 
-	group := n.GetKeyBook("foo/book1")
-	require.Len(t, group.Pages, 1)
-	require.Equal(t, specUrl.String(), group.Pages[0].String())
+	book := n.GetKeyBook("foo/book1")
+	require.Equal(t, uint64(1), book.PageCount)
+	require.Equal(t, bookUrl, book.Url)
 
-	spec := n.GetKeyPage("foo/page1")
-	require.Equal(t, spec.KeyBook.String(), groupUrl.String())
+	spec := n.GetKeyPage("foo/book1/1")
+	require.Equal(t, bookUrl, spec.KeyBook)
+	require.Equal(t, specUrl, spec.Url)
 }
 
 func TestAddKeyPage(t *testing.T) {
@@ -659,17 +708,15 @@ func TestAddKeyPage(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	// Sanity check
-	require.Equal(t, u.String(), n.GetKeyPage("foo/page1").KeyBook.String())
+	require.Equal(t, u.String(), n.GetKeyPage("foo/book1/1").KeyBook.String())
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = n.ParseUrl("foo/page2")
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey2.PubKey().Bytes(),
 		})
@@ -679,7 +726,7 @@ func TestAddKeyPage(t *testing.T) {
 			SignLegacyED25519(testKey1))
 	})
 
-	spec := n.GetKeyPage("foo/page2")
+	spec := n.GetKeyPage("foo/book1/2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
 	require.Equal(t, u.String(), spec.KeyBook.String())
@@ -696,23 +743,22 @@ func TestAddKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = protocol.KeyPageOperationAdd
 		body.NewKey = newKey.PubKey().Bytes()
 
-		send(newTxn("foo/page1").
+		send(newTxn("foo/book1/1").
 			WithBody(body).
 			SignLegacyED25519(testKey))
 	})
 
-	spec := n.GetKeyPage("foo/page1")
+	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 2)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
 }
@@ -726,24 +772,23 @@ func TestUpdateKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = protocol.KeyPageOperationUpdate
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
 
-		send(newTxn("foo/page1").
+		send(newTxn("foo/book1/1").
 			WithBody(body).
 			SignLegacyED25519(testKey))
 	})
 
-	spec := n.GetKeyPage("foo/page1")
+	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
@@ -757,22 +802,33 @@ func TestRemoveKey(t *testing.T) {
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
 	require.NoError(t, batch.Commit())
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	// Add second key because CreateKeyBook can't do it
+	n.Batch(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.KeyPageOperationAdd
+		body.NewKey = testKey2.PubKey().Bytes()
+
+		send(newTxn("foo/book1/1").
+			WithBody(body).
+			SignLegacyED25519(testKey1))
+	})
+
+	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = protocol.KeyPageOperationRemove
 		body.Key = testKey1.PubKey().Bytes()
 
-		send(newTxn("foo/page1").
+		send(newTxn("foo/book1/1").
+			WithKeyPage(0, 2).
 			WithBody(body).
 			SignLegacyED25519(testKey2))
 	})
 
-	spec := n.GetKeyPage("foo/page1")
+	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
@@ -788,7 +844,9 @@ func TestSignatorHeight(t *testing.T) {
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
-	keyPageUrl, err := url.Parse("foo/page0")
+	keyBookUrl, err := url.Parse("foo/book")
+	require.NoError(t, err)
+	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
 	require.NoError(t, err)
 
 	batch := n.db.Begin(true)
@@ -803,12 +861,11 @@ func TestSignatorHeight(t *testing.T) {
 		return uint64(chain.Height())
 	}
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("foo")
 		adi.PublicKey = fooKey.PubKey().Bytes()
-		adi.KeyBookName = "book"
-		adi.KeyPageName = "page0"
+		adi.KeyBookUrl = keyBookUrl
 
 		send(newTxn(liteUrl.String()).
 			WithBody(adi).
@@ -816,12 +873,12 @@ func TestSignatorHeight(t *testing.T) {
 	})
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page0"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, keyPageUrl, 1e9))
 	require.NoError(t, batch.Commit())
 
 	keyPageHeight := getHeight(keyPageUrl)
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = tokenUrl
 		tac.TokenUrl = protocol.AcmeUrl()
@@ -843,7 +900,7 @@ func TestCreateToken(t *testing.T) {
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, batch.Commit())
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.CreateToken)
 		body.Url = n.ParseUrl("foo/tokens")
 		body.Symbol = "FOO"
@@ -871,7 +928,7 @@ func TestIssueTokens(t *testing.T) {
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
 	require.NoError(t, err)
 
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
@@ -903,7 +960,7 @@ func TestInvalidDeposit(t *testing.T) {
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
 	require.NoError(t, err)
 
-	id := n.Batch(func(send func(*transactions.Envelope)) {
+	id := n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
 		body.Token = n.ParseUrl("foo2/tokens")
 		body.Amount.SetUint64(123)
@@ -944,11 +1001,11 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			}
 			txState, txStatus, txSigs, err := batch.Transaction(id32[:]).Get()
 			require.NoError(t, err)
-			if seen[*txState.TransactionHash()] {
-				fmt.Printf("      TX: hash=%X\n", *txState.TransactionHash())
+			if seen[*(*[32]byte)(txState.GetHash())] {
+				fmt.Printf("      TX: hash=%X\n", txState.GetHash())
 				continue
 			}
-			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.TxType(), txState.Url, txStatus, len(txSigs))
+			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.Body.GetType(), txState.Origin, txStatus, len(txSigs))
 			seen[id32] = true
 		}
 	}
@@ -959,19 +1016,18 @@ func TestUpdateValidators(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
 
+	netUrl := n.network.NodeUrl()
 	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	validators := n.network.NodeUrl(protocol.ValidatorBook + "0")
 
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 
 	// Add a validator
-	n.Batch(func(send func(*transactions.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = nodeKey1.PubKey().Bytes()
+	n.Batch(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
+		body.Key = nodeKey1.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 1).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
@@ -981,13 +1037,12 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey1.PubKey()})
 
 	// Update a validator
-	n.Batch(func(send func(*transactions.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationUpdate
-		body.Key = nodeKey1.PubKey().Bytes()
+	n.Batch(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateValidatorKey)
+		body.OldKey = nodeKey1.PubKey().Bytes()
 		body.NewKey = nodeKey2.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 2).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
@@ -997,12 +1052,11 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey2.PubKey()})
 
 	// Remove a validator
-	n.Batch(func(send func(*transactions.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationRemove
+	n.Batch(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
 		body.Key = nodeKey2.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 3).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))

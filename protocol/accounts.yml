@@ -76,10 +76,8 @@ KeyBook:
   embeddings:
   - AccountHeader
   fields:
-    - name: Pages
-      repeatable: true
-      type: url
-      pointer: true
+    - name: PageCount
+      type: uvarint
 
 DataAccount:
   kind: chain

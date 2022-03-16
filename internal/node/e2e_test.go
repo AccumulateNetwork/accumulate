@@ -16,8 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -55,7 +53,7 @@ func (d *e2eDUT) queryAccount(s string) *apiv2.ChainQueryResponse {
 	return r.(*apiv2.ChainQueryResponse)
 }
 
-func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
+func (d *e2eDUT) GetRecordAs(url string, target protocol.Account) {
 	r := d.queryAccount(url)
 	data, err := json.Marshal(r.Data)
 	d.Require().NoError(err)
@@ -66,7 +64,7 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.queryAccount(url).MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	d.T().Helper()
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
@@ -150,11 +148,6 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.RunTestNet(t, subnets, daemons)
 	daemon := daemons[protocol.Directory][0]
 	jrpc := daemon.Jrpc_TESTONLY()
-
-	rpcAddrs := make([]string, 0, 3)
-	for _, netName := range subnets[1:] {
-		rpcAddrs = append(rpcAddrs, daemons[netName][0].Config.RPC.ListenAddress)
-	}
 
 	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
 	require.NoError(t, err)

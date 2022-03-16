@@ -31,13 +31,19 @@ TransactionHeader:
       type: uvarint
     - name: Nonce
       type: uvarint
+    - name: Memo
+      type: string
+      optional: true
+    - name: Metadata
+      type: bytes
+      optional: true
 
 Transaction:
   embeddings:
     - TransactionHeader
   fields:
     - name: Body
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil
@@ -55,6 +61,15 @@ LegacyED25519Signature:
     - name: Signature
       type: bytes
 
+RCD1Signature:
+  kind: signature
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+
+
 ED25519Signature:
   kind: signature
   fields:
@@ -63,48 +78,11 @@ ED25519Signature:
     - name: Signature
       type: bytes
 
-TxState:
-  fields:
-    - name: SigInfo
-      type: TransactionHeader
-      marshal-as: reference
-      pointer: true
-    - name: Transaction
-      type: TransactionPayload
-      unmarshal-with: UnmarshalTransaction
-      marshal-as: value
-      zero-value: nil
-    - name: TransactionHash
-      type: chain
-      marshal-as: none
-
-TransactionState:
-  kind: chain
-  chain-type: Transaction
-  omit-new-func: true
+ReceiptSignature:
+  kind: signature
   embeddings:
-    - AccountHeader
-    - TxState
-
-PendingTransactionState:
-  kind: chain
-  chain-type: PendingTransaction
-  omit-new-func: true
-  embeddings:
-  - AccountHeader
-  fields:
-    - name: Signature
-      repeatable: true
-      type: Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSignature
-    - name: TransactionState
-      type: TxState
-      marshal-as: reference
-      pointer: true
-    - name: Status
-      type: rawJson
+  - Receipt
+  fields: []
 
 ##### User #####
 
@@ -116,11 +94,10 @@ CreateIdentity:
       pointer: true
     - name: PublicKey
       type: bytes
-    - name: KeyBookName
-      type: string
       optional: true
-    - name: KeyPageName
-      type: string
+    - name: KeyBookUrl
+      type: url
+      pointer: true
       optional: true
     - name: Manager
       type: url
@@ -250,9 +227,6 @@ BurnTokens:
 CreateKeyPage:
   kind: tx
   fields:
-    - name: Url
-      type: url
-      pointer: true
     - name: Keys
       repeatable: true
       type: KeySpecParams
@@ -269,10 +243,8 @@ CreateKeyBook:
     - name: Url
       type: url
       pointer: true
-    - name: Pages
-      repeatable: true
-      type: url
-      pointer: true
+    - name: PublicKeyHash
+      type: bytes
     - name: Manager
       type: url
       pointer: true
@@ -306,6 +278,47 @@ UpdateKeyPage:
     - name: Threshold
       type: uvarint
       optional: true
+
+UpdateManager:
+  kind: tx
+  fields:
+    - name: ManagerKeyBook
+      type: url
+      pointer: true
+
+RemoveManager:
+  kind: tx
+  fields:
+
+AddValidator:
+  kind: tx
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+RemoveValidator:
+  kind: tx
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+UpdateValidatorKey:
+  kind: tx
+  fields:
+    - name: OldKey
+      type: bytes
+    - name: NewKey
+      type: bytes
 
 SignPending:
   kind: tx
@@ -348,24 +361,27 @@ SyntheticAnchor:
   kind: tx
   fields:
     - name: Source
+      description: is the subnet the anchor originates from
       type: url
       pointer: true
     - name: Major
+      description: indicates whether the anchor is a major block anchor
       type: bool
     - name: RootAnchor
+      description: is the anchor of the source's root anchor chain
       type: chain
     - name: RootIndex
+      description: is the index of the root anchor chain anchor
       type: uvarint
     - name: Block
-      type: uvarint
-    - name: SourceIndex
-      type: uvarint
-    - name: SourceBlock
+      description: is the index of the block
       type: uvarint
     - name: AcmeOraclePrice
       type: uvarint
-    - name: Receipt
+    - name: Receipts
+      description: are receipts for anchors from other subnets that were included in the block
       type: Receipt
+      repeatable: true
       marshal-as: reference
 
 SyntheticDepositCredits:
@@ -449,14 +465,3 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
-
-UpdateManager:
-  kind: tx
-  fields:
-    - name: ManagerKeyBook
-      type: url
-      pointer: true
-
-RemoveManager:
-  kind: tx
-  fields:

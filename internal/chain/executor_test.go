@@ -59,7 +59,7 @@ func BenchmarkHighTps(b *testing.B) {
 
 	state, err := kv.MarshalJSON()
 	require.NoError(b, err)
-	_, err = exec.InitChain(state, time.Now(), 0)
+	_, err = exec.InitChain(state, time.Now())
 	require.NoError(b, err)
 
 	liteKey := acctesting.GenerateKey(b.Name(), "Lite")
@@ -170,7 +170,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	state, err := temp.MarshalJSON()
 	require.NoError(t, err)
 
-	_, err = chain.InitChain(state, time.Now(), 1)
+	_, err = chain.InitChain(state, time.Now())
 	require.NoError(t, err)
 
 	// Start a block
@@ -183,7 +183,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 
 	// Create a synthetic transaction where the origin does not exist
 	env := acctesting.NewTransaction().
-		WithOrigin(url.MustParse("acc://account-that-doesnt-exist")).
+		WithOrigin(url.MustParse("acc://account-that-does-not-exist")).
 		WithNonceTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
 			Cause:  [32]byte{1},

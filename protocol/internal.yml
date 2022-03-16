@@ -19,9 +19,16 @@ InternalLedger:
       type: uvarint
     - name: ActiveOracle
       type: uvarint
-    - name: Updates
+
+InternalSyntheticLedger:
+  kind: chain
+  embeddings:
+    - AccountHeader
+  fields:
+    - name: Pending
+      type: SyntheticLedgerEntry
+      pointer: true
       repeatable: true
-      type: AnchorMetadata
       marshal-as: reference
 
 ##### Transactions #####
@@ -59,9 +66,9 @@ SyntheticLedger:
   fields:
     - name: Nonce
       type: uvarint
-    - name: Produced
-      type: chain
-      repeatable: true
+    # - name: Produced
+    #   type: chain
+    #   repeatable: true
     - name: Unsigned
       type: chain
       repeatable: true
@@ -73,7 +80,7 @@ SendTransaction:
   incomparable: true
   fields:
     - name: Payload
-      type: TransactionPayload
+      type: TransactionBody
       marshal-as: value
       zero-value: nil
       unmarshal-with: UnmarshalTransaction
@@ -90,3 +97,25 @@ TransactionSignature:
       marshal-as: value
       zero-value: nil
       unmarshal-with: UnmarshalSignature
+
+SyntheticLedgerEntry:
+  description: contains the information needed to produce a receipt for a synthetic transaction that was produced in some block
+  fields:
+    - name: TransactionHash
+      type: chain
+      description: is the hash of the synthetic transaction
+    - name: RootAnchor
+      type: chain
+      description: is the anchor of the root chain from the block
+    - name: SynthIndex
+      type: uint
+      description: is the index of the transaction in the synthetic transaction chain
+    - name: SynthIndexIndex
+      type: uint
+      description: is the index of the synthetic transaction index chain entry from the block
+    - name: RootIndexIndex
+      type: uint
+      description: is the index of the root index chain entry from the block
+    - name: NeedsReceipt
+      type: bool
+      description: indicates whether the synthetic transaction is waiting for a receipt

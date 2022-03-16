@@ -55,7 +55,7 @@ func Check(t *testing.T, bpt *BPT, node *BptNode) {
 
 	bpt.LoadNext(BIdx, bit, node, key)
 
-	keyLeft, keyRight, ok := GetChildrenNodeKeys(node.NodeKey)
+	keyLeft, keyRight, _ := GetChildrenNodeKeys(node.NodeKey)
 
 	if lNode, ok := node.Left.(*BptNode); ok {
 		require.Truef(t, keyLeft == lNode.NodeKey, "Left branch is broken key %x ht %d", key, ht)
@@ -112,8 +112,8 @@ func TestManager(t *testing.T) {
 			v := values.NextA()       //
 			bptManager.InsertKV(k, v) //
 		}
-		bptManager.Bpt.Update()
-		Check(t, bptManager.Bpt, bptManager.Bpt.Root)
+		require.NoError(t, bptManager.Bpt.Update())
+		Check(t, bptManager.Bpt, bptManager.Bpt.GetRoot())
 		bptManager = NewBPTManager(storeTx)
 	}
 	var first, place, last [32]byte
@@ -132,7 +132,7 @@ func TestManager(t *testing.T) {
 	//fmt.Printf("%x-%x\n", first, last)
 
 	for i := range keys.List {
-		_, _, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
+		_, _, found := bptManager.Bpt.Get(bptManager.Bpt.GetRoot(), keys.GetAElement(i))
 		require.Truef(t, found, "Must find every key put into the BPT. Failed at %d", i)
 	}
 
@@ -140,7 +140,7 @@ func TestManager(t *testing.T) {
 	var sb, eb bool
 	for i := 0; !sb || !eb; i++ {
 		key := keys.NextA()
-		_, _, found := bptManager.Bpt.Get(bptManager.Bpt.Root, key)
+		_, _, found := bptManager.Bpt.Get(bptManager.Bpt.GetRoot(), key)
 		require.Falsef(t, found, "Should not find keys not put into the BPT. Failed at %d", i)
 		if bytes.Compare(first[:], key[:]) < 0 {
 			sb = true
@@ -151,7 +151,6 @@ func TestManager(t *testing.T) {
 			//		fmt.Printf("%d last:  %x key: %x\n", i, last, key)
 		}
 	}
-
 }
 
 func TestManagerSeries(t *testing.T) {
@@ -186,13 +185,14 @@ func TestManagerSeries(t *testing.T) {
 					}
 				}
 				priorRoot := bptManager.GetRootHash()          //        Get the prior root (cause no update yet)
-				bptManager.Bpt.Update()                        //        Update the value
+				require.NoError(t, bptManager.Bpt.Update())    //        Update the value
 				currentRoot := bptManager.GetRootHash()        //        Get the Root Hash.  Note this is in memory
 				if bytes.Equal(priorRoot[:], currentRoot[:]) { //        Prior should be different, cause we added stuff
 					t.Error("added stuff, hash should not be equal") //
 				} //
 				//fmt.Printf("%x %x\n", priorRoot, currentRoot)
 				previous = currentRoot //                                Make previous track current state of database
+				require.NoError(t, bptManager.Bpt.Update())
 			}
 		}
 		bptManager := NewBPTManager(storeTx)    //  One more check that previous is the same as current when
@@ -223,14 +223,14 @@ func TestManagerPersist(t *testing.T) {
 			bptManager.Bpt.Insert(k, v)
 		}
 
-		bptManager.Bpt.Update()
+		require.NoError(t, bptManager.Bpt.Update())
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
 		storeTx = store.Begin(true)
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
 			k := keys.GetAElement(i)
-			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, k)
+			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.GetRoot(), k)
 			require.NotNilf(t, entry, "Must find all the keys we put into the BPT: node returned is nil %d", i)
 			require.Truef(t, found, "Must find all keys in BPT: key index = %d", i)
 			value, ok := (*entry).(*Value)
@@ -242,13 +242,13 @@ func TestManagerPersist(t *testing.T) {
 			bptManager.Bpt.Insert(keys.GetAElement(i), values.NextA())
 		}
 
-		bptManager.Bpt.Update()
+		require.NoError(t, bptManager.Bpt.Update())
 		require.Nil(t, storeTx.Commit(), "Should be able to commit the data")
 
 		storeTx = store.Begin(true)
 		bptManager = NewBPTManager(storeTx)
 		for i, v := range keys.List {
-			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.Root, keys.GetAElement(i))
+			_, entry, found := bptManager.Bpt.Get(bptManager.Bpt.GetRoot(), keys.GetAElement(i))
 			value, ok := (*entry).(*Value)
 			require.Truef(t, ok && found, "Must find all the keys we put into the BPT: Key not found %i")
 			require.Truef(t, bytes.Equal(value.Key[:], v), "Must find all the keys we put into the BPT; Value != key %i", i)
@@ -274,13 +274,13 @@ func TestBptGet(t *testing.T) {
 		bpt.Insert(keys.GetAElement(i), values.NextAList())
 	}
 
-	bpt.Update()
+	require.NoError(t, bpt.Update())
 
 	for i := 0; i < numberTests; i++ {
 		idx := i
 		k := keys.GetAElement(idx)
 		v := values.List[idx]
-		node, entry, found := bpt.Get(bpt.Root, k)
+		node, entry, found := bpt.Get(bpt.GetRoot(), k)
 		require.Truef(t, found, "Should find all keys added. idx=%d", idx)
 		require.NotNilf(t, node, "Should return a node. idx=%d", idx)
 		require.NotNilf(t, *entry, "Should return a value. idx=%d", idx)
@@ -291,7 +291,7 @@ func TestBptGet(t *testing.T) {
 
 	for i := 0; i < numberTests/10; i++ {
 		k := keys.NextA()
-		node, _, found := bpt.Get(bpt.Root, k)
+		node, _, found := bpt.Get(bpt.GetRoot(), k)
 		require.Falsef(t, found, "Should not find a value for a random key idx:=%d", i)
 		BIdx := node.Height >> 3 // Get the Byte Index
 		require.Truef(t, bytes.Equal(k[:BIdx], node.NodeKey[:BIdx]),

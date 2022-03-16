@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -19,9 +21,14 @@ import (
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
+
+func runCmdFunc(fn func([]string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		out, err := fn(args)
+		printOutput(cmd, out, err)
+	}
+}
 
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	u, err := url2.Parse(urlStr)
@@ -52,7 +59,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Header, []byte, error) {
+func prepareSigner(origin *url2.URL, args []string) ([]string, *protocol.TransactionHeader, []byte, error) {
 	var privKey []byte
 	var err error
 
@@ -61,7 +68,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	hdr := transactions.Header{}
+	hdr := protocol.TransactionHeader{}
 	hdr.Origin = origin
 	hdr.KeyPageHeight = 1
 	hdr.KeyPageIndex = 0
@@ -103,7 +110,21 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	return args[ct:], &hdr, privKey, nil
 }
 
-func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *protocol.TransactionHeader, []byte, error) {
+	principal, err := url2.Parse(args[0])
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	args, header, key, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	return args, principal, header, key, nil
+}
+
+func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
 	var typ struct {
 		Type protocol.AccountType
 	}
@@ -125,10 +146,10 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (protocol.Signature, error) {
-	env := new(transactions.Envelope)
+func signGenTx(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, hdr *protocol.TransactionHeader, privKey []byte, nonce uint64) (protocol.Signature, error) {
+	env := new(protocol.Envelope)
 	env.TxHash = txHash
-	env.Transaction = new(transactions.Transaction)
+	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Body = payload
 
 	hdr.Nonce = nonce
@@ -142,7 +163,7 @@ func signGenTx(payload protocol.TransactionPayload, txHash []byte, origin *url2.
 	return ed, nil
 }
 
-func prepareGenTxV2(payload protocol.TransactionPayload, jsonPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+func prepareGenTxV2(payload protocol.TransactionBody, jsonPayload, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
 	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
@@ -232,9 +253,34 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (*api2.TxResponse, error) {
 	if payload == nil && txHash != nil {
 		payload = new(protocol.SignPending)
+	}
+
+	si.Memo = Memo
+	if Metadata != "" {
+		if strings.Contains(Metadata, ":") {
+			dataSet := strings.Split(Metadata, ":")
+			switch dataSet[0] {
+			case "hex":
+				bytes, err := hex.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				si.Metadata = bytes
+			case "base64":
+				bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
+				if err != nil {
+					return nil, err
+				}
+				si.Metadata = bytes
+			default:
+				si.Metadata = []byte(dataSet[1])
+			}
+		} else {
+			si.Metadata = []byte(Metadata)
+		}
 	}
 
 	dataBinary, err := payload.MarshalBinary()
@@ -258,6 +304,9 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 		return nil, err
 	}
 
+	params.Memo = si.Memo
+	params.Metadata = si.Metadata
+
 	data, err = json.Marshal(params)
 	if err != nil {
 		return nil, err
@@ -270,6 +319,15 @@ func dispatchTxRequest(action string, payload protocol.TransactionPayload, txHas
 	}
 
 	return &res, nil
+}
+
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (string, error) {
+	res, err := dispatchTxRequest(action, payload, txHash, origin, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFrom(res).Print()
 }
 
 type ActionResponse struct {
@@ -357,13 +415,26 @@ func (a *ActionDataResponse) Print() (string, error) {
 }
 
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
-	return &ActionResponse{
+	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
 		EnvelopeHash:    r.EnvelopeHash,
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+		Result:          r.Result,
 	}
+	if r.Code != 0 {
+		return ar
+	}
+
+	result := new(protocol.TransactionStatus)
+	if Remarshal(r.Result, result) != nil {
+		return ar
+	}
+
+	ar.Code = types.String(fmt.Sprint(result.Code))
+	ar.Error = types.String(result.Message)
+	return ar
 }
 
 func (a *ActionResponse) Print() (string, error) {
@@ -584,7 +655,9 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	}
 
 	for _, receipt := range res.Receipts {
-		out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		// // TODO Figure out how to include the directory receipt and block
+		// out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
+		out += fmt.Sprintf("Receipt from %v#chain/%s\n", receipt.Account, receipt.Chain)
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
@@ -722,10 +795,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		var out string
-		out += fmt.Sprintf("\n\tPage Index\t\tKey Page Url\n")
-		for i, v := range book.Pages {
-			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
-		}
+		out += fmt.Sprintf("\n\tPage Count\n")
+		out += fmt.Sprintf("\t%d\n", book.PageCount)
 		return out, nil
 	case protocol.AccountTypeKeyPage.String():
 		ss := protocol.KeyPage{}
@@ -776,7 +847,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	switch string(res.Type) {
-	case types.TxTypeSendTokens.String():
+	case protocol.TransactionTypeSendTokens.String():
 		tx := new(api.TokenSend)
 		err := Remarshal(res.Data, &tx)
 		if err != nil {
@@ -795,7 +866,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case types.TxTypeSyntheticDepositTokens.String():
+	case protocol.TransactionTypeSyntheticDepositTokens.String():
 		deposit := new(protocol.SyntheticDepositTokens)
 		err := Remarshal(res.Data, &deposit)
 		if err != nil {
@@ -811,7 +882,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case types.TxTypeSyntheticCreateChain.String():
+	case protocol.TransactionTypeSyntheticCreateChain.String():
 		scc := new(protocol.SyntheticCreateChain)
 		err := Remarshal(res.Data, &scc)
 		if err != nil {
@@ -832,7 +903,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
 		}
 		return out, nil
-	case types.TxTypeCreateIdentity.String():
+	case protocol.TransactionTypeCreateIdentity.String():
 		id := protocol.CreateIdentity{}
 		err := Remarshal(res.Data, &id)
 		if err != nil {
@@ -840,9 +911,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		}
 
 		out := "\n"
-		out += fmt.Sprintf("ADI url \t\t:\tacc://%s\n", id.Url)
-		out += fmt.Sprintf("Key Book \t\t:\tacc://%s/%s\n", id.Url, id.KeyBookName)
-		out += fmt.Sprintf("Key Page \t\t:\tacc://%s/%s\n", id.Url, id.KeyPageName)
+		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
+		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
 		keyName, err := FindLabelFromPubKey(id.PublicKey)
 		if err != nil {
@@ -864,9 +934,9 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	}
 }
 
-func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
+func getChainHeaderFromChainId(chainId []byte) (*protocol.AccountHeader, error) {
 	kb, err := GetByChainId(chainId)
-	header := state.ChainHeader{}
+	header := protocol.AccountHeader{}
 	err = Remarshal(kb.Data, &header)
 	if err != nil {
 		return nil, err
