@@ -44,6 +44,13 @@ type AddCredits struct {
 	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
+type AddValidator struct {
+	fieldsSet []bool
+	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	// Owner reserved for future use.
+	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+}
+
 type Anchor struct {
 	fieldsSet []bool
 	AccountHeader
@@ -332,6 +339,13 @@ type RemoveManager struct {
 	fieldsSet []bool
 }
 
+type RemoveValidator struct {
+	fieldsSet []bool
+	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	// Owner reserved for future use.
+	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+}
+
 type RequestDataEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -530,6 +544,12 @@ type UpdateManager struct {
 	ManagerKeyBook *url.URL `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
 }
 
+type UpdateValidatorKey struct {
+	fieldsSet []bool
+	OldKey    []byte `json:"oldKey,omitempty" form:"oldKey" query:"oldKey" validate:"required"`
+	NewKey    []byte `json:"newKey,omitempty" form:"newKey" query:"newKey" validate:"required"`
+}
+
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
@@ -619,6 +639,10 @@ func (*AcmeFaucet) GetType() TransactionType { return TransactionTypeAcmeFaucet 
 func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
 
 func (*AddCredits) GetType() TransactionType { return TransactionTypeAddCredits }
+
+func (*AddValidator) Type() TransactionType { return TransactionTypeAddValidator }
+
+func (*AddValidator) GetType() TransactionType { return TransactionTypeAddValidator }
 
 func (*Anchor) Type() AccountType { return AccountTypeAnchor }
 
@@ -732,6 +756,10 @@ func (*RemoveManager) Type() TransactionType { return TransactionTypeRemoveManag
 
 func (*RemoveManager) GetType() TransactionType { return TransactionTypeRemoveManager }
 
+func (*RemoveValidator) Type() TransactionType { return TransactionTypeRemoveValidator }
+
+func (*RemoveValidator) GetType() TransactionType { return TransactionTypeRemoveValidator }
+
 func (*SegWitDataEntry) Type() TransactionType { return TransactionTypeSegWitDataEntry }
 
 func (*SegWitDataEntry) GetType() TransactionType { return TransactionTypeSegWitDataEntry }
@@ -792,6 +820,10 @@ func (*UpdateManager) Type() TransactionType { return TransactionTypeUpdateManag
 
 func (*UpdateManager) GetType() TransactionType { return TransactionTypeUpdateManager }
 
+func (*UpdateValidatorKey) Type() TransactionType { return TransactionTypeUpdateValidatorKey }
+
+func (*UpdateValidatorKey) GetType() TransactionType { return TransactionTypeUpdateValidatorKey }
+
 func (*WriteData) Type() TransactionType { return TransactionTypeWriteData }
 
 func (*WriteData) GetType() TransactionType { return TransactionTypeWriteData }
@@ -847,6 +879,17 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 		return false
 	}
 	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddValidator) Equal(u *AddValidator) bool {
+	if !(bytes.Equal(v.Key, u.Key)) {
+		return false
+	}
+	if !((v.Owner).Equal(u.Owner)) {
 		return false
 	}
 
@@ -1438,6 +1481,17 @@ func (v *RemoveManager) Equal(u *RemoveManager) bool {
 	return true
 }
 
+func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
+	if !(bytes.Equal(v.Key, u.Key)) {
+		return false
+	}
+	if !((v.Owner).Equal(u.Owner)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
 	if !((v.Url).Equal(u.Url)) {
 		return false
@@ -1832,6 +1886,17 @@ func (v *UpdateManager) Equal(u *UpdateManager) bool {
 	return true
 }
 
+func (v *UpdateValidatorKey) Equal(u *UpdateValidatorKey) bool {
+	if !(bytes.Equal(v.OldKey, u.OldKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.NewKey, u.NewKey)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !((&v.Entry).Equal(&u.Entry)) {
 		return false
@@ -2057,6 +2122,47 @@ func (v *AddCredits) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if v.Amount == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AddValidator = []string{
+	1: "Type",
+	2: "Key",
+	3: "Owner",
+}
+
+func (v *AddValidator) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, TransactionTypeAddValidator.ID())
+	if !(len(v.Key) == 0) {
+		writer.WriteBytes(2, v.Key)
+	}
+	if !(v.Owner == nil) {
+		writer.WriteUrl(3, v.Owner)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AddValidator)
+	return buffer.Bytes(), err
+}
+
+func (v *AddValidator) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Key is missing")
+	} else if len(v.Key) == 0 {
+		errs = append(errs, "field Key is not set")
 	}
 
 	switch len(errs) {
@@ -4056,6 +4162,47 @@ func (v *RemoveManager) IsValid() error {
 	}
 }
 
+var fieldNames_RemoveValidator = []string{
+	1: "Type",
+	2: "Key",
+	3: "Owner",
+}
+
+func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, TransactionTypeRemoveValidator.ID())
+	if !(len(v.Key) == 0) {
+		writer.WriteBytes(2, v.Key)
+	}
+	if !(v.Owner == nil) {
+		writer.WriteUrl(3, v.Owner)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RemoveValidator)
+	return buffer.Bytes(), err
+}
+
+func (v *RemoveValidator) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Key is missing")
+	} else if len(v.Key) == 0 {
+		errs = append(errs, "field Key is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RequestDataEntry = []string{
 	1: "Url",
 	2: "EntryHash",
@@ -5411,6 +5558,52 @@ func (v *UpdateManager) IsValid() error {
 	}
 }
 
+var fieldNames_UpdateValidatorKey = []string{
+	1: "Type",
+	2: "OldKey",
+	3: "NewKey",
+}
+
+func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, TransactionTypeUpdateValidatorKey.ID())
+	if !(len(v.OldKey) == 0) {
+		writer.WriteBytes(2, v.OldKey)
+	}
+	if !(len(v.NewKey) == 0) {
+		writer.WriteBytes(3, v.NewKey)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateValidatorKey) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field OldKey is missing")
+	} else if len(v.OldKey) == 0 {
+		errs = append(errs, "field OldKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field NewKey is missing")
+	} else if len(v.NewKey) == 0 {
+		errs = append(errs, "field NewKey is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_WriteData = []string{
 	1: "Type",
 	2: "Entry",
@@ -5653,6 +5846,32 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddCredits)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *AddValidator) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeAddValidator {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAddValidator, typ)
+	}
+
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Key = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Owner = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AddValidator)
 	v.fieldsSet = seen
 	return err
 }
@@ -6763,6 +6982,32 @@ func (v *RemoveManager) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RemoveValidator) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeRemoveValidator {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeRemoveValidator, typ)
+	}
+
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Key = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Owner = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RemoveValidator)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7479,6 +7724,32 @@ func (v *UpdateManager) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *UpdateValidatorKey) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeUpdateValidatorKey {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateValidatorKey, typ)
+	}
+
+	if x, ok := reader.ReadBytes(2); ok {
+		v.OldKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.NewKey = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateValidatorKey)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *WriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7590,6 +7861,18 @@ func (v *AddCredits) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = v.Amount
+	return json.Marshal(&u)
+}
+
+func (v *AddValidator) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  TransactionType `json:"type"`
+		Key   *string         `json:"key,omitempty"`
+		Owner *url.URL        `json:"owner,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Key = encoding.BytesToJSON(v.Key)
+	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
 
@@ -8129,6 +8412,18 @@ func (v *RemoveManager) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  TransactionType `json:"type"`
+		Key   *string         `json:"key,omitempty"`
+		Owner *url.URL        `json:"owner,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Key = encoding.BytesToJSON(v.Key)
+	u.Owner = v.Owner
+	return json.Marshal(&u)
+}
+
 func (v *RequestDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
@@ -8489,6 +8784,18 @@ func (v *UpdateManager) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		OldKey *string         `json:"oldKey,omitempty"`
+		NewKey *string         `json:"newKey,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.OldKey = encoding.BytesToJSON(v.OldKey)
+	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	return json.Marshal(&u)
+}
+
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  TransactionType `json:"type"`
@@ -8573,6 +8880,27 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 	}
 	v.Recipient = u.Recipient
 	v.Amount = u.Amount
+	return nil
+}
+
+func (v *AddValidator) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  TransactionType `json:"type"`
+		Key   *string         `json:"key,omitempty"`
+		Owner *url.URL        `json:"owner,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Key = encoding.BytesToJSON(v.Key)
+	u.Owner = v.Owner
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		v.Key = x
+	}
+	v.Owner = u.Owner
 	return nil
 }
 
@@ -9497,6 +9825,27 @@ func (v *RemoveManager) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  TransactionType `json:"type"`
+		Key   *string         `json:"key,omitempty"`
+		Owner *url.URL        `json:"owner,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Key = encoding.BytesToJSON(v.Key)
+	u.Owner = v.Owner
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		v.Key = x
+	}
+	v.Owner = u.Owner
+	return nil
+}
+
 func (v *RequestDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
@@ -10135,6 +10484,31 @@ func (v *UpdateManager) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.ManagerKeyBook = u.ManagerKeyBook
+	return nil
+}
+
+func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		OldKey *string         `json:"oldKey,omitempty"`
+		NewKey *string         `json:"newKey,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.OldKey = encoding.BytesToJSON(v.OldKey)
+	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.OldKey); err != nil {
+		return fmt.Errorf("error decoding OldKey: %w", err)
+	} else {
+		v.OldKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.NewKey); err != nil {
+		return fmt.Errorf("error decoding NewKey: %w", err)
+	} else {
+		v.NewKey = x
+	}
 	return nil
 }
 
