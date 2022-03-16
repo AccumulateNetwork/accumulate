@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	randpkg "golang.org/x/exp/rand"
 )
 
@@ -443,7 +444,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		// Test getting the data by URL
-		rde := new(protocol.ResponseDataEntry)
+		rde := new(query.ResponseDataEntry)
 		n.QueryAccountAs("FooBar/oof#data", rde)
 
 		if !rde.Entry.Equal(&wd.Entry) {
@@ -451,7 +452,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry hash.
-		rde2 := new(protocol.ResponseDataEntry)
+		rde2 := new(query.ResponseDataEntry)
 		n.QueryAccountAs(fmt.Sprintf("FooBar/oof#data/%X", wd.Entry.Hash()), rde2)
 
 		if !rde.Entry.Equal(&rde2.Entry) {
@@ -459,7 +460,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry set
-		rde3 := new(protocol.ResponseDataEntrySet)
+		rde3 := new(query.ResponseDataEntrySet)
 		n.QueryAccountAs("FooBar/oof#data/0:1", rde3)
 		if !rde.Entry.Equal(&rde3.DataEntries[0].Entry) {
 			t.Fatalf("data query does not match what was entered")
