@@ -188,7 +188,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	case customErr == nil:
 		//Ok
 
-	case errors.Is(customErr.Unwrap(), storage.ErrNotFound):
+	case errors.Is(customErr, storage.ErrNotFound):
 		resQuery.Info = customErr.Error()
 		resQuery.Code = uint32(protocol.ErrorCodeNotFound)
 		return resQuery

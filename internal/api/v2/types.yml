@@ -9,6 +9,10 @@ ChainQueryResponse:
       pointer: true
       marshal-as: reference
       alternative: MerkleState
+    - name: Chains
+      type: query.ChainState
+      repeatable: true
+      marshal-as: reference
     - name: Data
       type: any
     - name: ChainId
