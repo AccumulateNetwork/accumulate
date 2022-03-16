@@ -88,10 +88,43 @@ func initDualNode(cmd *cobra.Command, args []string) {
 		check(fmt.Errorf("bvn host not found in %v subnet", subnetName))
 	}
 
-	flagInit.NoWebsite = true
+	if flagInit.NoEmptyBlocks {
+		c.Consensus.CreateEmptyBlocks = false
+	}
+	if flagInit.NoWebsite {
+		c.Accumulate.Website.Enabled = false
+	}
+
+	if len(c.P2P.PersistentPeers) > 0 {
+		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
+		c.P2P.PersistentPeers = ""
+	}
+	dnWebHostUrl, err := url.Parse(c.Accumulate.Website.ListenAddress)
+	checkf(err, "cannot parse website listen address (%v) for node", c.Accumulate.Website.ListenAddress)
+
+	cfg.Store(c)
+
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvnBasePort)
 	flagMain.WorkDir = path.Join(workDir, "bvn")
 	args = []string{bvnHost.Address}
 	initNode(cmd, args)
+
+	cfg.Load(path.Join(flagMain.WorkDir, "Node0"))
+
+	if flagInit.NoEmptyBlocks {
+		c.Consensus.CreateEmptyBlocks = false
+	}
+	if flagInit.NoWebsite {
+		c.Accumulate.Website.Enabled = false
+	}
+	webPort, err := strconv.ParseUint(dnWebHostUrl.Port(), 10, 16)
+	checkf(err, "invalid port for bvn website (%v)", dnWebHostUrl.Port())
+	c.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:%d", dnWebHostUrl.Hostname(), webPort+1)
+	if len(c.P2P.PersistentPeers) > 0 {
+		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
+		c.P2P.PersistentPeers = ""
+	}
+
+	cfg.Store(c)
 
 }
