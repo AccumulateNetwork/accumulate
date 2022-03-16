@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type governor struct {
@@ -213,20 +212,16 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			g.logger.Error("Failed to load pending transaction", "txid", logging.AsHex(txid), "error", err)
 			continue
 		}
-		if tx.Transaction == nil {
-			g.logger.Error("Transaction has no payload", "txid", logging.AsHex(txid))
-			continue
-		}
 
-		typ := tx.Transaction.Body.GetType()
-		if typ != types.TxTypeSyntheticAnchor {
+		typ := tx.Body.GetType()
+		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
 
 		// Sign it
 		ed := new(protocol.LegacyED25519Signature)
 		ed.PublicKey = g.Key[32:]
-		err = ed.Sign(tx.Transaction.Nonce, g.Key, txid[:])
+		err = ed.Sign(tx.Nonce, g.Key, txid[:])
 		if err != nil {
 			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid), "error", err)
 			continue
@@ -265,7 +260,8 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 		}
 
 		// Convert it back to a transaction
-		env := pending
+		env := new(protocol.Envelope)
+		env.Transaction = pending
 		env.Signatures = signatures
 
 		// Marshal it
@@ -277,7 +273,7 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 
 		// Send it
 		typ := env.Transaction.Type()
-		if typ != types.TxTypeSyntheticAnchor {
+		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
 		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
@@ -400,7 +396,7 @@ func (g *governor) sendMirror(batch *database.Batch) {
 	g.sendInternal(batch, txns)
 }
 
-func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionPayload) {
+func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionBody) {
 	// Construct the signature transaction
 	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
 	env, err := g.buildSynthTxn(st, g.Network.NodeUrl(protocol.Ledger), body)

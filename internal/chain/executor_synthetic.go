@@ -6,7 +6,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
@@ -23,7 +22,7 @@ func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction
 		*sub = *tx.Transaction
 
 		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx, status, nil)
+		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx.Transaction, status, nil)
 		if err != nil {
 			return err
 		}
@@ -40,10 +39,10 @@ func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction
 	return nil
 }
 
-func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionPayload) (*transactions.Envelope, error) {
+func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionBody) (*protocol.Envelope, error) {
 	// Build the transaction
 	env := new(protocol.Envelope)
-	env.Transaction = new(transactions.Transaction)
+	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Origin = dest
 	env.Transaction.KeyPageHeight = 1
 	env.Transaction.KeyPageIndex = 0

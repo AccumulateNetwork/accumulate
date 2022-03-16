@@ -304,14 +304,6 @@ type ObjectMetadata struct {
 	Chains    []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 }
 
-type PendingTransactionState struct {
-	fieldsSet []bool
-	AccountHeader
-	Signature        []Signature     `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	TransactionState *TxState        `json:"transactionState,omitempty" form:"transactionState" query:"transactionState" validate:"required"`
-	Status           json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-}
-
 type RCD1Signature struct {
 	fieldsSet []bool
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -382,8 +374,8 @@ type SendTokens struct {
 
 type SendTransaction struct {
 	fieldsSet []bool
-	Payload   TransactionPayload `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
-	Recipient *url.URL           `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	Payload   TransactionBody `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Recipient *url.URL        `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 }
 
 type SignPending struct {
@@ -508,7 +500,7 @@ type TokenRecipient struct {
 type Transaction struct {
 	fieldsSet []bool
 	TransactionHeader
-	Body TransactionPayload `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	Body TransactionBody `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash []byte
 }
 
@@ -528,12 +520,6 @@ type TransactionSignature struct {
 	Signature   Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 }
 
-type TransactionState struct {
-	fieldsSet []bool
-	AccountHeader
-	TxState
-}
-
 type TransactionStatus struct {
 	fieldsSet []bool
 	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
@@ -542,13 +528,6 @@ type TransactionStatus struct {
 	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
-}
-
-type TxState struct {
-	fieldsSet       []bool
-	SigInfo         *TransactionHeader `json:"sigInfo,omitempty" form:"sigInfo" query:"sigInfo" validate:"required"`
-	Transaction     TransactionPayload `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	TransactionHash [32]byte
 }
 
 type UpdateKeyPage struct {
@@ -759,10 +738,6 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 
 func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAccount }
 
-func (*PendingTransactionState) Type() AccountType { return AccountTypePendingTransaction }
-
-func (*PendingTransactionState) GetType() AccountType { return AccountTypePendingTransaction }
-
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
@@ -826,10 +801,6 @@ func (*TokenAccount) GetType() AccountType { return AccountTypeTokenAccount }
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
 
 func (*TokenIssuer) GetType() AccountType { return AccountTypeTokenIssuer }
-
-func (*TransactionState) Type() AccountType { return AccountTypeTransaction }
-
-func (*TransactionState) GetType() AccountType { return AccountTypeTransaction }
 
 func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPage }
 
@@ -1431,28 +1402,6 @@ func (v *ObjectMetadata) Equal(u *ObjectMetadata) bool {
 	return true
 }
 
-func (v *PendingTransactionState) Equal(u *PendingTransactionState) bool {
-	if !v.AccountHeader.Equal(&u.AccountHeader) {
-		return false
-	}
-	if len(v.Signature) != len(u.Signature) {
-		return false
-	}
-	for i := range v.Signature {
-		if !(v.Signature[i] == u.Signature[i]) {
-			return false
-		}
-	}
-	if !((v.TransactionState).Equal(u.TransactionState)) {
-		return false
-	}
-	if !(bytes.Equal(v.Status, u.Status)) {
-		return false
-	}
-
-	return true
-}
-
 func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -1875,17 +1824,6 @@ func (v *TransactionSignature) Equal(u *TransactionSignature) bool {
 	return true
 }
 
-func (v *TransactionState) Equal(u *TransactionState) bool {
-	if !v.AccountHeader.Equal(&u.AccountHeader) {
-		return false
-	}
-	if !v.TxState.Equal(&u.TxState) {
-		return false
-	}
-
-	return true
-}
-
 func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	if !(v.Remote == u.Remote) {
 		return false
@@ -1903,17 +1841,6 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	if !(v.Result == u.Result) {
-		return false
-	}
-
-	return true
-}
-
-func (v *TxState) Equal(u *TxState) bool {
-	if !((v.SigInfo).Equal(u.SigInfo)) {
-		return false
-	}
-	if !(v.Transaction == u.Transaction) {
 		return false
 	}
 
@@ -3967,68 +3894,6 @@ func (v *ObjectMetadata) IsValid() error {
 	}
 }
 
-var fieldNames_PendingTransactionState = []string{
-	1: "Type",
-	2: "AccountHeader",
-	3: "Signature",
-	4: "TransactionState",
-	5: "Status",
-}
-
-func (v *PendingTransactionState) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteUint(1, AccountTypePendingTransaction.ID())
-	writer.WriteValue(2, &v.AccountHeader)
-	if !(len(v.Signature) == 0) {
-		for _, v := range v.Signature {
-			writer.WriteValue(3, v)
-		}
-	}
-	if !(v.TransactionState == nil) {
-		writer.WriteValue(4, v.TransactionState)
-	}
-	if !(len(v.Status) == 0) {
-		writer.WriteBytes(5, v.Status)
-	}
-
-	_, _, err := writer.Reset(fieldNames_PendingTransactionState)
-	return buffer.Bytes(), err
-}
-
-func (v *PendingTransactionState) IsValid() error {
-	var errs []string
-
-	if err := v.AccountHeader.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Signature is missing")
-	} else if len(v.Signature) == 0 {
-		errs = append(errs, "field Signature is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field TransactionState is missing")
-	} else if v.TransactionState == nil {
-		errs = append(errs, "field TransactionState is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Status is missing")
-	} else if len(v.Status) == 0 {
-		errs = append(errs, "field Status is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_RCD1Signature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -5495,44 +5360,6 @@ func (v *TransactionSignature) IsValid() error {
 	}
 }
 
-var fieldNames_TransactionState = []string{
-	1: "Type",
-	2: "AccountHeader",
-	3: "TxState",
-}
-
-func (v *TransactionState) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteUint(1, AccountTypeTransaction.ID())
-	writer.WriteValue(2, &v.AccountHeader)
-	writer.WriteValue(3, &v.TxState)
-
-	_, _, err := writer.Reset(fieldNames_TransactionState)
-	return buffer.Bytes(), err
-}
-
-func (v *TransactionState) IsValid() error {
-	var errs []string
-
-	if err := v.AccountHeader.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if err := v.TxState.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_TransactionStatus = []string{
 	1: "Remote",
 	2: "Delivered",
@@ -5596,50 +5423,6 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field Message is missing")
 	} else if len(v.Message) == 0 {
 		errs = append(errs, "field Message is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_TxState = []string{
-	1: "SigInfo",
-	2: "Transaction",
-}
-
-func (v *TxState) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.SigInfo == nil) {
-		writer.WriteValue(1, v.SigInfo)
-	}
-	if !(v.Transaction == (nil)) {
-		writer.WriteValue(2, v.Transaction)
-	}
-
-	_, _, err := writer.Reset(fieldNames_TxState)
-	return buffer.Bytes(), err
-}
-
-func (v *TxState) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field SigInfo is missing")
-	} else if v.SigInfo == nil {
-		errs = append(errs, "field SigInfo is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Transaction is missing")
-	} else if v.Transaction == (nil) {
-		errs = append(errs, "field Transaction is not set")
 	}
 
 	switch len(errs) {
@@ -6983,46 +6766,6 @@ func (v *ObjectMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *PendingTransactionState) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PendingTransactionState) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypePendingTransaction {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypePendingTransaction, typ)
-	}
-
-	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
-	for {
-		ok := reader.ReadValue(3, func(b []byte) error {
-			x, err := UnmarshalSignature(b)
-			if err == nil {
-				v.Signature = append(v.Signature, x)
-			}
-			return err
-		})
-		if !ok {
-			break
-		}
-	}
-	if x := new(TxState); reader.ReadValue(4, x.UnmarshalBinary) {
-		v.TransactionState = x
-	}
-	if x, ok := reader.ReadBytes(5); ok {
-		v.Status = x
-	}
-
-	seen, err := reader.Reset(fieldNames_PendingTransactionState)
-	v.fieldsSet = seen
-	return err
-}
-
 func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7798,29 +7541,6 @@ func (v *TransactionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *TransactionState) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *TransactionState) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeTransaction {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeTransaction, typ)
-	}
-
-	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
-	reader.ReadValue(3, v.TxState.UnmarshalBinary)
-
-	seen, err := reader.Reset(fieldNames_TransactionState)
-	v.fieldsSet = seen
-	return err
-}
-
 func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7852,29 +7572,6 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_TransactionStatus)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *TxState) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *TxState) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(TransactionHeader); reader.ReadValue(1, x.UnmarshalBinary) {
-		v.SigInfo = x
-	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalTransaction(b)
-		if err == nil {
-			v.Transaction = x
-		}
-		return err
-	})
-
-	seen, err := reader.Reset(fieldNames_TxState)
 	v.fieldsSet = seen
 	return err
 }
@@ -8531,33 +8228,6 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *PendingTransactionState) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type             AccountType       `json:"type"`
-		Url              *url.URL          `json:"url,omitempty"`
-		KeyBook          *url.URL          `json:"keyBook,omitempty"`
-		ManagerKeyBook   *url.URL          `json:"managerKeyBook,omitempty"`
-		Signature        []json.RawMessage `json:"signature,omitempty"`
-		TransactionState *TxState          `json:"transactionState,omitempty"`
-		Status           json.RawMessage   `json:"status,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Url = v.AccountHeader.Url
-	u.KeyBook = v.AccountHeader.KeyBook
-	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.Signature = make([]json.RawMessage, len(v.Signature))
-	for i, x := range v.Signature {
-		if y, err := json.Marshal(x); err != nil {
-			return nil, fmt.Errorf("error encoding Signature: %w", err)
-		} else {
-			u.Signature[i] = y
-		}
-	}
-	u.TransactionState = v.TransactionState
-	u.Status = v.Status
-	return json.Marshal(&u)
-}
-
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      SignatureType `json:"type"`
@@ -8962,28 +8632,6 @@ func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *TransactionState) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type           AccountType        `json:"type"`
-		Url            *url.URL           `json:"url,omitempty"`
-		KeyBook        *url.URL           `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL           `json:"managerKeyBook,omitempty"`
-		SigInfo        *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction    json.RawMessage    `json:"transaction,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Url = v.AccountHeader.Url
-	u.KeyBook = v.AccountHeader.KeyBook
-	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.SigInfo = v.TxState.SigInfo
-	if x, err := json.Marshal(v.TxState.Transaction); err != nil {
-		return nil, fmt.Errorf("error encoding Transaction: %w", err)
-	} else {
-		u.Transaction = x
-	}
-	return json.Marshal(&u)
-}
-
 func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Remote    bool            `json:"remote,omitempty"`
@@ -9002,20 +8650,6 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("error encoding Result: %w", err)
 	} else {
 		u.Result = x
-	}
-	return json.Marshal(&u)
-}
-
-func (v *TxState) MarshalJSON() ([]byte, error) {
-	u := struct {
-		SigInfo     *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction json.RawMessage    `json:"transaction,omitempty"`
-	}{}
-	u.SigInfo = v.SigInfo
-	if x, err := json.Marshal(v.Transaction); err != nil {
-		return nil, fmt.Errorf("error encoding Transaction: %w", err)
-	} else {
-		u.Transaction = x
 	}
 	return json.Marshal(&u)
 }
@@ -9947,49 +9581,6 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *PendingTransactionState) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type             AccountType       `json:"type"`
-		Url              *url.URL          `json:"url,omitempty"`
-		KeyBook          *url.URL          `json:"keyBook,omitempty"`
-		ManagerKeyBook   *url.URL          `json:"managerKeyBook,omitempty"`
-		Signature        []json.RawMessage `json:"signature,omitempty"`
-		TransactionState *TxState          `json:"transactionState,omitempty"`
-		Status           json.RawMessage   `json:"status,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Url = v.AccountHeader.Url
-	u.KeyBook = v.AccountHeader.KeyBook
-	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.Signature = make([]json.RawMessage, len(v.Signature))
-	for i, x := range v.Signature {
-		if y, err := json.Marshal(x); err != nil {
-			return fmt.Errorf("error encoding Signature: %w", err)
-		} else {
-			u.Signature[i] = y
-		}
-	}
-	u.TransactionState = v.TransactionState
-	u.Status = v.Status
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.AccountHeader.Url = u.Url
-	v.AccountHeader.KeyBook = u.KeyBook
-	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
-	v.Signature = make([]Signature, len(u.Signature))
-	for i, x := range u.Signature {
-		if y, err := UnmarshalSignatureJSON(x); err != nil {
-			return fmt.Errorf("error decoding Signature: %w", err)
-		} else {
-			v.Signature[i] = y
-		}
-	}
-	v.TransactionState = u.TransactionState
-	v.Status = u.Status
-	return nil
-}
-
 func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      SignatureType `json:"type"`
@@ -10724,41 +10315,6 @@ func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *TransactionState) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type           AccountType        `json:"type"`
-		Url            *url.URL           `json:"url,omitempty"`
-		KeyBook        *url.URL           `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL           `json:"managerKeyBook,omitempty"`
-		SigInfo        *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction    json.RawMessage    `json:"transaction,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Url = v.AccountHeader.Url
-	u.KeyBook = v.AccountHeader.KeyBook
-	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.SigInfo = v.TxState.SigInfo
-	if x, err := json.Marshal(v.TxState.Transaction); err != nil {
-		return fmt.Errorf("error encoding Transaction: %w", err)
-	} else {
-		u.Transaction = x
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.AccountHeader.Url = u.Url
-	v.AccountHeader.KeyBook = u.KeyBook
-	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
-	v.TxState.SigInfo = u.SigInfo
-	if x, err := UnmarshalTransactionJSON(u.Transaction); err != nil {
-		return fmt.Errorf("error decoding Transaction: %w", err)
-	} else {
-		v.TxState.Transaction = x
-	}
-
-	return nil
-}
-
 func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Remote    bool            `json:"remote,omitempty"`
@@ -10790,30 +10346,6 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Result: %w", err)
 	} else {
 		v.Result = x
-	}
-
-	return nil
-}
-
-func (v *TxState) UnmarshalJSON(data []byte) error {
-	u := struct {
-		SigInfo     *TransactionHeader `json:"sigInfo,omitempty"`
-		Transaction json.RawMessage    `json:"transaction,omitempty"`
-	}{}
-	u.SigInfo = v.SigInfo
-	if x, err := json.Marshal(v.Transaction); err != nil {
-		return fmt.Errorf("error encoding Transaction: %w", err)
-	} else {
-		u.Transaction = x
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.SigInfo = u.SigInfo
-	if x, err := UnmarshalTransactionJSON(u.Transaction); err != nil {
-		return fmt.Errorf("error decoding Transaction: %w", err)
-	} else {
-		v.Transaction = x
 	}
 
 	return nil

@@ -12,7 +12,6 @@ import (
 	abci "gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
 	query "gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	transactions "gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // MockChain is a mock of Chain interface.
@@ -54,7 +53,7 @@ func (mr *MockChainMockRecorder) BeginBlock(arg0 interface{}) *gomock.Call {
 }
 
 // CheckTx mocks base method.
-func (m *MockChain) CheckTx(arg0 *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
+func (m *MockChain) CheckTx(arg0 *protocol.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTx", arg0)
 	ret0, _ := ret[0].(protocol.TransactionResult)
@@ -84,7 +83,7 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
+func (m *MockChain) DeliverTx(arg0 *protocol.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
 	ret0, _ := ret[0].(protocol.TransactionResult)

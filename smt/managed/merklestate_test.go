@@ -82,7 +82,7 @@ func TestUnmarshalMemorySafety(t *testing.T) {
 	require.NoError(t, MS2.UnMarshal(data))
 
 	// Overwrite the data array with garbage
-	rand.Read(data)
+	_, _ = rand.Read(data)
 
 	// Ensure that MS2 did not change
 	MS1.HashFunction = nil
@@ -99,7 +99,7 @@ func TestMarshal(t *testing.T) {
 	if err != nil {
 		t.Fatal("marshal should not fail")
 	}
-	MS2.UnMarshal(data1)
+	require.NoError(t, MS2.UnMarshal(data1))
 	data2, err2 := MS2.Marshal()
 	if err2 != nil {
 		t.Fatal("marshal should not fail")
@@ -116,7 +116,7 @@ func TestMarshal(t *testing.T) {
 		t.Fatal("marshal should not fail")
 	}
 
-	MS2.UnMarshal(data1)
+	require.NoError(t, MS2.UnMarshal(data1))
 	data2, err = MS2.Marshal()
 	if err != nil {
 		t.Fatal("marshal should not fail")
@@ -136,7 +136,7 @@ func TestMarshal(t *testing.T) {
 		if err != nil {
 			t.Fatal("marshal should not fail")
 		}
-		MS2.UnMarshal(data1)
+		require.NoError(t, MS2.UnMarshal(data1))
 		data2, err = MS2.Marshal()
 		if err != nil {
 			t.Fatal("marshal should not fail")

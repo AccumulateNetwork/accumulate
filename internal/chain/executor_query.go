@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
@@ -448,9 +447,10 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	}
 
 	qr := query.ResponseByTxId{}
-	qr.Envelope = txState
+	qr.Envelope = new(protocol.Envelope)
+	qr.Envelope.Transaction = txState
 	qr.Status = status
-	qr.Envelope.Signatures = signatures
+	qr.Envelope.Signatures = signatures.Signatures
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
 
@@ -464,7 +464,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, &txState.Transaction.TransactionHeader, status, &qr)
+	err = getPendingStatus(batch, &txState.TransactionHeader, status, &qr)
 	if err != nil {
 		return nil, err
 	}
@@ -731,6 +731,9 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 
 		k = []byte("dataSet")
 		v, err = ret.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
+		}
 	case types.QueryTypeKeyPageIndex:
 		chr := query.RequestKeyPageIndex{}
 		err := chr.UnmarshalBinary(q.Content)
@@ -751,7 +754,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
-			account, err = protocol.UnmarshalAccount(obj.Entry)
+			_, err = protocol.UnmarshalAccount(obj.Entry)
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("inavid object error")}
 			}
@@ -795,8 +798,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 	return k, v, err
 }
 
-func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) ([]*state.Object, error) {
-	expEntries := make([]*state.Object, len(entries))
+func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) ([]*protocol.Object, error) {
+	expEntries := make([]*protocol.Object, len(entries))
 	for i, entry := range entries {
 		index := i
 		r, err := m.expandChainEntry(batch, entry)
@@ -808,7 +811,7 @@ func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) (
 	return expEntries, nil
 }
 
-func (m *Executor) expandChainEntry(batch *database.Batch, entryUrl string) (*state.Object, error) {
+func (m *Executor) expandChainEntry(batch *database.Batch, entryUrl string) (*protocol.Object, error) {
 	u, err := url.Parse(entryUrl)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL in query %s", entryUrl)
@@ -818,7 +821,7 @@ func (m *Executor) expandChainEntry(batch *database.Batch, entryUrl string) (*st
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 	}
-	return &state.Object{Entry: v.Entry, Height: v.Height, Roots: v.Roots}, nil
+	return &protocol.Object{Entry: v.Entry, Height: v.Height, Roots: v.Roots}, nil
 }
 
 func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.Chain, txid []byte, entry *indexing.TransactionChainEntry) (*query.TxReceipt, error) {

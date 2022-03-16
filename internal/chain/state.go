@@ -11,14 +11,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type StateManager struct {
 	stateCache
 
-	Origin        state.Chain
+	Origin        protocol.Account
 	OriginUrl     *url.URL
 	OriginChainId [32]byte
 
@@ -29,7 +27,7 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.Envelope) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (*StateManager, error) {
 	m := new(StateManager)
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
@@ -77,18 +75,13 @@ func (m *StateManager) Commit() error {
 
 	create := map[string]*protocol.SyntheticCreateChain{}
 	for _, record := range records {
-		u, err := record.Header().ParseUrl()
-		if err != nil {
-			return err
-		}
-
 		data, err := record.MarshalBinary()
 		if err != nil {
 			return err
 		}
 
 		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := u.RootIdentity()
+		id := record.Header().Url.RootIdentity()
 		scc, ok := create[id.String()]
 		if ok {
 			scc.Chains = append(scc.Chains, params)

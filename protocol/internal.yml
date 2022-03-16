@@ -80,7 +80,7 @@ SendTransaction:
   incomparable: true
   fields:
     - name: Payload
-      type: TransactionPayload
+      type: TransactionBody
       marshal-as: value
       zero-value: nil
       unmarshal-with: UnmarshalTransaction

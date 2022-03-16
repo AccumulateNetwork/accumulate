@@ -22,13 +22,6 @@ func generateKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(key)
 }
 
-func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (protocol.Signature, error) {
-	return func(hash []byte) (protocol.Signature, error) {
-		sig := new(protocol.LegacyED25519Signature)
-		return sig, sig.Sign(1, key, hash)
-	}
-}
-
 func TestUpdateKeyPage_Priority(t *testing.T) {
 	db := database.OpenInMemory(nil)
 

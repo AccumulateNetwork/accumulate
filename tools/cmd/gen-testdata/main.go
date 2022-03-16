@@ -98,7 +98,7 @@ var txnTests = []*TCG{
 		txnTest1("adi", &CreateKeyPage{Keys: []*KeySpecParams{{PublicKey: key[32:]}}}),
 	}},
 	{Name: "CreateKeyBook", Cases: []*TC{
-		txnTest1("adi", &CreateKeyBook{Url: parseUrl("adi/book")}),
+		txnTest1("adi", &CreateKeyBook{Url: parseUrl("adi/book"), PublicKeyHash: key[32:]}),
 	}},
 	{Name: "AddCredits", Cases: []*TC{
 		txnTest1("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: 100}),
@@ -171,7 +171,7 @@ func parseUrl(s string) *url.URL {
 	return u
 }
 
-func txnTest1(origin string, body TransactionPayload) *TC {
+func txnTest1(origin string, body TransactionBody) *TC {
 	return txnTest(&TransactionHeader{
 		Origin:        parseUrl(origin),
 		KeyPageHeight: 1,
@@ -179,7 +179,7 @@ func txnTest1(origin string, body TransactionPayload) *TC {
 	}, body)
 }
 
-func txnTest(header *TransactionHeader, body TransactionPayload) *TC {
+func txnTest(header *TransactionHeader, body TransactionBody) *TC {
 	env := new(Envelope)
 	txn := new(Transaction)
 	sig := new(LegacyED25519Signature)
