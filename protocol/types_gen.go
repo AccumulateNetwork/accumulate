@@ -156,13 +156,6 @@ type DirectoryIndexMetadata struct {
 	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 }
 
-type DirectoryQueryResult struct {
-	fieldsSet       []bool
-	Entries         []string  `json:"entries,omitempty" form:"entries" query:"entries"`
-	ExpandedEntries []*Object `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
-	Total           uint64    `json:"total" form:"total" query:"total" validate:"required"`
-}
-
 type ED25519Signature struct {
 	fieldsSet []bool
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -344,32 +337,6 @@ type RemoveValidator struct {
 	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 	// Owner reserved for future use.
 	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
-}
-
-type RequestDataEntry struct {
-	fieldsSet []bool
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash"`
-}
-
-type RequestDataEntrySet struct {
-	fieldsSet    []bool
-	Url          *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Start        uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Count        uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	ExpandChains bool     `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
-}
-
-type ResponseDataEntry struct {
-	fieldsSet []bool
-	EntryHash [32]byte  `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
-	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-}
-
-type ResponseDataEntrySet struct {
-	fieldsSet   []bool
-	DataEntries []ResponseDataEntry `json:"dataEntries,omitempty" form:"dataEntries" query:"dataEntries" validate:"required"`
-	Total       uint64              `json:"total,omitempty" form:"total" query:"total" validate:"required"`
 }
 
 type SegWitDataEntry struct {
@@ -1116,30 +1083,6 @@ func (v *DirectoryIndexMetadata) Equal(u *DirectoryIndexMetadata) bool {
 	return true
 }
 
-func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
-	if len(v.Entries) != len(u.Entries) {
-		return false
-	}
-	for i := range v.Entries {
-		if !(v.Entries[i] == u.Entries[i]) {
-			return false
-		}
-	}
-	if len(v.ExpandedEntries) != len(u.ExpandedEntries) {
-		return false
-	}
-	for i := range v.ExpandedEntries {
-		if !((v.ExpandedEntries[i]).Equal(u.ExpandedEntries[i])) {
-			return false
-		}
-	}
-	if !(v.Total == u.Total) {
-		return false
-	}
-
-	return true
-}
-
 func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -1486,61 +1429,6 @@ func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
 		return false
 	}
 	if !((v.Owner).Equal(u.Owner)) {
-		return false
-	}
-
-	return true
-}
-
-func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
-	if !((v.Url).Equal(u.Url)) {
-		return false
-	}
-	if !(v.EntryHash == u.EntryHash) {
-		return false
-	}
-
-	return true
-}
-
-func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
-	if !((v.Url).Equal(u.Url)) {
-		return false
-	}
-	if !(v.Start == u.Start) {
-		return false
-	}
-	if !(v.Count == u.Count) {
-		return false
-	}
-	if !(v.ExpandChains == u.ExpandChains) {
-		return false
-	}
-
-	return true
-}
-
-func (v *ResponseDataEntry) Equal(u *ResponseDataEntry) bool {
-	if !(v.EntryHash == u.EntryHash) {
-		return false
-	}
-	if !((&v.Entry).Equal(&u.Entry)) {
-		return false
-	}
-
-	return true
-}
-
-func (v *ResponseDataEntrySet) Equal(u *ResponseDataEntrySet) bool {
-	if len(v.DataEntries) != len(u.DataEntries) {
-		return false
-	}
-	for i := range v.DataEntries {
-		if !((&v.DataEntries[i]).Equal(&u.DataEntries[i])) {
-			return false
-		}
-	}
-	if !(v.Total == u.Total) {
 		return false
 	}
 
@@ -2884,51 +2772,6 @@ func (v *DirectoryIndexMetadata) IsValid() error {
 	}
 }
 
-var fieldNames_DirectoryQueryResult = []string{
-	1: "Entries",
-	2: "ExpandedEntries",
-	3: "Total",
-}
-
-func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Entries) == 0) {
-		for _, v := range v.Entries {
-			writer.WriteString(1, v)
-		}
-	}
-	if !(len(v.ExpandedEntries) == 0) {
-		for _, v := range v.ExpandedEntries {
-			writer.WriteValue(2, v)
-		}
-	}
-	writer.WriteUint(3, v.Total)
-
-	_, _, err := writer.Reset(fieldNames_DirectoryQueryResult)
-	return buffer.Bytes(), err
-}
-
-func (v *DirectoryQueryResult) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_ED25519Signature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -4191,192 +4034,6 @@ func (v *RemoveValidator) IsValid() error {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
 		errs = append(errs, "field Key is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_RequestDataEntry = []string{
-	1: "Url",
-	2: "EntryHash",
-}
-
-func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
-	}
-	if !(v.EntryHash == ([32]byte{})) {
-		writer.WriteHash(2, &v.EntryHash)
-	}
-
-	_, _, err := writer.Reset(fieldNames_RequestDataEntry)
-	return buffer.Bytes(), err
-}
-
-func (v *RequestDataEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Url is missing")
-	} else if v.Url == nil {
-		errs = append(errs, "field Url is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_RequestDataEntrySet = []string{
-	1: "Url",
-	2: "Start",
-	3: "Count",
-	4: "ExpandChains",
-}
-
-func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
-	}
-	if !(v.Start == 0) {
-		writer.WriteUint(2, v.Start)
-	}
-	if !(v.Count == 0) {
-		writer.WriteUint(3, v.Count)
-	}
-	if !(!v.ExpandChains) {
-		writer.WriteBool(4, v.ExpandChains)
-	}
-
-	_, _, err := writer.Reset(fieldNames_RequestDataEntrySet)
-	return buffer.Bytes(), err
-}
-
-func (v *RequestDataEntrySet) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Url is missing")
-	} else if v.Url == nil {
-		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Start is missing")
-	} else if v.Start == 0 {
-		errs = append(errs, "field Start is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Count is missing")
-	} else if v.Count == 0 {
-		errs = append(errs, "field Count is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_ResponseDataEntry = []string{
-	1: "EntryHash",
-	2: "Entry",
-}
-
-func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.EntryHash == ([32]byte{})) {
-		writer.WriteHash(1, &v.EntryHash)
-	}
-	if !((v.Entry).Equal(new(DataEntry))) {
-		writer.WriteValue(2, &v.Entry)
-	}
-
-	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
-	return buffer.Bytes(), err
-}
-
-func (v *ResponseDataEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field EntryHash is missing")
-	} else if v.EntryHash == ([32]byte{}) {
-		errs = append(errs, "field EntryHash is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Entry is missing")
-	} else if (v.Entry).Equal(new(DataEntry)) {
-		errs = append(errs, "field Entry is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_ResponseDataEntrySet = []string{
-	1: "DataEntries",
-	2: "Total",
-}
-
-func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.DataEntries) == 0) {
-		for _, v := range v.DataEntries {
-			writer.WriteValue(1, &v)
-		}
-	}
-	if !(v.Total == 0) {
-		writer.WriteUint(2, v.Total)
-	}
-
-	_, _, err := writer.Reset(fieldNames_ResponseDataEntrySet)
-	return buffer.Bytes(), err
-}
-
-func (v *ResponseDataEntrySet) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field DataEntries is missing")
-	} else if len(v.DataEntries) == 0 {
-		errs = append(errs, "field DataEntries is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
 	}
 
 	switch len(errs) {
@@ -6273,36 +5930,6 @@ func (v *DirectoryIndexMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *DirectoryQueryResult) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadString(1); ok {
-			v.Entries = append(v.Entries, x)
-		} else {
-			break
-		}
-	}
-	for {
-		if x := new(Object); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.ExpandedEntries = append(v.ExpandedEntries, x)
-		} else {
-			break
-		}
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Total = x
-	}
-
-	seen, err := reader.Reset(fieldNames_DirectoryQueryResult)
-	v.fieldsSet = seen
-	return err
-}
-
 func (v *ED25519Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7004,92 +6631,6 @@ func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoveValidator)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *RequestDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUrl(1); ok {
-		v.Url = x
-	}
-	if x, ok := reader.ReadHash(2); ok {
-		v.EntryHash = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_RequestDataEntry)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *RequestDataEntrySet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *RequestDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUrl(1); ok {
-		v.Url = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Start = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Count = x
-	}
-	if x, ok := reader.ReadBool(4); ok {
-		v.ExpandChains = x
-	}
-
-	seen, err := reader.Reset(fieldNames_RequestDataEntrySet)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *ResponseDataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadHash(1); ok {
-		v.EntryHash = *x
-	}
-	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Entry = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_ResponseDataEntry)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *ResponseDataEntrySet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *ResponseDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x := new(ResponseDataEntry); reader.ReadValue(1, x.UnmarshalBinary) {
-			v.DataEntries = append(v.DataEntries, *x)
-		} else {
-			break
-		}
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Total = x
-	}
-
-	seen, err := reader.Reset(fieldNames_ResponseDataEntrySet)
 	v.fieldsSet = seen
 	return err
 }
@@ -8421,26 +7962,6 @@ func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.Owner = v.Owner
-	return json.Marshal(&u)
-}
-
-func (v *RequestDataEntry) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	return json.Marshal(&u)
-}
-
-func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
-	u := struct {
-		EntryHash string    `json:"entryHash,omitempty"`
-		Entry     DataEntry `json:"entry,omitempty"`
-	}{}
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.Entry = v.Entry
 	return json.Marshal(&u)
 }
 
@@ -9843,44 +9364,6 @@ func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 		v.Key = x
 	}
 	v.Owner = u.Owner
-	return nil
-}
-
-func (v *RequestDataEntry) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Url = u.Url
-	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
-		return fmt.Errorf("error decoding EntryHash: %w", err)
-	} else {
-		v.EntryHash = x
-	}
-	return nil
-}
-
-func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
-	u := struct {
-		EntryHash string    `json:"entryHash,omitempty"`
-		Entry     DataEntry `json:"entry,omitempty"`
-	}{}
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.Entry = v.Entry
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
-		return fmt.Errorf("error decoding EntryHash: %w", err)
-	} else {
-		v.EntryHash = x
-	}
-	v.Entry = u.Entry
 	return nil
 }
 
