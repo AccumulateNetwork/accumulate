@@ -1016,19 +1016,18 @@ func TestUpdateValidators(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
 
+	netUrl := n.network.NodeUrl()
 	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	validators := protocol.FormatKeyPageUrl(n.network.NodeUrl(protocol.ValidatorBook), 0)
 
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 
 	// Add a validator
 	n.Batch(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = nodeKey1.PubKey().Bytes()
+		body := new(protocol.AddValidator)
+		body.Key = nodeKey1.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 1).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
@@ -1039,12 +1038,11 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Update a validator
 	n.Batch(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationUpdate
-		body.Key = nodeKey1.PubKey().Bytes()
+		body := new(protocol.UpdateValidatorKey)
+		body.OldKey = nodeKey1.PubKey().Bytes()
 		body.NewKey = nodeKey2.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 2).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
@@ -1055,11 +1053,10 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Remove a validator
 	n.Batch(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationRemove
+		body := new(protocol.RemoveValidator)
 		body.Key = nodeKey2.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 3).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
