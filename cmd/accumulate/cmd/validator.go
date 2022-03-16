@@ -67,7 +67,7 @@ func removeValidator(args []string) (string, error) {
 
 	txn := new(protocol.RemoveValidator)
 	txn.Key = oldKey
-	return dispatchTxAndPrintResponse("add-validator", txn, nil, principal, header, privKey)
+	return dispatchTxAndPrintResponse("remove-validator", txn, nil, principal, header, privKey)
 }
 
 func updateValidatorKey(args []string) (string, error) {
@@ -89,5 +89,5 @@ func updateValidatorKey(args []string) (string, error) {
 	txn := new(protocol.UpdateValidatorKey)
 	txn.OldKey = oldKey
 	txn.NewKey = newKey
-	return dispatchTxAndPrintResponse("add-validator", txn, nil, principal, header, privKey)
+	return dispatchTxAndPrintResponse("update-validator-key", txn, nil, principal, header, privKey)
 }
