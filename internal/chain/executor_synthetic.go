@@ -42,7 +42,7 @@ func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction
 
 func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionPayload) (*transactions.Envelope, error) {
 	// Build the transaction
-	env := new(transactions.Envelope)
+	env := new(protocol.Envelope)
 	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Origin = dest
 	env.Transaction.KeyPageHeight = 1

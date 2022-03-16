@@ -6,11 +6,11 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"math/big"
 	"os"
 	"path/filepath"
 
+	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/testdata"
