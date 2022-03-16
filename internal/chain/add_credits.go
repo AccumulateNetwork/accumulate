@@ -101,11 +101,13 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	sdc.Amount = body.Amount
 	st.Submit(body.Recipient, sdc)
 
-	//Create synthetic burn token
-	burnAcme := new(protocol.SyntheticBurnTokens)
-	copy(sdc.Cause[:], tx.GetTxHash())
-	burnAcme.Amount = amount.Int
-	st.Submit(account.GetTokenUrl(), burnAcme)
+	// old way before 1086 Create synthetic burn token
+	// burnAcme := new(protocol.SyntheticBurnTokens)
+	// copy(sdc.Cause[:], tx.GetTxHash())
+	// burnAcme.Amount = amount.Int
+	// st.Submit(account.GetTokenUrl(), burnAcme)
+
+	ledgerState.AcmeBurnt = amount.Int
 
 	return nil, nil
 }
