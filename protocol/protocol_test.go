@@ -33,7 +33,6 @@ func TestIsValidAdiUrl(t *testing.T) {
 		"Invalid UTF-8":           {URL{Authority: "\xF1"}, "not valid UTF-8"},
 		"Has port":                {URL{Authority: "foo:123"}, "identity has a port number"},
 		"Empty identity":          {URL{}, "identity is empty"},
-		"Has path":                {URL{Authority: "foo", Path: "bar"}, "path is not empty"},
 		"Has query":               {URL{Authority: "foo", Query: "bar"}, "query is not empty"},
 		"Has fragment":            {URL{Authority: "foo", Fragment: "bar"}, "fragment is not empty"},
 		"Identity has dot":        {URL{Authority: "foo.bar"}, "identity contains dot(s)"},
@@ -87,7 +86,7 @@ func TestParseLiteTokenAddress(t *testing.T) {
 	fakeHash := sha256.Sum256(fakeKey)
 	addr, err := LiteTokenAddress(fakeKey, "-/-")
 	require.NoError(t, err)
-	addr = addr.Identity()
+	addr = addr.RootIdentity()
 
 	tests := []string{
 		"ACME",
@@ -95,7 +94,8 @@ func TestParseLiteTokenAddress(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test, func(t *testing.T) {
-			key, tok, err := ParseLiteTokenAddress(addr.JoinPath("/" + test))
+			joinPath := addr.JoinPath("/" + test)
+			key, tok, err := ParseLiteTokenAddress(joinPath)
 			require.NoError(t, err)
 			require.Equal(t, fakeHash[:20], key)
 			require.Equal(t, "acc://"+test, tok.String())

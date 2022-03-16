@@ -21,13 +21,13 @@ ResponseKeyPageIndex:
 ResponseTxHistory:
   fields:
     - name: Start
-      type: varint
+      type: uint
       keep-empty: true
     - name: End
-      type: varint
+      type: uint
       keep-empty: true
     - name: Total
-      type: varint
+      type: uint
       keep-empty: true
     - name: Transactions
       repeatable: true
@@ -64,10 +64,14 @@ ResponseByTxId:
   fields:
     - name: TxId
       type: chain
-    - name: TxState
-      type: bytes
-    - name: TxPendingState
-      type: bytes
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
     - name: TxSynthTxIds
       type: bytes
     - name: Height
@@ -94,8 +98,8 @@ TxReceipt:
       pointer: true
     - name: Chain
       type: string
-    - name: DirectoryBlock
-      type: uvarint
+    # - name: DirectoryBlock
+    #   type: uvarint
     - name: Receipt
       type: protocol.Receipt
       marshal-as: reference
@@ -125,3 +129,94 @@ MultiResponse:
     - name: Total
       type: uvarint
       keep-empty: true
+
+RequestTxHistory:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: Limit
+      type: uint
+
+DirectoryQueryResult:
+  fields:
+    - name: Entries
+      repeatable: true
+      type: string
+      optional: true
+    - name: ExpandedEntries
+      repeatable: true
+      type: protocol.Account
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalAccount
+      optional: true
+    - name: Total
+      type: uvarint
+      keep-empty: true
+
+RequestDataEntry:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: EntryHash
+      type: chain
+      optional: true
+
+RequestDataEntrySet:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Start
+      type: uvarint
+    - name: Count
+      type: uvarint
+    - name: ExpandChains
+      type: bool
+      optional: true
+
+ResponseDataEntry:
+  fields:
+    - name: EntryHash
+      type: chain
+    - name: Entry
+      type: protocol.DataEntry
+      marshal-as: reference
+
+ResponseDataEntrySet:
+  fields:
+    - name: DataEntries
+      repeatable: true
+      type: ResponseDataEntry
+      marshal-as: reference
+    - name: Total
+      type: uvarint
+
+ChainState:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Height
+      type: uvarint
+      alternative: Count
+    - name: Roots
+      repeatable: true
+      type: bytes
+
+ResponseAccount:
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalAccount
+      zero-value: nil
+    - name: ChainState
+      type: ChainState
+      marshal-as: reference
+      repeatable: true

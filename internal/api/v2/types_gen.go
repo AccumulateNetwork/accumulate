@@ -24,10 +24,11 @@ type ChainIdQuery struct {
 }
 
 type ChainQueryResponse struct {
-	Type      string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MainChain *MerkleState `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
-	Data      interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	ChainId   []byte       `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	Type      string             `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain *MerkleState       `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Chains    []query.ChainState `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Data      interface{}        `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ChainId   []byte             `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
 type DataEntry struct {
@@ -141,6 +142,7 @@ type TransactionQueryResponse struct {
 	Origin             *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	KeyPage            *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	TransactionHash    []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	Transaction        *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signatures         []protocol.Signature        `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Status             *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids     [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
@@ -163,6 +165,8 @@ type TxRequest struct {
 	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Memo       string      `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata   []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TxResponse struct {
@@ -429,15 +433,17 @@ func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        string       `json:"type,omitempty"`
-		MainChain   *MerkleState `json:"mainChain,omitempty"`
-		MerkleState *MerkleState `json:"merkleState,omitempty"`
-		Data        interface{}  `json:"data,omitempty"`
-		ChainId     *string      `json:"chainId,omitempty"`
+		Type        string             `json:"type,omitempty"`
+		MainChain   *MerkleState       `json:"mainChain,omitempty"`
+		MerkleState *MerkleState       `json:"merkleState,omitempty"`
+		Chains      []query.ChainState `json:"chains,omitempty"`
+		Data        interface{}        `json:"data,omitempty"`
+		ChainId     *string            `json:"chainId,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
+	u.Chains = v.Chains
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
@@ -646,6 +652,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		KeyPage            *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash    *string                     `json:"transactionHash,omitempty"`
 		Txid               *string                     `json:"txid,omitempty"`
+		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
 		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
 		Status             *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
@@ -662,6 +669,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.KeyPage = v.KeyPage
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Transaction = v.Transaction
 	u.Signatures = make([]json.RawMessage, len(v.Signatures))
 	for i, x := range v.Signatures {
 		if y, err := json.Marshal(x); err != nil {
@@ -704,6 +712,8 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 		KeyPage    KeyPage     `json:"keyPage,omitempty"`
 		TxHash     *string     `json:"txHash,omitempty"`
 		Payload    interface{} `json:"payload,omitempty"`
+		Memo       string      `json:"memo,omitempty"`
+		Metadata   *string     `json:"metadata,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
 	u.IsEnvelope = v.IsEnvelope
@@ -714,6 +724,8 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u.KeyPage = v.KeyPage
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
+	u.Memo = v.Memo
+	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	return json.Marshal(&u)
 }
 
@@ -777,15 +789,17 @@ func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 
 func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        string       `json:"type,omitempty"`
-		MainChain   *MerkleState `json:"mainChain,omitempty"`
-		MerkleState *MerkleState `json:"merkleState,omitempty"`
-		Data        interface{}  `json:"data,omitempty"`
-		ChainId     *string      `json:"chainId,omitempty"`
+		Type        string             `json:"type,omitempty"`
+		MainChain   *MerkleState       `json:"mainChain,omitempty"`
+		MerkleState *MerkleState       `json:"merkleState,omitempty"`
+		Chains      []query.ChainState `json:"chains,omitempty"`
+		Data        interface{}        `json:"data,omitempty"`
+		ChainId     *string            `json:"chainId,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
+	u.Chains = v.Chains
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -797,6 +811,7 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.MainChain = u.MerkleState
 	}
+	v.Chains = u.Chains
 	if x, err := encoding.AnyFromJSON(u.Data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
@@ -1182,6 +1197,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		KeyPage            *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash    *string                     `json:"transactionHash,omitempty"`
 		Txid               *string                     `json:"txid,omitempty"`
+		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
 		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
 		Status             *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
@@ -1198,6 +1214,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.KeyPage = v.KeyPage
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Transaction = v.Transaction
 	u.Signatures = make([]json.RawMessage, len(v.Signatures))
 	for i, x := range v.Signatures {
 		if y, err := json.Marshal(x); err != nil {
@@ -1247,6 +1264,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 			v.TransactionHash = x
 		}
 	}
+	v.Transaction = u.Transaction
 	v.Signatures = make([]protocol.Signature, len(u.Signatures))
 	for i, x := range u.Signatures {
 		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
@@ -1299,6 +1317,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		KeyPage    KeyPage     `json:"keyPage,omitempty"`
 		TxHash     *string     `json:"txHash,omitempty"`
 		Payload    interface{} `json:"payload,omitempty"`
+		Memo       string      `json:"memo,omitempty"`
+		Metadata   *string     `json:"metadata,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
 	u.IsEnvelope = v.IsEnvelope
@@ -1309,6 +1329,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u.KeyPage = v.KeyPage
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
+	u.Memo = v.Memo
+	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1335,6 +1357,12 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Payload: %w", err)
 	} else {
 		v.Payload = x
+	}
+	v.Memo = u.Memo
+	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
+		return fmt.Errorf("error decoding Metadata: %w", err)
+	} else {
+		v.Metadata = x
 	}
 	return nil
 }

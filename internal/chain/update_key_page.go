@@ -1,23 +1,18 @@
 package chain
 
 import (
-	"bytes"
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type UpdateKeyPage struct{}
 
-func (UpdateKeyPage) Type() types.TxType {
-	return types.TxTypeUpdateKeyPage
+func (UpdateKeyPage) Type() protocol.TransactionType {
+	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
@@ -28,58 +23,40 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.GetType())
 	}
 
-	// We're changing the height of the key page, so reset all the nonces
-	for _, key := range page.Keys {
-		key.Nonce = 0
+	if page.KeyBook == nil {
+		return nil, fmt.Errorf("invalid origin record: page %s does not have a KeyBook", page.Url)
 	}
 
-	// Find the old key.  Also go ahead and check cases where we must have the
-	// old key, can't have the old key, and don't care about the old key.
+	// If Key or NewKey are specified, find the corresponding entry. The user
+	// must supply an exact match of the key as is on the key page.
 	var bodyKey *protocol.KeySpec
 	indexKey := -1
 	indexNewKey := -1
-	if len(body.Key) > 0 { // SetThreshold doesn't care about the old key
-		for i, key := range page.Keys { // Look for the old key
-			if bytes.Equal(key.PublicKey, body.Key) { // User must supply an exact match of the key as is on the key page
-				bodyKey, indexKey = key, i
-				break
-			}
-		}
+	if len(body.Key) > 0 {
+		indexKey, bodyKey, _ = page.FindKeyHash(body.Key)
 	}
 	if len(body.NewKey) > 0 {
-		for i, key := range page.Keys { // Look for the old key
-			if bytes.Equal(key.PublicKey, body.NewKey) { // User must supply an exact match of the key as is on the key page
-				indexNewKey = i
-				break
-			}
-		}
+		indexNewKey, _, _ = page.FindKeyHash(body.NewKey)
 	}
 
-	var book *protocol.KeyBook
-	var bookUrl *url.URL
-	var priority = -1
-	if page.KeyBook != nil {
-		book = new(protocol.KeyBook)
-		err := st.LoadUrlAs(page.KeyBook, book)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key book: %v", err)
-		}
+	book := new(protocol.KeyBook)
+	err := st.LoadUrlAs(page.KeyBook, book)
+	if err != nil {
+		return nil, fmt.Errorf("invalid key book: %v", err)
+	}
 
-		for i, p := range book.Pages {
-			if p.AccountID32() == st.OriginChainId {
-				priority = i
-			}
-		}
-		if priority < 0 {
-			return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
-		}
+	if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
+		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
+	}
 
-		// 0 is the highest priority, followed by 1, etc
-		if tx.Transaction.KeyPageIndex > uint64(priority) {
-			return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
-		}
+	priority := getPriority(st, book)
+	if priority < 0 {
+		return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
+	}
 
-		bookUrl = book.Url
+	// 0 is the highest priority, followed by 1, etc
+	if tx.Transaction.KeyPageIndex > uint64(priority) {
+		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 	}
 
 	switch body.Operation {
@@ -101,10 +78,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		}
 		page.Keys = append(page.Keys, key)
 
-		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.AddValidator(ed25519.PubKey(body.NewKey))
-		}
-
 	case protocol.KeyPageOperationUpdate:
 		// check that the Key to update is on the key Page, and the new Key
 		// is not already on the Key Page
@@ -118,11 +91,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		bodyKey.PublicKey = body.NewKey
 		if body.Owner != nil {
 			bodyKey.Owner = body.Owner
-		}
-
-		if len(body.NewKey) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.DisableValidator(body.Key)
-			st.AddValidator(body.NewKey)
 		}
 
 	case protocol.KeyPageOperationRemove:
@@ -141,10 +109,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			page.Threshold = uint64(len(page.Keys))
 		}
 
-		if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(bookUrl) {
-			st.DisableValidator(body.Key)
-		}
-
 		// SetThreshold sets the signature threshold for the Key Page
 	case protocol.KeyPageOperationSetThreshold:
 		// Don't care what values are provided by keys....
@@ -156,6 +120,25 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("invalid operation: %v", body.Operation)
 	}
 
+	didUpdateKeyPage(page)
 	st.Update(page)
 	return nil, nil
+}
+
+func getPriority(st *StateManager, book *protocol.KeyBook) int {
+	var priority = -1
+	for i := uint64(0); i < book.PageCount; i++ {
+		pageUrl := protocol.FormatKeyPageUrl(book.Url, i)
+		if pageUrl.AccountID32() == st.OriginChainId {
+			priority = int(i)
+		}
+	}
+	return priority
+}
+
+func didUpdateKeyPage(page *protocol.KeyPage) {
+	// We're changing the height of the key page, so reset all the nonces
+	for _, key := range page.Keys {
+		key.Nonce = 0
+	}
 }

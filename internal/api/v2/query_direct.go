@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/rpc/client"
@@ -50,6 +51,12 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 		return string(res.Response.Key), res.Response.Value, nil
 	}
 	if res.Response.Code == uint32(protocol.ErrorCodeNotFound) {
+		// If possible, preserve the error message while still being
+		// errors.Is(err, storage.ErrNotFound)
+		if strings.HasSuffix(res.Response.Info, storage.ErrNotFound.Error()) {
+			s := res.Response.Info[:len(res.Response.Info)-len(storage.ErrNotFound.Error())]
+			return "", nil, fmt.Errorf("%s%w", s, storage.ErrNotFound)
+		}
 		return "", nil, storage.ErrNotFound
 	}
 
@@ -72,24 +79,20 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 	}
 
 	switch k {
-	case "chain":
-		obj, chain, err := unmarshalState(v)
+	case "account":
+		resp := new(query.ResponseAccount)
+		err = resp.UnmarshalBinary(v)
 		if err != nil {
 			return nil, err
 		}
 
-		return packStateResponse(obj, chain)
+		return packStateResponse(resp.Account, resp.ChainState)
 
 	case "tx":
 		res := new(query.ResponseByTxId)
 		err := res.UnmarshalBinary(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid TX response: %v", err)
-		}
-
-		main, pend, pl, err := unmarshalTxResponse(res.TxState, res.TxPendingState)
-		if err != nil {
-			return nil, err
 		}
 
 		var ms *MerkleState
@@ -99,7 +102,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			ms.Roots = res.ChainState
 		}
 
-		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, main, pend, pl)
+		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, res.Envelope, res.Status)
 		if err != nil {
 			return nil, err
 		}
@@ -123,12 +126,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
-			if err != nil {
-				return nil, err
-			}
-
-			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
 			if err != nil {
 				return nil, err
 			}
@@ -177,7 +175,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		return qr, nil
 
 	case "data-entry":
-		res := new(protocol.ResponseDataEntry)
+		res := new(query.ResponseDataEntry)
 		err := res.UnmarshalBinary(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid response: %v", err)
@@ -189,7 +187,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		return qr, nil
 
 	case "data-entry-set":
-		res := new(protocol.ResponseDataEntrySet)
+		res := new(query.ResponseDataEntrySet)
 		err := res.UnmarshalBinary(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid response: %v", err)
@@ -234,7 +232,7 @@ func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opt
 		return nil, fmt.Errorf("unknown response type: want directory, got %q", key)
 	}
 
-	protoDir := new(protocol.DirectoryQueryResult)
+	protoDir := new(query.DirectoryQueryResult)
 	err = protoDir.UnmarshalBinary(val)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
@@ -243,7 +241,7 @@ func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opt
 	return responseDirFromProto(protoDir, pagination)
 }
 
-func responseDirFromProto(src *protocol.DirectoryQueryResult, pagination QueryPagination) (*MultiResponse, error) {
+func responseDirFromProto(src *query.DirectoryQueryResult, pagination QueryPagination) (*MultiResponse, error) {
 	dst := new(MultiResponse)
 	dst.Type = "directory"
 	dst.Start = pagination.Start
@@ -257,11 +255,7 @@ func responseDirFromProto(src *protocol.DirectoryQueryResult, pagination QueryPa
 
 	dst.OtherItems = make([]interface{}, len(src.ExpandedEntries))
 	for i, entry := range src.ExpandedEntries {
-		chain, err := protocol.UnmarshalAccount(entry.Entry)
-		if err != nil {
-			return nil, err
-		}
-		response, err := packStateResponse(entry, chain)
+		response, err := packStateResponse(entry, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -281,16 +275,17 @@ func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	if k != "chain" {
+	if k != "account" {
 		return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
 	}
 
-	obj, chain, err := unmarshalState(v)
+	resp := new(query.ResponseAccount)
+	err = resp.UnmarshalBinary(v)
 	if err != nil {
 		return nil, err
 	}
 
-	return packStateResponse(obj, chain)
+	return packStateResponse(resp.Account, resp.ChainState)
 }
 
 func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
@@ -299,12 +294,16 @@ func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) 
 	}
 
 	var start time.Time
+	var sleepIncr time.Duration
+	var sleep time.Duration
 	if wait < time.Second/2 {
 		wait = 0
 	} else {
 		if wait > q.TxMaxWaitTime {
 			wait = q.TxMaxWaitTime
 		}
+		sleepIncr = wait / 50
+		sleep = sleepIncr
 		start = time.Now()
 	}
 
@@ -323,8 +322,9 @@ query:
 		// Not found, wait not specified or exceeded
 		return nil, err
 	default:
-		// Not found, try again
-		time.Sleep(time.Second / 2)
+		// Not found, try again, linearly increasing the wait time
+		time.Sleep(sleep)
+		sleep += sleepIncr
 		goto query
 	}
 	if k != "tx" {
@@ -337,12 +337,7 @@ query:
 		return nil, fmt.Errorf("invalid TX response: %v", err)
 	}
 
-	main, pend, pl, err := unmarshalTxResponse(res.TxState, res.TxPendingState)
-	if err != nil {
-		return nil, err
-	}
-
-	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
+	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, res.Envelope, res.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -368,9 +363,9 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	}
 
 	req := new(query.RequestTxHistory)
-	req.Start = int64(pagination.Start)
-	req.Limit = int64(pagination.Count)
-	copy(req.ChainId[:], u.AccountID())
+	req.Account = u
+	req.Start = pagination.Start
+	req.Limit = pagination.Count
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
@@ -392,12 +387,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
-		if err != nil {
-			return nil, err
-		}
-
-		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
 		if err != nil {
 			return nil, err
 		}
@@ -432,7 +422,7 @@ func (q *queryDirect) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryRe
 	}
 
 	//do I need to do anything with v?
-	rde := protocol.ResponseDataEntry{}
+	rde := query.ResponseDataEntry{}
 	err = rde.UnmarshalBinary(v)
 	if err != nil {
 		return nil, err
@@ -463,7 +453,7 @@ func (q *queryDirect) QueryDataSet(url *url.URL, pagination QueryPagination, opt
 		return nil, fmt.Errorf("unknown response type: want dataSet, got %q", k)
 	}
 
-	des := new(protocol.ResponseDataEntrySet)
+	des := new(query.ResponseDataEntrySet)
 	err = des.UnmarshalBinary(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
@@ -472,7 +462,7 @@ func (q *queryDirect) QueryDataSet(url *url.URL, pagination QueryPagination, opt
 }
 
 //responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
-func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagination QueryPagination) (*MultiResponse, error) {
+func responseDataSetFromProto(protoDataSet *query.ResponseDataEntrySet, pagination QueryPagination) (*MultiResponse, error) {
 	respDataSet := new(MultiResponse)
 	respDataSet.Type = "dataSet"
 	respDataSet.Start = pagination.Start

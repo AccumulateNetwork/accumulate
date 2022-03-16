@@ -73,3 +73,51 @@ func (e *ED25519Signature) Sign(nonce uint64, privateKey []byte, hash []byte) er
 func (e *ED25519Signature) Verify(hash []byte) bool {
 	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
 }
+
+// GetPublicKey returns PublicKey.
+func (e *RCD1Signature) GetPublicKey() []byte {
+	b := make([]byte, len(e.PublicKey)+1)
+	b[0] = 1
+	copy(b[1:], e.PublicKey)
+	return b
+}
+
+// GetSignature returns Signature.
+func (e *RCD1Signature) GetSignature() []byte {
+	return e.Signature
+}
+
+// Sign
+// Returns the signature for the given message.  What happens is the message
+// is hashed with sha256, then the hash is signed.  The signature of the hash
+// is returned.
+func (e *RCD1Signature) Sign(nonce uint64, privateKey []byte, hash []byte) error {
+	if len(privateKey) != 64 {
+		return errors.New("invalid private key")
+	}
+
+	e.PublicKey = privateKey[32:]
+	e.Signature = ed25519.Sign(privateKey, hash)
+	return nil
+}
+
+func (e *RCD1Signature) Verify(hash []byte) bool {
+	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
+}
+
+func (s *ReceiptSignature) GetPublicKey() []byte {
+	return nil
+}
+
+func (s *ReceiptSignature) GetSignature() []byte {
+	b, _ := s.Receipt.MarshalBinary()
+	return b
+}
+
+func (s *ReceiptSignature) Sign(nonce uint64, privateKey []byte, hash []byte) error {
+	panic("invalid operation")
+}
+
+func (s *ReceiptSignature) Verify(hash []byte) bool {
+	return bytes.Equal(s.Start, hash) && s.Receipt.Convert().Validate()
+}

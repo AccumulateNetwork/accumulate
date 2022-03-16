@@ -4,40 +4,39 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
+func packStateResponse(account protocol.Account, chains []query.ChainState) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = chain.GetType().String()
-	res.MainChain = new(MerkleState)
-	res.MainChain.Height = obj.Height
-	res.MainChain.Roots = obj.Roots
-	res.Data = chain
+	res.Type = account.GetType().String()
+	res.Data = account
+	res.Chains = chains
+	res.ChainId = account.Header().Url.AccountID()
 
-	u, err := chain.Header().ParseUrl()
-	if err == nil {
-		res.ChainId = u.AccountID()
+	for _, chain := range chains {
+		if chain.Name != protocol.MainChain {
+			continue
+		}
+
+		res.MainChain = new(MerkleState)
+		res.MainChain.Height = chain.Height
+		res.MainChain.Roots = chain.Roots
 	}
 	return res, nil
 }
 
-func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Transaction, pend *state.PendingTransaction, payload protocol.TransactionPayload) (*TransactionQueryResponse, error) {
-	var tx *state.TxState
-	if main != nil {
-		tx = &main.TxState
-	} else {
-		tx = pend.TransactionState
-	}
+func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*TransactionQueryResponse, error) {
 
 	res := new(TransactionQueryResponse)
-	res.Type = payload.GetType().String()
-	res.Data = payload
+	res.Type = envelope.Transaction.Body.GetType().String()
+	res.Data = envelope.Transaction.Body
 	res.TransactionHash = txid[:]
 	res.MainChain = ms
+	res.Transaction = envelope.Transaction
 	res.KeyPage = new(KeyPage)
-	res.KeyPage.Height = tx.SigInfo.KeyPageHeight
-	res.KeyPage.Index = tx.SigInfo.KeyPageIndex
+	res.KeyPage.Height = envelope.Transaction.KeyPageHeight
+	res.KeyPage.Index = envelope.Transaction.KeyPageIndex
 
 	if len(synth)%32 != 0 {
 		return nil, fmt.Errorf("invalid synthetic transaction information, not divisible by 32")
@@ -50,15 +49,15 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 		}
 	}
 
-	switch payload := payload.(type) {
+	switch payload := envelope.Transaction.Body.(type) {
 	case *protocol.SendTokens:
 		if synth != nil && len(res.SyntheticTxids) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
-		res.Origin = tx.SigInfo.Origin
+		res.Origin = envelope.Transaction.Origin
 		data := new(TokenSend)
-		data.From = main.SigInfo.Origin
+		data.From = envelope.Transaction.Origin
 		data.To = make([]TokenDeposit, len(payload.To))
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
@@ -68,33 +67,20 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 			}
 		}
 
-		res.Origin = main.SigInfo.Origin
+		res.Origin = envelope.Transaction.Origin
 		res.Data = data
 
 	case *protocol.SyntheticDepositTokens:
-		res.Origin = main.SigInfo.Origin
+		res.Origin = envelope.Transaction.Origin
 		res.Data = payload
 
 	default:
-		res.Origin = tx.SigInfo.Origin
+		res.Origin = envelope.Transaction.Origin
 		res.Data = payload
 	}
 
-	if pend == nil {
-		return res, nil
-	}
-
-	res.Signatures = pend.Signature
-
-	if len(pend.Status) > 0 {
-		status := new(protocol.TransactionStatus)
-		err := status.UnmarshalBinary(pend.Status)
-		if err != nil {
-			return nil, fmt.Errorf("invalid transaction status: %v", err)
-		}
-
-		res.Status = status
-	}
+	res.Signatures = envelope.Signatures
+	res.Status = status
 
 	return res, nil
 }

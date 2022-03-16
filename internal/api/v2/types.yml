@@ -9,6 +9,10 @@ ChainQueryResponse:
       pointer: true
       marshal-as: reference
       alternative: MerkleState
+    - name: Chains
+      type: query.ChainState
+      repeatable: true
+      marshal-as: reference
     - name: Data
       type: any
     - name: ChainId
@@ -38,6 +42,10 @@ TransactionQueryResponse:
     - name: TransactionHash
       type: bytes
       alternative: Txid
+    - name: Transaction
+      type: protocol.Transaction
+      pointer: true
+      marshal-as: reference
     - name: Signatures
       repeatable: true
       type: protocol.Signature
@@ -267,6 +275,12 @@ TxRequest:
     optional: true
   - name: Payload
     type: any
+  - name: Memo
+    type: string
+    optional: true
+  - name: Metadata
+    type: bytes
+    optional: true
 
 TxResponse:
   non-binary: true

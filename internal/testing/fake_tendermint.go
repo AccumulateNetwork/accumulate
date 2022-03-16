@@ -24,11 +24,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	acctypes "gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
-const debugTX = false
+const debugTX = true
 
 // FakeTendermint is a test harness that facilitates testing the ABCI
 // application without creating an actual Tendermint node.
@@ -57,7 +56,7 @@ type FakeTendermint struct {
 }
 
 type txStatus struct {
-	Envelopes     []*transactions.Envelope
+	Envelopes     []*protocol.Envelope
 	Tx            []byte
 	Hash          [32]byte
 	Height        int64
@@ -114,61 +113,6 @@ func (c *FakeTendermint) App() abci.Application {
 	c.appWg.Wait()
 	return c.app
 }
-
-// func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
-// 	if debugTX {
-// 		c.logger.Info("Waiting for transaction", "tx", logging.AsHex(txid))
-// 	}
-// 	c.txMu.RLock()
-// 	st := c.txStatus[txid]
-// 	for st == nil || !st.Done {
-// 		c.txCond.Wait()
-// 		st = c.txStatus[txid]
-// 	}
-// 	c.txMu.RUnlock()
-// 	if debugTX {
-// 		c.logger.Info("Done waiting for transaction", "tx", logging.AsHex(txid))
-// 	}
-
-// 	if !waitSynth {
-// 		return nil
-// 	}
-
-// 	var err error
-// 	reqTx := new(query.RequestByTxId)
-// 	reqTx.TxId = txid
-// 	q := new(query.Query)
-// 	q.Type = reqTx.Type()
-// 	q.Content, err = reqTx.MarshalBinary()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	data, err := q.MarshalBinary()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	r := c.App().Query(abci.RequestQuery{Data: data})
-// 	if r.Code != 0 {
-// 		return fmt.Errorf("failed: %v", r)
-// 	}
-
-// 	resTx := new(query.ResponseByTxId)
-// 	err = resTx.UnmarshalBinary(r.Value)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	n := len(resTx.TxSynthTxIds) / 32
-// 	for i := 0; i < n; i++ {
-// 		var id [32]byte
-// 		copy(id[:], resTx.TxSynthTxIds[i*32:])
-// 		err = c.WaitFor(id, true)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
 
 func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
 	st := c.didSubmit(tx, sha256.Sum256(tx))
@@ -300,6 +244,10 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 	var queue []*txStatus
 	tick := time.NewTicker(interval)
 
+	logger := c.logger.With("scope", "runloop")
+	logger.Debug("Start", "interval", interval.String())
+	defer logger.Debug("Stop")
+
 	defer func() {
 		for _, sub := range queue {
 			sub.CheckResult = &abci.ResponseCheckTx{
@@ -319,16 +267,21 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 	for {
 		// Collect transactions, submit at 1Hz
+		logger.Debug("Collecting transactions")
 		select {
 		case <-c.stop:
 			return
 
 		case sub := <-c.txCh:
 			queue = append(queue, sub)
+			logger.Debug("Got transaction(s)", "count", len(sub.Envelopes))
 			continue
 
 		case <-tick.C:
 			if c.app == nil {
+				logger.Debug("Waiting for ABCI")
+				c.App()
+				logger.Debug("ABCI ready")
 				continue
 			}
 		}
@@ -341,6 +294,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		case sub := <-c.txCh:
 			queue = append(queue, sub)
+			logger.Debug("Got transaction(s)", "count", len(sub.Envelopes))
 			goto collect
 
 		default:
@@ -348,9 +302,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		}
 
 		height := c.nextHeight()
-		if debugTX {
-			c.logger.Info("Beginning block", "height", height, "queue", len(queue))
-		}
+		logger.Info("Beginning block", "height", height, "queue", len(queue))
 
 		begin := abci.RequestBeginBlock{}
 		begin.Header.Height = height
@@ -368,9 +320,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		c.app.BeginBlock(begin)
 
-		if debugTX {
-			c.logger.Info("Processing queue", "height", height, "queue", len(queue))
-		}
+		logger.Info("Processing queue", "height", height, "queue", len(queue))
 
 		// Process the queue
 		for _, sub := range queue {
@@ -505,14 +455,14 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}, nil
 }
 
-func (c *FakeTendermint) logTxns(msg string, env ...*transactions.Envelope) {
+func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
 	if !debugTX {
 		return
 	}
 
 	for _, env := range env {
 		txt := env.Transaction.Type()
-		if !txt.IsInternal() && txt != acctypes.TxTypeSyntheticAnchor {
+		if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor {
 			c.logger.Debug(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
 		}
 	}

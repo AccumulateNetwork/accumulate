@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -93,14 +94,16 @@ func TestValidate(t *testing.T) {
 	t.Run("Create ADI", func(t *testing.T) {
 		adiKey = newKey([]byte(t.Name()))
 
+		bookUrl, err := url.Parse(fmt.Sprintf("%s/book", adiName))
+		require.NoError(t, err)
+
 		executeTx(t, japi, "create-adi", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
 			Payload: &CreateIdentity{
-				Url:         adiName,
-				PublicKey:   adiKey[32:],
-				KeyBookName: "book",
-				KeyPageName: "page",
+				Url:        adiName,
+				PublicKey:  adiKey[32:],
+				KeyBookUrl: bookUrl,
 			},
 		})
 
@@ -160,7 +163,21 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, dataAccountUrl, dataAccount.Url)
 	})
 
-	keyPageUrl := adiName.JoinPath("/page1")
+	keyBookUrl := adiName.JoinPath("/book1")
+	t.Run("Create Key Book", func(t *testing.T) {
+		executeTx(t, japi, "create-key-book", true, execParams{
+			Origin: adiName.String(),
+			Key:    adiKey,
+			Payload: &CreateKeyBook{
+				Url: keyBookUrl,
+			},
+		})
+		keyBook := NewKeyBook()
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
+		assert.Equal(t, keyBookUrl, keyBook.Url)
+	})
+
+	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
@@ -168,31 +185,16 @@ func TestValidate(t *testing.T) {
 			PublicKey: adiKey[32:],
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
-			Origin: adiName.String(),
+			Origin: keyBookUrl.String(),
 			Key:    adiKey,
 			Payload: &CreateKeyPage{
-				Url:  keyPageUrl,
 				Keys: keys,
 			},
 		})
+
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, keyPageUrl, keyPage.Url)
-	})
-
-	keyBookUrl := adiName.JoinPath("/book1")
-	t.Run("Create Key Book", func(t *testing.T) {
-		executeTx(t, japi, "create-key-book", true, execParams{
-			Origin: adiName.String(),
-			Key:    adiKey,
-			Payload: &CreateKeyBook{
-				Url:   keyBookUrl,
-				Pages: []*url.URL{keyPageUrl},
-			},
-		})
-		keyBook := NewKeyBook()
-		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
-		assert.Equal(t, keyBookUrl, keyBook.Url)
 	})
 
 	t.Run("Key page credits 2", func(t *testing.T) {
@@ -296,7 +298,8 @@ func TestTokenTransfer(t *testing.T) {
 			for i, daemon := range daemons {
 				japi := daemon.Jrpc_TESTONLY()
 				res := executeTxFail(t, japi, "send-tokens", 0, 1, txParams)
-				assert.Equal(t, uint64(protocol.ErrorCodeNotFound), res.Code, "Node %d (%s) returned the wrong error code", i, netName)
+				code := res.Result.(map[string]interface{})["code"].(float64)
+				assert.Equal(t, protocol.ErrorCodeNotFound, protocol.ErrorCode(code), "Node %d (%s) returned the wrong error code", i, netName)
 			}
 		}
 	})

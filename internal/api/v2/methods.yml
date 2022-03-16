@@ -1,26 +1,32 @@
 Status:
+  description: queries the status of the node
   rpc: status
   output: StatusResponse
 
 Version:
   rpc: version
   output: ChainQueryResponse
+  description: queries the software version of the node
 
 Describe:
+  description: queries the basic configuration of the node
   rpc: describe
   output: DescriptionResponse
 
 Metrics:
+  description: queries network metrics, such as transactions per second
   rpc: metrics
   input: MetricsQuery
   output: ChainQueryResponse
 
 Faucet:
+  description: requests tokens from the ACME faucet
   rpc: faucet
   input: protocol.AcmeFaucet
   output: TxResponse
 
 Query:
+  description: queries an account or account chain by URL
   kind: query
   rpc: query
   input: GeneralQuery
@@ -29,6 +35,7 @@ Query:
   call-params: [Url, QueryOptions]
 
 QueryDirectory:
+  description: queries the directory entries of an account
   kind: query
   rpc: query-directory
   input: DirectoryQuery
@@ -36,6 +43,8 @@ QueryDirectory:
   call-params: [Url, QueryPagination, QueryOptions]
 
 QueryChain:
+  description: queries an account by ID
+  deprecated: Querying by account ID will be removed in the future
   kind: query
   rpc: query-chain
   input: ChainIdQuery
@@ -43,6 +52,7 @@ QueryChain:
   call-params: [ChainId]
 
 QueryTx:
+  description: queries a transaction by ID
   kind: query
   rpc: query-tx
   input: TxnQuery
@@ -50,6 +60,7 @@ QueryTx:
   call-params: [Txid, Wait, QueryOptions]
 
 QueryTxHistory:
+  description: queries an account's transaction history
   kind: query
   rpc: query-tx-history
   input: TxHistoryQuery
@@ -57,6 +68,7 @@ QueryTxHistory:
   call-params: [Url, QueryPagination]
 
 QueryData:
+  description: queries an entry on an account's data chain
   kind: query
   rpc: query-data
   input: DataEntryQuery
@@ -64,6 +76,7 @@ QueryData:
   call-params: [Url, EntryHash]
 
 QueryDataSet:
+  description: queries a range of entries on an account's data chain
   kind: query
   rpc: query-data-set
   input: DataEntrySetQuery
@@ -71,6 +84,7 @@ QueryDataSet:
   call-params: [Url, QueryPagination, QueryOptions]
 
 QueryKeyPageIndex:
+  description: queries the location of a key within an account's key book(s)
   kind: query
   rpc: query-key-index
   input: KeyPageIndexQuery
@@ -78,87 +92,122 @@ QueryKeyPageIndex:
   call-params: [Url, Key]
 
 Execute:
+  description: submits a transaction
   rpc: execute
   input: TxRequest
   output: TxResponse
 
 ExecuteCreateAdi:
+  description: submits a CreateIdentity transaction
   kind: execute
   rpc: create-adi
   input: CreateIdentity
 
 ExecuteCreateIdentity:
+  description: submits a CreateIdentity transaction
   kind: execute
   rpc: create-identity
   input: CreateIdentity
 
 ExecuteCreateDataAccount:
+  description: submits a CreateDataAccount transaction
   kind: execute
   rpc: create-data-account
   input: CreateDataAccount
 
 ExecuteCreateKeyBook:
+  description: submits a CreateKeyBook transaction
   kind: execute
   rpc: create-key-book
   input: CreateKeyBook
 
 ExecuteCreateKeyPage:
+  description: submits a CreateKeyPage transaction
   kind: execute
   rpc: create-key-page
   input: CreateKeyPage
 
 ExecuteCreateToken:
+  description: submits a CreateToken transaction
   kind: execute
   rpc: create-token
   input: CreateToken
 
 ExecuteCreateTokenAccount:
+  description: submits a CreateTokenAccount transaction
   kind: execute
   rpc: create-token-account
   input: CreateTokenAccount
 
 ExecuteSendTokens:
+  description: submits a SendTokens transaction
   kind: execute
   rpc: send-tokens
   input: SendTokens
   validate: [From, To]
 
 ExecuteAddCredits:
+  description: submits an AddCredits transaction
   kind: execute
   rpc: add-credits
   input: AddCredits
 
 ExecuteUpdateKeyPage:
+  description: submits an UpdateKeyPage transaction
   kind: execute
   rpc: update-key-page
   input: UpdateKeyPage
 
 ExecuteWriteData:
+  description: submits a WriteData transaction
   kind: execute
   rpc: write-data
   input: WriteData
 
 ExecuteIssueTokens:
+  description: submits an IssueTokens transaction
   kind: execute
   rpc: issue-tokens
   input: IssueTokens
 
 ExecuteWriteDataTo:
+  description: submits a WriteDataTo transaction
   kind: execute
   rpc: write-data-to
   input: WriteDataTo
 
 ExecuteBurnTokens:
+  description: submits a BurnTokens transaction
   kind: execute
   rpc: burn-tokens
   input: BurnTokens
 
 ExecuteUpdateManager:
+  description: submits an UpdateManager transaction
   kind: execute
   rpc: update-manager
   input: UpdateManager
 
 ExecuteRemoveManager:
+  description: submits a RemoveManager transaction
   kind: execute
   rpc: remove-manager
   input: RemoveManager
+
+ExecuteAddValidator:
+  # description: submits an AddValidator transaction
+  kind: execute
+  rpc: add-validator
+  input: AddValidator
+
+ExecuteRemoveValidator:
+  # description: submits a RemoveValidator transaction
+  kind: execute
+  rpc: remove-validator
+  input: RemoveValidator
+
+ExecuteUpdateValidatorKey:
+  # description: submits an UpdateValidatorKey transaction
+  kind: execute
+  rpc: update-validator-key
+  input: UpdateValidatorKey

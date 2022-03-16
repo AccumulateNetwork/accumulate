@@ -5,15 +5,15 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type InternalTransactionsSigned struct{}
 
-func (InternalTransactionsSigned) Type() types.TxType { return types.TxTypeInternalTransactionsSigned }
+func (InternalTransactionsSigned) Type() protocol.TransactionType {
+	return protocol.TransactionTypeInternalTransactionsSigned
+}
 
-func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSigned)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.InternalTransactionsSigned), tx.Transaction.Body)
@@ -50,17 +50,18 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.En
 		}
 
 		// Add the signature
-		gtx := txState.Restore()
-		gtx.Signatures = []protocol.Signature{sig}
+		env := new(protocol.Envelope)
+		env.Transaction = txState
+		env.Signatures = []protocol.Signature{sig}
 
 		// Validate it
-		if !gtx.Verify() {
+		if !env.Verify() {
 			return nil, fmt.Errorf("invalid signature for txn %X", id)
 		}
 
 		// Skip transactions that are already signed
 		if len(txSigs) > 0 {
-			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", gtx.Transaction.Type())
+			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", env.Transaction.Type())
 			continue
 		}
 
