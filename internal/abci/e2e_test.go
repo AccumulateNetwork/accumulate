@@ -613,6 +613,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
 		ac.Recipient = n.ParseUrl("foo/book0/1")
+		ac.Oracle = 500
 
 		send(newTxn("foo/tokens").
 			WithBody(ac).

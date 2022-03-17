@@ -57,6 +57,11 @@ func AddCredits(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
+	if err := oracleCmd.Execute(); err != nil {
+		fmt.Println("hi", err)
+
+	}
+
 	var acmeOracle protocol.AcmeOracle
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
