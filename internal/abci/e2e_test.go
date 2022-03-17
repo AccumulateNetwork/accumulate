@@ -922,7 +922,7 @@ func TestIssueTokens(t *testing.T) {
 	fooKey, liteKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10))
+	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, 123))
 	require.NoError(t, batch.Commit())
 
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
