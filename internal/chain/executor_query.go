@@ -194,7 +194,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.PendingChain)
+				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.SignatureChain)
 				if perr != nil {
 					return nil, nil, perr
 				}
