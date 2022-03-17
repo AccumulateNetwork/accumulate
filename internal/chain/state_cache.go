@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type stateCache struct {
@@ -32,8 +31,10 @@ func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]b
 	c.nodeUrl = nodeUrl
 	c.txType = txtype
 	c.txHash = txid
-
 	c.batch = batch
+
+	_ = c.logger // Get static analsis to shut up
+
 	c.Reset()
 	return c
 }
@@ -57,7 +58,7 @@ func (c *stateCache) Commit() ([]protocol.Account, error) {
 	return create, nil
 }
 
-func (c *stateCache) load(id [32]byte, r *database.Account) (state.Chain, error) {
+func (c *stateCache) load(id [32]byte, r *database.Account) (protocol.Account, error) {
 	st, ok := c.chains[id]
 	if ok {
 		return st, nil
@@ -98,7 +99,7 @@ func (c *stateCache) loadAs(id [32]byte, r *database.Account, v interface{}) (er
 }
 
 // LoadUrl loads a chain by URL and unmarshals it.
-func (c *stateCache) LoadUrl(u *url.URL) (state.Chain, error) {
+func (c *stateCache) LoadUrl(u *url.URL) (protocol.Account, error) {
 	return c.load(u.AccountID32(), c.batch.Account(u))
 }
 
@@ -123,7 +124,7 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 }
 
 // LoadTxn loads and unmarshals a saved transaction
-func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	return c.batch.Transaction(txid[:]).Get()
 }
 
@@ -141,7 +142,7 @@ func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error 
 
 type Value interface {
 	Get() ([]byte, error)
-	Put([]byte)
+	Put([]byte) error
 }
 
 func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory *url.URL, u ...*url.URL) error {
@@ -171,6 +172,5 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 		return fmt.Errorf("failed to marshal metadata: %v", err)
 	}
 
-	mdi.Put(data)
-	return nil
+	return mdi.Put(data)
 }

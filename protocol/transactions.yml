@@ -43,7 +43,7 @@ Transaction:
     - TransactionHeader
   fields:
     - name: Body
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil
@@ -83,49 +83,6 @@ ReceiptSignature:
   embeddings:
   - Receipt
   fields: []
-
-TxState:
-  fields:
-    - name: SigInfo
-      type: TransactionHeader
-      marshal-as: reference
-      pointer: true
-    - name: Transaction
-      type: TransactionPayload
-      unmarshal-with: UnmarshalTransaction
-      marshal-as: value
-      zero-value: nil
-    - name: TransactionHash
-      type: chain
-      marshal-as: none
-
-TransactionState:
-  kind: chain
-  chain-type: Transaction
-  omit-new-func: true
-  embeddings:
-    - AccountHeader
-    - TxState
-
-PendingTransactionState:
-  kind: chain
-  chain-type: PendingTransaction
-  omit-new-func: true
-  embeddings:
-  - AccountHeader
-  fields:
-    - name: Signature
-      repeatable: true
-      type: Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSignature
-    - name: TransactionState
-      type: TxState
-      marshal-as: reference
-      pointer: true
-    - name: Status
-      type: rawJson
 
 ##### User #####
 
@@ -324,6 +281,47 @@ UpdateKeyPage:
       type: uvarint
       optional: true
 
+UpdateManager:
+  kind: tx
+  fields:
+    - name: ManagerKeyBook
+      type: url
+      pointer: true
+
+RemoveManager:
+  kind: tx
+  fields:
+
+AddValidator:
+  kind: tx
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+RemoveValidator:
+  kind: tx
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+UpdateValidatorKey:
+  kind: tx
+  fields:
+    - name: OldKey
+      type: bytes
+    - name: NewKey
+      type: bytes
+
 SignPending:
   kind: tx
   fields: []
@@ -469,14 +467,3 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
-
-UpdateManager:
-  kind: tx
-  fields:
-    - name: ManagerKeyBook
-      type: url
-      pointer: true
-
-RemoveManager:
-  kind: tx
-  fields:

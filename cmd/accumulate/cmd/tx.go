@@ -14,7 +14,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -397,7 +396,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 	}
 
 	var typ struct {
-		Type types.TransactionType
+		Type protocol.TransactionType
 	}
 	err = json.Unmarshal([]byte(args[0]), &typ)
 	if err != nil {

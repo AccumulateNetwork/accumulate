@@ -34,14 +34,10 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteIdentity), nil
 	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
-	case AccountTypePendingTransaction:
-		return new(PendingTransactionState), nil
 	case AccountTypeTokenAccount:
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
-	case AccountTypeTransaction:
-		return new(TransactionState), nil
 	default:
 		return nil, fmt.Errorf("unknown account type %v", typ)
 	}
@@ -137,6 +133,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AcmeFaucet), nil
 	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
+	case TransactionTypeAddValidator:
+		return new(AddValidator), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -163,6 +161,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeRemoveManager:
 		return new(RemoveManager), nil
+	case TransactionTypeRemoveValidator:
+		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
@@ -187,6 +187,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(UpdateKeyPage), nil
 	case TransactionTypeUpdateManager:
 		return new(UpdateManager), nil
+	case TransactionTypeUpdateValidatorKey:
+		return new(UpdateValidatorKey), nil
 	case TransactionTypeWriteData:
 		return new(WriteData), nil
 	case TransactionTypeWriteDataTo:

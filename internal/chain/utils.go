@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -156,8 +155,8 @@ func addChainAnchor(rootChain *database.Chain, account *database.Account, accoun
 	return indexIndex, true, nil
 }
 
-func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.DirectoryIndexMetadata, error) {
-	b, err := batch.AccountByID(chainId).Index("Directory", "Metadata").Get()
+func loadDirectoryMetadata(batch *database.Batch, account *url.URL) (*protocol.DirectoryIndexMetadata, error) {
+	b, err := batch.Account(account).Index("Directory", "Metadata").Get()
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +170,8 @@ func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.Dir
 	return md, nil
 }
 
-func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (string, error) {
-	b, err := batch.AccountByID(chainId).Index("Directory", index).Get()
+func loadDirectoryEntry(batch *database.Batch, account *url.URL, index uint64) (string, error) {
+	b, err := batch.Account(account).Index("Directory", index).Get()
 	if err != nil {
 		return "", err
 	}
@@ -236,7 +235,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.Transaction.Type() != types.TxTypeSyntheticAnchor {
+		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -247,7 +246,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 func countExceptAnchors2(txns []*protocol.Transaction) int {
 	var count int
 	for _, txn := range txns {
-		if txn.Type() != types.TxTypeSyntheticAnchor {
+		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}

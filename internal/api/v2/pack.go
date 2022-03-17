@@ -4,20 +4,24 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
+func packStateResponse(account protocol.Account, chains []query.ChainState) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = chain.GetType().String()
-	res.MainChain = new(MerkleState)
-	res.MainChain.Height = obj.Height
-	res.MainChain.Roots = obj.Roots
-	res.Data = chain
+	res.Type = account.GetType().String()
+	res.Data = account
+	res.Chains = chains
+	res.ChainId = account.Header().Url.AccountID()
 
-	u, err := chain.Header().ParseUrl()
-	if err == nil {
-		res.ChainId = u.AccountID()
+	for _, chain := range chains {
+		if chain.Name != protocol.MainChain {
+			continue
+		}
+
+		res.MainChain = new(MerkleState)
+		res.MainChain.Height = chain.Height
+		res.MainChain.Roots = chain.Roots
 	}
 	return res, nil
 }

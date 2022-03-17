@@ -31,7 +31,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 
 		jerr := new(JsonRpcError)
 		require.ErrorAs(t, err, &jerr)
-		require.Equal(t, api.ErrCodeNotFound, int(jerr.Err.Code))
+		require.Equalf(t, api.ErrCodeNotFound, int(jerr.Err.Code), "Expected not found, got %q, %v", jerr.Err.Message, jerr.Err.Data)
 	}
 
 	var results []string

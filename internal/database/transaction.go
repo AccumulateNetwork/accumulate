@@ -1,7 +1,6 @@
 package database
 
 import (
-	"crypto/sha256"
 	"errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -22,7 +21,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // Get loads the transaction state, status, and signatures.
 //
 // See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (t *Transaction) Get() (*protocol.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
 	state, err := t.GetState()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, nil, err
@@ -42,14 +41,14 @@ func (t *Transaction) Get() (*protocol.Envelope, *protocol.TransactionStatus, []
 		return nil, nil, nil, storage.ErrNotFound
 	}
 
-	return state, status, signatures, nil
+	return state, status, signatures.Signatures, nil
 }
 
 // Put stores the transaction object metadata, state, status, and signatures.
 // Put appends signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *protocol.Envelope, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
+func (t *Transaction) Put(state *protocol.Transaction, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
 	// Ensure the object metadata is stored. Transactions don't have chains, so
 	// we don't need to add chain metadata.
 	if _, err := t.batch.store.Get(t.key.Object()); errors.Is(err, storage.ErrNotFound) {
@@ -71,18 +70,23 @@ func (t *Transaction) Put(state *protocol.Envelope, status *protocol.Transaction
 		return err
 	}
 
-	_, err = t.AddSignatures(sigs...)
-	return err
+	ss, err := t.GetSignatures()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+
+	ss.Add(sigs...)
+	return t.PutSignatures(ss)
 }
 
 // GetState loads the transaction state.
-func (t *Transaction) GetState() (*protocol.Envelope, error) {
+func (t *Transaction) GetState() (*protocol.Transaction, error) {
 	data, err := t.batch.store.Get(t.key.State())
 	if err != nil {
 		return nil, err
 	}
 
-	state := new(protocol.Envelope)
+	state := new(protocol.Transaction)
 	err = state.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
@@ -92,14 +96,13 @@ func (t *Transaction) GetState() (*protocol.Envelope, error) {
 }
 
 // PutState stores the transaction state and adds the transaction to the BPT (as a hash).
-func (t *Transaction) PutState(state *protocol.Envelope) error {
+func (t *Transaction) PutState(state *protocol.Transaction) error {
 	data, err := state.MarshalBinary()
 	if err != nil {
 		return err
 	}
 
-	t.batch.store.Put(t.key.State(), data)
-	return nil
+	return t.batch.store.Put(t.key.State(), data)
 }
 
 // GetStatus loads the transaction state.
@@ -129,61 +132,35 @@ func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
 		return err
 	}
 
-	t.batch.store.Put(t.key.Status(), data)
-	return nil
+	return t.batch.store.Put(t.key.Status(), data)
 }
 
 // GetSignatures loads the transaction's signatures.
-func (t *Transaction) GetSignatures() ([]protocol.Signature, error) {
+func (t *Transaction) GetSignatures() (*SignatureSet, error) {
 	data, err := t.batch.store.Get(t.key.Signatures())
-	if err != nil {
+	if errors.Is(err, storage.ErrNotFound) {
+		return new(SignatureSet), err
+	} else if err != nil {
 		return nil, err
 	}
 
-	v := new(txSignatures)
+	v := new(SignatureSet)
 	err = v.UnmarshalBinary(data)
 	if err != nil {
 		return nil, err
 	}
 
-	return v.Signatures, nil
+	return v, nil
 }
 
-// AddSignatures adds signatures the transaction's list of signatures.
-func (t *Transaction) AddSignatures(newSignatures ...protocol.Signature) (count int, err error) {
-	signatures, err := t.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return 0, err
-	}
-
-	if len(newSignatures) == 0 {
-		return len(signatures), nil
-	}
-
-	// Only keep one signature per public key
-	seen := map[[32]byte]bool{}
-	for _, sig := range signatures {
-		hash := sha256.Sum256(sig.GetPublicKey())
-		seen[hash] = true
-	}
-	for _, sig := range newSignatures {
-		hash := sha256.Sum256(sig.GetPublicKey())
-		if seen[hash] {
-			continue
-		}
-		seen[hash] = true
-		signatures = append(signatures, sig)
-	}
-
-	v := new(txSignatures)
-	v.Signatures = signatures
+// PutSignatures stores the transaction's signatures.
+func (t *Transaction) PutSignatures(v *SignatureSet) error {
 	data, err := v.MarshalBinary()
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	t.batch.store.Put(t.key.Signatures(), data)
-	return len(signatures), nil
+	return t.batch.store.Put(t.key.Signatures(), data)
 }
 
 // GetSyntheticTxns returns IDs of synthetic transactions produced by the
@@ -218,6 +195,5 @@ func (t *Transaction) AddSyntheticTxns(txids ...[32]byte) error {
 		return err
 	}
 
-	t.batch.store.Put(t.key.Synthetic(), data)
-	return nil
+	return t.batch.store.Put(t.key.Synthetic(), data)
 }
