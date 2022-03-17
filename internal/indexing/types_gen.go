@@ -84,7 +84,12 @@ func (v *PendingTransactionsIndex) Equal(u *PendingTransactionsIndex) bool {
 }
 
 func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
-	if !((v.Account).Equal(u.Account)) {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 	if !(v.Chain == u.Chain) {
