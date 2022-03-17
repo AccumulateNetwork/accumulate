@@ -49,6 +49,13 @@ var cmdListNamedNetworkConfig = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
+var cmdInitDualNode = &cobra.Command{
+	Use:   "dual <url|ip> <dn base port> <bvn base port>",
+	Short: "Initialize a dual run from seed IP, DN base port, and BVN base port",
+	Run:   initDualNode,
+	Args:  cobra.ExactArgs(2),
+}
+
 var cmdInitNode = &cobra.Command{
 	Use:   "node <network-name|url>",
 	Short: "Initialize a node",
@@ -86,6 +93,12 @@ var flagInitNode struct {
 	SkipVersionCheck bool
 }
 
+var flagInitNodeFromSeed struct {
+	GenesisDoc       string
+	Follower         bool
+	SkipVersionCheck bool
+}
+
 var flagInitDevnet struct {
 	Name          string
 	NumBvns       int
@@ -111,7 +124,7 @@ var flagInitNetwork struct {
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdListNamedNetworkConfig)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdListNamedNetworkConfig, cmdInitDualNode)
 
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
@@ -133,6 +146,10 @@ func init() {
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	_ = cmdInitNode.MarkFlagRequired("listen")
+
+	cmdInitDualNode.Flags().BoolVarP(&flagInitNodeFromSeed.Follower, "follow", "f", false, "Do not participate in voting")
+	cmdInitDualNode.Flags().StringVar(&flagInitNodeFromSeed.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitDualNode.Flags().BoolVar(&flagInitNodeFromSeed.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
@@ -327,10 +344,16 @@ func initNode(cmd *cobra.Command, args []string) {
 					}
 					if netAddr != nodeHost {
 						tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", nodeHost, netPort+networks.TmRpcPortOffset))
-						warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+						if err != nil {
+							warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+							continue
+						}
 
 						status, err := tmClient.Status(context.Background())
-						warnf("failed to get status of %s with error %v", n.Address, err)
+						if err != nil {
+							warnf("failed to get status of %s with error %v", n.Address, err)
+							continue
+						}
 
 						peers := config.P2P.PersistentPeers
 						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
