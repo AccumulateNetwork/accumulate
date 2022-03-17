@@ -267,10 +267,10 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:" + flagInitDevnet.DockerTag
+	svc.Image = flagInitDevnet.DockerImage
 	svc.Environment = map[string]*string{"ACC_API": &api}
 
-	svc.Command = dc.ShellCommand{"accumulated", "init", "devnet", "-w", "/nodes", "--docker"}
+	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
 
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
@@ -353,7 +353,7 @@ func initNetworkNode(networkName string, subnetName string, nodes []Node, netTyp
 	var svc dc.ServiceConfig
 	svc.Name = name
 	svc.ContainerName = networkName + "-" + name
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:" + flagInitDevnet.DockerTag
+	svc.Image = flagInitDevnet.DockerImage
 	svc.DependsOn = []string{"tools"}
 
 	if flagInitDevnet.UseVolumes {
