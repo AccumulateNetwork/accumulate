@@ -973,13 +973,28 @@ func (v *ADI) Equal(u *ADI) bool {
 }
 
 func (v *AccountHeader) Equal(u *AccountHeader) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !((v.KeyBook).Equal(u.KeyBook)) {
+	switch {
+	case v.KeyBook == u.KeyBook:
+		// equal
+	case v.KeyBook == nil || u.KeyBook == nil:
+		return false
+	case !((v.KeyBook).Equal(u.KeyBook)):
 		return false
 	}
-	if !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)) {
+	switch {
+	case v.ManagerKeyBook == u.ManagerKeyBook:
+		// equal
+	case v.ManagerKeyBook == nil || u.ManagerKeyBook == nil:
+		return false
+	case !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)):
 		return false
 	}
 
@@ -987,7 +1002,12 @@ func (v *AccountHeader) Equal(u *AccountHeader) bool {
 }
 
 func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 
@@ -1003,7 +1023,12 @@ func (v *AcmeOracle) Equal(u *AcmeOracle) bool {
 }
 
 func (v *AddCredits) Equal(u *AddCredits) bool {
-	if !((v.Recipient).Equal(u.Recipient)) {
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
 		return false
 	}
 	if !(v.Amount == u.Amount) {
@@ -1025,7 +1050,12 @@ func (v *AddValidator) Equal(u *AddValidator) bool {
 	if !(bytes.Equal(v.Key, u.Key)) {
 		return false
 	}
-	if !((v.Owner).Equal(u.Owner)) {
+	switch {
+	case v.Owner == u.Owner:
+		// equal
+	case v.Owner == nil || u.Owner == nil:
+		return false
+	case !((v.Owner).Equal(u.Owner)):
 		return false
 	}
 
@@ -1044,7 +1074,12 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 	if !v.ChainMetadata.Equal(&u.ChainMetadata) {
 		return false
 	}
-	if !((v.Account).Equal(u.Account)) {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 	if !(v.Index == u.Index) {
@@ -1105,13 +1140,28 @@ func (v *ChainParams) Equal(u *ChainParams) bool {
 }
 
 func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
+	switch {
+	case v.KeyBookUrl == u.KeyBookUrl:
+		// equal
+	case v.KeyBookUrl == nil || u.KeyBookUrl == nil:
+		return false
+	case !((v.KeyBookUrl).Equal(u.KeyBookUrl)):
 		return false
 	}
-	if !((v.ManagerKeyBookUrl).Equal(u.ManagerKeyBookUrl)) {
+	switch {
+	case v.ManagerKeyBookUrl == u.ManagerKeyBookUrl:
+		// equal
+	case v.ManagerKeyBookUrl == nil || u.ManagerKeyBookUrl == nil:
+		return false
+	case !((v.ManagerKeyBookUrl).Equal(u.ManagerKeyBookUrl)):
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
@@ -1122,16 +1172,31 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 }
 
 func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
-	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
+	switch {
+	case v.KeyBookUrl == u.KeyBookUrl:
+		// equal
+	case v.KeyBookUrl == nil || u.KeyBookUrl == nil:
+		return false
+	case !((v.KeyBookUrl).Equal(u.KeyBookUrl)):
 		return false
 	}
-	if !((v.Manager).Equal(u.Manager)) {
+	switch {
+	case v.Manager == u.Manager:
+		// equal
+	case v.Manager == nil || u.Manager == nil:
+		return false
+	case !((v.Manager).Equal(u.Manager)):
 		return false
 	}
 
@@ -1139,13 +1204,23 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 }
 
 func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(bytes.Equal(v.PublicKeyHash, u.PublicKeyHash)) {
 		return false
 	}
-	if !((v.Manager).Equal(u.Manager)) {
+	switch {
+	case v.Manager == u.Manager:
+		// equal
+	case v.Manager == nil || u.Manager == nil:
+		return false
+	case !((v.Manager).Equal(u.Manager)):
 		return false
 	}
 
@@ -1161,7 +1236,12 @@ func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
 			return false
 		}
 	}
-	if !((v.Manager).Equal(u.Manager)) {
+	switch {
+	case v.Manager == u.Manager:
+		// equal
+	case v.Manager == nil || u.Manager == nil:
+		return false
+	case !((v.Manager).Equal(u.Manager)):
 		return false
 	}
 
@@ -1169,10 +1249,20 @@ func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
 }
 
 func (v *CreateToken) Equal(u *CreateToken) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
+	switch {
+	case v.KeyBookUrl == u.KeyBookUrl:
+		// equal
+	case v.KeyBookUrl == nil || u.KeyBookUrl == nil:
+		return false
+	case !((v.KeyBookUrl).Equal(u.KeyBookUrl)):
 		return false
 	}
 	if !(v.Symbol == u.Symbol) {
@@ -1181,7 +1271,12 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 	if !(v.Precision == u.Precision) {
 		return false
 	}
-	if !((v.Properties).Equal(u.Properties)) {
+	switch {
+	case v.Properties == u.Properties:
+		// equal
+	case v.Properties == nil || u.Properties == nil:
+		return false
+	case !((v.Properties).Equal(u.Properties)):
 		return false
 	}
 	if !((&v.InitialSupply).Cmp(&u.InitialSupply) == 0) {
@@ -1190,7 +1285,12 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
 		return false
 	}
-	if !((v.Manager).Equal(u.Manager)) {
+	switch {
+	case v.Manager == u.Manager:
+		// equal
+	case v.Manager == nil || u.Manager == nil:
+		return false
+	case !((v.Manager).Equal(u.Manager)):
 		return false
 	}
 
@@ -1198,19 +1298,39 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 }
 
 func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !((v.TokenUrl).Equal(u.TokenUrl)) {
+	switch {
+	case v.TokenUrl == u.TokenUrl:
+		// equal
+	case v.TokenUrl == nil || u.TokenUrl == nil:
+		return false
+	case !((v.TokenUrl).Equal(u.TokenUrl)):
 		return false
 	}
-	if !((v.KeyBookUrl).Equal(u.KeyBookUrl)) {
+	switch {
+	case v.KeyBookUrl == u.KeyBookUrl:
+		// equal
+	case v.KeyBookUrl == nil || u.KeyBookUrl == nil:
+		return false
+	case !((v.KeyBookUrl).Equal(u.KeyBookUrl)):
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
 		return false
 	}
-	if !((v.Manager).Equal(u.Manager)) {
+	switch {
+	case v.Manager == u.Manager:
+		// equal
+	case v.Manager == nil || u.Manager == nil:
+		return false
+	case !((v.Manager).Equal(u.Manager)):
 		return false
 	}
 
@@ -1259,7 +1379,12 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
-	if !((v.Signer).Equal(u.Signer)) {
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
 	if !(v.SignerHeight == u.SignerHeight) {
@@ -1289,7 +1414,12 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	if !(bytes.Equal(v.TxHash, u.TxHash)) {
 		return false
 	}
-	if !((v.Transaction).Equal(u.Transaction)) {
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
 		return false
 	}
 
@@ -1306,7 +1436,12 @@ func (v *IndexEntry) Equal(u *IndexEntry) bool {
 	if !(v.BlockIndex == u.BlockIndex) {
 		return false
 	}
-	if !(*v.BlockTime == *u.BlockTime) {
+	switch {
+	case v.BlockTime == u.BlockTime:
+		// equal
+	case v.BlockTime == nil || u.BlockTime == nil:
+		return false
+	case !(*v.BlockTime == *u.BlockTime):
 		return false
 	}
 
@@ -1342,7 +1477,12 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 }
 
 func (v *InternalSignature) Equal(u *InternalSignature) bool {
-	if !((v.Network).Equal(u.Network)) {
+	switch {
+	case v.Network == u.Network:
+		// equal
+	case v.Network == nil || u.Network == nil:
+		return false
+	case !((v.Network).Equal(u.Network)):
 		return false
 	}
 
@@ -1392,7 +1532,12 @@ func (v *InternalTransactionsSigned) Equal(u *InternalTransactionsSigned) bool {
 }
 
 func (v *IssueTokens) Equal(u *IssueTokens) bool {
-	if !((v.Recipient).Equal(u.Recipient)) {
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
 		return false
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
@@ -1431,7 +1576,12 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 			return false
 		}
 	}
-	if !(*v.TransactionBlacklist == *u.TransactionBlacklist) {
+	switch {
+	case v.TransactionBlacklist == u.TransactionBlacklist:
+		// equal
+	case v.TransactionBlacklist == nil || u.TransactionBlacklist == nil:
+		return false
+	case !(*v.TransactionBlacklist == *u.TransactionBlacklist):
 		return false
 	}
 
@@ -1445,7 +1595,12 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 	if !(v.Nonce == u.Nonce) {
 		return false
 	}
-	if !((v.Owner).Equal(u.Owner)) {
+	switch {
+	case v.Owner == u.Owner:
+		// equal
+	case v.Owner == nil || u.Owner == nil:
+		return false
+	case !((v.Owner).Equal(u.Owner)):
 		return false
 	}
 
@@ -1456,7 +1611,12 @@ func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
-	if !((v.Owner).Equal(u.Owner)) {
+	switch {
+	case v.Owner == u.Owner:
+		// equal
+	case v.Owner == nil || u.Owner == nil:
+		return false
+	case !((v.Owner).Equal(u.Owner)):
 		return false
 	}
 
@@ -1473,7 +1633,12 @@ func (v *LegacyED25519Signature) Equal(u *LegacyED25519Signature) bool {
 	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
-	if !((v.Signer).Equal(u.Signer)) {
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
 	if !(v.SignerHeight == u.SignerHeight) {
@@ -1506,7 +1671,12 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
 	}
-	if !((v.TokenUrl).Equal(u.TokenUrl)) {
+	switch {
+	case v.TokenUrl == u.TokenUrl:
+		// equal
+	case v.TokenUrl == nil || u.TokenUrl == nil:
+		return false
+	case !((v.TokenUrl).Equal(u.TokenUrl)):
 		return false
 	}
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
@@ -1575,7 +1745,12 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
-	if !((v.Signer).Equal(u.Signer)) {
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
 	if !(v.SignerHeight == u.SignerHeight) {
@@ -1643,7 +1818,12 @@ func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
 	if !(bytes.Equal(v.Key, u.Key)) {
 		return false
 	}
-	if !((v.Owner).Equal(u.Owner)) {
+	switch {
+	case v.Owner == u.Owner:
+		// equal
+	case v.Owner == nil || u.Owner == nil:
+		return false
+	case !((v.Owner).Equal(u.Owner)):
 		return false
 	}
 
@@ -1654,7 +1834,12 @@ func (v *SegWitDataEntry) Equal(u *SegWitDataEntry) bool {
 	if !(v.Cause == u.Cause) {
 		return false
 	}
-	if !((v.EntryUrl).Equal(u.EntryUrl)) {
+	switch {
+	case v.EntryUrl == u.EntryUrl:
+		// equal
+	case v.EntryUrl == nil || u.EntryUrl == nil:
+		return false
+	case !((v.EntryUrl).Equal(u.EntryUrl)):
 		return false
 	}
 	if !(v.EntryHash == u.EntryHash) {
@@ -1697,7 +1882,12 @@ func (v *SignPending) Equal(u *SignPending) bool {
 }
 
 func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
-	if !((v.Source).Equal(u.Source)) {
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
 		return false
 	}
 	if !(v.Major == u.Major) {
@@ -1769,7 +1959,12 @@ func (v *SyntheticDepositTokens) Equal(u *SyntheticDepositTokens) bool {
 	if !(v.Cause == u.Cause) {
 		return false
 	}
-	if !((v.Token).Equal(u.Token)) {
+	switch {
+	case v.Token == u.Token:
+		// equal
+	case v.Token == nil || u.Token == nil:
+		return false
+	case !((v.Token).Equal(u.Token)):
 		return false
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
@@ -1840,10 +2035,20 @@ func (v *SyntheticMirror) Equal(u *SyntheticMirror) bool {
 }
 
 func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
-	if !((v.SourceNetwork).Equal(u.SourceNetwork)) {
+	switch {
+	case v.SourceNetwork == u.SourceNetwork:
+		// equal
+	case v.SourceNetwork == nil || u.SourceNetwork == nil:
+		return false
+	case !((v.SourceNetwork).Equal(u.SourceNetwork)):
 		return false
 	}
-	if !((v.DestinationNetwork).Equal(u.DestinationNetwork)) {
+	switch {
+	case v.DestinationNetwork == u.DestinationNetwork:
+		// equal
+	case v.DestinationNetwork == nil || u.DestinationNetwork == nil:
+		return false
+	case !((v.DestinationNetwork).Equal(u.DestinationNetwork)):
 		return false
 	}
 	if !(v.SequenceNumber == u.SequenceNumber) {
@@ -1868,7 +2073,12 @@ func (v *TokenAccount) Equal(u *TokenAccount) bool {
 	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
 	}
-	if !((v.TokenUrl).Equal(u.TokenUrl)) {
+	switch {
+	case v.TokenUrl == u.TokenUrl:
+		// equal
+	case v.TokenUrl == nil || u.TokenUrl == nil:
+		return false
+	case !((v.TokenUrl).Equal(u.TokenUrl)):
 		return false
 	}
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
@@ -1891,7 +2101,12 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 	if !(v.Precision == u.Precision) {
 		return false
 	}
-	if !((v.Properties).Equal(u.Properties)) {
+	switch {
+	case v.Properties == u.Properties:
+		// equal
+	case v.Properties == nil || u.Properties == nil:
+		return false
+	case !((v.Properties).Equal(u.Properties)):
 		return false
 	}
 	if !((&v.Supply).Cmp(&u.Supply) == 0) {
@@ -1905,7 +2120,12 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 }
 
 func (v *TokenRecipient) Equal(u *TokenRecipient) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
@@ -1927,7 +2147,12 @@ func (v *Transaction) Equal(u *Transaction) bool {
 }
 
 func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
-	if !((v.Principal).Equal(u.Principal)) {
+	switch {
+	case v.Principal == u.Principal:
+		// equal
+	case v.Principal == nil || u.Principal == nil:
+		return false
+	case !((v.Principal).Equal(u.Principal)):
 		return false
 	}
 	if !(v.Initiator == u.Initiator) {
@@ -2034,7 +2259,12 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 }
 
 func (v *UpdateManager) Equal(u *UpdateManager) bool {
-	if !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)) {
+	switch {
+	case v.ManagerKeyBook == u.ManagerKeyBook:
+		// equal
+	case v.ManagerKeyBook == nil || u.ManagerKeyBook == nil:
+		return false
+	case !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)):
 		return false
 	}
 
@@ -2064,7 +2294,12 @@ func (v *WriteDataResult) Equal(u *WriteDataResult) bool {
 	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
-	if !((v.AccountUrl).Equal(u.AccountUrl)) {
+	switch {
+	case v.AccountUrl == u.AccountUrl:
+		// equal
+	case v.AccountUrl == nil || u.AccountUrl == nil:
+		return false
+	case !((v.AccountUrl).Equal(u.AccountUrl)):
 		return false
 	}
 	if !(bytes.Equal(v.AccountID, u.AccountID)) {
@@ -2075,7 +2310,12 @@ func (v *WriteDataResult) Equal(u *WriteDataResult) bool {
 }
 
 func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
-	if !((v.Recipient).Equal(u.Recipient)) {
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
 		return false
 	}
 	if !((&v.Entry).Equal(&u.Entry)) {

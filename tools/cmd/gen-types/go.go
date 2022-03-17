@@ -300,15 +300,28 @@ func GoAreEqual(field *Field, varName, otherName string) (string, error) {
 		ptrPrefix = "*"
 	}
 
-	if !field.Repeatable {
+	if field.Repeatable {
+		expr = fmt.Sprintf(expr, ptrPrefix, "%[2]s[i]", "%[3]s[i]")
+		return fmt.Sprintf(
+			"	if len(%[2]s) != len(%[3]s) { return false }\n"+
+				"	for i := range %[2]s {\n"+
+				"		if !("+expr+") { return false }\n"+
+				"	}",
+			ptrPrefix, varName, otherName), nil
+	}
+
+	if !field.Pointer {
 		return fmt.Sprintf("\tif !("+expr+") { return false }", ptrPrefix, varName, otherName), nil
 	}
 
-	expr = fmt.Sprintf(expr, ptrPrefix, "%[2]s[i]", "%[3]s[i]")
 	return fmt.Sprintf(
-		"	if len(%[2]s) != len(%[3]s) { return false }\n"+
-			"	for i := range %[2]s {\n"+
-			"		if !("+expr+") { return false }\n"+
+		"	switch {\n"+
+			"	case %[2]s == %[3]s:\n"+
+			"		// equal\n"+
+			"	case %[2]s == nil || %[3]s == nil:\n"+
+			"		return false\n"+
+			"	case !("+expr+"):\n"+
+			"		return false\n"+
 			"	}",
 		ptrPrefix, varName, otherName), nil
 }
