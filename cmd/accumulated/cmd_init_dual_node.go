@@ -19,7 +19,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	host := u.Hostname()
 	port := u.Port()
 	if port == "" {
-		check(fmt.Errorf("cannot resolve host and port %v", args[1]))
+		fatalf("cannot resolve host and port %v", args[1])
 	}
 
 	addr, err := net.LookupIP(host)
@@ -42,11 +42,10 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
 	c, err := cfg.Load(path.Join(flagMain.WorkDir, "Node0"))
-	fmt.Printf("%v", c.Accumulate.Network.Subnets)
 
 	//make sure we have a block validator type
 	if c.Accumulate.Network.Type != cfg.Directory {
-		check(fmt.Errorf("expecting directory but received %v", c.Accumulate.Network.Type))
+		fatalf("expecting directory but received %v", c.Accumulate.Network.Type)
 	}
 
 	//now find out what bvn we are on then let
@@ -66,7 +65,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if bvn == nil {
-		check(fmt.Errorf("directory not found in bvn configuration"))
+		fatalf("directory not found in bvn configuration")
 	}
 
 	// now search for the dn associated with the local address
@@ -85,7 +84,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if bvnHost == nil {
-		check(fmt.Errorf("bvn host not found in %v subnet", subnetName))
+		fatalf("bvn host not found in %v subnet", subnetName)
 	}
 
 	if flagInit.NoEmptyBlocks {
@@ -102,14 +101,17 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	dnWebHostUrl, err := url.Parse(c.Accumulate.Website.ListenAddress)
 	checkf(err, "cannot parse website listen address (%v) for node", c.Accumulate.Website.ListenAddress)
 
-	cfg.Store(c)
+	err = cfg.Store(c)
+	checkf(err, "cannot store configuration file for node")
 
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvnBasePort)
 	flagMain.WorkDir = path.Join(workDir, "bvn")
 	args = []string{bvnHost.Address}
 	initNode(cmd, args)
 
-	cfg.Load(path.Join(flagMain.WorkDir, "Node0"))
+	c, err = cfg.Load(path.Join(flagMain.WorkDir, "Node0"))
+
+	checkf(err, "cannot load configuration file for node")
 
 	if flagInit.NoEmptyBlocks {
 		c.Consensus.CreateEmptyBlocks = false
@@ -125,6 +127,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 		c.P2P.PersistentPeers = ""
 	}
 
-	cfg.Store(c)
+	err = cfg.Store(c)
+	checkf(err, "cannot store configuration file for node")
 
 }
