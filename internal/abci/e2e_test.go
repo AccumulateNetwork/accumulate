@@ -3,6 +3,7 @@ package abci_test
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -19,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	randpkg "golang.org/x/exp/rand"
 )
 
@@ -305,44 +307,68 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	//create a lite data account aka factom chainId
 	chainId := protocol.ComputeLiteDataAccountId(&firstEntry)
 
-	lde := protocol.LiteDataEntry{}
-	lde.DataEntry = new(protocol.DataEntry)
-	copy(lde.AccountId[:], chainId)
-	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
-	for i := 0; i < 3; i++ {
-		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
-	}
 	liteDataAddress, err := protocol.LiteDataAddress(chainId)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Run("Create ADI then write to Lite Data Account", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-		nodes := RunTestNet(t, subnets, daemons, nil, true)
-		n := nodes[subnets[1]][0]
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
 
-		adiKey := generateKey()
-		batch := n.db.Begin(true)
-		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, batch.Commit())
-		n.Batch(func(send func(*protocol.Envelope)) {
-			wdt := new(protocol.WriteDataTo)
-			wdt.Recipient = liteDataAddress
-			wdt.Entry = firstEntry
-			send(newTxn("FooBar").
-				WithBody(wdt).
-				SignLegacyED25519(adiKey))
-		})
-
-		partialChainId, err := protocol.ParseLiteDataAddress(liteDataAddress)
-		if err != nil {
-			t.Fatal(err)
-		}
-		r := n.GetLiteDataAccount(liteDataAddress.String())
-		require.Equal(t, liteDataAddress.String(), r.Url.String())
-		require.Equal(t, append(partialChainId, r.Tail...), chainId)
+	adiKey := generateKey()
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+	require.NoError(t, batch.Commit())
+	ids := n.Batch(func(send func(*protocol.Envelope)) {
+		wdt := new(protocol.WriteDataTo)
+		wdt.Recipient = liteDataAddress
+		wdt.Entry = firstEntry
+		send(newTxn("FooBar").
+			WithBody(wdt).
+			SignLegacyED25519(adiKey))
 	})
+
+	partialChainId, err := protocol.ParseLiteDataAddress(liteDataAddress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := n.GetLiteDataAccount(liteDataAddress.String())
+	require.Equal(t, liteDataAddress.String(), r.Url.String())
+	require.Equal(t, append(partialChainId, r.Tail...), chainId)
+
+	firstEntryHash, err := protocol.ComputeLiteEntryHashFromEntry(chainId, &firstEntry)
+	require.NoError(t, err)
+
+	batch = n.db.Begin(false)
+	defer batch.Discard()
+
+	synthIds, err := batch.Transaction(ids[0][:]).GetSyntheticTxns()
+	require.NoError(t, err)
+
+	// Verify the entry hash in the transaction result
+	txStatus, err := batch.Transaction(synthIds[0][:]).GetStatus()
+	require.NoError(t, err)
+	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
+	txResult := txStatus.Result.(*protocol.WriteDataResult)
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
+
+	// Verify the entry hash returned by Entry
+	dataChain, err := batch.Account(liteDataAddress).Data()
+	require.NoError(t, err)
+	entry, err := dataChain.Entry(0)
+	require.NoError(t, err)
+	hashFromEntry, err := protocol.ComputeLiteEntryHashFromEntry(chainId, entry)
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
+	//sample verification for calculating the hash from lite data entry
+	hashes, err := dataChain.GetHashes(0, 1)
+	ent, err := dataChain.Entry(0)
+	id := protocol.ComputeLiteDataAccountId(ent)
+	newh, err := protocol.ComputeLiteEntryHashFromEntry(id, ent)
+	require.NoError(t, err)
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashes[0]), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
+
 }
 
 func TestCreateAdiDataAccount(t *testing.T) {
@@ -443,7 +469,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		// Test getting the data by URL
-		rde := new(protocol.ResponseDataEntry)
+		rde := new(query.ResponseDataEntry)
 		n.QueryAccountAs("FooBar/oof#data", rde)
 
 		if !rde.Entry.Equal(&wd.Entry) {
@@ -451,7 +477,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry hash.
-		rde2 := new(protocol.ResponseDataEntry)
+		rde2 := new(query.ResponseDataEntry)
 		n.QueryAccountAs(fmt.Sprintf("FooBar/oof#data/%X", wd.Entry.Hash()), rde2)
 
 		if !rde.Entry.Equal(&rde2.Entry) {
@@ -459,7 +485,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry set
-		rde3 := new(protocol.ResponseDataEntrySet)
+		rde3 := new(query.ResponseDataEntrySet)
 		n.QueryAccountAs("FooBar/oof#data/0:1", rde3)
 		if !rde.Entry.Equal(&rde3.DataEntries[0].Entry) {
 			t.Fatalf("data query does not match what was entered")
