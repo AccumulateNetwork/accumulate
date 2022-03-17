@@ -112,18 +112,18 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 	return args[ct:], signer, nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *protocol.TransactionHeader, []byte, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Signer, error) {
 	principal, err := url2.Parse(args[0])
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	args, header, key, err := prepareSigner(principal, args[1:])
+	args, signer, err := prepareSigner(principal, args[1:])
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return args, principal, header, key, nil
+	return args, principal, signer, nil
 }
 
 func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
@@ -207,6 +207,15 @@ func queryAs(method string, input, output interface{}) error {
 	}
 
 	return fmt.Errorf("%v", ret)
+}
+
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (string, error) {
+	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFrom(res).Print()
 }
 
 func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (*api2.TxResponse, error) {
@@ -305,15 +314,6 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 		env.Transaction.Header.Metadata = []byte(dataSet[1])
 	}
 	return env, nil
-}
-
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (string, error) {
-	res, err := dispatchTxRequest(action, payload, txHash, origin, si, privKey)
-	if err != nil {
-		return "", err
-	}
-
-	return ActionResponseFrom(res).Print()
 }
 
 type ActionResponse struct {
