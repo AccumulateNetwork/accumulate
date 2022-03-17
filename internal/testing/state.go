@@ -47,7 +47,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*protocol.Envelo
 
 	return NewTransaction().
 		WithPrincipal(recipientAdi).
-		WithSigner(recipientAdi, 1).
+		WithSigner(protocol.FaucetUrl, 1).
 		WithNonce(1).
 		WithBody(deposit).
 		Initiate(protocol.SignatureTypeLegacyED25519, recipient), nil
@@ -90,7 +90,7 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *protocol.Envelop
 
 	env := NewTransaction().
 		WithPrincipal(destAddress).
-		WithSigner(destAddress, 1).
+		WithSigner(protocol.FaucetUrl, 1).
 		WithNonce(1).
 		WithBody(deposit).
 		Initiate(protocol.SignatureTypeLegacyED25519, privateKey)

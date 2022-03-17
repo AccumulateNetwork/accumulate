@@ -45,6 +45,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			env := acctesting.NewTransaction().
 				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
 				WithSigner(protocol.FormatKeyPageUrl(bookUrl, idx), 1).
+				WithNonce(1).
 				WithBody(body).
 				Initiate(protocol.SignatureTypeED25519, testKey)
 

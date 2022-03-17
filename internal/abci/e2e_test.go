@@ -219,6 +219,7 @@ func TestAnchorChain(t *testing.T) {
 		originUrl := protocol.PriceOracleAuthority
 
 		send(newTxn(originUrl).
+			WithSigner(dn.network.ValidatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()))
 	})
@@ -325,6 +326,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		wdt.Recipient = liteDataAddress
 		wdt.Entry = firstEntry
 		send(newTxn("FooBar").
+			WithSigner(url.MustParse("FooBar/book0/1"), 1).
 			WithBody(wdt).
 			Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 	})
@@ -387,6 +389,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = n.ParseUrl("FooBar/oof")
 			send(newTxn("FooBar").
+				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 		})
@@ -417,6 +420,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			cda.KeyBookUrl = n.ParseUrl("acc://FooBar/foo/book1")
 			cda.ManagerKeyBookUrl = n.ParseUrl("acc://FooBar/mgr/book1")
 			send(newTxn("FooBar").
+				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(cda).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 		})
@@ -444,6 +448,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			tac := new(protocol.CreateDataAccount)
 			tac.Url = n.ParseUrl("FooBar/oof")
 			send(newTxn("FooBar").
+				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 		})
@@ -461,6 +466,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			wd.Entry.Data = []byte("thequickbrownfoxjumpsoverthelazydog")
 
 			send(newTxn("FooBar/oof").
+				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(wd).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 		})
@@ -510,6 +516,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
 			send(newTxn("FooBar").
+				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 		})
@@ -543,6 +550,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac.TokenUrl = protocol.AcmeUrl()
 			tac.KeyBookUrl = n.ParseUrl("foo/book1")
 			send(newTxn("FooBar").
+				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 		})
@@ -606,6 +614,7 @@ func TestAdiAccountTx(t *testing.T) {
 		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
 
 		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
@@ -632,6 +641,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 		ac.Recipient = n.ParseUrl("foo/book0/1")
 
 		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithBody(ac).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
@@ -680,6 +690,7 @@ func TestCreateKeyPage(t *testing.T) {
 		})
 
 		send(newTxn("foo/book0").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithBody(cms).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
@@ -710,6 +721,7 @@ func TestCreateKeyBook(t *testing.T) {
 		csg.PublicKeyHash = testKey.PubKey().Bytes()
 
 		send(newTxn("foo").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithBody(csg).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
@@ -748,6 +760,7 @@ func TestAddKeyPage(t *testing.T) {
 		})
 
 		send(newTxn("foo/book1").
+			WithSigner(url.MustParse("foo/book1/1"), 1).
 			WithBody(cms).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey1))
 	})
@@ -780,6 +793,7 @@ func TestAddKey(t *testing.T) {
 		body.NewKey = newKey.PubKey().Bytes()
 
 		send(newTxn("foo/book1/1").
+			WithSigner(url.MustParse("foo/book1/1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey))
 	})
@@ -810,6 +824,7 @@ func TestUpdateKey(t *testing.T) {
 		body.NewKey = newKey.PubKey().Bytes()
 
 		send(newTxn("foo/book1/1").
+			WithSigner(url.MustParse("foo/book1/1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey))
 	})
@@ -839,6 +854,7 @@ func TestRemoveKey(t *testing.T) {
 		body.NewKey = testKey2.PubKey().Bytes()
 
 		send(newTxn("foo/book1/1").
+			WithSigner(url.MustParse("foo/book1/1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey1))
 	})
@@ -909,6 +925,7 @@ func TestSignatorHeight(t *testing.T) {
 		tac.Url = tokenUrl
 		tac.TokenUrl = protocol.AcmeUrl()
 		send(newTxn("foo").
+			WithSigner(protocol.FormatKeyPageUrl(keyBookUrl, 0), 1).
 			WithBody(tac).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
@@ -933,6 +950,7 @@ func TestCreateToken(t *testing.T) {
 		body.Precision = 10
 
 		send(newTxn("foo").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
@@ -960,6 +978,7 @@ func TestIssueTokens(t *testing.T) {
 		body.Amount.SetUint64(123)
 
 		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})

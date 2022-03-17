@@ -133,7 +133,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 
 func getKeyPageIndex(page *url.URL) (uint64, bool) {
 	_, index, ok := protocol.ParseKeyPageUrl(page)
-	return index, ok
+	return index - 1, ok
 }
 
 func didUpdateKeyPage(page *protocol.KeyPage) {

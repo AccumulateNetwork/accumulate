@@ -18,7 +18,11 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 
 	db := database.OpenInMemory(nil)
 
-	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), gtx)
+	batch := db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, testing2.CreateTokenAccount(batch, protocol.FaucetUrl.String(), protocol.ACME, 1e9, true))
+
+	st, err := NewStateManager(batch, protocol.SubnetUrl(t.Name()), gtx)
 	require.NoError(t, err)
 
 	_, err = SyntheticDepositTokens{}.Validate(st, gtx)

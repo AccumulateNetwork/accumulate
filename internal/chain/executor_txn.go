@@ -288,8 +288,11 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	}
 
 	// Verify the transaction's signatures
-	if !env.Verify() {
-		return fmt.Errorf("invalid signature(s)")
+	txid := env.GetTxHash()
+	for i, v := range env.Signatures {
+		if !v.Verify(txid) {
+			return fmt.Errorf("signature %d is invalid", i)
+		}
 	}
 
 	// // TODO Do we need this check? It appears to be causing issues and we can't guarantee that the governor sends transactions only once.

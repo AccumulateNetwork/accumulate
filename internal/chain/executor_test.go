@@ -178,7 +178,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	// Create a synthetic transaction where the origin does not exist
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("acc://account-that-does-not-exist")).
-		WithSigner(network.NodeUrl(), 1).
+		WithSigner(network.ValidatorPage(0), 1).
 		WithNonceTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
 			Cause:  [32]byte{1},

@@ -150,7 +150,7 @@ func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
 			}
 
 			if route == "" {
-				sigRoute = route
+				route = sigRoute
 				continue
 			}
 

@@ -246,6 +246,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
+	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Nonce = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()

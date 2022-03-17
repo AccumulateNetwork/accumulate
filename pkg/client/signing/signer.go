@@ -173,17 +173,11 @@ func (s *Signer) Initiate(txn *protocol.Transaction) (protocol.Signature, error)
 
 func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	fs := protocol.Faucet.Signer()
-	signer := new(Signer)
-	signer.Type = protocol.SignatureTypeLegacyED25519
-	signer.Url = protocol.FaucetUrl
-	signer.Height = 1
-	signer.Timestamp = fs.Nonce()
-
-	sig, err := signer.prepare(true)
-	if err != nil {
-		return nil, err
-	}
-	ed := sig.(*protocol.LegacyED25519Signature)
+	sig := new(protocol.LegacyED25519Signature)
+	sig.Signer = protocol.FaucetUrl
+	sig.SignerHeight = 1
+	sig.Timestamp = fs.Nonce()
+	sig.PublicKey = fs.PublicKey()
 
 	init, err := sig.InitiatorHash()
 	if err != nil {
@@ -191,6 +185,6 @@ func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	}
 
 	txn.Header.Initiator = *(*[32]byte)(init)
-	ed.Signature = fs.Sign(txn.GetHash())
-	return ed, nil
+	sig.Signature = fs.Sign(txn.GetHash())
+	return sig, nil
 }

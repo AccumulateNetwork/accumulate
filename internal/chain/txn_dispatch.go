@@ -105,6 +105,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			err = d.checkError(err)
 			if err != nil {
 				errs <- err
+				return
 			}
 
 			// Parse the results
