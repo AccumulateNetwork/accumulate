@@ -99,7 +99,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			env := acctesting.NewTransaction().
 				WithOrigin(fromUrl).
 				WithKeyPage(0, 1).
-				WithCurrentTimestamp().
+				WithTimestamp(1).
 				WithBody(&protocol.SendTokens{
 					To: []*protocol.TokenRecipient{
 						{Url: toUrl0, Amount: *big.NewInt(1)},

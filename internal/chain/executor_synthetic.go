@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -59,7 +58,13 @@ func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body p
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
-	env.Transaction.Timestamp = uint64(time.Now().Unix())
+	if body.GetType().IsInternal() {
+		// For internal transactions, set the nonce to the height of the next block
+		env.Transaction.Timestamp = uint64(ledgerState.Index) + 1
+		return env, nil
+	}
+
+	env.Transaction.Timestamp = ledgerState.Synthetic.Nonce
 
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++
