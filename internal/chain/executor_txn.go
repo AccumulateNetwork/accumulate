@@ -139,10 +139,13 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 		return fmt.Errorf("no internal data transaction provided")
 	}
 
+	signer := m.Network.ValidatorPage(0)
 	env := new(protocol.Envelope)
 	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Header.Principal = m.Network.NodeUrl()
 	env.Transaction.Body = wd
+	env.Transaction.Header.Initiator = signer.AccountID32()
+	env.Signatures = []protocol.Signature{&protocol.InternalSignature{Network: signer}}
 
 	sw := protocol.SegWitDataEntry{}
 	sw.Cause = *(*[32]byte)(env.GetTxHash())
@@ -354,6 +357,11 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 
 	for _, sig := range env.Signatures {
 		switch sig := sig.(type) {
+		case *protocol.SyntheticSignature:
+			if !m.Network.NodeUrl().Equal(sig.DestinationNetwork) {
+				return fmt.Errorf("destination network %v is not this network", sig.DestinationNetwork)
+			}
+
 		case *protocol.ReceiptSignature:
 			// TODO We should add something so we know which subnet originated
 			// the transaction. That way, the DN can also check receipts.

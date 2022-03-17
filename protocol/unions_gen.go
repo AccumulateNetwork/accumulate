@@ -286,6 +286,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
+	case SignatureTypeInternal:
+		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:

@@ -32,7 +32,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithPrincipalStr("foo").
+		WithPrincipal(url.MustParse("foo")).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithNonce(1).
 		WithBody(body).
@@ -67,7 +67,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithPrincipalStr("foo").
+		WithPrincipal(url.MustParse("foo")).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithNonce(1).
 		WithBody(body).

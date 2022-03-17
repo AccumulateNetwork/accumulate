@@ -10,7 +10,7 @@ import (
 
 type TransactionBuilder struct {
 	*protocol.Envelope
-	signer *signing.Signer
+	signer signing.Signer
 }
 
 func NewTransaction() TransactionBuilder {
@@ -38,16 +38,6 @@ func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) Transac
 func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
 	tb.ensureTxn()
 	tb.Transaction.Header.Principal = origin
-	return tb
-}
-
-func (tb TransactionBuilder) WithPrincipalStr(origin string) TransactionBuilder {
-	originURL, err := url.Parse(origin)
-	if err != nil {
-		panic(err)
-	}
-	tb.ensureTxn()
-	tb.Transaction.Header.Principal = originURL
 	return tb
 }
 

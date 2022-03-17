@@ -95,13 +95,8 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	// Route the request
-	subnet, err := m.Router.Route(req.Origin)
-	if err != nil {
-		return validatorError(err)
-	}
-
 	var envs []*protocol.Envelope
+	var err error
 	if req.IsEnvelope {
 		// Unmarshal all the envelopes
 		envs, err = transactions.UnmarshalAll(payload)
@@ -137,6 +132,12 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		env.Transaction.Header.Metadata = req.Metadata
 		env.Signatures = append(env.Signatures, initSig)
 		envs = append(envs, env)
+	}
+
+	// Route the request
+	subnet, err := m.Router.Route(envs...)
+	if err != nil {
+		return validatorError(err)
 	}
 
 	// Marshal the envelope(s)

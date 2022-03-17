@@ -210,6 +210,13 @@ type InternalSendTransactions struct {
 	Transactions []SendTransaction `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
+// InternalSignature is used when executing transactions internally.
+type InternalSignature struct {
+	fieldsSet []bool
+	// Network is the network that produced the transaction.
+	Network *url.URL `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+}
+
 type InternalSyntheticLedger struct {
 	fieldsSet []bool
 	AccountHeader
@@ -688,6 +695,8 @@ func (*InternalSendTransactions) Type() TransactionType {
 func (*InternalSendTransactions) GetType() TransactionType {
 	return TransactionTypeInternalSendTransactions
 }
+
+func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
 func (*InternalSyntheticLedger) Type() AccountType { return AccountTypeInternalSyntheticLedger }
 
@@ -1188,6 +1197,14 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 		return false
 	}
 	if !(v.ActiveOracle == u.ActiveOracle) {
+		return false
+	}
+
+	return true
+}
+
+func (v *InternalSignature) Equal(u *InternalSignature) bool {
+	if !((v.Network).Equal(u.Network)) {
 		return false
 	}
 
@@ -3160,6 +3177,43 @@ func (v *InternalSendTransactions) IsValid() error {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_InternalSignature = []string{
+	1: "Type",
+	2: "Network",
+}
+
+func (v *InternalSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, SignatureTypeInternal.ID())
+	if !(v.Network == nil) {
+		writer.WriteUrl(2, v.Network)
+	}
+
+	_, _, err := writer.Reset(fieldNames_InternalSignature)
+	return buffer.Bytes(), err
+}
+
+func (v *InternalSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Network is missing")
+	} else if v.Network == nil {
+		errs = append(errs, "field Network is not set")
 	}
 
 	switch len(errs) {
@@ -6280,6 +6334,29 @@ func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *InternalSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ SignatureType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != SignatureTypeInternal {
+		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeInternal, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Network = x
+	}
+
+	seen, err := reader.Reset(fieldNames_InternalSignature)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *InternalSyntheticLedger) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7902,6 +7979,16 @@ func (v *InternalSendTransactions) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *InternalSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    SignatureType `json:"type"`
+		Network *url.URL      `json:"network,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.Network
+	return json.Marshal(&u)
+}
+
 func (v *InternalSyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type           AccountType             `json:"type"`
@@ -9110,6 +9197,20 @@ func (v *InternalSendTransactions) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Transactions = u.Transactions
+	return nil
+}
+
+func (v *InternalSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    SignatureType `json:"type"`
+		Network *url.URL      `json:"network,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.Network
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Network = u.Network
 	return nil
 }
 

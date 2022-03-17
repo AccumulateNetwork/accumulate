@@ -66,7 +66,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 	if s.Url == nil {
 		errs = append(errs, "missing signer")
 	}
-	if s.PrivateKey != nil {
+	if len(s.PrivateKey) == 0 {
 		errs = append(errs, "missing private key")
 	}
 	if init && s.Height == 0 {

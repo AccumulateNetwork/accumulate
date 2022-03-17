@@ -128,6 +128,15 @@ SyntheticSignature:
       description: is the sequence number of the transaction
       type: uint
 
+InternalSignature:
+  kind: signature
+  description: is used when executing transactions internally
+  fields:
+    - name: Network
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
+
 ##### User #####
 
 CreateIdentity:

@@ -29,6 +29,11 @@ func (n *Network) ValidatorBook() *url.URL {
 	return n.NodeUrl(protocol.ValidatorBook)
 }
 
+// ValidatorPage returns the URL of the page of the subnet's validator key book.
+func (n *Network) ValidatorPage(index uint64) *url.URL {
+	return protocol.FormatKeyPageUrl(n.ValidatorBook(), index)
+}
+
 // AnchorPool returns the URL of the subnet's anchor pool.
 func (n *Network) AnchorPool() *url.URL {
 	return n.NodeUrl(protocol.AnchorPool)

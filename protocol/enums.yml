@@ -45,6 +45,9 @@ SignatureType:
   Synthetic:
     value: 5
     description: is used when sending synthetic transactions
+  Internal:
+    value: 6
+    description: is used when executing transactions internally
 
 KeyPageOperation:
   Unknown:

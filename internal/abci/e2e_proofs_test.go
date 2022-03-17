@@ -53,6 +53,7 @@ func TestProofADI(t *testing.T) {
 		tac.TokenUrl = protocol.AcmeUrl()
 		send(newTxn("RoadRunner").
 			WithBody(tac).
+			WithSigner(url.MustParse("RoadRunner/book0/1"), 1).
 			Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 	})
 
