@@ -24,10 +24,11 @@ type ChainIdQuery struct {
 }
 
 type ChainQueryResponse struct {
-	Type      string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MainChain *MerkleState `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
-	Data      interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	ChainId   []byte       `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	Type      string             `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain *MerkleState       `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Chains    []query.ChainState `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Data      interface{}        `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ChainId   []byte             `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
 type DataEntry struct {
@@ -432,15 +433,17 @@ func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        string       `json:"type,omitempty"`
-		MainChain   *MerkleState `json:"mainChain,omitempty"`
-		MerkleState *MerkleState `json:"merkleState,omitempty"`
-		Data        interface{}  `json:"data,omitempty"`
-		ChainId     *string      `json:"chainId,omitempty"`
+		Type        string             `json:"type,omitempty"`
+		MainChain   *MerkleState       `json:"mainChain,omitempty"`
+		MerkleState *MerkleState       `json:"merkleState,omitempty"`
+		Chains      []query.ChainState `json:"chains,omitempty"`
+		Data        interface{}        `json:"data,omitempty"`
+		ChainId     *string            `json:"chainId,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
+	u.Chains = v.Chains
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
@@ -786,15 +789,17 @@ func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 
 func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        string       `json:"type,omitempty"`
-		MainChain   *MerkleState `json:"mainChain,omitempty"`
-		MerkleState *MerkleState `json:"merkleState,omitempty"`
-		Data        interface{}  `json:"data,omitempty"`
-		ChainId     *string      `json:"chainId,omitempty"`
+		Type        string             `json:"type,omitempty"`
+		MainChain   *MerkleState       `json:"mainChain,omitempty"`
+		MerkleState *MerkleState       `json:"merkleState,omitempty"`
+		Chains      []query.ChainState `json:"chains,omitempty"`
+		Data        interface{}        `json:"data,omitempty"`
+		ChainId     *string            `json:"chainId,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
+	u.Chains = v.Chains
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -806,6 +811,7 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.MainChain = u.MerkleState
 	}
+	v.Chains = u.Chains
 	if x, err := encoding.AnyFromJSON(u.Data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {

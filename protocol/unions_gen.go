@@ -133,6 +133,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AcmeFaucet), nil
 	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
+	case TransactionTypeAddValidator:
+		return new(AddValidator), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -159,6 +161,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeRemoveManager:
 		return new(RemoveManager), nil
+	case TransactionTypeRemoveValidator:
+		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
@@ -183,6 +187,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(UpdateKeyPage), nil
 	case TransactionTypeUpdateManager:
 		return new(UpdateManager), nil
+	case TransactionTypeUpdateValidatorKey:
+		return new(UpdateValidatorKey), nil
 	case TransactionTypeWriteData:
 		return new(WriteData), nil
 	case TransactionTypeWriteDataTo:

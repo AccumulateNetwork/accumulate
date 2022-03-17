@@ -347,14 +347,14 @@ func (g *governor) sendMirror(batch *database.Batch) {
 	}
 	mirror.Objects = append(mirror.Objects, rec)
 
-	md, err := loadDirectoryMetadata(batch, nodeUrl.AccountID())
+	md, err := loadDirectoryMetadata(batch, nodeUrl)
 	if err != nil {
 		g.logger.Error("Failed to load directory", "error", err, "url", nodeUrl)
 		return
 	}
 
 	for i := uint64(0); i < md.Count; i++ {
-		s, err := loadDirectoryEntry(batch, nodeUrl.AccountID(), i)
+		s, err := loadDirectoryEntry(batch, nodeUrl, i)
 		if err != nil {
 			g.logger.Error("Failed to load directory entry", "error", err, "url", nodeUrl, "index", i)
 			return

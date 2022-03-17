@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	randpkg "golang.org/x/exp/rand"
 )
 
@@ -469,7 +470,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		// Test getting the data by URL
-		rde := new(protocol.ResponseDataEntry)
+		rde := new(query.ResponseDataEntry)
 		n.QueryAccountAs("FooBar/oof#data", rde)
 
 		if !rde.Entry.Equal(&wd.Entry) {
@@ -477,7 +478,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry hash.
-		rde2 := new(protocol.ResponseDataEntry)
+		rde2 := new(query.ResponseDataEntry)
 		n.QueryAccountAs(fmt.Sprintf("FooBar/oof#data/%X", wd.Entry.Hash()), rde2)
 
 		if !rde.Entry.Equal(&rde2.Entry) {
@@ -485,7 +486,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry set
-		rde3 := new(protocol.ResponseDataEntrySet)
+		rde3 := new(query.ResponseDataEntrySet)
 		n.QueryAccountAs("FooBar/oof#data/0:1", rde3)
 		if !rde.Entry.Equal(&rde3.DataEntries[0].Entry) {
 			t.Fatalf("data query does not match what was entered")
@@ -1042,19 +1043,18 @@ func TestUpdateValidators(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
 
+	netUrl := n.network.NodeUrl()
 	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	validators := protocol.FormatKeyPageUrl(n.network.NodeUrl(protocol.ValidatorBook), 0)
 
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 
 	// Add a validator
 	n.Batch(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = nodeKey1.PubKey().Bytes()
+		body := new(protocol.AddValidator)
+		body.Key = nodeKey1.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 1).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
@@ -1065,12 +1065,11 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Update a validator
 	n.Batch(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationUpdate
-		body.Key = nodeKey1.PubKey().Bytes()
+		body := new(protocol.UpdateValidatorKey)
+		body.OldKey = nodeKey1.PubKey().Bytes()
 		body.NewKey = nodeKey2.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 2).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
@@ -1081,11 +1080,10 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Remove a validator
 	n.Batch(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationRemove
+		body := new(protocol.RemoveValidator)
 		body.Key = nodeKey2.PubKey().Bytes()
 
-		send(newTxn(validators.String()).
+		send(newTxn(netUrl.String()).
 			WithKeyPage(0, 3).
 			WithBody(body).
 			SignLegacyED25519(n.key.Bytes()))
