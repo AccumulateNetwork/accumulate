@@ -194,6 +194,10 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
+		newKey, err = resolvePublicKey(args[0])
+		if err != nil {
+			return "", err
+		}
 		ukp.Operation = &protocol.AddKeyOperation{
 			Entry: protocol.KeySpecParams{PublicKey: newKey},
 		}

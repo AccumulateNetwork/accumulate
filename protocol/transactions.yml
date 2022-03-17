@@ -562,6 +562,7 @@ KeySpecParams:
     - name: Owner
       type: url
       pointer: true
+      optional: true
 
 AnchoredRecord:
   fields:

@@ -269,7 +269,7 @@ type KeySpec struct {
 type KeySpecParams struct {
 	fieldsSet []bool
 	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
 }
 
 type LegacyED25519Signature struct {
@@ -4055,11 +4055,6 @@ func (v *KeySpecParams) IsValid() error {
 		errs = append(errs, "field PublicKey is missing")
 	} else if len(v.PublicKey) == 0 {
 		errs = append(errs, "field PublicKey is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Owner is missing")
-	} else if v.Owner == nil {
-		errs = append(errs, "field Owner is not set")
 	}
 
 	switch len(errs) {
