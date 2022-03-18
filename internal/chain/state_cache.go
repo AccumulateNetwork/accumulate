@@ -58,54 +58,59 @@ func (c *stateCache) Commit() ([]protocol.Account, error) {
 	return create, nil
 }
 
-func (c *stateCache) load(id [32]byte, r *database.Account) (protocol.Account, error) {
-	st, ok := c.chains[id]
+func (c *stateCache) load(account *url.URL) (protocol.Account, error) {
+	st, ok := c.chains[account.AccountID32()]
 	if ok {
 		return st, nil
 	}
 
-	st, err := r.GetState()
+	st, err := c.batch.Account(account).GetState()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load %v: get state: %w", account, err)
 	}
 
 	if c.chains == nil {
 		c.chains = map[[32]byte]protocol.Account{}
 	}
-	c.chains[id] = st
+	c.chains[account.AccountID32()] = st
 	return st, nil
 }
 
-func (c *stateCache) loadAs(id [32]byte, r *database.Account, v interface{}) (err error) {
-	state, err := c.load(id, r)
+func (c *stateCache) loadAs(account *url.URL, target interface{}) (err error) {
+	state, err := c.load(account)
 	if err != nil {
 		return err
 	}
 
-	rv := reflect.ValueOf(v)
-	rr := reflect.ValueOf(state)
-	if !rr.Type().AssignableTo(rv.Type()) {
-		return fmt.Errorf("want %T, got %T", v, state)
+	rstate := reflect.ValueOf(state)
+	rtarget := reflect.ValueOf(target).Elem()
+	switch {
+	case rstate.Type().AssignableTo(rtarget.Type()):
+		// OK
+	case rstate.Type().Elem().AssignableTo(rtarget.Type()):
+		rstate = rstate.Elem()
+	default:
+		return fmt.Errorf("load %v: cannot assign %T to %v", account, state, rtarget.Type())
 	}
 
 	// Catch reflection panic
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("failed to load chain: unable to write to %T", v)
+			err = fmt.Errorf("load %v: unable to write to %T", account, target)
 		}
 	}()
-	rv.Elem().Set(rr.Elem())
+	rtarget.Set(rstate)
 	return nil
 }
 
 // LoadUrl loads a chain by URL and unmarshals it.
 func (c *stateCache) LoadUrl(u *url.URL) (protocol.Account, error) {
-	return c.load(u.AccountID32(), c.batch.Account(u))
+	return c.load(u)
 }
 
 // LoadUrlAs loads a chain by URL and unmarshals it as a specific type.
 func (c *stateCache) LoadUrlAs(u *url.URL, v interface{}) error {
-	return c.loadAs(u.AccountID32(), c.batch.Account(u), v)
+	return c.loadAs(u, v)
 }
 
 // ReadChain loads an account's chain by URL and name.
@@ -124,14 +129,13 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 }
 
 // LoadTxn loads and unmarshals a saved transaction
-func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
-	return c.batch.Transaction(txid[:]).Get()
+func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
+	return c.batch.Transaction(txid[:]).GetState()
 }
 
-// TxnExists checks if the transaction already exists
-func (c *stateCache) TxnExists(txid []byte) bool {
-	_, err := c.batch.Transaction(txid).GetStatus()
-	return err == nil
+// LoadSignatures loads and unmarshals a transaction's signatures
+func (c *stateCache) LoadSignatures(txid [32]byte) (*database.SignatureSet, error) {
+	return c.batch.Transaction(txid[:]).GetSignatures()
 }
 
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {

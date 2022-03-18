@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/rand"
@@ -54,14 +53,4 @@ func (s *Suite) generateKey() ed25519.PrivateKey {
 
 func (s *Suite) generateTmKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(s.generateKey())
-}
-
-func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body protocol.TransactionBody) *protocol.Envelope {
-	s.T().Helper()
-	return testing.NewTransaction().
-		WithOrigin(sponsor).
-		WithKeyPage(0, s.dut.GetRecordHeight(sponsor.String())).
-		WithNonce(nonce).
-		WithBody(body).
-		SignLegacyED25519(key)
 }
