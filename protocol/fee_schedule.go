@@ -104,6 +104,7 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		// TODO Fee schedule for these transactions
 		return 0, nil
 	case TransactionTypeSignPending:
+
 		return FeeSignature, nil
 	default:
 		// All user transactions must have a defined fee amount, even if it's zero
@@ -172,4 +173,8 @@ func ComputeTransactionFee(tx *Envelope) (Fee, error) {
 
 	// Charge an extra data fee per 256 B past the initial 256 B
 	return fee + FeeWriteData*Fee(count-1), nil
+}
+
+func IsSignPending(typ TransactionType) bool {
+	return typ == TransactionTypeSignPending
 }
