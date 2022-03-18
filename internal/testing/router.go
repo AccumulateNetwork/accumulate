@@ -7,6 +7,7 @@ import (
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -14,7 +15,11 @@ type NullRouter struct{}
 
 var _ routing.Router = NullRouter{}
 
-func (NullRouter) Route(account *url.URL) (string, error) {
+func (NullRouter) RouteAccount(*url.URL) (string, error) {
+	return "", nil
+}
+
+func (NullRouter) Route(...*protocol.Envelope) (string, error) {
 	return "", nil
 }
 

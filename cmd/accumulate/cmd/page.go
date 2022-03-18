@@ -108,7 +108,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(bookUrl, args)
+	args, signer, err := prepareSigner(bookUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -138,7 +138,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	res, err := dispatchTxRequest("create-key-page", &ckp, nil, bookUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-page", &ckp, nil, bookUrl, signer)
 	if err != nil {
 		return "", err
 	}
@@ -163,7 +163,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -208,7 +208,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	ukp.Key = oldKey[:]
 	ukp.NewKey = newKey[:]
 
-	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, si, privKey)
+	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
