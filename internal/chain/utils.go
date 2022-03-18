@@ -254,13 +254,13 @@ func countExceptAnchors2(txns []*protocol.Transaction) int {
 	return count
 }
 
-func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, resp *query.ResponseByTxId) error {
+func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, signatures []protocol.Signature, resp *query.ResponseByTxId) error {
 	// If it's not pending, don't bother
 	if !status.Pending {
 		return nil
 	}
 
-	origin, err := batch.Account(header.Origin).GetState()
+	origin, err := batch.Account(header.Principal).GetState()
 	if err != nil {
 		return err
 	}
@@ -282,20 +282,15 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 		}
 	}
 
-	// Sanity check
-	if header.KeyPageIndex >= keyBook.PageCount {
-		return fmt.Errorf("invalid transaction: book has %d pages, transaction specifies page %d", keyBook.PageCount, header.KeyPageIndex)
-	}
-
 	// Read the page's main chain
-	pageAcnt := batch.Account(protocol.FormatKeyPageUrl(keyBook.Url, header.KeyPageIndex))
+	pageAcnt := batch.Account(signatures[0].GetSigner())
 	pageChain, err := pageAcnt.ReadChain(protocol.MainChain)
 	if err != nil {
-		return fmt.Errorf("failed to load main chain of key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
+		return fmt.Errorf("failed to load main chain of %v: %v", signatures[0].GetSigner(), err)
 	}
 
 	// If height no longer matches, the transaction is invalidated
-	if header.KeyPageHeight != uint64(pageChain.Height()) {
+	if signatures[0].GetSignerHeight() != uint64(pageChain.Height()) {
 		resp.Invalidated = true
 		return nil
 	}
@@ -304,7 +299,7 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	keyPage := new(protocol.KeyPage)
 	err = pageAcnt.GetStateAs(keyPage)
 	if err != nil {
-		return fmt.Errorf("failed to load key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
+		return fmt.Errorf("failed to load %v: %v", signatures[0].GetSigner(), err)
 	}
 
 	// Set the threshold
