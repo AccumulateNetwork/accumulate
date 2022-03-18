@@ -91,16 +91,16 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 		switch len(fragment) {
 		case 2:
-			start, end, err := parseRange(qv)
+			start, count, err := parseRange(qv)
 			if err != nil {
 				return nil, nil, err
 			}
 
 			res := new(query.ResponseChainRange)
 			res.Start = start
-			res.End = end
+			res.End = start + count
 			res.Total = chain.Height()
-			res.Entries, err = chain.Entries(start, end)
+			res.Entries, err = chain.Entries(start, start+count)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
 			}
@@ -128,15 +128,16 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("chain-entry"), res, nil
 		}
 
-	case "tx", "txn", "transaction":
+	case "tx", "txn", "transaction", "signature":
+		chainName := chainNameFor(fragment[0])
 		switch len(fragment) {
 		case 1:
-			start, end, err := parseRange(qv)
+			start, count, err := parseRange(qv)
 			if err != nil {
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.MainChain)
+			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), protocol.MainChain)
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -144,7 +145,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Account(u).ReadChain(protocol.MainChain)
+			chain, err := batch.Account(u).ReadChain(chainName)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -193,13 +194,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.PendingChain)
+				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.SignatureChain)
 				if perr != nil {
 					return nil, nil, perr
 				}
 				return []byte("tx-history"), txns, nil
 			} else {
-				chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
+				chain, err := batch.Account(u).ReadChain(protocol.SignatureChain)
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 				}
@@ -318,8 +319,16 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
-func parseRange(qv url.Values) (start, end int64, err error) {
-	if s := qv.Get("from"); s != "" {
+func chainNameFor(entity string) string {
+	switch entity {
+	case "signature":
+		return protocol.SignatureChain
+	}
+	return protocol.MainChain
+}
+
+func parseRange(qv url.Values) (start, count int64, err error) {
+	if s := qv.Get("start"); s != "" {
 		start, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			return 0, 0, fmt.Errorf("invalid start: %v", err)
@@ -328,16 +337,16 @@ func parseRange(qv url.Values) (start, end int64, err error) {
 		start = 0
 	}
 
-	if s := qv.Get("from"); s != "" {
-		end, err = strconv.ParseInt(s, 10, 64)
+	if s := qv.Get("count"); s != "" {
+		count, err = strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			return 0, 0, fmt.Errorf("invalid end: %v", err)
+			return 0, 0, fmt.Errorf("invalid count: %v", err)
 		}
 	} else {
-		end = 10
+		count = 10
 	}
 
-	return start, end, nil
+	return start, count, nil
 }
 
 func getChainEntry(chain *database.Chain, s string) (int64, []byte, error) {
