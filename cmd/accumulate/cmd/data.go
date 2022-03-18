@@ -336,6 +336,9 @@ func WriteData(accountUrl string, args []string) (string, error) {
 
 func prepareData(args []string, isFirstLiteEntry bool) *protocol.DataEntry {
 	entry := new(protocol.DataEntry)
+	if isFirstLiteEntry {
+		entry.Data = append(entry.Data, []byte{})
+	}
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
 
@@ -348,11 +351,12 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.DataEntry {
 			//clip the padding
 			data = data[:n]
 		}
-		if i == len(args)-1 && !isFirstLiteEntry {
-			entry.Data = data
-		} else {
-			entry.ExtIds = append(entry.ExtIds, data)
-		}
+		//if i == 0 && !isFirstLiteEntry {
+		//	//if i == len(args)-1 && !isFirstLiteEntry {
+		//	entry.Data = append(entry.Data, data)
+		//} else {
+		entry.Data = append(entry.Data, data)
+		//}
 	}
 	return entry
 }
@@ -399,7 +403,10 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	lda := protocol.LiteDataAccount{}
 	q, err := GetUrl(wd.Recipient.String())
 	if err == nil {
-		Remarshal(q.Data, &lda)
+		err = Remarshal(q.Data, &lda)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	lde := protocol.LiteDataEntry{}

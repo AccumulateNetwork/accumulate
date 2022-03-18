@@ -68,13 +68,10 @@ IndexEntry:
 
 DataEntry:
   fields:
-    - name: ExtIds
-      optional: true
+    - name: Data
+      optional: false
       repeatable: true
       type: bytes
-    - name: Data
-      type: bytes
-      optional: true
 
 DirectoryIndexMetadata:
   fields:

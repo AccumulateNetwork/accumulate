@@ -472,7 +472,6 @@ func responseDataSetFromProto(protoDataSet *query.ResponseDataEntrySet, paginati
 		de := DataEntryQueryResponse{}
 		de.EntryHash = entry.EntryHash
 		de.Entry.Data = entry.Entry.Data
-		de.Entry.ExtIds = entry.Entry.ExtIds
 		respDataSet.Items = append(respDataSet.Items, &de)
 	}
 	return respDataSet, nil

@@ -9,8 +9,10 @@ import (
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#chainid
 func ComputeLiteDataAccountId(firstEntry *DataEntry) []byte {
 	hash := sha256.New()
-	for _, id := range firstEntry.ExtIds {
-		idSum := sha256.Sum256(id)
+
+	n := len(firstEntry.Data)
+	for i := 1; i < n; i++ {
+		idSum := sha256.Sum256(firstEntry.Data[i])
 		hash.Write(idSum[:])
 	}
 

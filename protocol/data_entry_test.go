@@ -8,9 +8,9 @@ import (
 func TestDataEntry(t *testing.T) {
 	de := DataEntry{}
 
-	de.Data = []byte("test data entry")
+	de.Data = append(de.Data, []byte("test data entry"))
 	for i := 0; i < 10; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
 	expectedHash := "b617fafc3f7144c34a2e892a89841368bb32c92fc810226f95fdcd15e2dc0d37"
@@ -27,9 +27,11 @@ func TestDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
 	}
 
+	de.Data = nil
+	de.Data = append(de.Data, []byte("test data entry"))
 	//now make the data entry larger and compute cost
 	for i := 0; i < 100; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
 	cost, err = de.Cost()
@@ -42,9 +44,11 @@ func TestDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 50 credits, but computed %d", cost)
 	}
 
+	de.Data = nil
+	de.Data = append(de.Data, []byte("test data entry"))
 	//now let's blow up the size of the entry to > 10kB to make sure it fails.
 	for i := 0; i < 1000; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
 	//now the size of the entry is 10878 bytes, so the cost should fail.
