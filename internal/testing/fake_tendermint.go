@@ -441,6 +441,15 @@ func (c *FakeTendermint) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*ct
 
 func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
 	st := c.SubmitTx(ctx, tx, true)
+	if st == nil {
+		h := sha256.Sum256(tx)
+		return &ctypes.ResultBroadcastTx{
+			Code: uint32(protocol.ErrorCodeUnknownError),
+			Log:  "An unknown error occured",
+			Hash: h[:],
+		}, nil
+	}
+
 	return &ctypes.ResultBroadcastTx{
 		Code:         st.CheckResult.Code,
 		Data:         st.CheckResult.Data,
