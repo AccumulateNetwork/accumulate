@@ -22,15 +22,12 @@ Envelope:
 
 TransactionHeader:
   fields:
-    - name: Origin
+    - name: Principal
       type: url
       pointer: true
-    - name: KeyPageHeight
-      type: uvarint
-    - name: KeyPageIndex
-      type: uvarint
-    - name: Nonce
-      type: uvarint
+      alternative: Origin
+    - name: Initiator
+      type: chain
     - name: Memo
       type: string
       optional: true
@@ -39,9 +36,10 @@ TransactionHeader:
       optional: true
 
 Transaction:
-  embeddings:
-    - TransactionHeader
   fields:
+    - name: Header
+      type: TransactionHeader
+      marshal-as: reference
     - name: Body
       type: TransactionBody
       unmarshal-with: UnmarshalTransaction
@@ -54,35 +52,90 @@ Transaction:
 LegacyED25519Signature:
   kind: signature
   fields:
-    - name: Nonce
+    - name: privateKey
+      type: bytes
+      marshal-as: none
+    - name: Timestamp
       type: uint
+      alternative: Nonce
     - name: PublicKey
       type: bytes
     - name: Signature
       type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerHeight # TODO Rename to SignerVersion
+      type: uint
 
 RCD1Signature:
   kind: signature
   fields:
+    - name: privateKey
+      type: bytes
+      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
       type: bytes
-
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerHeight # TODO Rename to SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
 
 ED25519Signature:
   kind: signature
   fields:
+    - name: privateKey
+      type: bytes
+      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
       type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerHeight # TODO Rename to SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
 
 ReceiptSignature:
   kind: signature
   embeddings:
   - Receipt
   fields: []
+
+SyntheticSignature:
+  kind: signature
+  description: is used to initiate transactions between BVNs
+  fields:
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
+    - name: DestinationNetwork
+      description: is the network that the transaction is sent to
+      type: url
+      pointer: true
+    - name: SequenceNumber
+      description: is the sequence number of the transaction
+      type: uint
+
+InternalSignature:
+  kind: signature
+  description: is used when executing transactions internally
+  fields:
+    - name: Network
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
 
 ##### User #####
 

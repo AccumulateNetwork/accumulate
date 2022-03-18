@@ -42,6 +42,12 @@ SignatureType:
   Receipt:
     value: 4
     description: represents a Merkle tree receipt
+  Synthetic:
+    value: 5
+    description: is used when sending synthetic transactions
+  Internal:
+    value: 6
+    description: is used when executing transactions internally
 
 KeyPageOperation:
   Unknown:

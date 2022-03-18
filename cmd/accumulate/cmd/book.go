@@ -96,7 +96,7 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 	originKeyName := args[0]
 
-	args, si, privKey, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -124,7 +124,7 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 	keyBook.PublicKeyHash = publicKeyHash
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}

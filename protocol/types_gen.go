@@ -157,9 +157,13 @@ type DirectoryIndexMetadata struct {
 }
 
 type ED25519Signature struct {
-	fieldsSet []bool
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	fieldsSet    []bool
+	privateKey   []byte
+	PublicKey    []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature    []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer       *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerHeight uint64   `json:"signerHeight,omitempty" form:"signerHeight" query:"signerHeight" validate:"required"`
+	Timestamp    uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 }
 
 type EmptyResult struct {
@@ -204,6 +208,13 @@ type InternalLedger struct {
 type InternalSendTransactions struct {
 	fieldsSet    []bool
 	Transactions []SendTransaction `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+}
+
+// InternalSignature is used when executing transactions internally.
+type InternalSignature struct {
+	fieldsSet []bool
+	// Network is the network that produced the transaction.
+	Network *url.URL `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 }
 
 type InternalSyntheticLedger struct {
@@ -255,10 +266,13 @@ type KeySpecParams struct {
 }
 
 type LegacyED25519Signature struct {
-	fieldsSet []bool
-	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	fieldsSet    []bool
+	privateKey   []byte
+	Timestamp    uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	PublicKey    []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature    []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer       *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerHeight uint64   `json:"signerHeight,omitempty" form:"signerHeight" query:"signerHeight" validate:"required"`
 }
 
 type LiteDataAccount struct {
@@ -305,9 +319,13 @@ type ObjectMetadata struct {
 }
 
 type RCD1Signature struct {
-	fieldsSet []bool
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	fieldsSet    []bool
+	privateKey   []byte
+	PublicKey    []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature    []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer       *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerHeight uint64   `json:"signerHeight,omitempty" form:"signerHeight" query:"signerHeight" validate:"required"`
+	Timestamp    uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 }
 
 type Receipt struct {
@@ -434,6 +452,17 @@ type SyntheticMirror struct {
 	Objects   []AnchoredRecord `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
 }
 
+// SyntheticSignature is used to initiate transactions between BVNs.
+type SyntheticSignature struct {
+	fieldsSet []bool
+	// SourceNetwork is the network that produced the transaction.
+	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
+	// DestinationNetwork is the network that the transaction is sent to.
+	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
+	// SequenceNumber is the sequence number of the transaction.
+	SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+}
+
 type SyntheticWriteData struct {
 	fieldsSet []bool
 	Cause     [32]byte  `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
@@ -466,19 +495,17 @@ type TokenRecipient struct {
 
 type Transaction struct {
 	fieldsSet []bool
-	TransactionHeader
-	Body TransactionBody `json:"body,omitempty" form:"body" query:"body" validate:"required"`
-	hash []byte
+	Header    TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
+	Body      TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	hash      []byte
 }
 
 type TransactionHeader struct {
-	fieldsSet     []bool
-	Origin        *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	KeyPageHeight uint64   `json:"keyPageHeight,omitempty" form:"keyPageHeight" query:"keyPageHeight" validate:"required"`
-	KeyPageIndex  uint64   `json:"keyPageIndex,omitempty" form:"keyPageIndex" query:"keyPageIndex" validate:"required"`
-	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Memo          string   `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata      []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	fieldsSet []bool
+	Principal *url.URL `json:"principal,omitempty" form:"principal" query:"principal" validate:"required"`
+	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
+	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TransactionSignature struct {
@@ -669,6 +696,8 @@ func (*InternalSendTransactions) GetType() TransactionType {
 	return TransactionTypeInternalSendTransactions
 }
 
+func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
+
 func (*InternalSyntheticLedger) Type() AccountType { return AccountTypeInternalSyntheticLedger }
 
 func (*InternalSyntheticLedger) GetType() AccountType { return AccountTypeInternalSyntheticLedger }
@@ -766,6 +795,8 @@ func (*SyntheticDepositTokens) GetType() TransactionType {
 func (*SyntheticMirror) Type() TransactionType { return TransactionTypeSyntheticMirror }
 
 func (*SyntheticMirror) GetType() TransactionType { return TransactionTypeSyntheticMirror }
+
+func (*SyntheticSignature) Type() SignatureType { return SignatureTypeSynthetic }
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
@@ -1090,6 +1121,15 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	if !(bytes.Equal(v.Signature, u.Signature)) {
 		return false
 	}
+	if !((v.Signer).Equal(u.Signer)) {
+		return false
+	}
+	if !(v.SignerHeight == u.SignerHeight) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
 
 	return true
 }
@@ -1157,6 +1197,14 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 		return false
 	}
 	if !(v.ActiveOracle == u.ActiveOracle) {
+		return false
+	}
+
+	return true
+}
+
+func (v *InternalSignature) Equal(u *InternalSignature) bool {
+	if !((v.Network).Equal(u.Network)) {
 		return false
 	}
 
@@ -1272,13 +1320,19 @@ func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
 }
 
 func (v *LegacyED25519Signature) Equal(u *LegacyED25519Signature) bool {
-	if !(v.Nonce == u.Nonce) {
+	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
 	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	if !((v.Signer).Equal(u.Signer)) {
+		return false
+	}
+	if !(v.SignerHeight == u.SignerHeight) {
 		return false
 	}
 
@@ -1375,6 +1429,15 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	if !((v.Signer).Equal(u.Signer)) {
+		return false
+	}
+	if !(v.SignerHeight == u.SignerHeight) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 
@@ -1616,6 +1679,20 @@ func (v *SyntheticMirror) Equal(u *SyntheticMirror) bool {
 	return true
 }
 
+func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
+	if !((v.SourceNetwork).Equal(u.SourceNetwork)) {
+		return false
+	}
+	if !((v.DestinationNetwork).Equal(u.DestinationNetwork)) {
+		return false
+	}
+	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
 	if !(v.Cause == u.Cause) {
 		return false
@@ -1679,7 +1756,7 @@ func (v *TokenRecipient) Equal(u *TokenRecipient) bool {
 }
 
 func (v *Transaction) Equal(u *Transaction) bool {
-	if !v.TransactionHeader.Equal(&u.TransactionHeader) {
+	if !((&v.Header).Equal(&u.Header)) {
 		return false
 	}
 	if !(v.Body == u.Body) {
@@ -1690,16 +1767,10 @@ func (v *Transaction) Equal(u *Transaction) bool {
 }
 
 func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
-	if !((v.Origin).Equal(u.Origin)) {
+	if !((v.Principal).Equal(u.Principal)) {
 		return false
 	}
-	if !(v.KeyPageHeight == u.KeyPageHeight) {
-		return false
-	}
-	if !(v.KeyPageIndex == u.KeyPageIndex) {
-		return false
-	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.Initiator == u.Initiator) {
 		return false
 	}
 	if !(v.Memo == u.Memo) {
@@ -2776,6 +2847,9 @@ var fieldNames_ED25519Signature = []string{
 	1: "Type",
 	2: "PublicKey",
 	3: "Signature",
+	4: "Signer",
+	5: "SignerHeight",
+	6: "Timestamp",
 }
 
 func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
@@ -2788,6 +2862,15 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerHeight == 0) {
+		writer.WriteUint(5, v.SignerHeight)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ED25519Signature)
@@ -2806,6 +2889,16 @@ func (v *ED25519Signature) IsValid() error {
 		errs = append(errs, "field Signature is missing")
 	} else if len(v.Signature) == 0 {
 		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SignerHeight is missing")
+	} else if v.SignerHeight == 0 {
+		errs = append(errs, "field SignerHeight is not set")
 	}
 
 	switch len(errs) {
@@ -3084,6 +3177,43 @@ func (v *InternalSendTransactions) IsValid() error {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_InternalSignature = []string{
+	1: "Type",
+	2: "Network",
+}
+
+func (v *InternalSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, SignatureTypeInternal.ID())
+	if !(v.Network == nil) {
+		writer.WriteUrl(2, v.Network)
+	}
+
+	_, _, err := writer.Reset(fieldNames_InternalSignature)
+	return buffer.Bytes(), err
+}
+
+func (v *InternalSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Network is missing")
+	} else if v.Network == nil {
+		errs = append(errs, "field Network is not set")
 	}
 
 	switch len(errs) {
@@ -3458,9 +3588,11 @@ func (v *KeySpecParams) IsValid() error {
 
 var fieldNames_LegacyED25519Signature = []string{
 	1: "Type",
-	2: "Nonce",
+	2: "Timestamp",
 	3: "PublicKey",
 	4: "Signature",
+	5: "Signer",
+	6: "SignerHeight",
 }
 
 func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
@@ -3468,14 +3600,20 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, SignatureTypeLegacyED25519.ID())
-	if !(v.Nonce == 0) {
-		writer.WriteUint(2, v.Nonce)
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(2, v.Timestamp)
 	}
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(3, v.PublicKey)
 	}
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(4, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(5, v.Signer)
+	}
+	if !(v.SignerHeight == 0) {
+		writer.WriteUint(6, v.SignerHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LegacyED25519Signature)
@@ -3486,9 +3624,9 @@ func (v *LegacyED25519Signature) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field Timestamp is missing")
+	} else if v.Timestamp == 0 {
+		errs = append(errs, "field Timestamp is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field PublicKey is missing")
@@ -3499,6 +3637,16 @@ func (v *LegacyED25519Signature) IsValid() error {
 		errs = append(errs, "field Signature is missing")
 	} else if len(v.Signature) == 0 {
 		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field SignerHeight is missing")
+	} else if v.SignerHeight == 0 {
+		errs = append(errs, "field SignerHeight is not set")
 	}
 
 	switch len(errs) {
@@ -3804,6 +3952,9 @@ var fieldNames_RCD1Signature = []string{
 	1: "Type",
 	2: "PublicKey",
 	3: "Signature",
+	4: "Signer",
+	5: "SignerHeight",
+	6: "Timestamp",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -3816,6 +3967,15 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerHeight == 0) {
+		writer.WriteUint(5, v.SignerHeight)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
@@ -3834,6 +3994,16 @@ func (v *RCD1Signature) IsValid() error {
 		errs = append(errs, "field Signature is missing")
 	} else if len(v.Signature) == 0 {
 		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SignerHeight is missing")
+	} else if v.SignerHeight == 0 {
+		errs = append(errs, "field SignerHeight is not set")
 	}
 
 	switch len(errs) {
@@ -4683,6 +4853,61 @@ func (v *SyntheticMirror) IsValid() error {
 	}
 }
 
+var fieldNames_SyntheticSignature = []string{
+	1: "Type",
+	2: "SourceNetwork",
+	3: "DestinationNetwork",
+	4: "SequenceNumber",
+}
+
+func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, SignatureTypeSynthetic.ID())
+	if !(v.SourceNetwork == nil) {
+		writer.WriteUrl(2, v.SourceNetwork)
+	}
+	if !(v.DestinationNetwork == nil) {
+		writer.WriteUrl(3, v.DestinationNetwork)
+	}
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(4, v.SequenceNumber)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticSignature)
+	return buffer.Bytes(), err
+}
+
+func (v *SyntheticSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field SourceNetwork is missing")
+	} else if v.SourceNetwork == nil {
+		errs = append(errs, "field SourceNetwork is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field DestinationNetwork is missing")
+	} else if v.DestinationNetwork == nil {
+		errs = append(errs, "field DestinationNetwork is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SequenceNumber is missing")
+	} else if v.SequenceNumber == 0 {
+		errs = append(errs, "field SequenceNumber is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SyntheticWriteData = []string{
 	1: "Type",
 	2: "Cause",
@@ -4897,7 +5122,7 @@ func (v *TokenRecipient) IsValid() error {
 }
 
 var fieldNames_Transaction = []string{
-	1: "TransactionHeader",
+	1: "Header",
 	2: "Body",
 }
 
@@ -4905,7 +5130,9 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.TransactionHeader)
+	if !((v.Header).Equal(new(TransactionHeader))) {
+		writer.WriteValue(1, &v.Header)
+	}
 	if !(v.Body == (nil)) {
 		writer.WriteValue(2, v.Body)
 	}
@@ -4917,8 +5144,10 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 func (v *Transaction) IsValid() error {
 	var errs []string
 
-	if err := v.TransactionHeader.IsValid(); err != nil {
-		errs = append(errs, err.Error())
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Header is missing")
+	} else if (v.Header).Equal(new(TransactionHeader)) {
+		errs = append(errs, "field Header is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Body is missing")
@@ -4937,35 +5166,27 @@ func (v *Transaction) IsValid() error {
 }
 
 var fieldNames_TransactionHeader = []string{
-	1: "Origin",
-	2: "KeyPageHeight",
-	3: "KeyPageIndex",
-	4: "Nonce",
-	5: "Memo",
-	6: "Metadata",
+	1: "Principal",
+	2: "Initiator",
+	3: "Memo",
+	4: "Metadata",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Origin == nil) {
-		writer.WriteUrl(1, v.Origin)
+	if !(v.Principal == nil) {
+		writer.WriteUrl(1, v.Principal)
 	}
-	if !(v.KeyPageHeight == 0) {
-		writer.WriteUint(2, v.KeyPageHeight)
-	}
-	if !(v.KeyPageIndex == 0) {
-		writer.WriteUint(3, v.KeyPageIndex)
-	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(4, v.Nonce)
+	if !(v.Initiator == ([32]byte{})) {
+		writer.WriteHash(2, &v.Initiator)
 	}
 	if !(len(v.Memo) == 0) {
-		writer.WriteString(5, v.Memo)
+		writer.WriteString(3, v.Memo)
 	}
 	if !(len(v.Metadata) == 0) {
-		writer.WriteBytes(6, v.Metadata)
+		writer.WriteBytes(4, v.Metadata)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -4976,24 +5197,14 @@ func (v *TransactionHeader) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Origin is missing")
-	} else if v.Origin == nil {
-		errs = append(errs, "field Origin is not set")
+		errs = append(errs, "field Principal is missing")
+	} else if v.Principal == nil {
+		errs = append(errs, "field Principal is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field KeyPageHeight is missing")
-	} else if v.KeyPageHeight == 0 {
-		errs = append(errs, "field KeyPageHeight is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field KeyPageIndex is missing")
-	} else if v.KeyPageIndex == 0 {
-		errs = append(errs, "field KeyPageIndex is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field Initiator is missing")
+	} else if v.Initiator == ([32]byte{}) {
+		errs = append(errs, "field Initiator is not set")
 	}
 
 	switch len(errs) {
@@ -5950,6 +6161,15 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Signature = x
 	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerHeight = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ED25519Signature)
 	v.fieldsSet = seen
@@ -6110,6 +6330,29 @@ func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalSendTransactions)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *InternalSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ SignatureType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != SignatureTypeInternal {
+		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeInternal, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Network = x
+	}
+
+	seen, err := reader.Reset(fieldNames_InternalSignature)
 	v.fieldsSet = seen
 	return err
 }
@@ -6336,13 +6579,19 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	if x, ok := reader.ReadUint(2); ok {
-		v.Nonce = x
+		v.Timestamp = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
 		v.PublicKey = x
 	}
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.SignerHeight = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LegacyED25519Signature)
@@ -6517,6 +6766,15 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerHeight = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
 	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
@@ -6983,6 +7241,35 @@ func (v *SyntheticMirror) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *SyntheticSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ SignatureType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != SignatureTypeSynthetic {
+		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeSynthetic, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.SourceNetwork = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.DestinationNetwork = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.SequenceNumber = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticSignature)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7103,8 +7390,9 @@ func (v *Transaction) UnmarshalBinary(data []byte) error {
 func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, v.TransactionHeader.UnmarshalBinary)
-
+	if x := new(TransactionHeader); reader.ReadValue(1, x.UnmarshalBinary) {
+		v.Header = *x
+	}
 	reader.ReadValue(2, func(b []byte) error {
 		x, err := UnmarshalTransaction(b)
 		if err == nil {
@@ -7126,21 +7414,15 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUrl(1); ok {
-		v.Origin = x
+		v.Principal = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.KeyPageHeight = x
+	if x, ok := reader.ReadHash(2); ok {
+		v.Initiator = *x
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.KeyPageIndex = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.Nonce = x
-	}
-	if x, ok := reader.ReadString(5); ok {
+	if x, ok := reader.ReadString(3); ok {
 		v.Memo = x
 	}
-	if x, ok := reader.ReadBytes(6); ok {
+	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
 	}
 
@@ -7612,13 +7894,19 @@ func (v *DataEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      SignatureType `json:"type"`
-		PublicKey *string       `json:"publicKey,omitempty"`
-		Signature *string       `json:"signature,omitempty"`
+		Type         SignatureType `json:"type"`
+		PublicKey    *string       `json:"publicKey,omitempty"`
+		Signature    *string       `json:"signature,omitempty"`
+		Signer       *url.URL      `json:"signer,omitempty"`
+		SignerHeight uint64        `json:"signerHeight,omitempty"`
+		Timestamp    uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerHeight = v.SignerHeight
+	u.Timestamp = v.Timestamp
 	return json.Marshal(&u)
 }
 
@@ -7688,6 +7976,16 @@ func (v *InternalSendTransactions) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Transactions = v.Transactions
+	return json.Marshal(&u)
+}
+
+func (v *InternalSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    SignatureType `json:"type"`
+		Network *url.URL      `json:"network,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.Network
 	return json.Marshal(&u)
 }
 
@@ -7800,15 +8098,21 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 
 func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      SignatureType `json:"type"`
-		Nonce     uint64        `json:"nonce,omitempty"`
-		PublicKey *string       `json:"publicKey,omitempty"`
-		Signature *string       `json:"signature,omitempty"`
+		Type         SignatureType `json:"type"`
+		Timestamp    uint64        `json:"timestamp,omitempty"`
+		Nonce        uint64        `json:"nonce,omitempty"`
+		PublicKey    *string       `json:"publicKey,omitempty"`
+		Signature    *string       `json:"signature,omitempty"`
+		Signer       *url.URL      `json:"signer,omitempty"`
+		SignerHeight uint64        `json:"signerHeight,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerHeight = v.SignerHeight
 	return json.Marshal(&u)
 }
 
@@ -7899,13 +8203,19 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      SignatureType `json:"type"`
-		PublicKey *string       `json:"publicKey,omitempty"`
-		Signature *string       `json:"signature,omitempty"`
+		Type         SignatureType `json:"type"`
+		PublicKey    *string       `json:"publicKey,omitempty"`
+		Signature    *string       `json:"signature,omitempty"`
+		Signer       *url.URL      `json:"signer,omitempty"`
+		SignerHeight uint64        `json:"signerHeight,omitempty"`
+		Timestamp    uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerHeight = v.SignerHeight
+	u.Timestamp = v.Timestamp
 	return json.Marshal(&u)
 }
 
@@ -8133,6 +8443,20 @@ func (v *SyntheticMirror) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               SignatureType `json:"type"`
+		SourceNetwork      *url.URL      `json:"sourceNetwork,omitempty"`
+		DestinationNetwork *url.URL      `json:"destinationNetwork,omitempty"`
+		SequenceNumber     uint64        `json:"sequenceNumber,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.SourceNetwork = v.SourceNetwork
+	u.DestinationNetwork = v.DestinationNetwork
+	u.SequenceNumber = v.SequenceNumber
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  TransactionType `json:"type"`
@@ -8201,20 +8525,10 @@ func (v *TokenRecipient) MarshalJSON() ([]byte, error) {
 
 func (v *Transaction) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Origin        *url.URL        `json:"origin,omitempty"`
-		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
-		Nonce         uint64          `json:"nonce,omitempty"`
-		Memo          string          `json:"memo,omitempty"`
-		Metadata      *string         `json:"metadata,omitempty"`
-		Body          json.RawMessage `json:"body,omitempty"`
+		Header TransactionHeader `json:"header,omitempty"`
+		Body   json.RawMessage   `json:"body,omitempty"`
 	}{}
-	u.Origin = v.TransactionHeader.Origin
-	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
-	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
-	u.Nonce = v.TransactionHeader.Nonce
-	u.Memo = v.TransactionHeader.Memo
-	u.Metadata = encoding.BytesToJSON(v.TransactionHeader.Metadata)
+	u.Header = v.Header
 	if x, err := json.Marshal(v.Body); err != nil {
 		return nil, fmt.Errorf("error encoding Body: %w", err)
 	} else {
@@ -8225,17 +8539,15 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Origin        *url.URL `json:"origin,omitempty"`
-		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
-		Memo          string   `json:"memo,omitempty"`
-		Metadata      *string  `json:"metadata,omitempty"`
+		Principal *url.URL `json:"principal,omitempty"`
+		Origin    *url.URL `json:"origin,omitempty"`
+		Initiator string   `json:"initiator,omitempty"`
+		Memo      string   `json:"memo,omitempty"`
+		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
-	u.Origin = v.Origin
-	u.KeyPageHeight = v.KeyPageHeight
-	u.KeyPageIndex = v.KeyPageIndex
-	u.Nonce = v.Nonce
+	u.Principal = v.Principal
+	u.Origin = v.Principal
+	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	return json.Marshal(&u)
@@ -8749,13 +9061,19 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      SignatureType `json:"type"`
-		PublicKey *string       `json:"publicKey,omitempty"`
-		Signature *string       `json:"signature,omitempty"`
+		Type         SignatureType `json:"type"`
+		PublicKey    *string       `json:"publicKey,omitempty"`
+		Signature    *string       `json:"signature,omitempty"`
+		Signer       *url.URL      `json:"signer,omitempty"`
+		SignerHeight uint64        `json:"signerHeight,omitempty"`
+		Timestamp    uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerHeight = v.SignerHeight
+	u.Timestamp = v.Timestamp
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -8769,6 +9087,9 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Signature = x
 	}
+	v.Signer = u.Signer
+	v.SignerHeight = u.SignerHeight
+	v.Timestamp = u.Timestamp
 	return nil
 }
 
@@ -8876,6 +9197,20 @@ func (v *InternalSendTransactions) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Transactions = u.Transactions
+	return nil
+}
+
+func (v *InternalSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    SignatureType `json:"type"`
+		Network *url.URL      `json:"network,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Network = v.Network
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Network = u.Network
 	return nil
 }
 
@@ -9057,19 +9392,29 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 
 func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      SignatureType `json:"type"`
-		Nonce     uint64        `json:"nonce,omitempty"`
-		PublicKey *string       `json:"publicKey,omitempty"`
-		Signature *string       `json:"signature,omitempty"`
+		Type         SignatureType `json:"type"`
+		Timestamp    uint64        `json:"timestamp,omitempty"`
+		Nonce        uint64        `json:"nonce,omitempty"`
+		PublicKey    *string       `json:"publicKey,omitempty"`
+		Signature    *string       `json:"signature,omitempty"`
+		Signer       *url.URL      `json:"signer,omitempty"`
+		SignerHeight uint64        `json:"signerHeight,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerHeight = v.SignerHeight
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Nonce = u.Nonce
+	if u.Timestamp != 0 {
+		v.Timestamp = u.Timestamp
+	} else {
+		v.Timestamp = u.Nonce
+	}
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -9080,6 +9425,8 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Signature = x
 	}
+	v.Signer = u.Signer
+	v.SignerHeight = u.SignerHeight
 	return nil
 }
 
@@ -9239,13 +9586,19 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 
 func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      SignatureType `json:"type"`
-		PublicKey *string       `json:"publicKey,omitempty"`
-		Signature *string       `json:"signature,omitempty"`
+		Type         SignatureType `json:"type"`
+		PublicKey    *string       `json:"publicKey,omitempty"`
+		Signature    *string       `json:"signature,omitempty"`
+		Signer       *url.URL      `json:"signer,omitempty"`
+		SignerHeight uint64        `json:"signerHeight,omitempty"`
+		Timestamp    uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerHeight = v.SignerHeight
+	u.Timestamp = v.Timestamp
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -9259,6 +9612,9 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Signature = x
 	}
+	v.Signer = u.Signer
+	v.SignerHeight = u.SignerHeight
+	v.Timestamp = u.Timestamp
 	return nil
 }
 
@@ -9672,6 +10028,26 @@ func (v *SyntheticMirror) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               SignatureType `json:"type"`
+		SourceNetwork      *url.URL      `json:"sourceNetwork,omitempty"`
+		DestinationNetwork *url.URL      `json:"destinationNetwork,omitempty"`
+		SequenceNumber     uint64        `json:"sequenceNumber,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.SourceNetwork = v.SourceNetwork
+	u.DestinationNetwork = v.DestinationNetwork
+	u.SequenceNumber = v.SequenceNumber
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.SourceNetwork = u.SourceNetwork
+	v.DestinationNetwork = u.DestinationNetwork
+	v.SequenceNumber = u.SequenceNumber
+	return nil
+}
+
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  TransactionType `json:"type"`
@@ -9786,20 +10162,10 @@ func (v *TokenRecipient) UnmarshalJSON(data []byte) error {
 
 func (v *Transaction) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Origin        *url.URL        `json:"origin,omitempty"`
-		KeyPageHeight uint64          `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64          `json:"keyPageIndex,omitempty"`
-		Nonce         uint64          `json:"nonce,omitempty"`
-		Memo          string          `json:"memo,omitempty"`
-		Metadata      *string         `json:"metadata,omitempty"`
-		Body          json.RawMessage `json:"body,omitempty"`
+		Header TransactionHeader `json:"header,omitempty"`
+		Body   json.RawMessage   `json:"body,omitempty"`
 	}{}
-	u.Origin = v.TransactionHeader.Origin
-	u.KeyPageHeight = v.TransactionHeader.KeyPageHeight
-	u.KeyPageIndex = v.TransactionHeader.KeyPageIndex
-	u.Nonce = v.TransactionHeader.Nonce
-	u.Memo = v.TransactionHeader.Memo
-	u.Metadata = encoding.BytesToJSON(v.TransactionHeader.Metadata)
+	u.Header = v.Header
 	if x, err := json.Marshal(v.Body); err != nil {
 		return fmt.Errorf("error encoding Body: %w", err)
 	} else {
@@ -9808,16 +10174,7 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.TransactionHeader.Origin = u.Origin
-	v.TransactionHeader.KeyPageHeight = u.KeyPageHeight
-	v.TransactionHeader.KeyPageIndex = u.KeyPageIndex
-	v.TransactionHeader.Nonce = u.Nonce
-	v.TransactionHeader.Memo = u.Memo
-	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
-		return fmt.Errorf("error decoding Metadata: %w", err)
-	} else {
-		v.TransactionHeader.Metadata = x
-	}
+	v.Header = u.Header
 	if x, err := UnmarshalTransactionJSON(u.Body); err != nil {
 		return fmt.Errorf("error decoding Body: %w", err)
 	} else {
@@ -9829,26 +10186,30 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Origin        *url.URL `json:"origin,omitempty"`
-		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
-		Memo          string   `json:"memo,omitempty"`
-		Metadata      *string  `json:"metadata,omitempty"`
+		Principal *url.URL `json:"principal,omitempty"`
+		Origin    *url.URL `json:"origin,omitempty"`
+		Initiator string   `json:"initiator,omitempty"`
+		Memo      string   `json:"memo,omitempty"`
+		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
-	u.Origin = v.Origin
-	u.KeyPageHeight = v.KeyPageHeight
-	u.KeyPageIndex = v.KeyPageIndex
-	u.Nonce = v.Nonce
+	u.Principal = v.Principal
+	u.Origin = v.Principal
+	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Origin = u.Origin
-	v.KeyPageHeight = u.KeyPageHeight
-	v.KeyPageIndex = u.KeyPageIndex
-	v.Nonce = u.Nonce
+	if u.Principal != nil {
+		v.Principal = u.Principal
+	} else {
+		v.Principal = u.Origin
+	}
+	if x, err := encoding.ChainFromJSON(u.Initiator); err != nil {
+		return fmt.Errorf("error decoding Initiator: %w", err)
+	} else {
+		v.Initiator = x
+	}
 	v.Memo = u.Memo
 	if x, err := encoding.BytesFromJSON(u.Metadata); err != nil {
 		return fmt.Errorf("error decoding Metadata: %w", err)

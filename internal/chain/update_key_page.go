@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -49,13 +50,18 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
 	}
 
-	priority := getPriority(st, book)
-	if priority < 0 {
-		return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
+	originPriority, ok := getKeyPageIndex(st.OriginUrl)
+	if !ok {
+		return nil, fmt.Errorf("cannot parse key page URL: %v", st.OriginUrl)
+	}
+
+	signerPriority, ok := getKeyPageIndex(st.SignatorUrl)
+	if !ok {
+		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
 	}
 
 	// 0 is the highest priority, followed by 1, etc
-	if tx.Transaction.KeyPageIndex > uint64(priority) {
+	if signerPriority > originPriority {
 		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 	}
 
@@ -101,7 +107,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 
 		page.Keys = append(page.Keys[:indexKey], page.Keys[indexKey+1:]...)
 
-		if len(page.Keys) == 0 && priority == 0 {
+		if len(page.Keys) == 0 && originPriority == 0 {
 			return nil, fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
@@ -125,15 +131,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	return nil, nil
 }
 
-func getPriority(st *StateManager, book *protocol.KeyBook) int {
-	var priority = -1
-	for i := uint64(0); i < book.PageCount; i++ {
-		pageUrl := protocol.FormatKeyPageUrl(book.Url, i)
-		if pageUrl.AccountID32() == st.OriginChainId {
-			priority = int(i)
-		}
-	}
-	return priority
+func getKeyPageIndex(page *url.URL) (uint64, bool) {
+	_, index, ok := protocol.ParseKeyPageUrl(page)
+	return index - 1, ok
 }
 
 func didUpdateKeyPage(page *protocol.KeyPage) {

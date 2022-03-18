@@ -184,6 +184,12 @@ const SignatureTypeRCD1 SignatureType = 3
 // SignatureTypeReceipt represents a Merkle tree receipt.
 const SignatureTypeReceipt SignatureType = 4
 
+// SignatureTypeSynthetic is used when sending synthetic transactions.
+const SignatureTypeSynthetic SignatureType = 5
+
+// SignatureTypeInternal is used when executing transactions internally.
+const SignatureTypeInternal SignatureType = 6
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 47
 
@@ -878,7 +884,7 @@ func (v SignatureType) ID() uint64 { return uint64(v) }
 func (v *SignatureType) Set(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal:
 		*v = u
 		return true
 	default:
@@ -899,6 +905,10 @@ func (v SignatureType) String() string {
 		return "rCD1"
 	case SignatureTypeReceipt:
 		return "receipt"
+	case SignatureTypeSynthetic:
+		return "synthetic"
+	case SignatureTypeInternal:
+		return "internal"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -917,6 +927,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeRCD1, true
 	case "receipt":
 		return SignatureTypeReceipt, true
+	case "synthetic":
+		return SignatureTypeSynthetic, true
+	case "internal":
+		return SignatureTypeInternal, true
 	default:
 		return 0, false
 	}

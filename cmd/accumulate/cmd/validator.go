@@ -39,7 +39,7 @@ var validatorUpdateKeyCmd = &cobra.Command{
 }
 
 func addValidator(args []string) (string, error) {
-	args, principal, header, privKey, err := parseArgsAndPrepareSigner(args)
+	args, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}
@@ -51,11 +51,11 @@ func addValidator(args []string) (string, error) {
 
 	txn := new(protocol.AddValidator)
 	txn.Key = newKey
-	return dispatchTxAndPrintResponse("add-validator", txn, nil, principal, header, privKey)
+	return dispatchTxAndPrintResponse("add-validator", txn, nil, principal, signer)
 }
 
 func removeValidator(args []string) (string, error) {
-	args, principal, header, privKey, err := parseArgsAndPrepareSigner(args)
+	args, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}
@@ -67,11 +67,11 @@ func removeValidator(args []string) (string, error) {
 
 	txn := new(protocol.RemoveValidator)
 	txn.Key = oldKey
-	return dispatchTxAndPrintResponse("remove-validator", txn, nil, principal, header, privKey)
+	return dispatchTxAndPrintResponse("remove-validator", txn, nil, principal, signer)
 }
 
 func updateValidatorKey(args []string) (string, error) {
-	args, principal, header, privKey, err := parseArgsAndPrepareSigner(args)
+	args, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}
@@ -89,5 +89,5 @@ func updateValidatorKey(args []string) (string, error) {
 	txn := new(protocol.UpdateValidatorKey)
 	txn.OldKey = oldKey
 	txn.NewKey = newKey
-	return dispatchTxAndPrintResponse("update-validator-key", txn, nil, principal, header, privKey)
+	return dispatchTxAndPrintResponse("update-validator-key", txn, nil, principal, signer)
 }
