@@ -104,6 +104,7 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 		panic("cannot initiate transaction: already initiated")
 	}
 
+	tb.signer.Type = typ
 	tb.signer.PrivateKey = privateKey
 	sig, err := tb.signer.Initiate(tb.Transaction)
 	if err != nil {

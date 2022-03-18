@@ -24,24 +24,26 @@ func (s *Suite) TestCreateLiteAccount() {
 	senderUrl, err := protocol.LiteTokenAddress(sender.PubKey().Bytes(), protocol.ACME)
 	s.Require().NoError(err)
 
-	tx, err := acctesting.CreateFakeSyntheticDepositTx(sender)
-	s.Require().NoError(err)
-	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.GetTxHash())
+	env := acctesting.NewTransaction().
+		WithPrincipal(protocol.FaucetUrl).
+		WithBody(&protocol.AcmeFaucet{Url: senderUrl}).
+		Faucet()
+	s.dut.SubmitTxn(env)
+	s.dut.WaitForTxns(env.GetTxHash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(acctesting.TestTokenAmount*acctesting.TokenMx), account.Balance.Int64())
+	s.Require().Equal(int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), account.Balance.Int64())
 
 	var nonce uint64 = 1
-	tx = acctesting.NewTransaction().
+	env = acctesting.NewTransaction().
 		WithPrincipal(senderUrl).
 		WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
 		WithNonce(nonce).
 		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: 1e8}).
 		Initiate(protocol.SignatureTypeLegacyED25519, sender)
-	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.GetTxHash())
+	s.dut.SubmitTxn(env)
+	s.dut.WaitForTxns(env.GetTxHash())
 
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
@@ -83,5 +85,5 @@ func (s *Suite) TestCreateLiteAccount() {
 
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(3e5*acctesting.TokenMx-total), account.Balance.Int64())
+	s.Require().Equal(int64(3e5*protocol.AcmePrecision-total), account.Balance.Int64())
 }
