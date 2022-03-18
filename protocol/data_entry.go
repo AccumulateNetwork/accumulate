@@ -9,7 +9,11 @@ import (
 // ComputeEntryHash
 // returns the entry hash given external id's and data associated with an entry
 func ComputeEntryHash(data [][]byte) []byte {
-	return hash.Hasher(data).MerkleHash()
+	h := make(hash.Hasher, 0, len(data))
+	for _, data := range data {
+		h.AddBytes(data)
+	}
+	return h.MerkleHash()
 }
 
 const TransactionSizeMax = 10240
