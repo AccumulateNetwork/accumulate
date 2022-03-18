@@ -28,8 +28,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
-	body.Source = acctesting.FakeBvn
-	body.Cause[0] = 1
+	body.SetSyntheticOrigin([]byte{1}, acctesting.FakeBvn)
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
@@ -78,8 +77,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
-	body.Source = acctesting.FakeBvn
-	body.Cause[0] = 1
+	body.SetSyntheticOrigin([]byte{1}, acctesting.FakeBvn)
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().

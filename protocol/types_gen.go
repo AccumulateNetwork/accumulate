@@ -463,8 +463,8 @@ type SyntheticOrigin struct {
 type SyntheticReceipt struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	TxHash [32]byte        `json:"txHash,omitempty" form:"txHash" query:"txHash" validate:"required"`
-	Status json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	SynthTxHash [32]byte           `json:"synthTxHash,omitempty" form:"synthTxHash" query:"synthTxHash" validate:"required"`
+	Status      *TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
 type SyntheticWriteData struct {
@@ -1707,10 +1707,10 @@ func (v *SyntheticReceipt) Equal(u *SyntheticReceipt) bool {
 	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
 		return false
 	}
-	if !(v.TxHash == u.TxHash) {
+	if !(v.SynthTxHash == u.SynthTxHash) {
 		return false
 	}
-	if !(bytes.Equal(v.Status, u.Status)) {
+	if !((v.Status).Equal(u.Status)) {
 		return false
 	}
 
@@ -4949,7 +4949,7 @@ func (v *SyntheticOrigin) IsValid() error {
 var fieldNames_SyntheticReceipt = []string{
 	1: "Type",
 	2: "SyntheticOrigin",
-	3: "TxHash",
+	3: "SynthTxHash",
 	4: "Status",
 }
 
@@ -4959,11 +4959,11 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 
 	writer.WriteUint(1, TransactionTypeSyntheticReceipt.ID())
 	writer.WriteValue(2, &v.SyntheticOrigin)
-	if !(v.TxHash == ([32]byte{})) {
-		writer.WriteHash(3, &v.TxHash)
+	if !(v.SynthTxHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.SynthTxHash)
 	}
-	if !(len(v.Status) == 0) {
-		writer.WriteBytes(4, v.Status)
+	if !(v.Status == nil) {
+		writer.WriteValue(4, v.Status)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticReceipt)
@@ -4977,13 +4977,13 @@ func (v *SyntheticReceipt) IsValid() error {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field TxHash is missing")
-	} else if v.TxHash == ([32]byte{}) {
-		errs = append(errs, "field TxHash is not set")
+		errs = append(errs, "field SynthTxHash is missing")
+	} else if v.SynthTxHash == ([32]byte{}) {
+		errs = append(errs, "field SynthTxHash is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Status is missing")
-	} else if len(v.Status) == 0 {
+	} else if v.Status == nil {
 		errs = append(errs, "field Status is not set")
 	}
 
@@ -7342,9 +7342,9 @@ func (v *SyntheticReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
 
 	if x, ok := reader.ReadHash(3); ok {
-		v.TxHash = *x
+		v.SynthTxHash = *x
 	}
-	if x, ok := reader.ReadBytes(4); ok {
+	if x := new(TransactionStatus); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Status = x
 	}
 
@@ -8494,16 +8494,16 @@ func (v *SyntheticOrigin) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   TransactionType `json:"type"`
-		Source *url.URL        `json:"source,omitempty"`
-		Cause  string          `json:"cause,omitempty"`
-		TxHash string          `json:"txHash,omitempty"`
-		Status json.RawMessage `json:"status,omitempty"`
+		Type        TransactionType    `json:"type"`
+		Source      *url.URL           `json:"source,omitempty"`
+		Cause       string             `json:"cause,omitempty"`
+		SynthTxHash string             `json:"synthTxHash,omitempty"`
+		Status      *TransactionStatus `json:"status,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SyntheticOrigin.Source
 	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.TxHash = encoding.ChainToJSON(v.TxHash)
+	u.SynthTxHash = encoding.ChainToJSON(v.SynthTxHash)
 	u.Status = v.Status
 	return json.Marshal(&u)
 }
@@ -10069,16 +10069,16 @@ func (v *SyntheticOrigin) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   TransactionType `json:"type"`
-		Source *url.URL        `json:"source,omitempty"`
-		Cause  string          `json:"cause,omitempty"`
-		TxHash string          `json:"txHash,omitempty"`
-		Status json.RawMessage `json:"status,omitempty"`
+		Type        TransactionType    `json:"type"`
+		Source      *url.URL           `json:"source,omitempty"`
+		Cause       string             `json:"cause,omitempty"`
+		SynthTxHash string             `json:"synthTxHash,omitempty"`
+		Status      *TransactionStatus `json:"status,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SyntheticOrigin.Source
 	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.TxHash = encoding.ChainToJSON(v.TxHash)
+	u.SynthTxHash = encoding.ChainToJSON(v.SynthTxHash)
 	u.Status = v.Status
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -10089,10 +10089,10 @@ func (v *SyntheticReceipt) UnmarshalJSON(data []byte) error {
 	} else {
 		v.SyntheticOrigin.Cause = x
 	}
-	if x, err := encoding.ChainFromJSON(u.TxHash); err != nil {
-		return fmt.Errorf("error decoding TxHash: %w", err)
+	if x, err := encoding.ChainFromJSON(u.SynthTxHash); err != nil {
+		return fmt.Errorf("error decoding SynthTxHash: %w", err)
 	} else {
-		v.TxHash = x
+		v.SynthTxHash = x
 	}
 	v.Status = u.Status
 	return nil

@@ -22,24 +22,23 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
 	}
-	newStatus := new(protocol.TransactionStatus)
-	newStatus.UnmarshalJSON(body.Status)
+	newStatus := body.Status
 
 	// Load the transaction status & state
-	synthTx := st.batch.Transaction(body.TxHash[:])
+	synthTx := st.batch.Transaction(body.SynthTxHash[:])
 	curStatus, err := synthTx.GetStatus()
 	if err != nil {
-		st.logger.Error("received SyntheticReceipt from", body.Source.URL(), "but the status for tx", logging.AsHex(body.TxHash),
+		st.logger.Error("received SyntheticReceipt from", body.Source.URL(), "but the status for tx", logging.AsHex(body.SynthTxHash),
 			"could not be retrieved:", err)
 	}
 
 	// Update the status when changed
 	if curStatus == nil || !statusEqual(curStatus, newStatus) {
-		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.TxHash),
+		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash),
 			"and the status was changed. Updating status")
 		synthTx.PutStatus(newStatus)
 	} else {
-		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.TxHash),
+		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash),
 			"and the status was not changed. Skipping status update")
 	}
 	return nil, nil
@@ -93,16 +92,10 @@ func NeedsReceipt(txt protocol.TransactionType) bool {
 // CreateReceipt creates a receipt used to return the status of synthetic transactions to its sender
 func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, nodeUrl *url.URL) (*protocol.SyntheticReceipt, *url.URL) {
 	sr := new(protocol.SyntheticReceipt)
-	sr.TxHash = *(*[32]byte)(env.GetTxHash())
-	sr.Source = nodeUrl
+	sr.SetSyntheticOrigin(env.GetTxHash(), nodeUrl)
 	synthOrigin := getSyntheticOrigin(env.Transaction)
 	sr.Cause = synthOrigin.Cause
-
-	var err error
-	sr.Status, err = status.MarshalJSON()
-	if err != nil {
-		panic(fmt.Errorf("can't marshal transaction status: %w", err))
-	}
+	sr.Status = status
 
 	return sr, synthOrigin.Source
 }

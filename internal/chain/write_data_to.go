@@ -21,8 +21,7 @@ func (WriteDataTo) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)
-	writeThis.Source = st.nodeUrl
-	writeThis.Cause = *(*[32]byte)(tx.GetTxHash())
+	writeThis.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 	writeThis.Entry = body.Entry
 
 	st.Submit(body.Recipient, writeThis)

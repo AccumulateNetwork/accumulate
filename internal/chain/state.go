@@ -89,7 +89,7 @@ func (m *StateManager) Commit() error {
 		}
 
 		scc = new(protocol.SyntheticCreateChain)
-		scc.Source = m.nodeUrl
+		scc.Source = m.OriginUrl
 		scc.Cause = m.txHash
 		scc.Chains = []protocol.ChainParams{params}
 		create[id.String()] = scc

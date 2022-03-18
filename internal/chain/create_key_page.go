@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type CreateKeyPage struct{}
@@ -30,8 +29,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Source = st.nodeUrl
-	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
+	scc.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()

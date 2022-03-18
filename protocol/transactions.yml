@@ -383,10 +383,12 @@ SyntheticReceipt:
   embeddings:
     - SyntheticOrigin
   fields:
-    - name: TxHash
+    - name: SynthTxHash
       type: chain
     - name: Status
-      type: rawJson
+      type: TransactionStatus
+      marshal-as: reference
+      pointer: true
 
 SegWitDataEntry:
   kind: tx

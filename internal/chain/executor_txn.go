@@ -548,7 +548,7 @@ func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelo
 	return failure
 }
 
-func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, status *protocol.TransactionStatus, postCommit bool) (err error) { // Don't add internal transactions to chains. Internal transactions are
+func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, status *protocol.TransactionStatus, postCommit bool) (err error) {
 	// Don't add internal transactions to chains. Internal transactions are
 	// exclusively used for communication between the governor and the state
 	// machine.
