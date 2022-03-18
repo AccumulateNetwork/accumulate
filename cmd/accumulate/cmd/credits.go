@@ -57,21 +57,13 @@ func AddCredits(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
-	if err := oracleCmd.Execute(); err != nil {
-		fmt.Println("hi", err)
 
-	}
-
-	var acmeOracle protocol.AcmeOracle
+	var acmeOracle, _ = GetacmeOracle()
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
 	credits.Amount = *amt
-	credits.Oracle = acmeOracle.Price
+	credits.Oracle = acmeOracle
 
-	ledgerState := protocol.NewInternalLedger()
-	if credits.Oracle != ledgerState.ActiveOracle {
-		return "", fmt.Errorf("oracle doesn't match")
-	}
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
 	if err != nil {
 		return "", err

@@ -971,3 +971,23 @@ func nonceFromTimeNow() uint64 {
 	t := time.Now()
 	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }
+
+func GetacmeOracle() (uint64, error) {
+	params := api.DataEntryQuery{}
+	params.Url = protocol.PriceOracle()
+
+	res := new(api.ChainQueryResponse)
+	entry := new(api.DataEntryQueryResponse)
+	res.Data = entry
+
+	err := Client.RequestAPIv2(context.Background(), "query-data", &params, &res)
+	if err != nil {
+		return 0, err
+	}
+
+	var acmeOracle protocol.AcmeOracle
+	if err = json.Unmarshal(entry.Entry.Data, &acmeOracle); err != nil {
+		return 0, err
+	}
+	return acmeOracle.Price, err
+}
