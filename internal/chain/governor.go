@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -219,9 +220,13 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Sign it
-		ed := new(protocol.LegacyED25519Signature)
-		ed.PublicKey = g.Key[32:]
-		err = ed.Sign(tx.Nonce, g.Key, txid[:])
+		ed, err := new(signing.Signer).
+			SetType(protocol.SignatureTypeED25519).
+			SetPrivateKey(g.Key).
+			SetKeyPageUrl(g.Network.ValidatorBook(), 0).
+			SetHeight(1).
+			SetTimestamp(1).
+			Sign(txid[:])
 		if err != nil {
 			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid), "error", err)
 			continue
@@ -274,9 +279,9 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 		// Send it
 		typ := env.Transaction.Type()
 		if typ != protocol.TransactionTypeSyntheticAnchor {
-			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
+			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
-		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
+		err = g.dispatcher.BroadcastTx(context.Background(), env.Transaction.Header.Principal, raw)
 		if err != nil {
 			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id), "error", err)
 			continue
@@ -320,7 +325,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		txns.Transactions = make([]protocol.SendTransaction, len(bvnNames))
 		for i, bvn := range bvnNames {
 			txns.Transactions[i] = protocol.SendTransaction{
-				Recipient: protocol.BvnUrl(bvn).JoinPath(protocol.AnchorPool),
+				Recipient: protocol.SubnetUrl(bvn).JoinPath(protocol.AnchorPool),
 				Payload:   msg.anchor,
 			}
 		}
@@ -381,7 +386,7 @@ func (g *governor) sendMirror(batch *database.Batch) {
 		txns.Transactions = make([]protocol.SendTransaction, len(bvnNames))
 		for i, bvn := range bvnNames {
 			txns.Transactions[i] = protocol.SendTransaction{
-				Recipient: protocol.BvnUrl(bvn),
+				Recipient: protocol.SubnetUrl(bvn),
 				Payload:   mirror,
 			}
 		}
@@ -397,23 +402,34 @@ func (g *governor) sendMirror(batch *database.Batch) {
 }
 
 func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionBody) {
-	// Construct the signature transaction
 	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
-	env, err := g.buildSynthTxn(st, g.Network.NodeUrl(protocol.Ledger), body)
+
+	// Construct the signature transaction
+	ledgerState := new(protocol.InternalLedger)
+	err := st.LoadUrlAs(g.Network.Ledger(), ledgerState)
 	if err != nil {
-		g.logger.Error("Failed to build internal transaction", "error", err)
-		return
+		// If we can't load the ledger, the node is fubared
+		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
+	env.Transaction.Header.Principal = g.Network.Ledger()
+	env.Transaction.Body = body
+
 	// Sign it
-	ed := new(protocol.LegacyED25519Signature)
-	env.Signatures = append(env.Signatures, ed)
-	ed.PublicKey = g.Key[32:]
-	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())
+	ed, err := new(signing.Signer).
+		SetType(protocol.SignatureTypeED25519).
+		SetPrivateKey(g.Key).
+		SetUrl(g.Network.ValidatorPage(0)).
+		SetHeight(1).
+		SetTimestamp(uint64(ledgerState.Index) + 1).
+		Initiate(env.Transaction)
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return
 	}
+	env.Signatures = append(env.Signatures, ed)
 
 	// Marshal it
 	data, err := env.MarshalBinary()
@@ -424,5 +440,5 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 
 	// Send it
 	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()), "type", body.GetType())
-	g.dispatcher.BroadcastTxAsyncLocal(context.TODO(), data)
+	g.dispatcher.BroadcastTxLocal(context.TODO(), data)
 }

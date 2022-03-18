@@ -7,14 +7,22 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/fatih/color"
 )
 
-// Run the devnet and run a test against it.
 func main() {
+	if !run() {
+		os.Exit(1)
+	}
+}
+
+// Run the devnet and run a test against it.
+func run() bool {
 	resetColor := color.New(color.Reset)
 
 	cwd, err := os.Getwd()
@@ -23,18 +31,35 @@ func main() {
 	_, err = os.Stat(filepath.Join(cwd, "go.mod"))
 	checkf(err, "stat go.mod failed - are we in the repo root?")
 
+	// Build the CLI
+	buildCmd := exec.Command("go", "install", "./cmd/accumulate")
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stdout
+	err = buildCmd.Run()
+	checkf(err, "build cli")
+
+	// Build the daemon
+	buildCmd = exec.Command("go", "build", "./cmd/accumulated")
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stdout
+	err = buildCmd.Run()
+	checkf(err, "build daemon")
+
 	// Initialize the devnet command
-	args := append([]string{"run", "./cmd/accumulated", "init", "devnet", "--work-dir", ".nodes"}, os.Args[1:]...)
-	initCmd := exec.Command("go", args...)
+	args := append([]string{"init", "devnet", "--work-dir", ".nodes"}, os.Args[1:]...)
+	initCmd := exec.Command("./accumulated", args...)
 	initCmd.Stdout = os.Stdout
 	initCmd.Stderr = os.Stdout
 	err = initCmd.Run()
 	checkf(err, "init devnet")
 
 	// Configure the devnet command
-	runCmd := exec.Command("go", "run", "./cmd/accumulated", "run", "devnet", "--work-dir", ".nodes")
+	runCmd := exec.Command("./accumulated", "run", "devnet", "--work-dir", ".nodes")
 	runCmd.Env = os.Environ()
 	runCmd.Env = append(runCmd.Env, "FORCE_COLOR=true")
+
+	// Don't interrupt the run process if the parent process is interrupted
+	runCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Forward output
 	runRd, runWr := io.Pipe()
@@ -62,6 +87,7 @@ func main() {
 	// Start the devnet
 	err = runCmd.Start()
 	checkf(err, "start devnet")
+	defer runCmd.Process.Kill()
 	<-started
 
 	// Configure the validator script command
@@ -93,17 +119,31 @@ func main() {
 		}
 	}()
 
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	go func() { <-sig; print("\r"); signal.Stop(sig) }()
+
 	err = valCmd.Start()
 	checkf(err, "start script")
 
 	// Run the validation script, but do not immediately check the return value
 	err = valCmd.Wait()
-	if err != nil {
+	ok := err == nil
+	if !ok {
 		fmt.Printf("Error: validation script failed: %v\n", err)
 	}
 
-	// TODO Shut down gracefully. Every attempt I made to send SIGINT to the
-	// devnet failed.
+	err = runCmd.Process.Signal(os.Interrupt)
+	if err != nil {
+		fmt.Printf("Error: interrupt devnet: %v\n", err)
+	}
+
+	err = runCmd.Wait()
+	if err != nil {
+		fmt.Printf("Error: wait for devnet: %v\n", err)
+	}
+
+	return !ok
 }
 
 func fatalf(format string, args ...interface{}) {

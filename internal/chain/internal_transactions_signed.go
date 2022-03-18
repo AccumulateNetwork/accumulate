@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -44,25 +43,19 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelo
 		}
 
 		// Load the transaction
-		txState, _, txSigs, err := st.LoadTxn(id)
+		txn, err := st.LoadTxn(id)
 		if err != nil {
 			return nil, err
 		}
 
 		// Add the signature
 		env := new(protocol.Envelope)
-		env.Transaction = txState
+		env.Transaction = txn
 		env.Signatures = []protocol.Signature{sig}
 
 		// Validate it
 		if !env.Verify() {
 			return nil, fmt.Errorf("invalid signature for txn %X", id)
-		}
-
-		// Skip transactions that are already signed
-		if len(txSigs) > 0 {
-			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", env.Transaction.Type())
-			continue
 		}
 
 		// Write the signature

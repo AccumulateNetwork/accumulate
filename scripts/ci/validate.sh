@@ -411,7 +411,7 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 section "Transaction with Memo"
 TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
 wait-for-tx $TXID
-MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.memo)
+MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Query votes chain"

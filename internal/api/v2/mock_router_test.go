@@ -13,6 +13,7 @@ import (
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	routing "gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	url "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // MockRouter is a mock of Router interface.
@@ -54,18 +55,37 @@ func (mr *MockRouterMockRecorder) Query(ctx, subnet, query, opts interface{}) *g
 }
 
 // Route mocks base method.
-func (m *MockRouter) Route(account *url.URL) (string, error) {
+func (m *MockRouter) Route(arg0 ...*protocol.Envelope) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Route", account)
+	varargs := []interface{}{}
+	for _, a := range arg0 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Route", varargs...)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Route indicates an expected call of Route.
-func (mr *MockRouterMockRecorder) Route(account interface{}) *gomock.Call {
+func (mr *MockRouterMockRecorder) Route(arg0 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Route", reflect.TypeOf((*MockRouter)(nil).Route), account)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Route", reflect.TypeOf((*MockRouter)(nil).Route), arg0...)
+}
+
+// RouteAccount mocks base method.
+func (m *MockRouter) RouteAccount(arg0 *url.URL) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RouteAccount", arg0)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RouteAccount indicates an expected call of RouteAccount.
+func (mr *MockRouterMockRecorder) RouteAccount(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RouteAccount", reflect.TypeOf((*MockRouter)(nil).RouteAccount), arg0)
 }
 
 // Submit mocks base method.

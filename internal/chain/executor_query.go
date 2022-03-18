@@ -486,7 +486,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, &txState.TransactionHeader, status, &qr)
+	err = getPendingStatus(batch, &txState.Header, status, signatures.Signatures, &qr)
 	if err != nil {
 		return nil, err
 	}

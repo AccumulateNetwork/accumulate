@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -23,11 +24,11 @@ func TestFee(t *testing.T) {
 
 	t.Run("SendTokens", func(t *testing.T) {
 		env := acctesting.NewTransaction().
-			WithOrigin(protocol.AcmeUrl()).
-			WithKeyPage(1, 1).
+			WithPrincipal(protocol.AcmeUrl()).
+			WithSigner(url.MustParse("foo/book/1"), 1).
 			WithNonceTimestamp().
 			WithBody(new(protocol.SendTokens)).
-			SignLegacyED25519(acctesting.GenerateKey(t.Name()))
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
 		fee, err := ComputeTransactionFee(env)
 		require.NoError(t, err)
 		require.Equal(t, protocol.FeeSendTokens, fee)
@@ -35,12 +36,12 @@ func TestFee(t *testing.T) {
 
 	t.Run("Lots of data", func(t *testing.T) {
 		env := acctesting.NewTransaction().
-			WithOrigin(protocol.AcmeUrl()).
-			WithKeyPage(1, 1).
+			WithPrincipal(protocol.AcmeUrl()).
+			WithSigner(url.MustParse("foo/book/1"), 1).
 			WithNonceTimestamp().
 			WithBody(new(protocol.SendTokens)).
-			SignLegacyED25519(acctesting.GenerateKey(t.Name()))
-		env.Transaction.Metadata = make([]byte, 1024)
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		env.Transaction.Header.Metadata = make([]byte, 1024)
 		fee, err := ComputeTransactionFee(env)
 		require.NoError(t, err)
 		require.Equal(t, protocol.FeeSendTokens+protocol.FeeWriteData*4, fee)
