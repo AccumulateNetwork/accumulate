@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
@@ -52,7 +53,7 @@ func (l LogLevel) Parse(s string) LogLevel {
 		if len(s) == 1 {
 			l.Default = s[0]
 		} else {
-			l.Modules = append(l.Modules, *(*[2]string)(s))
+			l.Modules = append(l.Modules, *(*[2]string)(unsafe.Pointer(&s)))
 		}
 	}
 	return l

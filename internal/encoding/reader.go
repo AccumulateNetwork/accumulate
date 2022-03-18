@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/big"
 	"time"
+	"unsafe"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
@@ -187,7 +188,7 @@ func (r *Reader) ReadHash(n uint) (*[32]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	return (*[32]byte)(v), true
+	return (*[32]byte)(unsafe.Pointer(&v)), true
 }
 
 // ReadInt reads the value as a varint-encoded signed integer.
