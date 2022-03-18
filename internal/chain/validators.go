@@ -126,8 +126,8 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 // checkValidatorTransaction implements common checks for validator
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *protocol.Envelope) (*protocol.KeyPage, error) {
-	if !st.nodeUrl.Equal(env.Transaction.Origin) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, env.Transaction.Origin)
+	if !st.nodeUrl.Equal(env.Transaction.Header.Principal) {
+		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, env.Transaction.Header.Principal)
 	}
 
 	bookUrl := st.nodeUrl.JoinPath(protocol.ValidatorBook)
@@ -138,7 +138,12 @@ func checkValidatorTransaction(st *StateManager, env *protocol.Envelope) (*proto
 		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
 	}
 
-	if env.Transaction.KeyPageIndex > 0 {
+	signerPriority, ok := getKeyPageIndex(st.SignatorUrl)
+	if !ok {
+		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
+	}
+
+	if signerPriority > 0 {
 		return nil, fmt.Errorf("cannot modify %v with a lower priority key page", pageUrl)
 	}
 

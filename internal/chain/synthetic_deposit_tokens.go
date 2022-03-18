@@ -31,7 +31,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		default:
 			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.GetType())
 		}
-	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Origin); err != nil {
+	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
 		return nil, fmt.Errorf("could not find token account")
@@ -40,11 +40,11 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 	} else {
 		// Address is lite and the account doesn't exist, so create one
 		lite := protocol.NewLiteTokenAccount()
-		lite.Url = tx.Transaction.Origin
+		lite.Url = tx.Transaction.Header.Principal
 		lite.TokenUrl = body.Token
 		account = lite
 
-		originIdentity := tx.Transaction.Origin.Identity()
+		originIdentity := tx.Transaction.Header.Principal.Identity()
 		liteIdentity := protocol.NewLiteIdentity()
 		err := st.LoadUrlAs(originIdentity, liteIdentity)
 		switch {
@@ -58,13 +58,13 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 			return nil, err
 		}
 
-		rootIdentity := tx.Transaction.Origin.RootIdentity()
+		rootIdentity := tx.Transaction.Header.Principal.RootIdentity()
 		if rootIdentity.Equal(originIdentity) && !protocol.AcmeUrl().Equal(body.Token) {
-			return nil, fmt.Errorf("invalid origin, expecting origin format acc://lite-account/lite-identity/... but got %s", tx.Transaction.Origin.String())
+			return nil, fmt.Errorf("invalid origin, expecting origin format acc://lite-account/lite-identity/... but got %s", tx.Transaction.Header.Principal.String())
 		}
-		err = st.AddDirectoryEntry(rootIdentity, tx.Transaction.Origin)
+		err = st.AddDirectoryEntry(rootIdentity, tx.Transaction.Header.Principal)
 		if err != nil {
-			return nil, fmt.Errorf("failed to add directory entries in lite token account %s: %v", tx.Transaction.Origin.RootIdentity(), err)
+			return nil, fmt.Errorf("failed to add directory entries in lite token account %s: %v", tx.Transaction.Header.Principal.RootIdentity(), err)
 		}
 	}
 

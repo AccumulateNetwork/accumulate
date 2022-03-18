@@ -1,24 +1,19 @@
 package protocol
 
 import (
-	"crypto/sha256"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 )
 
 // ComputeEntryHash
 // returns the entry hash given external id's and data associated with an entry
 func ComputeEntryHash(data [][]byte) []byte {
-	smt := managed.MerkleState{}
-	smt.InitSha256()
-	//add the external id's to the merkle tree
-	for i := range data {
-		h := sha256.Sum256(data[i])
-		smt.AddToMerkleTree(h[:])
+	h := make(hash.Hasher, 0, len(data))
+	for _, data := range data {
+		h.AddBytes(data)
 	}
-	//return the entry hash
-	return smt.GetMDRoot().Bytes()
+	return h.MerkleHash()
 }
 
 const TransactionSizeMax = 10240
