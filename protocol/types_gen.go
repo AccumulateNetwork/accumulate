@@ -543,8 +543,8 @@ type TransactionStatus struct {
 
 type UpdateAllowedKeyPageOperation struct {
 	fieldsSet []bool
-	Allow     []TransactionType `json:"allow,omitempty" form:"allow" query:"allow" validate:"required"`
-	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny" validate:"required"`
+	Allow     []TransactionType `json:"allow,omitempty" form:"allow" query:"allow"`
+	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny"`
 }
 
 type UpdateAllowedTransactions struct {
@@ -5919,17 +5919,6 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 
 func (v *UpdateAllowedKeyPageOperation) IsValid() error {
 	var errs []string
-
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Allow is missing")
-	} else if len(v.Allow) == 0 {
-		errs = append(errs, "field Allow is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Deny is missing")
-	} else if len(v.Deny) == 0 {
-		errs = append(errs, "field Deny is not set")
-	}
 
 	switch len(errs) {
 	case 0:

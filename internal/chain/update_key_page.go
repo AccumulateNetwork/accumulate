@@ -110,7 +110,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		}
 
 	case *protocol.UpdateAllowedKeyPageOperation:
-		if page.Url.Equal(st.OriginUrl) {
+		if signerPriority == originPriority {
 			return nil, fmt.Errorf("%v cannot modify its own allowed operations", st.OriginUrl)
 		}
 

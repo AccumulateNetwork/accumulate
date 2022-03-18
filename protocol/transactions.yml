@@ -502,10 +502,12 @@ UpdateAllowedKeyPageOperation:
       type: TransactionType
       repeatable: true
       marshal-as: enum
+      optional: true
     - name: Deny
       type: TransactionType
       repeatable: true
       marshal-as: enum
+      optional: true
 
 
 ##### Result Types #####
