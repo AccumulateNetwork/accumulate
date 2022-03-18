@@ -358,9 +358,11 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 		return err
 	}
 
+	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
 	for _, sig := range env.Signatures {
 		switch sig := sig.(type) {
 		case *protocol.SyntheticSignature:
+			gotSynthSig = true
 			if !m.Network.NodeUrl().Equal(sig.DestinationNetwork) {
 				return fmt.Errorf("destination network %v is not this network", sig.DestinationNetwork)
 			}
@@ -372,6 +374,8 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 				// TODO Check receipts on the DN
 				continue
 			}
+
+			gotReceiptSig = true
 
 			// Load the anchor chain
 			anchorChain, err := batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
@@ -392,9 +396,22 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 
 		case *protocol.ED25519Signature, *protocol.LegacyED25519Signature:
 			// TODO Check the key
+			gotED25519Sig = true
 
 		default:
 			return fmt.Errorf("synthetic transaction do not support %T signatures", sig)
+		}
+	}
+	if !gotSynthSig {
+		return fmt.Errorf("missing synthetic transaction origin")
+	}
+	if st.txType == protocol.TransactionTypeSyntheticAnchor {
+		if !gotED25519Sig {
+			return fmt.Errorf("missing ED25519 signature")
+		}
+	} else {
+		if !gotReceiptSig {
+			return fmt.Errorf("missing synthetic transaction receipt")
 		}
 	}
 
