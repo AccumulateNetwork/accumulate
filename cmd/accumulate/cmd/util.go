@@ -230,10 +230,11 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		}
 		sig, err = signer.Initiate(env.Transaction)
 	case payload == nil && txHash != nil:
-		env := new(protocol.Envelope)
+		payload = new(protocol.SignPending)
+		env = new(protocol.Envelope)
 		env.TxHash = txHash
 		env.Transaction = new(protocol.Transaction)
-		env.Transaction.Body = new(protocol.SignPending)
+		env.Transaction.Body = payload
 		env.Transaction.Header.Principal = origin
 		sig, err = signer.Sign(txHash)
 	default:
