@@ -229,10 +229,10 @@ RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "Query signature chain range by URL"
-RESULT=$(accumulate -j get "keytest/tokens?start=1&count=2#signature" | jq -re .count)
-[ "$RESULT" -eq 2 ] && success || die "No entries found"
-RESULT=$(accumulate -j get "keytest/tokens?start=1&count=2#signature" | jq -re .total)
-[ "$RESULT" -ge 3 ] && success || die "No entries found"
+RESULT=$(accumulate -j get "keytest/tokens?start=1&count=1#signature" | jq -re .count)
+[ "$RESULT" -eq 1 ] && success || die "Count mismatch"
+RESULT=$(accumulate -j get "keytest/tokens?start=1&count=1#signature" | jq -re .total)
+[ "$RESULT" -ge 2 ] && success || die "Total mismatch"
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
