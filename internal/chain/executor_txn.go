@@ -196,8 +196,6 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println("the transaction type is :", b)
-		fmt.Println("the transaction fee is :", fee)
 	} else {
 		fee, err = protocol.ComputeTransactionFee(env)
 		if err != nil {
@@ -483,7 +481,6 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 			ks.Nonce = env.Transaction.Nonce
 		}
 	}
-	fmt.Println("the transaction fee 2 is :", fee)
 	sigs, err := st.batch.Transaction(env.GetTxHash()).GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return false, fmt.Errorf("failed to get signatures: %v", err)
@@ -502,7 +499,6 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *protocol.Envelope,
 				fee += c
 			}
 		}*/
-		fmt.Println("This is a pending transaction and the fee is ", fee)
 	}
 
 	if !page.DebitCredits(uint64(fee)) {
@@ -553,8 +549,6 @@ func (m *Executor) validateAgainstLite(st *StateManager, env *protocol.Envelope,
 			account.Nonce = env.Transaction.Nonce
 		}
 	}
-	fmt.Println("the transaction fee 3 is :", fee)
-
 	if !account.DebitCredits(uint64(fee)) {
 		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.Url, account.CreditBalance.String(), fee)
 	}
@@ -677,7 +671,6 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 	if err != nil || fee > protocol.FeeFailedMaximum {
 		fee = protocol.FeeFailedMaximum
 	}
-	fmt.Println("the transaction fee 4 is :", fee)
 	st.Signator.DebitCredits(uint64(fee))
 
 	return sigRecord.PutState(st.Signator)

@@ -175,6 +175,7 @@ func ComputeTransactionFee(tx *Envelope) (Fee, error) {
 	return fee + FeeWriteData*Fee(count-1), nil
 }
 
+//Check if a Transaction is of the type SignPending
 func IsSignPending(typ TransactionType) bool {
 	return typ == TransactionTypeSignPending
 }
