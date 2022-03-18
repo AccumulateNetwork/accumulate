@@ -69,7 +69,6 @@ IndexEntry:
 DataEntry:
   fields:
     - name: Data
-      optional: false
       repeatable: true
       type: bytes
 
