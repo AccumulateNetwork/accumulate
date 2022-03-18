@@ -36,7 +36,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 				"txid", logging.AsHex(txid),
 				"hash", logging.AsHex(hash),
 				"error", err,
-				"principal", env.Transaction.Origin)
+				"principal", env.Transaction.Header.Principal)
 			status.Code = err.Code.ID()
 			status.Message = err.Error()
 		} else if !typ.IsInternal() && typ != protocol.TransactionTypeSyntheticAnchor {
