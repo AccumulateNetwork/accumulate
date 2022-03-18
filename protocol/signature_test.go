@@ -3,7 +3,6 @@ package protocol
 import (
 	"crypto/sha256"
 	"testing"
-	"time"
 
 	"golang.org/x/crypto/ed25519"
 )
@@ -12,7 +11,7 @@ func TestED25519Sig(t *testing.T) {
 	seed := sha256.Sum256([]byte{17, 26, 35, 44, 53, 62})
 	privateKey := ed25519.NewKeyFromSeed(seed[:])
 	message := []byte("this is a message of some import")
-	var timestamp uint64 = uint64(time.Now().Unix())
+	var timestamp uint64 = 1
 
 	es1 := new(LegacyED25519Signature)
 	es1.Timestamp = timestamp

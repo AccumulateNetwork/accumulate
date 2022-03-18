@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -45,7 +44,7 @@ func TestKeyPage_MofN(t *testing.T) {
 	for i := 1; i < 11; i++ {
 		key := new(KeySpec)
 		key.PublicKey = rh.Next()
-		key.LastUsedOn = uint64(time.Now().Unix())
+		key.LastUsedOn = 0
 		kp.Keys = append(kp.Keys, key)
 		for j := 1; j < 12; j++ {
 			err := kp.SetThreshold(uint64(j))

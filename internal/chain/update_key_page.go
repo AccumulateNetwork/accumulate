@@ -33,7 +33,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 
 	// We're changing the height of the key page, so reset all the nonces
 	for _, key := range page.Keys {
-		key.LastUsedOn = tx.Transaction.Timestamp
+		key.LastUsedOn = 0
 	}
 
 	// Find the old key.  Also go ahead and check cases where we must have the

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
@@ -55,7 +54,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	tx.Transaction.KeyPageHeight = 1
 
 	ed := new(protocol.LegacyED25519Signature)
-	tx.Transaction.Timestamp = uint64(time.Now().UTC().UnixNano())
+	tx.Transaction.Timestamp = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
 	err := ed.Sign(tx.Transaction.Timestamp, recipient, tx.GetTxHash())
 	if err != nil {
@@ -84,7 +83,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	gtx.Transaction.Origin = from
 
 	ed := new(protocol.LegacyED25519Signature)
-	gtx.Transaction.Timestamp = uint64(time.Now().UTC().UnixNano())
+	gtx.Transaction.Timestamp = 1
 	ed.PublicKey = sponsor[32:]
 	err = ed.Sign(gtx.Transaction.Timestamp, sponsor, gtx.GetTxHash())
 	if err != nil {
@@ -117,7 +116,7 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *transactions.Env
 	gtx.Transaction.Origin = destAddress
 
 	ed := new(protocol.LegacyED25519Signature)
-	gtx.Transaction.Timestamp = uint64(time.Now().UTC().UnixNano())
+	gtx.Transaction.Timestamp = 1
 	ed.PublicKey = privateKey[32:]
 	err := ed.Sign(gtx.Transaction.Timestamp, privateKey, gtx.GetTxHash())
 	if err != nil {

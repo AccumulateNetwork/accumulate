@@ -661,11 +661,11 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, txAc
 		return err
 	}
 
-	// sig := env.Signatures[0]
-	// err = st.Signator.SetTimestamp(sig.GetPublicKey(), env.Transaction.Timestamp)
-	// if err != nil {
-	// 	return err
-	// }
+	sig := env.Signatures[0]
+	err = st.Signator.SetLastUsedOn(sig.GetPublicKey(), env.Transaction.Timestamp)
+	if err != nil {
+		return err
+	}
 
 	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil || fee > protocol.FeeFailedMaximum {
