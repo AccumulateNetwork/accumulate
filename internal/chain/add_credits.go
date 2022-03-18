@@ -61,7 +61,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.GetType())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
-		if body.Recipient.Routing() == tx.Transaction.Origin.Routing() {
+		if body.Recipient.Routing() == tx.Transaction.Header.Principal.Routing() {
 			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
@@ -78,7 +78,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("not an account: %q", tx.Transaction.Origin)
+		return nil, fmt.Errorf("not an account: %q", tx.Transaction.Header.Principal)
 	}
 
 	// Only ACME tokens can be converted into credits
@@ -91,7 +91,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	}
 
 	if !account.DebitTokens(&amount.Int) {
-		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
+		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Header.Principal)
 	}
 	st.Update(account)
 

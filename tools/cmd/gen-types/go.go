@@ -258,7 +258,7 @@ func GoJsonZeroValue(field *Field) (string, error) {
 		return "false", nil
 	case "string", "chain":
 		return `""`, nil
-	case "uvarint", "varint":
+	case "uvarint", "varint", "uint", "int":
 		return "0", nil
 	}
 
