@@ -214,6 +214,7 @@ success
 
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
+accumulate -j get keytest/tokens#signature | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve signature transactions"
 
 
 section "Query pending chain at height 0 by URL"
@@ -226,6 +227,12 @@ RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionH
 section "Query pending chain range by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
+
+section "Query signature chain range by URL"
+RESULT=$(accumulate -j get "keytest/tokens?start=1&count=2#signature" | jq -re .count)
+[ "$RESULT" -eq 2 ] && success || die "No entries found"
+RESULT=$(accumulate -j get "keytest/tokens?start=1&count=2#signature" | jq -re .total)
+[ "$RESULT" -ge 3 ] && success || die "No entries found"
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
