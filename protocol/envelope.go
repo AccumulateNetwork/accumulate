@@ -77,7 +77,7 @@ func (t *Transaction) GetHash() []byte {
 	}
 
 	// Marshal the header
-	header, err := t.TransactionHeader.MarshalBinary()
+	header, err := t.Header.MarshalBinary()
 	if err != nil {
 		// TransactionHeader.MarshalBinary will never return an error, but better safe than sorry.
 		panic(err)

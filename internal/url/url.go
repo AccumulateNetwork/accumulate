@@ -150,6 +150,16 @@ func id(s string) [32]byte {
 	return h
 }
 
+func concatId(ids ...[32]byte) [32]byte {
+	digest := sha256.New()
+	for _, id := range ids {
+		digest.Write(id[:])
+	}
+	var result [32]byte
+	copy(result[:], digest.Sum(nil))
+	return result
+}
+
 func ensurePath(s string) string {
 	if s == "" || s[0] == '/' {
 		return s
@@ -223,6 +233,22 @@ func (u *URL) AccountID32() [32]byte {
 //   Routing = uint64(u.IdentityAccountID()[:8])
 func (u *URL) Routing() uint64 {
 	return binary.BigEndian.Uint64(u.IdentityAccountID())
+}
+
+// Hash calculates a hash of the URL starting with AccountID, hashing and
+// concatenating Query unless it is empty, and hashing and concatenating
+// Fragment unless it is empty. If Query and Fragment are both non-empty, with H
+// defined as the SHA-256 hash of the lower case of the operand, the result is
+// H(H(AccountID + H(Query)) + H(Fragment)).
+func (u *URL) Hash() []byte {
+	hash := u.AccountID32()
+	if u.Query != "" {
+		hash = concatId(hash, id(u.Query))
+	}
+	if u.Fragment != "" {
+		hash = concatId(hash, id(u.Fragment))
+	}
+	return hash[:]
 }
 
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,

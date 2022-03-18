@@ -266,7 +266,8 @@ func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
 	})
 
 	// Submit all the transactions as a batch
-	n.client.SubmitTx(context.Background(), blob)
+	st := n.client.SubmitTx(context.Background(), blob, true)
+	n.require.NotNil(st)
 
 	n.waitForTxns(nil, convertIds32(ids...)...)
 	return ids
@@ -414,5 +415,5 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
-	d.client.SubmitTx(context.Background(), b)
+	d.client.SubmitTx(context.Background(), b, false)
 }

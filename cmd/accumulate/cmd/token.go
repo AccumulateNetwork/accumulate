@@ -95,7 +95,7 @@ func CreateToken(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -139,7 +139,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 
-	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, si, privKey)
+	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}
@@ -163,7 +163,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -186,7 +186,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Recipient = recipient
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, si, privKey)
+	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}
@@ -210,7 +210,7 @@ func BurnTokens(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -233,7 +233,7 @@ func BurnTokens(origin string, args []string) (string, error) {
 	params := protocol.BurnTokens{}
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("burn-tokens", &params, nil, originUrl, si, privKey)
+	res, err := dispatchTxRequest("burn-tokens", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}

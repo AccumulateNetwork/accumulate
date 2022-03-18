@@ -83,6 +83,9 @@ func (s *BlockState) DidUpdateChain(update ChainUpdate) {
 }
 
 // DidProduceTxn records a produced transaction.
-func (s *BlockState) DidProduceTxn(txn *protocol.Transaction) {
+func (s *BlockState) DidProduceTxn(url *url.URL, body protocol.TransactionBody) {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = url
+	txn.Body = body
 	s.ProducedTxns = append(s.ProducedTxns, txn)
 }

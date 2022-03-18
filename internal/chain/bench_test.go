@@ -97,15 +97,15 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			require.NoError(b, batch.Commit())
 
 			env := acctesting.NewTransaction().
-				WithOrigin(fromUrl).
-				WithKeyPage(0, 1).
+				WithPrincipal(fromUrl).
+				WithSigner(fromUrl, 1).
 				WithNonce(1).
 				WithBody(&protocol.SendTokens{
 					To: []*protocol.TokenRecipient{
 						{Url: toUrl0, Amount: *big.NewInt(1)},
 					},
 				}).
-				SignLegacyED25519(fromKey)
+				Initiate(protocol.SignatureTypeED25519, fromKey)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
