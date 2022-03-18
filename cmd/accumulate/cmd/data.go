@@ -351,12 +351,7 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.DataEntry {
 			//clip the padding
 			data = data[:n]
 		}
-		//if i == 0 && !isFirstLiteEntry {
-		//	//if i == len(args)-1 && !isFirstLiteEntry {
-		//	entry.Data = append(entry.Data, data)
-		//} else {
 		entry.Data = append(entry.Data, data)
-		//}
 	}
 	return entry
 }
