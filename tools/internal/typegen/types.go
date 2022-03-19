@@ -13,24 +13,8 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 		typ.Name = name
 		t = append(t, typ)
 
-		if typ.TxType == "" {
-			if typ.Kind == "tx-result" && strings.HasSuffix(name, "Result") {
-				typ.TxType = name[0 : len(name)-6]
-			} else {
-				typ.TxType = name
-			}
-		}
-
-		if typ.ChainType == "" {
-			typ.ChainType = name
-		}
-
-		if typ.SignatureType == "" {
-			if strings.HasSuffix(typ.Name, "Signature") {
-				typ.SignatureType = name[0 : len(name)-9]
-			} else {
-				typ.SignatureType = name
-			}
+		if typ.Union.Type != "" && typ.Union.Value == "" {
+			typ.Union.Value = strings.TrimSuffix(name, strings.Title(typ.Union.Type))
 		}
 	}
 
@@ -42,25 +26,19 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 }
 
 type DataType struct {
-	Name          string `yaml:"-"`
-	Description   string
-	Kind          string
-	TxType        string `yaml:"tx-type"`
-	ChainType     string `yaml:"chain-type"`
-	SignatureType string `yaml:"signature-type"`
-	NonBinary     bool   `yaml:"non-binary"`
-	Incomparable  bool   `yaml:"incomparable"`
-	OmitNewFunc   bool   `yaml:"omit-new-func"`
-	Fields        []*Field
-	Embeddings    []string `yaml:"embeddings"`
+	Name         string `yaml:"-"`
+	Description  string
+	Union        Union
+	NonBinary    bool `yaml:"non-binary"`
+	Incomparable bool `yaml:"incomparable"`
+	OmitNewFunc  bool `yaml:"omit-new-func"`
+	Fields       []*Field
+	Embeddings   []string `yaml:"embeddings"`
 }
 
-func (typ *DataType) GoTxType() string {
-	return "protocol.TransactionType" + typ.TxType
-}
-
-func (typ *DataType) GoChainType() string {
-	return "types.ChainType" + typ.ChainType
+type Union struct {
+	Type  string
+	Value string
 }
 
 type Field struct {
