@@ -458,6 +458,12 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 		}
 	}
 
+	// Verify that the key page is allowed to sign the transaction
+	bit, ok := env.Transaction.Type().AllowedTransactionBit()
+	if ok && page.TransactionBlacklist.IsSet(bit) {
+		return false, fmt.Errorf("page %s is not authorized to sign %v", st.SignatorUrl, env.Transaction.Type())
+	}
+
 	var firstKeySpec *protocol.KeySpec
 	for i, sig := range env.Signatures {
 		ks := page.FindKey(sig.GetPublicKey())
@@ -652,7 +658,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 		}
 	}
 
-	if status.Code == protocol.ErrorCodeOK.ID() {
+	if status.Code == protocol.ErrorCodeOK.GetEnumValue() {
 		return nil
 	}
 

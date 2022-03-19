@@ -788,9 +788,10 @@ func TestAddKey(t *testing.T) {
 
 	newKey := generateKey()
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.PublicKey = newKey.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = newKey.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -818,10 +819,11 @@ func TestUpdateKey(t *testing.T) {
 
 	newKey := generateKey()
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.UpdateKeyOperation)
+		op.OldEntry.PublicKey = testKey.PubKey().Bytes()
+		op.NewEntry.PublicKey = newKey.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationUpdate
-		body.Key = testKey.PubKey().Bytes()
-		body.NewKey = newKey.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -849,9 +851,10 @@ func TestRemoveKey(t *testing.T) {
 
 	// Add second key because CreateKeyBook can't do it
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.PublicKey = testKey2.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = testKey2.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -860,9 +863,10 @@ func TestRemoveKey(t *testing.T) {
 	})
 
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.RemoveKeyOperation)
+		op.Entry.PublicKey = testKey1.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationRemove
-		body.Key = testKey1.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 2).

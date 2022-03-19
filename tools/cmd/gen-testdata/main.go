@@ -103,7 +103,7 @@ var txnTests = []*TCG{
 		txnTest("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: 100}),
 	}},
 	{Name: "UpdateKeyPage", Cases: []*TC{
-		txnTest("adi", &UpdateKeyPage{Operation: KeyPageOperationAdd, NewKey: key[32:]}),
+		txnTest("adi", &UpdateKeyPage{Operation: &AddKeyOperation{Entry: KeySpecParams{PublicKey: key[32:]}}}),
 	}},
 	{Name: "SignPending", Cases: []*TC{
 		txnTest("adi", &SignPending{}),

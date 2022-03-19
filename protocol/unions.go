@@ -50,3 +50,8 @@ type TransactionResult interface {
 	Type() TransactionType
 	encoding.BinaryValue
 }
+
+type KeyPageOperation interface {
+	Type() KeyPageOperationType
+	encoding.BinaryValue
+}
