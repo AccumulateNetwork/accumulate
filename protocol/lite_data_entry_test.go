@@ -85,7 +85,6 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 40 credits, but computed %d", cost)
 	}
 
-	de.Data = append(de.Data, []byte("a cost test"))
 	//now let's blow up the size of the entry to > 10kB to make sure it fails.
 	for i := 0; i < 1000; i++ {
 		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
