@@ -17,11 +17,11 @@ const {{$typ}}{{.Name}} {{$typ}} = {{.Value}}
 {{end}}
 
 {{range .Types}}
-// ID returns the ID of the {{natural .Name}}
-func (v {{.Name}}) ID() uint64 { return uint64(v) }
+// GetEnumValue returns the value of the {{natural .Name}}
+func (v {{.Name}}) GetEnumValue() uint64 { return uint64(v) }
 
-// Set sets the value. Set returns false if the value is invalid.
-func (v *{{.Name}}) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *{{.Name}}) SetEnumValue(id uint64) bool {
 	u := {{.Name}}(id)
 	switch u {
 	{{- $typ := .Name}}
@@ -84,27 +84,5 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
-
-// BinarySize returns the number of bytes required to binary marshal the {{natural .Name}}.
-func (v {{.Name}}) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
-
-// MarshalBinary marshals the {{natural .Name}} to bytes as a unsigned varint.
-func (v {{.Name}}) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the {{natural .Name}} from bytes as a unsigned varint.
-func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = {{.Name}}(u)
-	return nil
-}
-
 
 {{end}}

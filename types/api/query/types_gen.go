@@ -187,7 +187,12 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 }
 
 func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(v.EntryHash == u.EntryHash) {
@@ -198,7 +203,12 @@ func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
 }
 
 func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(v.Start == u.Start) {
@@ -215,7 +225,12 @@ func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(bytes.Equal(v.Key, u.Key)) {
@@ -226,7 +241,12 @@ func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
 }
 
 func (v *RequestTxHistory) Equal(u *RequestTxHistory) bool {
-	if !((v.Account).Equal(u.Account)) {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 	if !(v.Start == u.Start) {
@@ -259,10 +279,20 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 	if !(v.TxId == u.TxId) {
 		return false
 	}
-	if !((v.Envelope).Equal(u.Envelope)) {
+	switch {
+	case v.Envelope == u.Envelope:
+		// equal
+	case v.Envelope == nil || u.Envelope == nil:
+		return false
+	case !((v.Envelope).Equal(u.Envelope)):
 		return false
 	}
-	if !((v.Status).Equal(u.Status)) {
+	switch {
+	case v.Status == u.Status:
+		// equal
+	case v.Status == nil || u.Status == nil:
+		return false
+	case !((v.Status).Equal(u.Status)):
 		return false
 	}
 	if !(bytes.Equal(v.TxSynthTxIds, u.TxSynthTxIds)) {
@@ -366,10 +396,20 @@ func (v *ResponseDataEntrySet) Equal(u *ResponseDataEntrySet) bool {
 }
 
 func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
-	if !((v.KeyBook).Equal(u.KeyBook)) {
+	switch {
+	case v.KeyBook == u.KeyBook:
+		// equal
+	case v.KeyBook == nil || u.KeyBook == nil:
+		return false
+	case !((v.KeyBook).Equal(u.KeyBook)):
 		return false
 	}
-	if !((v.KeyPage).Equal(u.KeyPage)) {
+	switch {
+	case v.KeyPage == u.KeyPage:
+		// equal
+	case v.KeyPage == nil || u.KeyPage == nil:
+		return false
+	case !((v.KeyPage).Equal(u.KeyPage)):
 		return false
 	}
 	if !(v.Index == u.Index) {
@@ -415,7 +455,12 @@ func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 }
 
 func (v *TxReceipt) Equal(u *TxReceipt) bool {
-	if !((v.Account).Equal(u.Account)) {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 	if !(v.Chain == u.Chain) {
