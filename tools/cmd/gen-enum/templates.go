@@ -84,8 +84,11 @@ func natural(name string) string {
 
 	var word string
 	var split int
+	var offset int
 	for len(splits) > 0 {
 		split, splits = splits[0], splits[1:]
+		split -= offset
+		offset += split
 		word, name = name[:split], name[split:]
 		w.WriteString(word)
 		w.WriteRune(' ')
