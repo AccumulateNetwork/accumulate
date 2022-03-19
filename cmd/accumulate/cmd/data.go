@@ -216,10 +216,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	}
 	wdt.Recipient = addr
 
-	lite, err := GetUrl(wdt.Recipient.String())
-	if err != nil {
-		return "", err
-	}
+	lite, _ := GetUrl(wdt.Recipient.String())
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}

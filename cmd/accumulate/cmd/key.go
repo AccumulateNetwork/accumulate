@@ -239,7 +239,6 @@ func GenerateKey(label string) (string, error) {
 	}
 
 	privKey, err := GeneratePrivateKey()
-
 	if err != nil {
 		return "", err
 	}
@@ -423,39 +422,36 @@ func ExportKey(label string) (string, error) {
 	}
 }
 
-func GeneratePrivateKey() (privKey []byte, err error) {
+func GeneratePrivateKey() ([]byte, error) {
 	seed, err := lookupSeed()
-
 	if err != nil {
 		//if private key seed doesn't exist, just create a key
-		_, privKey, err = ed25519.GenerateKey(nil)
+		_, privKey, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		//if we do have a seed, then create a new key
-		masterKey, _ := bip32.NewMasterKey(seed)
-
-		ct, err := getKeyCountAndIncrement()
-		if err != nil {
-			return nil, err
-		}
-
-		newKey, err := masterKey.NewChildKey(ct)
-		if err != nil {
-			return nil, err
-		}
-		privKey = ed25519.NewKeyFromSeed(newKey.Key)
+		return privKey, nil
 	}
-	return
+
+	//if we do have a seed, then create a new key
+	masterKey, _ := bip32.NewMasterKey(seed)
+
+	ct, err := getKeyCountAndIncrement()
+	if err != nil {
+		return nil, err
+	}
+
+	newKey, err := masterKey.NewChildKey(ct)
+	if err != nil {
+		return nil, err
+	}
+	privKey := ed25519.NewKeyFromSeed(newKey.Key)
+	return privKey, nil
 }
 
 func getKeyCountAndIncrement() (count uint32, err error) {
 
-	ct, err := Db.Get(BucketMnemonic, []byte("count"))
-	if err != nil {
-		return 0, err
-	}
+	ct, _ := Db.Get(BucketMnemonic, []byte("count"))
 	if ct != nil {
 		count = binary.LittleEndian.Uint32(ct)
 	}
@@ -489,15 +485,12 @@ func ImportMnemonic(mnemonic []string) (string, error) {
 	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
 	seed := bip39.NewSeed(mns, "")
 
-	root, err := Db.Get(BucketMnemonic, []byte("seed"))
-	if err != nil {
-		return "", err
-	}
+	root, _ := Db.Get(BucketMnemonic, []byte("seed"))
 	if len(root) != 0 {
 		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
 	}
 
-	err = Db.Put(BucketMnemonic, []byte("seed"), seed)
+	err := Db.Put(BucketMnemonic, []byte("seed"), seed)
 	if err != nil {
 		return "", fmt.Errorf("DB: seed write error, %v", err)
 	}
