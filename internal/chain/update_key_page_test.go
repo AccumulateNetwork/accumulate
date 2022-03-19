@@ -37,10 +37,11 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
+			op := new(protocol.UpdateKeyOperation)
+			op.OldEntry.PublicKey = testKey.PubKey().Bytes()
+			op.NewEntry.PublicKey = newKey.PubKey().Bytes()
 			body := new(protocol.UpdateKeyPage)
-			body.Operation = protocol.KeyPageOperationUpdate
-			body.Key = testKey.PubKey().Bytes()
-			body.NewKey = newKey.PubKey().Bytes()
+			body.Operation = op
 
 			env := acctesting.NewTransaction().
 				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
