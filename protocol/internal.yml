@@ -4,7 +4,7 @@
 ##### Accounts #####
 
 InternalLedger:
-  kind: chain
+  union: { type: account }
   embeddings:
     - AccountHeader
   fields:
@@ -21,7 +21,7 @@ InternalLedger:
       type: uvarint
 
 InternalSyntheticLedger:
-  kind: chain
+  union: { type: account }
   embeddings:
     - AccountHeader
   fields:
@@ -34,10 +34,10 @@ InternalSyntheticLedger:
 ##### Transactions #####
 
 InternalGenesis:
-  kind: tx
+  union: { type: transaction }
 
 InternalSendTransactions:
-  kind: tx
+  union: { type: transaction }
   incomparable: true
   fields:
     - name: Transactions
@@ -46,7 +46,7 @@ InternalSendTransactions:
       marshal-as: reference
 
 InternalTransactionsSigned:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Transactions
       repeatable: true
@@ -54,7 +54,7 @@ InternalTransactionsSigned:
       marshal-as: reference
 
 InternalTransactionsSent:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Transactions
       type: chain

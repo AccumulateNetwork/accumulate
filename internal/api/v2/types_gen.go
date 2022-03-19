@@ -210,7 +210,12 @@ func (v *DataEntry) Equal(u *DataEntry) bool {
 }
 
 func (v *DataEntryQuery) Equal(u *DataEntryQuery) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(v.EntryHash == u.EntryHash) {
