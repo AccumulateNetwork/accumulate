@@ -317,12 +317,12 @@ func (r *Reader) ReadValue(n uint, unmarshal func([]byte) error) bool {
 	return err == nil
 }
 
-func (r *Reader) ReadEnum(n uint, v interface{ Set(uint64) bool }) bool {
+func (r *Reader) ReadEnum(n uint, v EnumValueSetter) bool {
 	u, ok := r.ReadUint(n)
 	if !ok {
 		return false
 	}
-	if v.Set(u) {
+	if v.SetEnumValue(u) {
 		return true
 	}
 	r.didRead(n, fmt.Errorf("%d is not a valid value", u), "failed to unmarshal value")
