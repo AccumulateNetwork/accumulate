@@ -453,6 +453,9 @@ func GeneratePrivateKey() (privKey []byte, err error) {
 func getKeyCountAndIncrement() (count uint32, err error) {
 
 	ct, err := Db.Get(BucketMnemonic, []byte("count"))
+	if err != nil {
+		return 0, err
+	}
 	if ct != nil {
 		count = binary.LittleEndian.Uint32(ct)
 	}
@@ -487,6 +490,9 @@ func ImportMnemonic(mnemonic []string) (string, error) {
 	seed := bip39.NewSeed(mns, "")
 
 	root, err := Db.Get(BucketMnemonic, []byte("seed"))
+	if err != nil {
+		return "", err
+	}
 	if len(root) != 0 {
 		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
 	}

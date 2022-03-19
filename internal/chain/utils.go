@@ -201,31 +201,6 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 	return arec, nil
 }
 
-func buildProof(batch *database.Batch, u *ChainUpdate, rootChain *database.Chain, rootIndex, rootHeight int64) (*managed.Receipt, error) {
-	anchorChain, err := batch.Account(u.Account).ReadChain(u.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	anchorHeight := anchorChain.Height()
-	r1, err := anchorChain.Receipt(int64(u.Index), anchorHeight-1)
-	if err != nil {
-		return nil, fmt.Errorf("unable to construct a receipt for %s#chain/%s: %w", u.Account, u.Name, err)
-	}
-
-	r2, err := rootChain.Receipt(rootIndex, rootHeight-1)
-	if err != nil {
-		return nil, fmt.Errorf("unable to construct a receipt for the root chain: %w", err)
-	}
-
-	r, err := r1.Combine(r2)
-	if err != nil {
-		return nil, err
-	}
-
-	return r, nil
-}
-
 func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 	var count int
 	for _, hash := range txids {
@@ -266,7 +241,7 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	}
 
 	// Find the origin's key book
-	keyBook, ok := origin.(*protocol.KeyBook)
+	_, ok := origin.(*protocol.KeyBook)
 	switch {
 	case ok:
 		// Key books are their own key books
@@ -275,8 +250,7 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 		return nil
 	default:
 		// Load the origin's key book
-		keyBook = new(protocol.KeyBook)
-		err := batch.Account(origin.Header().KeyBook).GetStateAs(keyBook)
+		err := batch.Account(origin.Header().KeyBook).GetStateAs(new(protocol.KeyBook))
 		if err != nil {
 			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
 		}
