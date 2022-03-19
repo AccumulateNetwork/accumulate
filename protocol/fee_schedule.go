@@ -144,10 +144,10 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 
 func ComputeTransactionFee(tx *Envelope) (Fee, error) {
 	// Do not charge fees for the DN or BVNs
-	if IsDnUrl(tx.Transaction.Origin) {
+	if IsDnUrl(tx.Transaction.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
+	if _, ok := ParseBvnUrl(tx.Transaction.Header.Principal); ok {
 		return 0, nil
 	}
 

@@ -39,7 +39,7 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +64,7 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Amount = *amt
 	credits.Oracle = acmeOracle
 
-	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
+	res, err := dispatchTxRequest("add-credits", &credits, nil, u, signer)
 	if err != nil {
 		return "", err
 	}

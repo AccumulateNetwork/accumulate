@@ -21,10 +21,15 @@ func TestExecuteCheckOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	baseReq := TxRequest{
-		Origin:  &url.URL{Authority: "check"},
+		Origin:  url.MustParse("check"),
 		Payload: hex.EncodeToString(payload),
 		Signer: Signer{
 			PublicKey: make([]byte, 32),
+			Url:       url.MustParse("check"),
+			Nonce:     1,
+		},
+		KeyPage: KeyPage{
+			Height: 1,
 		},
 		Signature: make([]byte, 64),
 	}

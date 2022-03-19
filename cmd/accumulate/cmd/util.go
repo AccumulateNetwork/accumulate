@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
@@ -59,69 +60,70 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *protocol.TransactionHeader, []byte, error) {
-	var privKey []byte
-	var err error
-
+func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, error) {
 	ct := 0
 	if len(args) == 0 {
-		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
+		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	hdr := protocol.TransactionHeader{}
-	hdr.Origin = origin
-	hdr.KeyPageHeight = 1
-	hdr.KeyPageIndex = 0
+	signer := new(signing.Signer)
+	signer.Type = protocol.SignatureTypeLegacyED25519
+	signer.Timestamp = nonceFromTimeNow()
 
 	if IsLiteAccount(origin.String()) {
-		privKey, err = LookupByLabel(origin.String())
+		privKey, err := LookupByLabel(origin.String())
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
+			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-		return args, &hdr, privKey, nil
+
+		signer.Url = origin
+		signer.Height = 1
+		signer.PrivateKey = privKey
+		return args, signer, nil
 	}
 
-	privKey, err = resolvePrivateKey(args[0])
+	privKey, err := resolvePrivateKey(args[0])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
+	signer.PrivateKey = privKey
 	ct++
-
-	if len(args) > 1 {
-		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
-			ct++
-			hdr.KeyPageIndex = uint64(v)
-		}
-	}
 
 	keyInfo, err := getKey(origin.String(), privKey[32:])
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
+		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	ms, err := getRecord(keyInfo.KeyPage.String(), nil)
+	if len(args) < 2 {
+		signer.Url = keyInfo.KeyPage
+	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
+		signer.Url = protocol.FormatKeyPageUrl(keyInfo.KeyBook, v)
+		ct++
+	} else {
+		signer.Url = keyInfo.KeyPage
+	}
+
+	ms, err := getRecord(signer.Url.String(), nil)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
+		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
+	signer.Height = ms.Height
 
-	hdr.KeyPageIndex = keyInfo.Index
-	hdr.KeyPageHeight = ms.Height
-
-	return args[ct:], &hdr, privKey, nil
+	return args[ct:], signer, nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *protocol.TransactionHeader, []byte, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Signer, error) {
 	principal, err := url2.Parse(args[0])
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	args, header, key, err := prepareSigner(principal, args[1:])
+	args, signer, err := prepareSigner(principal, args[1:])
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return args, principal, header, key, nil
+	return args, principal, signer, nil
 }
 
 func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
@@ -144,52 +146,6 @@ func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
 	}
 
 	return account, nil
-}
-
-func signGenTx(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, hdr *protocol.TransactionHeader, privKey []byte, nonce uint64) (protocol.Signature, error) {
-	env := new(protocol.Envelope)
-	env.TxHash = txHash
-	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Body = payload
-
-	hdr.Nonce = nonce
-	env.Transaction.TransactionHeader = *hdr
-
-	ed := new(protocol.LegacyED25519Signature)
-	err := ed.Sign(nonce, privKey, env.GetTxHash())
-	if err != nil {
-		return nil, err
-	}
-	return ed, nil
-}
-
-func prepareGenTxV2(payload protocol.TransactionBody, jsonPayload, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(payload, txHash, origin, si, privKey, nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	params := &api2.TxRequest{}
-	params.TxHash = txHash
-
-	if TxPretend {
-		params.CheckOnly = true
-	}
-
-	// TODO The payload field can be set equal to the struct, without marshalling first
-	params.Payload = json.RawMessage(jsonPayload)
-	params.Signer.Nonce = nonce
-	params.Origin = origin
-	params.KeyPage.Height = si.KeyPageHeight
-	params.KeyPage.Index = si.KeyPageIndex
-
-	params.Signature = ed.GetSignature()
-	//The public key needs to be used to verify the signature, however,
-	//to pass verification, the validator will hash the key and check the
-	//sig spec group to make sure this key belongs to the identity.
-	params.Signer.PublicKey = ed.GetPublicKey()
-
-	return params, err
 }
 
 func IsLiteAccount(url string) bool {
@@ -253,67 +209,72 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (*api2.TxResponse, error) {
-	if payload == nil && txHash != nil {
-		payload = new(protocol.SignPending)
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (string, error) {
+	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
+	if err != nil {
+		return "", err
 	}
 
-	si.Memo = Memo
-	if Metadata != "" {
-		if strings.Contains(Metadata, ":") {
-			dataSet := strings.Split(Metadata, ":")
-			switch dataSet[0] {
-			case "hex":
-				bytes, err := hex.DecodeString(dataSet[1])
-				if err != nil {
-					return nil, err
-				}
-				si.Metadata = bytes
-			case "base64":
-				bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
-				if err != nil {
-					return nil, err
-				}
-				si.Metadata = bytes
-			default:
-				si.Metadata = []byte(dataSet[1])
-			}
-		} else {
-			si.Metadata = []byte(Metadata)
+	return ActionResponseFrom(res).Print()
+}
+
+func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (*api2.TxResponse, error) {
+	var env *protocol.Envelope
+	var sig protocol.Signature
+	var err error
+	switch {
+	case payload != nil && txHash == nil:
+		env, err = buildEnvelope(payload, origin)
+		if err != nil {
+			return nil, err
 		}
+		sig, err = signer.Initiate(env.Transaction)
+	case payload == nil && txHash != nil:
+		payload = new(protocol.SignPending)
+		env = new(protocol.Envelope)
+		env.TxHash = txHash
+		env.Transaction = new(protocol.Transaction)
+		env.Transaction.Body = payload
+		env.Transaction.Header.Principal = origin
+		sig, err = signer.Sign(txHash)
+	default:
+		panic("cannot specify a transaction hash and a payload")
 	}
-
-	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
+	env.Signatures = append(env.Signatures, sig)
 
-	var data []byte
+	req := new(api2.TxRequest)
+	req.TxHash = txHash
+	req.Origin = env.Transaction.Header.Principal
+	req.Signer.Nonce = sig.GetTimestamp()
+	req.Signer.Url = sig.GetSigner()
+	req.Signer.PublicKey = sig.GetPublicKey()
+	req.KeyPage.Height = sig.GetSignerHeight()
+	req.Signature = sig.GetSignature()
+	req.Memo = env.Transaction.Header.Memo
+	req.Metadata = env.Transaction.Header.Metadata
+
+	if TxPretend {
+		req.CheckOnly = true
+	}
+
 	if action == "execute" {
-		data, err = json.Marshal(hex.EncodeToString(dataBinary))
+		dataBinary, err := payload.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		req.Payload = hex.EncodeToString(dataBinary)
 	} else {
-		data, err = json.Marshal(payload)
+		req.Payload = payload
 	}
-	if err != nil {
-		return nil, err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(payload, data, txHash, origin, si, privKey, nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	params.Memo = si.Memo
-	params.Metadata = si.Metadata
-
-	data, err = json.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
 
 	var res api2.TxResponse
-	if err := Client.RequestAPIv2(context.Background(), action, json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), action, req, &res); err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
 	}
@@ -321,13 +282,40 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	return &res, nil
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, si *protocol.TransactionHeader, privKey []byte) (string, error) {
-	res, err := dispatchTxRequest(action, payload, txHash, origin, si, privKey)
-	if err != nil {
-		return "", err
+func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
+	env.Transaction.Body = payload
+	env.Transaction.Header.Principal = origin
+	env.Transaction.Header.Memo = Memo
+
+	if Metadata == "" {
+		return env, nil
 	}
 
-	return ActionResponseFrom(res).Print()
+	if !strings.Contains(Metadata, ":") {
+		env.Transaction.Header.Metadata = []byte(Metadata)
+		return env, nil
+	}
+
+	dataSet := strings.Split(Metadata, ":")
+	switch dataSet[0] {
+	case "hex":
+		bytes, err := hex.DecodeString(dataSet[1])
+		if err != nil {
+			return nil, err
+		}
+		env.Transaction.Header.Metadata = bytes
+	case "base64":
+		bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
+		if err != nil {
+			return nil, err
+		}
+		env.Transaction.Header.Metadata = bytes
+	default:
+		env.Transaction.Header.Metadata = []byte(dataSet[1])
+	}
+	return env, nil
 }
 
 type ActionResponse struct {
@@ -609,9 +597,8 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+		out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKey())
 	}
-	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
 	return out
 }

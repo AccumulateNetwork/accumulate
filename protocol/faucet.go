@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 const AcmeFaucetAmount = 2000000
@@ -52,12 +53,7 @@ func (s faucetSigner) PublicKey() []byte {
 	return faucetKey[32:]
 }
 
-func SignWithFaucet(nonce uint64, message []byte) (Signature, error) {
-	sig := new(LegacyED25519Signature)
-	err := sig.Sign(nonce, faucetKey, message)
-	return sig, err
-}
-
-func (s faucetSigner) Sign(message []byte) (Signature, error) {
-	return SignWithFaucet(uint64(s), message)
+func (s faucetSigner) Sign(message []byte) []byte {
+	withNonce := append(common.Uint64Bytes(s.Nonce()), message...)
+	return ed25519.Sign(faucetKey, withNonce)
 }

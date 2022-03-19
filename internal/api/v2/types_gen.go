@@ -71,9 +71,7 @@ type GeneralQuery struct {
 }
 
 type KeyPage struct {
-	Height    uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
-	Index     uint64 `json:"index" form:"index" query:"index"`
-	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold"`
+	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 }
 
 type KeyPageIndexQuery struct {
@@ -116,8 +114,9 @@ type QueryPagination struct {
 }
 
 type Signer struct {
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 }
 
 type StatusResponse struct {
@@ -140,7 +139,6 @@ type TransactionQueryResponse struct {
 	MainChain          *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
 	Data               interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	Origin             *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	KeyPage            *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	TransactionHash    []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
 	Transaction        *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signatures         []protocol.Signature        `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -212,7 +210,12 @@ func (v *DataEntry) Equal(u *DataEntry) bool {
 }
 
 func (v *DataEntryQuery) Equal(u *DataEntryQuery) bool {
-	if !((v.Url).Equal(u.Url)) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
 		return false
 	}
 	if !(v.EntryHash == u.EntryHash) {
@@ -621,11 +624,13 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-		Nonce     uint64  `json:"nonce,omitempty"`
+		PublicKey *string  `json:"publicKey,omitempty"`
+		Nonce     uint64   `json:"nonce,omitempty"`
+		Url       *url.URL `json:"url,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
+	u.Url = v.Url
 	return json.Marshal(&u)
 }
 
@@ -649,7 +654,6 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		Data               interface{}                 `json:"data,omitempty"`
 		Origin             *url.URL                    `json:"origin,omitempty"`
 		Sponsor            *url.URL                    `json:"sponsor,omitempty"`
-		KeyPage            *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash    *string                     `json:"transactionHash,omitempty"`
 		Txid               *string                     `json:"txid,omitempty"`
 		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
@@ -666,7 +670,6 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
-	u.KeyPage = v.KeyPage
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Transaction = v.Transaction
@@ -1143,11 +1146,13 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-		Nonce     uint64  `json:"nonce,omitempty"`
+		PublicKey *string  `json:"publicKey,omitempty"`
+		Nonce     uint64   `json:"nonce,omitempty"`
+		Url       *url.URL `json:"url,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
+	u.Url = v.Url
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1157,6 +1162,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		v.PublicKey = x
 	}
 	v.Nonce = u.Nonce
+	v.Url = u.Url
 	return nil
 }
 
@@ -1194,7 +1200,6 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		Data               interface{}                 `json:"data,omitempty"`
 		Origin             *url.URL                    `json:"origin,omitempty"`
 		Sponsor            *url.URL                    `json:"sponsor,omitempty"`
-		KeyPage            *KeyPage                    `json:"keyPage,omitempty"`
 		TransactionHash    *string                     `json:"transactionHash,omitempty"`
 		Txid               *string                     `json:"txid,omitempty"`
 		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
@@ -1211,7 +1216,6 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Data = encoding.AnyToJSON(v.Data)
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
-	u.KeyPage = v.KeyPage
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Transaction = v.Transaction
@@ -1250,7 +1254,6 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Origin = u.Sponsor
 	}
-	v.KeyPage = u.KeyPage
 	if u.TransactionHash != nil {
 		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
 			return fmt.Errorf("error decoding TransactionHash: %w", err)

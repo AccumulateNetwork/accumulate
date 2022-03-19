@@ -3,7 +3,13 @@ package protocol
 import (
 	"bytes"
 	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
+
+func (k *KeySpecParams) IsEmpty() bool {
+	return len(k.PublicKey) == 0 && k.Owner == nil
+}
 
 func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
 	// Check each key
@@ -19,12 +25,25 @@ func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
 	return nil
 }
 
-func (p *KeyPage) FindKeyHash(hash []byte) (int, *KeySpec, bool) {
-	for i, key := range p.Keys {
-		if bytes.Equal(key.PublicKey, hash) {
-			return i, key, true
+// EntryByKeyHash finds the entry with a matching key hash.
+func (p *KeyPage) EntryByKeyHash(keyHash []byte) (int, *KeySpec, bool) {
+	for i, entry := range p.Keys {
+		if bytes.Equal(entry.PublicKey, keyHash) {
+			return i, entry, true
 		}
 	}
+
+	return -1, nil, false
+}
+
+// EntryByOwner finds the entry with a matching owner
+func (p *KeyPage) EntryByOwner(owner *url.URL) (int, *KeySpec, bool) {
+	for i, entry := range p.Keys {
+		if owner.Equal(entry.Owner) {
+			return i, entry, true
+		}
+	}
+
 	return -1, nil, false
 }
 
