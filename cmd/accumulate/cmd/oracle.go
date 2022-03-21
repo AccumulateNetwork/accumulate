@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -32,6 +33,14 @@ func GetCreditValue() (string, error) {
 	acmeOracle, err := QueryAcmeOracle()
 	if err != nil {
 		return "", err
+	}
+
+	if WantJsonOutput {
+		data, err := json.Marshal(&acmeOracle)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
 	}
 
 	usd := float64(acmeOracle.Price) / protocol.AcmeOraclePrecision
