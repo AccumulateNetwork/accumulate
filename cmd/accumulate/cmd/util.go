@@ -48,18 +48,6 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
-	params := api2.ChainIdQuery{
-		ChainId: chainId,
-	}
-	res := new(api2.ChainQueryResponse)
-	res.Data = rec
-	if err := Client.RequestAPIv2(context.Background(), "query-chain", &params, res); err != nil {
-		return nil, err
-	}
-	return res.MainChain, nil
-}
-
 func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, error) {
 	ct := 0
 	if len(args) == 0 {
@@ -126,28 +114,6 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Sig
 	return args, principal, signer, nil
 }
 
-func jsonUnmarshalAccount(data []byte) (protocol.Account, error) {
-	var typ struct {
-		Type protocol.AccountType
-	}
-	err := json.Unmarshal(data, &typ)
-	if err != nil {
-		return nil, err
-	}
-
-	account, err := protocol.NewAccount(typ.Type)
-	if err != nil {
-		return nil, err
-	}
-
-	err = json.Unmarshal(data, account)
-	if err != nil {
-		return nil, err
-	}
-
-	return account, nil
-}
-
 func IsLiteAccount(url string) bool {
 	u, err := url2.Parse(url)
 	if err != nil {
@@ -184,6 +150,9 @@ func GetUrl(url string) (*QueryResponse, error) {
 	var res QueryResponse
 
 	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
 	params := api2.UrlQuery{}
 	params.Url = u
 
@@ -344,7 +313,7 @@ type ActionLiteDataResponse struct {
 func ActionResponseFromLiteData(r *api2.TxResponse, accountUrl string, accountId []byte, entryHash []byte) *ActionLiteDataResponse {
 	ar := &ActionLiteDataResponse{}
 	ar.AccountUrl = types.String(accountUrl)
-	ar.AccountId.FromBytes(accountId)
+	_ = ar.AccountId.FromBytes(accountId)
 	ar.ActionDataResponse = *ActionResponseFromData(r, entryHash)
 	return ar
 }
@@ -375,7 +344,7 @@ func (a *ActionLiteDataResponse) Print() (string, error) {
 
 func ActionResponseFromData(r *api2.TxResponse, entryHash []byte) *ActionDataResponse {
 	ar := &ActionDataResponse{}
-	ar.EntryHash.FromBytes(entryHash)
+	_ = ar.EntryHash.FromBytes(entryHash)
 	ar.ActionResponse = *ActionResponseFrom(r)
 	return ar
 }
@@ -445,6 +414,7 @@ func (a *ActionResponse) Print() (string, error) {
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
 		} else {
+			//nolint:gosimple
 			out += fmt.Sprintf("\tError code\t\t:\tok\n")
 		}
 		if a.Error != "" {
@@ -591,6 +561,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	return fmt.Sprintf("%s %s", amountToString(t.Precision, amount), t.Symbol), nil
 }
 
+//nolint:gosimple
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
@@ -649,6 +620,7 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
 		if !receipt.Receipt.Convert().Validate() {
+			//nolint:gosimple
 			out += fmt.Sprintf("  Invalid!!\n")
 		}
 	}
@@ -721,6 +693,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 	return out, nil
 }
 
+//nolint:gosimple
 func outputForHumans(res *QueryResponse) (string, error) {
 	switch string(res.Type) {
 	case protocol.AccountTypeLiteTokenAccount.String():
@@ -919,39 +892,6 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
 		return out, nil
 	}
-}
-
-func getChainHeaderFromChainId(chainId []byte) (*protocol.AccountHeader, error) {
-	kb, err := GetByChainId(chainId)
-	header := protocol.AccountHeader{}
-	err = Remarshal(kb.Data, &header)
-	if err != nil {
-		return nil, err
-	}
-	return &header, nil
-}
-
-func resolveKeyBookUrl(chainId []byte) (string, error) {
-	kb, err := GetByChainId(chainId)
-	book := protocol.KeyBook{}
-	err = Remarshal(kb.Data, &book)
-	if err != nil {
-		return "", err
-	}
-	return book.Url.String(), nil
-}
-
-func resolveKeyPageUrl(chainId []byte) (string, error) {
-	res, err := GetByChainId(chainId)
-	if err != nil {
-		return "", err
-	}
-	kp := protocol.KeyPage{}
-	err = Remarshal(res.Data, &kp)
-	if err != nil {
-		return "", err
-	}
-	return kp.Url.String(), nil
 }
 
 func nonceFromTimeNow() uint64 {
