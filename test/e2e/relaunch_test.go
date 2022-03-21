@@ -42,7 +42,7 @@ func TestRelaunch(t *testing.T) {
 	daemon := daemons[protocol.Directory][0]
 	jrpc := daemon.Jrpc_TESTONLY()
 	txResp := new(api.TxResponse)
-	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite}, txResp)
+	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{}, txResp)
 	txqResp := new(api.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
 	for _, txid := range txqResp.SyntheticTxids {
