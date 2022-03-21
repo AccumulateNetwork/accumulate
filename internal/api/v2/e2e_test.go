@@ -220,9 +220,12 @@ func TestValidate(t *testing.T) {
 			Origin: keyPageUrl.String(),
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: protocol.KeyPageOperationAdd,
-				NewKey:    adiKey2[32:],
-				Owner:     makeUrl(t, "acc://foo/book1"),
+				Operation: &AddKeyOperation{
+					Entry: KeySpecParams{
+						PublicKey: adiKey2[32:],
+						Owner:     makeUrl(t, "acc://foo/book1"),
+					},
+				},
 			},
 		})
 		keyPage := NewKeyPage()

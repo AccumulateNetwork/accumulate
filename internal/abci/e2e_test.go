@@ -179,10 +179,10 @@ func TestAnchorChain(t *testing.T) {
 	// Sanity check
 	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url.String())
 
-	// Get the anchor chain manager
-	batch = n.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
+	// // Get the anchor chain manager
+	// batch = n.db.Begin(true)
+	// defer batch.Discard()
+	// ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// // Check each anchor
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
@@ -230,7 +230,7 @@ func TestAnchorChain(t *testing.T) {
 	// Get the anchor chain manager for DN
 	batch = dn.db.Begin(true)
 	defer batch.Discard()
-	ledger = batch.Account(dn.network.NodeUrl(protocol.Ledger))
+	ledger := batch.Account(dn.network.NodeUrl(protocol.Ledger))
 	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
@@ -361,10 +361,13 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	entry, err := dataChain.Entry(0)
 	require.NoError(t, err)
 	hashFromEntry, err := protocol.ComputeLiteEntryHashFromEntry(chainId, entry)
+	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
 	hashes, err := dataChain.GetHashes(0, 1)
+	require.NoError(t, err)
 	ent, err := dataChain.Entry(0)
+	require.NoError(t, err)
 	id := protocol.ComputeLiteDataAccountId(ent)
 	newh, err := protocol.ComputeLiteEntryHashFromEntry(id, ent)
 	require.NoError(t, err)
@@ -788,9 +791,10 @@ func TestAddKey(t *testing.T) {
 
 	newKey := generateKey()
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.PublicKey = newKey.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = newKey.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -818,10 +822,11 @@ func TestUpdateKey(t *testing.T) {
 
 	newKey := generateKey()
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.UpdateKeyOperation)
+		op.OldEntry.PublicKey = testKey.PubKey().Bytes()
+		op.NewEntry.PublicKey = newKey.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationUpdate
-		body.Key = testKey.PubKey().Bytes()
-		body.NewKey = newKey.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -849,9 +854,10 @@ func TestRemoveKey(t *testing.T) {
 
 	// Add second key because CreateKeyBook can't do it
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.PublicKey = testKey2.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationAdd
-		body.NewKey = testKey2.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -860,9 +866,10 @@ func TestRemoveKey(t *testing.T) {
 	})
 
 	n.Batch(func(send func(*protocol.Envelope)) {
+		op := new(protocol.RemoveKeyOperation)
+		op.Entry.PublicKey = testKey1.PubKey().Bytes()
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.KeyPageOperationRemove
-		body.Key = testKey1.PubKey().Bytes()
+		body.Operation = op
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 2).

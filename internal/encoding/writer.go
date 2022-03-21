@@ -215,6 +215,6 @@ func (w *Writer) WriteValue(n uint, v encoding.BinaryMarshaler) {
 }
 
 // WriteEnum writes the value as a varint-encoded unsigned integer.
-func (w *Writer) WriteEnum(n uint, v interface{ ID() uint64 }) {
-	w.WriteUint(n, v.ID())
+func (w *Writer) WriteEnum(n uint, v EnumValueGetter) {
+	w.WriteUint(n, v.GetEnumValue())
 }

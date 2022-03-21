@@ -34,15 +34,6 @@ type govDidCommit struct {
 	synthLedger *protocol.InternalSyntheticLedger
 	rootAnchor  []byte
 	rootHeight  int64
-	receipts    map[string]*receiptAndIndex
-}
-
-type receiptAndIndex struct {
-	Receipt     protocol.Receipt
-	Index       int64
-	SourceIndex int64
-	Block       uint64
-	SourceBlock uint64
 }
 
 func newGovernor(opts ExecutorOptions) *governor {
