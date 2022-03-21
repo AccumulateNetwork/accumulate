@@ -111,6 +111,10 @@ lint:
   before_script:
     - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
   script:
+    - echo -e "${SECTION}section_start:`date +%s`:build\r${SECTION}Build"
+    - go build ./...
+    - echo -e "${SECTION}section_end:`date +%s`:build\r${SECTION}"
+
     - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
     - go vet ./...
     - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
