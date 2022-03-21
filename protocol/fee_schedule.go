@@ -173,3 +173,9 @@ func ComputeTransactionFee(tx *Envelope) (Fee, error) {
 	// Charge an extra data fee per 256 B past the initial 256 B
 	return fee + FeeWriteData*Fee(count-1), nil
 }
+
+//Check if a Transaction is of the type SignPending
+
+func IsSignPending(typ TransactionType) bool {
+	return typ == TransactionTypeSignPending
+}

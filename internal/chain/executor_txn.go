@@ -187,14 +187,27 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 		return nil, nil, false, err
 	}
 
-	// Calculate the fee before modifying the transaction
-	fee, err := protocol.ComputeTransactionFee(env)
-	if err != nil {
-		return nil, nil, false, err
-	}
+	var fee protocol.Fee
 
 	// Load previous transaction state
 	txt := env.Transaction.Type()
+
+	// Calculate the fee before modifying the transaction
+
+	if protocol.IsSignPending(txt) {
+		a, _, _, _ := batch.Transaction(env.TxHash).Get()
+		b := a.Body.Type()
+		fee, err = protocol.BaseTransactionFee(b)
+		if err != nil {
+			fmt.Println(err)
+		}
+	} else {
+		fee, err = protocol.ComputeTransactionFee(env)
+		if err != nil {
+			return nil, nil, false, err
+		}
+	}
+
 	txState, err := batch.Transaction(env.GetTxHash()).GetState()
 	switch {
 	case err == nil:
@@ -507,6 +520,21 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 		return false, fmt.Errorf("failed to get signatures: %v", err)
 	}
 
+	// Add to the sig set to get the resulting count
+	sigCount := sigs.Add(env.Signatures...)
+
+	if sigCount < int(page.Threshold) {
+		page.CreditCredits(uint64(fee))
+		fee = protocol.FeeSignature // if the transaction is pending then add this fee   ()which must be implemented the  commented code or simple tx fee)
+		/*	for _, i := range sigs.Signatures {
+			c, err := protocol.ComputeSignatureFee(i)
+			if err != nil {
+				fmt.Errorf("error computing signature fee")
+				fee += c
+			}
+		}*/
+	}
+
 	if !page.DebitCredits(uint64(fee)) {
 		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.Url, page.CreditBalance.String(), fee)
 	}
@@ -515,9 +543,6 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 	if err != nil {
 		return false, err
 	}
-
-	// Add to the sig set to get the resulting count
-	sigCount := sigs.Add(env.Signatures...)
 
 	// Queue a write
 	st.SignTransaction(env.GetTxHash(), env.Signatures...)
@@ -682,6 +707,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 	if err != nil || fee > protocol.FeeFailedMaximum {
 		fee = protocol.FeeFailedMaximum
 	}
+
 	st.Signator.DebitCredits(uint64(fee))
 
 	return sigRecord.PutState(st.Signator)
