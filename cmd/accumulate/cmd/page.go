@@ -88,6 +88,7 @@ var pageSetThresholdCmd = &cobra.Command{
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(setKeyPageThreshold),
 }
+var _ = pageSetThresholdCmd // remove dead code removal
 
 var pageLockCmd = &cobra.Command{
 	Use:   "lock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
