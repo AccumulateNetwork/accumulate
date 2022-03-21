@@ -81,6 +81,7 @@ var pageKeyUpdateCmd = &cobra.Command{
 	}),
 }
 
+////nolint
 var pageSetThresholdCmd = &cobra.Command{
 	Use:   "set-threshold [key page url] [signing key name] [key index (optional)] [key height (optional)] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",
@@ -279,7 +280,7 @@ func setKeyPageThreshold(args []string) (string, error) {
 }
 
 func lockKeyPage(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	_, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}
@@ -293,7 +294,7 @@ func lockKeyPage(args []string) (string, error) {
 }
 
 func unlockKeyPage(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	_, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}

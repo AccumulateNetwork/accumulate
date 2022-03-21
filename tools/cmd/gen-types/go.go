@@ -18,6 +18,7 @@ func init() {
 	Templates.Register(goUnionSrc, "go-union", goFuncs)
 }
 
+//nolint
 type goUnionTypeSpec struct {
 	Type        string
 	Enumeration string
