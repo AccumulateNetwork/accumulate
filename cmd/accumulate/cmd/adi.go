@@ -74,6 +74,9 @@ func PrintADICreate() {
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
 	u, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
 
 	st, err := strconv.ParseInt(start, 10, 64)
 	if err != nil {
