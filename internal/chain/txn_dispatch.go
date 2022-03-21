@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -105,6 +106,12 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			err = d.checkError(err)
 			if err != nil {
 				errs <- err
+				return
+			}
+
+			if resp == nil {
+				//Guard put here to prevent nil responses.  This error may be a symptom of something else...
+				errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
 				return
 			}
 
