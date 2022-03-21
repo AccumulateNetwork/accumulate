@@ -102,17 +102,3 @@ func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 	}
 	return nil
 }
-
-func validateKeyPageUrl(pageUrl *url.URL, bookUrl *url.URL) error {
-	kpParentUrl, ok := pageUrl.Parent()
-	if !ok {
-		return fmt.Errorf("invalid URL: %s, the KeyPage URL must be adi_path/KeyPage", pageUrl)
-	}
-
-	bkParentUrl, _ := bookUrl.Parent()
-	if !bkParentUrl.Equal(kpParentUrl) {
-		return fmt.Errorf("KeyPage %s must be in the same path as its KeyBook %s", pageUrl, bookUrl)
-	}
-
-	return nil
-}
