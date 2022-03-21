@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/fatih/color"
 )
@@ -58,7 +59,7 @@ func run() bool {
 	runCmd.Env = append(runCmd.Env, "FORCE_COLOR=true")
 
 	// Don't interrupt the run process if the parent process is interrupted
-	//runCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	runCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	// Forward output
 	runRd, runWr := io.Pipe()
