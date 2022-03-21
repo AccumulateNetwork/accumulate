@@ -408,31 +408,39 @@ func (a *ActionResponse) Print() (string, error) {
 		}
 		out = string(b)
 	} else {
-		out += fmt.Sprintf("\n\tTransaction Hash\t:\t%x\n", a.TransactionHash)
-		out += fmt.Sprintf("\tEnvelope Hash\t\t:\t%x\n", a.EnvelopeHash)
-		out += fmt.Sprintf("\tSimple Hash\t\t:\t%x\n", a.SimpleHash)
+		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
+		out += fmt.Sprintf("\tEnvelope Hash\t\t: %x\n", a.EnvelopeHash)
+		out += fmt.Sprintf("\tSimple Hash\t\t: %x\n", a.SimpleHash)
 		if !ok {
-			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
+			out += fmt.Sprintf("\tError code\t\t: %s\n", a.Code)
 		} else {
 			//nolint:gosimple
-			out += fmt.Sprintf("\tError code\t\t:\tok\n")
+			out += fmt.Sprintf("\tError code\t\t: ok\n")
 		}
 		if a.Error != "" {
-			out += fmt.Sprintf("\tError\t\t\t:\t%s\n", a.Error)
+			out += fmt.Sprintf("\tError\t\t\t: %s\n", a.Error)
 		}
 		if a.Log != "" {
-			out += fmt.Sprintf("\tLog\t\t\t:\t%s\n", a.Log)
+			out += fmt.Sprintf("\tLog\t\t\t: %s\n", a.Log)
 		}
 		if a.Codespace != "" {
-			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
+			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
 		}
 		if a.Result != nil {
-			d, err := json.Marshal(a.Result)
-			out += "Result\t\t:\t"
-			if err != nil {
-				out += fmt.Sprintf("error marshaling result %v\n", err)
-			} else {
-				out += fmt.Sprintf("%s\n", d)
+			r := a.Result.(map[string]interface{})
+			out += "\tResult\t\t\t: "
+			if t, ok := r["result"]; ok {
+				d, err := json.Marshal(t)
+				if err != nil {
+					out += fmt.Sprintf("error remarshaling result %v\n", t)
+				} else {
+					v, err := protocol.UnmarshalTransactionResultJSON(d)
+					if err != nil {
+						out += fmt.Sprintf("error unmarshaling transaction result %v", err)
+					} else {
+						out += outputTransactionResultForHumans(v)
+					}
+				}
 			}
 		}
 	}
@@ -441,6 +449,26 @@ func (a *ActionResponse) Print() (string, error) {
 		return out, nil
 	}
 	return "", errors.New(out)
+}
+
+func outputTransactionResultForHumans(t protocol.TransactionResult) string {
+	var out string
+
+	switch c := t.(type) {
+	case *protocol.AddCreditsResult:
+		amt, err := formatAmount(protocol.ACME, &c.Amount)
+		if err != nil {
+			amt = "unknown"
+		}
+		out += fmt.Sprintf("Oracle\t$%.2f / ACME\n", float64(c.Oracle)/protocol.AcmeOraclePrecision)
+		out += fmt.Sprintf("\t\t\t\t  Credits\t%.2f\n", float64(c.Credits)/protocol.CreditPrecision)
+		out += fmt.Sprintf("\t\t\t\t  Amount\t%s\n", amt)
+	case *protocol.WriteDataResult:
+		out += fmt.Sprintf("Account URL\t%s\n", c.AccountUrl)
+		out += fmt.Sprintf("\t\t\t\t  Account ID\t%x\n", c.AccountID)
+		out += fmt.Sprintf("\t\t\t\t  Entry Hash\t%x\n", c.EntryHash)
+	}
+	return out
 }
 
 type JsonRpcError struct {
