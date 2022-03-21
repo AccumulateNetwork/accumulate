@@ -13,7 +13,7 @@ AccountHeader:
     pointer: true
 
 LiteTokenAccount:
-  kind: chain
+  union: { type: account, value: LiteTokenAccount }
   embeddings:
   - AccountHeader
   fields:
@@ -29,7 +29,7 @@ LiteTokenAccount:
       type: bigint
 
 LiteDataAccount:
-  kind: chain
+  union: { type: account, value: LiteDataAccount }
   embeddings:
     - AccountHeader
   fields:
@@ -37,14 +37,13 @@ LiteDataAccount:
       type: bytes
 
 ADI:
-  kind: chain
+  union: { type: account, value: Identity }
   embeddings:
     - AccountHeader
-  chain-type: Identity
   fields: [ ]
 
 TokenAccount:
-  kind: chain
+  union: { type: account, value: TokenAccount }
   embeddings:
   - AccountHeader
   fields:
@@ -58,7 +57,7 @@ TokenAccount:
       optional: true
 
 KeyPage:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields:
@@ -71,9 +70,14 @@ KeyPage:
       type: KeySpec
       pointer: true
       marshal-as: reference
+    - name: TransactionBlacklist
+      type: AllowedTransactions
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 KeyBook:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields:
@@ -81,7 +85,7 @@ KeyBook:
       type: uvarint
 
 DataAccount:
-  kind: chain
+  union: { type: account, value: DataAccount }
   embeddings:
   - AccountHeader
   fields:
@@ -90,7 +94,7 @@ DataAccount:
       optional: true
 
 TokenIssuer:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields:
@@ -109,7 +113,7 @@ TokenIssuer:
       optional: true
 
 Anchor:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields: [ ]
@@ -128,7 +132,7 @@ KeySpec:
       pointer: true
 
 LiteIdentity:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields: [ ]

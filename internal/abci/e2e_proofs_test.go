@@ -9,7 +9,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func TestProofADI(t *testing.T) {
@@ -37,7 +36,7 @@ func TestProofADI(t *testing.T) {
 		adi.PublicKey = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
-			SignLegacyED25519(liteKey))
+			Initiate(protocol.SignatureTypeLegacyED25519, liteKey))
 	})
 
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
@@ -48,13 +47,14 @@ func TestProofADI(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
-	n.Batch(func(send func(*transactions.Envelope)) {
+	n.Batch(func(send func(*protocol.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = n.ParseUrl("RoadRunner/Baz")
 		tac.TokenUrl = protocol.AcmeUrl()
 		send(newTxn("RoadRunner").
 			WithBody(tac).
-			SignLegacyED25519(adiKey))
+			WithSigner(url.MustParse("RoadRunner/book0/1"), 1).
+			Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 	})
 
 	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))

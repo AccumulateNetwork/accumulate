@@ -7,9 +7,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -49,6 +46,9 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			WriteDataTo{},
 			UpdateManager{},
 			RemoveManager{},
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
 
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
@@ -85,19 +85,19 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network config
 // TxExecutor executes a specific type of transaction.
 type TxExecutor interface {
 	// Type is the transaction type the executor can execute.
-	Type() types.TransactionType
+	Type() protocol.TransactionType
 
 	// Validate fully validates and executes the transaction.
-	Validate(*StateManager, *transactions.Envelope) (protocol.TransactionResult, error)
+	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
 }
 
 type creditChain interface {
-	state.Chain
+	protocol.Account
 	SetLastUsedOn(key []byte, timestamp uint64) error
 	protocol.CreditHolder
 }
 
 type tokenChain interface {
-	state.Chain
+	protocol.Account
 	protocol.TokenHolder
 }

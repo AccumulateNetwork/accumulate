@@ -17,8 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func newKey(seed []byte) ed25519.PrivateKey {
@@ -82,7 +80,7 @@ func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, r
 type execParams struct {
 	Origin  string
 	Key     ed25519.PrivateKey
-	Payload protocol.TransactionPayload
+	Payload protocol.TransactionBody
 }
 
 func recode(t *testing.T, from, to interface{}) {
@@ -100,7 +98,6 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	require.NoError(t, err)
 
 	var signator *url.URL
-	var keyPageIndex uint64
 	if key, _, _ := protocol.ParseLiteTokenAddress(u); key != nil {
 		signator = u
 	} else {
@@ -110,25 +107,24 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		qr := queryRecord(t, japi, "query-key-index", q)
 		resp := new(query.ResponseKeyPageIndex)
 		recode(t, qr.Data, resp)
-		keyPageIndex = resp.Index
 		signator = resp.KeyPage
 	}
 
 	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: signator})
 	env := acctesting.NewTransaction().
-		WithOrigin(u).
-		WithKeyPage(keyPageIndex, qr.MainChain.Height).
+		WithPrincipal(u).
+		WithSigner(signator, qr.MainChain.Height).
 		WithCurrentTimestamp().
 		WithBody(params.Payload).
-		SignLegacyED25519(params.Key)
+		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 
 	req := new(api.TxRequest)
-	req.Origin = env.Transaction.Origin
+	req.Origin = env.Transaction.Header.Principal
+	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
+	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
-	req.Signer.Timestamp = env.Transaction.Timestamp
 	req.Signature = env.Signatures[0].GetSignature()
-	req.KeyPage.Index = env.Transaction.KeyPageIndex
-	req.KeyPage.Height = env.Transaction.KeyPageHeight
+	req.KeyPage.Height = env.Signatures[0].GetSignerHeight()
 	req.Payload = env.Transaction.Body
 	return req
 }
@@ -147,26 +143,26 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	return resp
 }
 
-func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIndex, keyPageHeight uint64, params execParams) *api.TxResponse {
+func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUrl *url.URL, keyPageHeight uint64, params execParams) *api.TxResponse {
 	t.Helper()
 
 	u, err := url.Parse(params.Origin)
 	require.NoError(t, err)
 
 	env := acctesting.NewTransaction().
-		WithOrigin(u).
-		WithKeyPage(keyPageIndex, keyPageHeight).
+		WithPrincipal(u).
+		WithSigner(keyPageUrl, keyPageHeight).
 		WithCurrentTimestamp().
 		WithBody(params.Payload).
-		SignLegacyED25519(params.Key)
+		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 
 	req := new(api.TxRequest)
-	req.Origin = env.Transaction.Origin
+	req.Origin = env.Transaction.Header.Principal
+	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
+	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
-	req.Signer.Timestamp = env.Transaction.Timestamp
 	req.Signature = env.Signatures[0].GetSignature()
-	req.KeyPage.Index = env.Transaction.KeyPageIndex
-	req.KeyPage.Height = env.Transaction.KeyPageHeight
+	req.KeyPage.Height = env.Signatures[0].GetSignerHeight()
 	req.Payload = env.Transaction.Body
 
 	resp := new(api.TxResponse)
@@ -192,7 +188,7 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 	return d.daemon.Jrpc_TESTONLY()
 }
 
-func (d *e2eDUT) GetRecordAs(s string, target state.Chain) {
+func (d *e2eDUT) GetRecordAs(s string, target protocol.Account) {
 	d.T().Helper()
 	u, err := url.Parse(s)
 	d.Require().NoError(err)
@@ -215,19 +211,19 @@ func (d *e2eDUT) GetRecordHeight(s string) uint64 {
 	return qr.MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	data, err := tx.Transaction.Body.MarshalBinary()
 	d.Require().NoError(err)
 
 	d.T().Helper()
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
-	pl.Origin = tx.Transaction.Origin
-	pl.Signer.Timestamp = tx.Transaction.Timestamp
+	pl.Origin = tx.Transaction.Header.Principal
+	pl.Signer.Timestamp = tx.Signatures[0].GetTimestamp()
+	pl.Signer.Url = tx.Signatures[0].GetSigner()
 	pl.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	pl.Signature = tx.Signatures[0].GetSignature()
-	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
-	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
+	pl.KeyPage.Height = tx.Signatures[0].GetSignerHeight()
 	pl.Payload = data
 
 	data, err = pl.MarshalJSON()

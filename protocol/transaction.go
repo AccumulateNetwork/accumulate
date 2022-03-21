@@ -6,9 +6,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-// Deprecated: use TransactionBody
-type TransactionPayload = TransactionBody
-
 func NewTransaction(typ TransactionType) (TransactionBody, error) {
 	return NewTransactionBody(typ)
 }
@@ -23,21 +20,21 @@ func UnmarshalTransactionJSON(data []byte) (TransactionBody, error) {
 
 // IsUser returns true if the transaction type is user.
 func (t TransactionType) IsUser() bool {
-	return TransactionTypeUnknown < t && t.ID() <= TransactionMaxUser.ID()
+	return TransactionTypeUnknown < t && t.GetEnumValue() <= TransactionMaxUser.GetEnumValue()
 }
 
 // IsSynthetic returns true if the transaction type is synthetic.
 func (t TransactionType) IsSynthetic() bool {
-	return TransactionMaxUser.ID() < t.ID() && t.ID() <= TransactionMaxSynthetic.ID()
+	return TransactionMaxUser.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxSynthetic.GetEnumValue()
 }
 
 // IsInternal returns true if the transaction type is internal.
 func (t TransactionType) IsInternal() bool {
-	return TransactionMaxSynthetic.ID() < t.ID() && t.ID() <= TransactionMaxInternal.ID()
+	return TransactionMaxSynthetic.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxInternal.GetEnumValue()
 }
 
 type SyntheticTransaction interface {
-	TransactionPayload
+	TransactionBody
 	GetCause() [32]byte
 }
 

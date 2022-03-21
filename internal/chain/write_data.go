@@ -4,15 +4,13 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type WriteData struct{}
 
-func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
+func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
 
-func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (WriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
@@ -42,7 +40,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol
 	sw := protocol.SegWitDataEntry{}
 	sw.Cause = *(*[32]byte)(tx.GetTxHash())
 	sw.EntryHash = *(*[32]byte)(body.Entry.Hash())
-	sw.EntryUrl = tx.Transaction.Origin
+	sw.EntryUrl = tx.Transaction.Header.Principal
 
 	//now replace the original data entry payload with the new segwit payload
 	tx.Transaction.Body = &sw
@@ -52,7 +50,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol
 
 	result := new(protocol.WriteDataResult)
 	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
-	result.AccountID = tx.Transaction.Origin.AccountID()
-	result.AccountUrl = tx.Transaction.Origin
+	result.AccountID = tx.Transaction.Header.Principal.AccountID()
+	result.AccountUrl = tx.Transaction.Header.Principal
 	return result, nil
 }

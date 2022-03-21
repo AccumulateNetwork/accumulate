@@ -5,76 +5,79 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction) error {
 	ids := make([][32]byte, len(produced))
 	for i, sub := range produced {
-		// Generate a synthetic tx and send to the router. Need to track txid to
-		// make sure they get processed.
-
-		tx, err := m.buildSynthTxn(st, sub.Origin, sub.Body)
+		tx, err := m.buildSynthTxn(st, sub.Header.Principal, sub.Body)
 		if err != nil {
 			return err
 		}
-		*sub = *tx.Transaction
-
-		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(tx, status, nil)
-		if err != nil {
-			return err
-		}
-
-		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.GetTxHash(), 0, 0)
-		if err != nil {
-			return err
-		}
-
-		copy(ids[i][:], tx.GetTxHash())
+		sub.Header = tx.Header
+		copy(ids[i][:], tx.GetHash())
 	}
 
 	st.AddSyntheticTxns(st.txHash[:], ids)
 	return nil
 }
 
-func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionPayload) (*transactions.Envelope, error) {
-	// Build the transaction
-	env := new(transactions.Envelope)
-	env.Transaction = new(transactions.Transaction)
-	env.Transaction.Origin = dest
-	env.Transaction.KeyPageHeight = 1
-	env.Transaction.KeyPageIndex = 0
-	env.Transaction.Body = body
-
+func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
 	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
+	// Generate a synthetic tx and send to the router. Need to track txid to
+	// make sure they get processed.
+
+	destSubnet, err := m.Router.RouteAccount(dest)
+	if err != nil {
+		return nil, fmt.Errorf("routing %v: %v", dest, err)
+	}
+
 	ledgerState := new(protocol.InternalLedger)
-	err := st.LoadUrlAs(opts.Network.NodeUrl(protocol.Ledger), ledgerState)
+	err = st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
-	if body.GetType().IsInternal() {
-		// For internal transactions, set the nonce to the height of the next block
-		env.Transaction.Timestamp = uint64(ledgerState.Index) + 1
-		return env, nil
+	initSig := new(protocol.SyntheticSignature)
+	initSig.SourceNetwork = m.Network.NodeUrl()
+	initSig.DestinationNetwork = protocol.SubnetUrl(destSubnet)
+	initSig.SequenceNumber = ledgerState.Synthetic.Nonce
+
+	initHash, err := initSig.InitiatorHash()
+	if err != nil {
+		// This should never happen
+		panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
 	}
 
-	env.Transaction.Timestamp = ledgerState.Synthetic.Nonce
-
-	// Increment the nonce
-	ledgerState.Synthetic.Nonce++
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = dest
+	txn.Header.Initiator = *(*[32]byte)(initHash)
+	txn.Body = body
 
 	// Append the ID
 	if body.Type() == protocol.TransactionTypeSyntheticAnchor {
-		txid := types.Bytes(env.GetTxHash()).AsBytes32()
-		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
+		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, *(*[32]byte)(txn.GetHash()))
 	}
 
+	// Increment the nonce
+	ledgerState.Synthetic.Nonce++
 	st.Update(ledgerState)
-	return env, nil
+
+	// Store the transaction, its status, and the initiator
+	status := &protocol.TransactionStatus{Remote: true}
+	err = m.blockBatch.Transaction(txn.GetHash()).Put(txn, status, []protocol.Signature{initSig})
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the transaction to the synthetic transaction chain
+	err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return txn, nil
 }

@@ -11,16 +11,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type StateManager struct {
 	stateCache
 
-	Origin        state.Chain
-	OriginUrl     *url.URL
-	OriginChainId [32]byte
+	Origin    protocol.Account
+	OriginUrl *url.URL
 
 	Signator    creditChain
 	SignatorUrl *url.URL
@@ -29,16 +26,29 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.Envelope) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (*StateManager, error) {
 	m := new(StateManager)
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
-	m.OriginUrl = env.Transaction.Origin
 
-	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
+	// TODO Process each signature separately
+
+	// Find the signator
+	var err error
+	m.SignatorUrl = env.Signatures[0].GetSigner()
+	err = m.LoadUrlAs(m.SignatorUrl, &m.Signator)
+	switch {
+	case err == nil:
+		// OK
+	case !errors.Is(err, storage.ErrNotFound):
+		return nil, err
+	case env.Transaction.Type() != protocol.TransactionTypeInternalGenesis:
+		// The signer must not be missing
+		return nil, fmt.Errorf("%v not found", m.SignatorUrl)
+	}
 
 	// Find the origin
-	var err error
+	m.OriginUrl = env.Transaction.Header.Principal
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
 	switch {
 	case err == nil:
@@ -77,18 +87,13 @@ func (m *StateManager) Commit() error {
 
 	create := map[string]*protocol.SyntheticCreateChain{}
 	for _, record := range records {
-		u, err := record.Header().ParseUrl()
-		if err != nil {
-			return err
-		}
-
 		data, err := record.MarshalBinary()
 		if err != nil {
 			return err
 		}
 
 		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := u.RootIdentity()
+		id := record.Header().Url.RootIdentity()
 		scc, ok := create[id.String()]
 		if ok {
 			scc.Chains = append(scc.Chains, params)
@@ -106,15 +111,12 @@ func (m *StateManager) Commit() error {
 }
 
 // Submit queues a synthetic transaction for submission.
-func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
+func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 
-	txn := new(protocol.Transaction)
-	txn.Origin = url
-	txn.Body = body
-	m.blockState.DidProduceTxn(txn)
+	m.blockState.DidProduceTxn(url, body)
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {

@@ -5,16 +5,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type CreateIdentity struct{}
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	// *protocol.IdentityCreate, *url.URL, state.Chain
+func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
@@ -61,7 +58,7 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	return nil, nil
 }
 
-func validateAdiUrl(body *protocol.CreateIdentity, origin state.Chain) error {
+func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) error {
 	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
@@ -69,7 +66,7 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin state.Chain) error {
 
 	switch v := origin.(type) {
 	case *protocol.LiteTokenAccount:
-	// OK
+		// OK
 	case *protocol.ADI:
 		if len(body.Url.Path) > 0 {
 			parent, _ := body.Url.Parent()
@@ -103,19 +100,5 @@ func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 	if !parent.Equal(adiUrl) {
 		return fmt.Errorf("KeyBook %s must be a direct child of its ADI %s", bookUrl.String(), adiUrl.String())
 	}
-	return nil
-}
-
-func validateKeyPageUrl(pageUrl *url.URL, bookUrl *url.URL) error {
-	kpParentUrl, ok := pageUrl.Parent()
-	if !ok {
-		return fmt.Errorf("invalid URL: %s, the KeyPage URL must be adi_path/KeyPage", pageUrl)
-	}
-
-	bkParentUrl, _ := bookUrl.Parent()
-	if !bkParentUrl.Equal(kpParentUrl) {
-		return fmt.Errorf("KeyPage %s must be in the same path as its KeyBook %s", pageUrl, bookUrl)
-	}
-
 	return nil
 }

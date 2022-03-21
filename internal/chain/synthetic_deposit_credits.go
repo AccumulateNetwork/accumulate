@@ -4,15 +4,15 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type SyntheticDepositCredits struct{}
 
-func (SyntheticDepositCredits) Type() types.TxType { return types.TxTypeSyntheticDepositCredits }
+func (SyntheticDepositCredits) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticDepositCredits
+}
 
-func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositCredits)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), tx.Transaction.Body)

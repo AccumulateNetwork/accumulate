@@ -22,9 +22,10 @@ Envelope:
 
 TransactionHeader:
   fields:
-    - name: Origin
+    - name: Principal
       type: url
       pointer: true
+      alternative: Origin
     - name: KeyPageHeight
       type: uvarint
     - name: KeyPageIndex
@@ -32,6 +33,8 @@ TransactionHeader:
     - name: Timestamp
       type: uvarint
       alternative: Nonce
+    - name: Initiator
+      type: chain
     - name: Memo
       type: string
       optional: true
@@ -40,11 +43,12 @@ TransactionHeader:
       optional: true
 
 Transaction:
-  embeddings:
-    - TransactionHeader
   fields:
+    - name: Header
+      type: TransactionHeader
+      marshal-as: reference
     - name: Body
-      type: TransactionPayload
+      type: TransactionBody
       unmarshal-with: UnmarshalTransaction
       marshal-as: value
       zero-value: nil
@@ -53,86 +57,97 @@ Transaction:
       marshal-as: none
 
 LegacyED25519Signature:
-  kind: signature
+  union: { type: signature }
   fields:
+    - name: privateKey
+      type: bytes
+      marshal-as: none
     - name: Timestamp
-      type: uvarint
+      type: uint
       alternative: Nonce
     - name: PublicKey
       type: bytes
     - name: Signature
       type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerHeight # TODO Rename to SignerVersion
+      type: uint
 
 RCD1Signature:
-  kind: signature
+  union: { type: signature }
   fields:
+    - name: privateKey
+      type: bytes
+      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
       type: bytes
-
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerHeight # TODO Rename to SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
 
 ED25519Signature:
-  kind: signature
+  union: { type: signature }
   fields:
+    - name: privateKey
+      type: bytes
+      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
       type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerHeight # TODO Rename to SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
 
 ReceiptSignature:
-  kind: signature
+  union: { type: signature }
   embeddings:
   - Receipt
   fields: []
 
-TxState:
+SyntheticSignature:
+  union: { type: signature }
+  description: is used to initiate transactions between BVNs
   fields:
-    - name: SigInfo
-      type: TransactionHeader
-      marshal-as: reference
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
       pointer: true
-    - name: Transaction
-      type: TransactionPayload
-      unmarshal-with: UnmarshalTransaction
-      marshal-as: value
-      zero-value: nil
-    - name: TransactionHash
-      type: chain
-      marshal-as: none
+    - name: DestinationNetwork
+      description: is the network that the transaction is sent to
+      type: url
+      pointer: true
+    - name: SequenceNumber
+      description: is the sequence number of the transaction
+      type: uint
 
-TransactionState:
-  kind: chain
-  chain-type: Transaction
-  omit-new-func: true
-  embeddings:
-    - AccountHeader
-    - TxState
-
-PendingTransactionState:
-  kind: chain
-  chain-type: PendingTransaction
-  omit-new-func: true
-  embeddings:
-  - AccountHeader
+InternalSignature:
+  union: { type: signature }
+  description: is used when executing transactions internally
   fields:
-    - name: Signature
-      repeatable: true
-      type: Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSignature
-    - name: TransactionState
-      type: TxState
-      marshal-as: reference
+    - name: Network
+      description: is the network that produced the transaction
+      type: url
       pointer: true
-    - name: Status
-      type: rawJson
 
 ##### User #####
 
 CreateIdentity:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -150,7 +165,7 @@ CreateIdentity:
       optional: true
 
 CreateTokenAccount:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -171,7 +186,7 @@ CreateTokenAccount:
       optional: true
 
 SendTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Hash
       type: chain
@@ -186,7 +201,7 @@ SendTokens:
       pointer: true
 
 CreateDataAccount:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -204,14 +219,14 @@ CreateDataAccount:
       optional: true
 
 WriteData:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Entry
       type: DataEntry
       marshal-as: reference
 
 WriteDataTo:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Recipient
       type: url
@@ -221,14 +236,14 @@ WriteDataTo:
       marshal-as: reference
 
 AcmeFaucet:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
       pointer: true
 
 CreateToken:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -257,7 +272,7 @@ CreateToken:
       optional: true
 
 IssueTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Recipient
       type: url
@@ -266,13 +281,13 @@ IssueTokens:
       type: bigint
 
 BurnTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Amount
       type: bigint
 
 CreateKeyPage:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Keys
       repeatable: true
@@ -285,7 +300,7 @@ CreateKeyPage:
       optional: true
 
 CreateKeyBook:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Url
       type: url
@@ -298,7 +313,7 @@ CreateKeyBook:
       optional: true
 
 AddCredits:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Recipient
       type: url
@@ -307,33 +322,63 @@ AddCredits:
       type: uvarint
 
 UpdateKeyPage:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: enum
+      marshal-as: value
+      unmarshal-with: UnmarshalKeyPageOperation
+      zero-value: nil
+
+UpdateManager:
+  union: { type: transaction }
+  fields:
+    - name: ManagerKeyBook
+      type: url
+      pointer: true
+
+RemoveManager:
+  union: { type: transaction }
+  fields:
+
+AddValidator:
+  union: { type: transaction }
+  fields:
     - name: Key
       type: bytes
-      optional: true
-    - name: NewKey
-      type: bytes
-      optional: true
     - name: Owner
+      description: reserved for future use
       type: url
       pointer: true
       optional: true
-    - name: Threshold
-      type: uvarint
+
+RemoveValidator:
+  union: { type: transaction }
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
       optional: true
 
+UpdateValidatorKey:
+  union: { type: transaction }
+  fields:
+    - name: OldKey
+      type: bytes
+    - name: NewKey
+      type: bytes
+
 SignPending:
-  kind: tx
+  union: { type: transaction }
   fields: []
 
 ##### Synthetic #####
 
 SyntheticCreateChain:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -344,7 +389,7 @@ SyntheticCreateChain:
 
 
 SyntheticWriteData:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -353,7 +398,7 @@ SyntheticWriteData:
       marshal-as: reference
 
 SyntheticDepositTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -364,7 +409,7 @@ SyntheticDepositTokens:
       type: bigint
 
 SyntheticAnchor:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Source
       description: is the subnet the anchor originates from
@@ -391,7 +436,7 @@ SyntheticAnchor:
       marshal-as: reference
 
 SyntheticDepositCredits:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -399,7 +444,7 @@ SyntheticDepositCredits:
       type: uvarint
 
 SyntheticBurnTokens:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -407,7 +452,7 @@ SyntheticBurnTokens:
       type: bigint
 
 SyntheticMirror:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Objects
       repeatable: true
@@ -415,7 +460,7 @@ SyntheticMirror:
       marshal-as: reference
 
 SegWitDataEntry:
-  kind: tx
+  union: { type: transaction }
   fields:
     - name: Cause
       type: chain
@@ -425,15 +470,61 @@ SegWitDataEntry:
     - name: EntryHash
       type: chain
 
+##### Key Page Operations #####
+
+AddKeyOperation:
+  union: { type: keyPageOperation, value: Add }
+  fields:
+    - name: Entry
+      type: KeySpecParams
+      marshal-as: reference
+
+RemoveKeyOperation:
+  union: { type: keyPageOperation, value: Remove }
+  fields:
+    - name: Entry
+      type: KeySpecParams
+      marshal-as: reference
+
+UpdateKeyOperation:
+  union: { type: keyPageOperation, value: Update }
+  fields:
+    - name: OldEntry
+      type: KeySpecParams
+      marshal-as: reference
+    - name: NewEntry
+      type: KeySpecParams
+      marshal-as: reference
+
+SetThresholdKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Threshold
+      type: uvarint
+
+UpdateAllowedKeyPageOperation:
+  union: { type: keyPageOperation }
+  fields:
+    - name: Allow
+      type: TransactionType
+      repeatable: true
+      marshal-as: enum
+      optional: true
+    - name: Deny
+      type: TransactionType
+      repeatable: true
+      marshal-as: enum
+      optional: true
+
+
 ##### Result Types #####
 
 EmptyResult:
-  kind: tx-result
-  tx-type: Unknown
+  union: { type: result, value: Unknown }
   fields: []
 
 WriteDataResult:
-  kind: tx-result
+  union: { type: result }
   fields:
     - name: EntryHash
       type: chain
@@ -444,6 +535,19 @@ WriteDataResult:
       type: bytes
 
 ##### Data Types #####
+
+UpdateAllowedTransactions:
+  fields:
+    - name: Whitelist
+      description: is reserved for future use
+      type: bool
+      optional: true
+    - name: Transactions
+      description: is a list of allowed transaction types
+      type: TransactionType
+      marshal-as: enum
+      repeatable: true
+      optional: true
 
 TokenRecipient:
   fields:
@@ -464,6 +568,10 @@ KeySpecParams:
   fields:
     - name: PublicKey
       type: bytes
+    - name: Owner
+      type: url
+      pointer: true
+      optional: true
 
 AnchoredRecord:
   fields:
@@ -471,14 +579,3 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
-
-UpdateManager:
-  kind: tx
-  fields:
-    - name: ManagerKeyBook
-      type: url
-      pointer: true
-
-RemoveManager:
-  kind: tx
-  fields:

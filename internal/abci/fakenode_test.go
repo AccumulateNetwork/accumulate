@@ -32,9 +32,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type FakeNode struct {
@@ -79,9 +76,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
-		if strings.HasPrefix(netName, evilNodePrefix) {
-			netName = strings.TrimPrefix(netName, evilNodePrefix)
-		}
+		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
@@ -256,12 +251,12 @@ func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
 	n.Require().NoError(json.Unmarshal(data, result))
 }
 
-func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte {
+func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
 	n.t.Helper()
 
 	var ids [][32]byte
 	var blob []byte
-	inBlock(func(tx *transactions.Envelope) {
+	inBlock(func(tx *protocol.Envelope) {
 		var id [32]byte
 		copy(id[:], tx.GetTxHash())
 		ids = append(ids, id)
@@ -271,7 +266,8 @@ func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte 
 	})
 
 	// Submit all the transactions as a batch
-	n.client.SubmitTx(context.Background(), blob)
+	st := n.client.SubmitTx(context.Background(), blob, true)
+	n.require.NotNil(st)
 
 	n.waitForTxns(nil, convertIds32(ids...)...)
 	return ids
@@ -345,7 +341,7 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)
 
-	var typ types.TransactionType
+	var typ protocol.TransactionType
 	require.NoError(n.t, typ.UnmarshalJSON([]byte(strconv.Quote(resp.Type))))
 
 	resp.Data, err = protocol.NewTransaction(typ)
@@ -408,7 +404,7 @@ type e2eDUT struct {
 	*FakeNode
 }
 
-func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
+func (d *e2eDUT) GetRecordAs(url string, target protocol.Account) {
 	d.QueryAccountAs(url, target)
 }
 
@@ -416,8 +412,8 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.QueryAccount(url).MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
-	d.client.SubmitTx(context.Background(), b)
+	d.client.SubmitTx(context.Background(), b, false)
 }

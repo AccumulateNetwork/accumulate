@@ -42,8 +42,14 @@ SignatureType:
   Receipt:
     value: 4
     description: represents a Merkle tree receipt
+  Synthetic:
+    value: 5
+    description: is used when sending synthetic transactions
+  Internal:
+    value: 6
+    description: is used when executing transactions internally
 
-KeyPageOperation:
+KeyPageOperationType:
   Unknown:
     value: 0
     description: is used when the key page operation is not known
@@ -59,6 +65,9 @@ KeyPageOperation:
   SetThreshold:
     value: 4
     description: sets the signing threshold (the M of "M of N" signatures required)
+  UpdateAllowed:
+    value: 5
+    description: updates the transactions the key page is allowed to execute
 
 TransactionMax:
   User:
@@ -123,6 +132,15 @@ TransactionType:
   RemoveManager:
     value: 0x11
     description: remove manager from existing chain
+  AddValidator:
+    value: 0x12
+    description: add a validator
+  RemoveValidator:
+    value: 0x13
+    description: remove a validator
+  UpdateValidatorKey:
+    value: 0x14
+    description: update a validator key
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
@@ -183,12 +201,12 @@ AccountType:
   LiteTokenAccount:
     value: 5
     description: is a Lite Token Account
-  Transaction:
-    value: 7
-    description: is a completed transaction
-  PendingTransaction:
-    value: 8
-    description: is a pending transaction
+  # Transaction:
+  #   value: 7
+  #   description: is a completed transaction
+  # PendingTransaction:
+  #   value: 8
+  #   description: is a pending transaction
   KeyPage:
     value: 9
     description: is a Key Page account
@@ -210,3 +228,8 @@ AccountType:
   InternalSyntheticLedger:
     value: 16
     description: is a ledger that tracks the status of unsent synthetic transactions
+
+AllowedTransactionBit:
+  UpdateKeyPage:
+    value: 1
+    description: is the offset of the UpdateKeyPage bit

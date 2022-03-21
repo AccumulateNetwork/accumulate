@@ -195,7 +195,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
@@ -216,7 +216,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	}
 	wdt.Recipient = addr
 
-	lite, err := GetUrl(wdt.Recipient.String())
+	lite, _ := GetUrl(wdt.Recipient.String())
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
@@ -229,7 +229,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
 	}
 
-	res, err = dispatchTxRequest("write-data-to", &wdt, nil, u, si, privKey)
+	res, err = dispatchTxRequest("write-data-to", &wdt, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +254,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
@@ -285,7 +285,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.KeyBookUrl = keybook
 	cda.Scratch = flagAccount.Scratch
 
-	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, si, privKey)
+	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -310,7 +310,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -322,7 +322,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteData{}
 	wd.Entry = *prepareData(args, false)
 
-	res, err := dispatchTxRequest("write-data", &wd, nil, u, si, privKey)
+	res, err := dispatchTxRequest("write-data", &wd, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -363,7 +363,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -391,7 +391,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Entry = *prepareData(args[1:], false)
 
-	res, err := dispatchTxRequest("write-data-to", &wd, nil, u, si, privKey)
+	res, err := dispatchTxRequest("write-data-to", &wd, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -399,7 +399,10 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	lda := protocol.LiteDataAccount{}
 	q, err := GetUrl(wd.Recipient.String())
 	if err == nil {
-		Remarshal(q.Data, &lda)
+		err = Remarshal(q.Data, &lda)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	lde := protocol.LiteDataEntry{}

@@ -32,13 +32,13 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithOriginStr("foo").
-		WithKeyPage(0, 1).
+		WithPrincipal(url.MustParse("foo")).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithTimestamp(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
+	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 	require.NoError(t, err)
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
@@ -67,13 +67,13 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithOriginStr("foo").
-		WithKeyPage(0, 1).
+		WithPrincipal(url.MustParse("foo")).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithTimestamp(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
+	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 	require.NoError(t, err)
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)

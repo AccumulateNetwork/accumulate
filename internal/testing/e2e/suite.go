@@ -6,11 +6,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 	"golang.org/x/exp/rand"
 )
 
@@ -18,9 +15,9 @@ type NewDUT func(*Suite) DUT
 
 // DUT are the parameters needed to test the Device Under Test.
 type DUT interface {
-	GetRecordAs(url string, target state.Chain)
+	GetRecordAs(url string, target protocol.Account)
 	GetRecordHeight(url string) uint64
-	SubmitTxn(*transactions.Envelope)
+	SubmitTxn(*protocol.Envelope)
 	WaitForTxns(...[]byte)
 }
 
@@ -56,14 +53,4 @@ func (s *Suite) generateKey() ed25519.PrivateKey {
 
 func (s *Suite) generateTmKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(s.generateKey())
-}
-
-func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, timestamp uint64, body protocol.TransactionPayload) *transactions.Envelope {
-	s.T().Helper()
-	return testing.NewTransaction().
-		WithOrigin(sponsor).
-		WithKeyPage(0, s.dut.GetRecordHeight(sponsor.String())).
-		WithTimestamp(timestamp).
-		WithBody(body).
-		SignLegacyED25519(key)
 }
