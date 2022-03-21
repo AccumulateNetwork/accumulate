@@ -66,7 +66,7 @@ func RemoveManager(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, signer, err := prepareSigner(u, args)
+	_, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
