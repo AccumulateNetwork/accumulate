@@ -84,7 +84,6 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	t.Log("Need to support get txid with upgrade to V2 api to perform test, skipping... ")
-	return
 
 	//uncomment after V2 upgrade
 	//commandLine := fmt.Sprintf("adi create %s acc://RedWagon red5 blue green", liteAccounts[0])
@@ -109,8 +108,7 @@ func testCase2_6a(t *testing.T, tc *testCmd) {
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 9 15.0", liteAccounts[1])
 	require.NoError(t, err)
 
-	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://Redstone red2")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "adi create acc://RedWagon red1 acc://Redstone red2")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -148,8 +146,7 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
-	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://RedWagon/sub1 red2")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "adi create acc://RedWagon red1 acc://RedWagon/sub1 red2")
 	t.Log(r)
 	require.NoError(t, err)
 
@@ -167,7 +164,6 @@ func testCase2_7b(t *testing.T, tc *testCmd) {
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
-	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://RedWagon/sub1/sub2 red2")
-	_, err = tc.executeTx(t, commandLine)
+	_, err = tc.executeTx(t, "adi create acc://RedWagon red1 acc://RedWagon/sub1/sub2 red2")
 	require.Error(t, err)
 }

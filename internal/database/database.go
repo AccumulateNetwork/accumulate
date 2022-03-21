@@ -170,6 +170,10 @@ func (b *Batch) AccountByID(id []byte) *Account {
 	return &Account{b, accountByID(id)}
 }
 
+//
+// This is still needed in one place, so the deprecation warning is disabled in
+// order to pass static analysis.
+
 // AccountByKey returns an Account for the given storage key. This is used for
 // creating snapshots from the BPT.
 func (b *Batch) AccountByKey(key storage.Key) *Account {

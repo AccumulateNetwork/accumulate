@@ -11,7 +11,7 @@ import (
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "get version of the accumulate node",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := GetVersion()
 		printOutput(cmd, out, err)
 	},

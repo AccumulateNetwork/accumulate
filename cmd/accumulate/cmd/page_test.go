@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,8 +22,7 @@ func init() {
 func testCase4_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("book create acc://RedWagon red1 acc://RedWagon/book4_1")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "book create acc://RedWagon red1 acc://RedWagon/book4_1")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -33,8 +31,7 @@ func testCase4_1(t *testing.T, tc *testCmd) {
 func testCase4_2(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("book create acc://RedWagon red1 acc://RedWagon/book red2")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "book create acc://RedWagon red1 acc://RedWagon/book red2")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -46,8 +43,7 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[2])
 	require.NoError(t, err)
 
-	commandLine := fmt.Sprintf("page key add acc://RedWagon/book/1 red2 red4")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "page key add acc://RedWagon/book/1 red2 red4")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -57,13 +53,11 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 red3")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "page create acc://RedWagon/book red2 red3")
 	require.NoError(t, err)
 	t.Log(r)
 
-	commandLine = fmt.Sprintf("page create acc://RedWagon/book red2 red5")
-	r, err = tc.executeTx(t, commandLine)
+	r, err = tc.executeTx(t, "page create acc://RedWagon/book red2 red5")
 	require.NoError(t, err)
 	t.Log(r)
 
@@ -73,8 +67,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 func testCase4_5(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("account create token acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "account create token acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -85,8 +78,7 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//remove red4
-	commandLine := fmt.Sprintf("page key remove acc://RedWagon/book/1 red2 red4")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "page key remove acc://RedWagon/book/1 red2 red4")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -97,8 +89,7 @@ func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//replace key3 with key 4
-	commandLine := fmt.Sprintf("page key update acc://RedWagon/book/1 red2 red2 red5")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "page key update acc://RedWagon/book/1 red2 red2 red5")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -109,7 +100,6 @@ func testCase4_8(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	t.Log("Skipping test to await for full support for v2")
-	return
 
 	//commandLine := fmt.Sprintf("tx create %s acc://RedWagon/acct2 5", liteAccounts[0])
 	//r, err := tc.execute(t, commandLine)
