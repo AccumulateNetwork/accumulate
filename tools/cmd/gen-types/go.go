@@ -18,13 +18,6 @@ func init() {
 	Templates.Register(goUnionSrc, "go-union", goFuncs)
 }
 
-type goUnionTypeSpec struct {
-	Type        string
-	Enumeration string
-	Interface   string
-	NaturalName string
-}
-
 var goFuncs = template.FuncMap{
 	"isPkg": func(s string) bool {
 		return s == PackagePath
