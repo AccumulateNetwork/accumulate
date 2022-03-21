@@ -16,6 +16,8 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	subnetName := args[0]
 	u, err := url.Parse(args[1])
+	check(err)
+
 	host := u.Hostname()
 	port := u.Port()
 	if port == "" {
@@ -24,7 +26,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	addr, err := net.LookupIP(host)
 	checkf(err, "unknown host %s", u.Hostname())
-	netAddr := fmt.Sprintf("%s", addr[0])
+	netAddr := addr[0].String()
 
 	dnBasePort, err := strconv.ParseUint(port, 10, 16)
 	checkf(err, "invalid DN port number")
@@ -42,6 +44,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
 	c, err := cfg.Load(path.Join(flagMain.WorkDir, "Node0"))
+	check(err)
 
 	//make sure we have a block validator type
 	if c.Accumulate.Network.Type != cfg.Directory {
@@ -50,7 +53,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	//now find out what bvn we are on then let
 	dnSubNet := c.Accumulate.Network.LocalAddress
-	dnHost, port, err := net.SplitHostPort(dnSubNet)
+	dnHost, _, err := net.SplitHostPort(dnSubNet)
 	checkf(err, "cannot resolve bvn host and port")
 
 	_ = netAddr
