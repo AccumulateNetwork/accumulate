@@ -116,7 +116,7 @@ lint:
     - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:lint\r${SECTION}Lint"
-    - go run github.com/golangci/golangci-lint/cmd/golangci-lint run ./...
+    - go run github.com/golangci/golangci-lint/cmd/golangci-lint run --verbose ./...
     - echo -e "${SECTION}section_end:`date +%s`:lint\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
