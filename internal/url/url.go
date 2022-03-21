@@ -184,9 +184,7 @@ func (u *URL) Identity() *URL {
 func (u *URL) Parent() (*URL, bool) {
 	v := *u
 	// Canonicalize the path
-	if strings.HasSuffix(v.Path, "/") {
-		v.Path = v.Path[:len(v.Path)-1]
-	}
+	v.Path = strings.TrimSuffix(v.Path, "/")
 	if len(v.Path) == 0 {
 		return &v, false
 	}
