@@ -37,7 +37,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	tx = acctesting.NewTransaction().
 		WithPrincipal(senderUrl).
 		WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
-		WithNonce(nonce).
+		WithTimestamp(nonce).
 		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: 1e8}).
 		Initiate(protocol.SignatureTypeLegacyED25519, sender)
 	s.dut.SubmitTxn(tx)
@@ -72,7 +72,7 @@ func (s *Suite) TestCreateLiteAccount() {
 		tx := acctesting.NewTransaction().
 			WithPrincipal(senderUrl).
 			WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
-			WithNonce(nonce).
+			WithTimestamp(nonce).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, sender)
 		s.dut.SubmitTxn(tx)
