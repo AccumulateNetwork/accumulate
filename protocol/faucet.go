@@ -54,6 +54,6 @@ func (s faucetSigner) PublicKey() []byte {
 }
 
 func (s faucetSigner) Sign(message []byte) []byte {
-	withNonce := append(common.Uint64Bytes(s.Nonce()), message...)
+	withNonce := append(common.Uint64Bytes(s.Timestamp()), message...)
 	return ed25519.Sign(faucetKey, withNonce)
 }
