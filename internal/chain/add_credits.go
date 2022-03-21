@@ -9,6 +9,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+var bigZeroAmount = big.NewInt(0)
+
 type AddCredits struct{}
 
 func (AddCredits) Type() protocol.TransactionType { return protocol.TransactionTypeAddCredits }
@@ -19,15 +21,28 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
 	}
 
+	// need to make sure acme amount is greater than 0
+	if body.Amount.Cmp(bigZeroAmount) <= 0 {
+		return nil, fmt.Errorf("invalid ACME amount specified for credit purchase, must be greater than zero")
+	}
+
+	// need to make sure oracle is set
+	if body.Oracle == 0 {
+		return nil, fmt.Errorf("cannot purchase credits, transaction oracle must be greater than zero")
+	}
+
 	ledgerState := protocol.NewInternalLedger()
 	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), ledgerState)
 	if err != nil {
 		return nil, err
 	}
 
+	// need to make sure internal oracle is set.
 	if ledgerState.ActiveOracle == 0 {
 		return nil, fmt.Errorf("cannot purchase credits: acme oracle price has not been set")
 	}
+
+	// make sure oracle matches
 	if body.Oracle != ledgerState.ActiveOracle {
 		return nil, fmt.Errorf("oracle doesn't match")
 	}
@@ -39,8 +54,9 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units - oracle precision
 	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units - acme precision
 
+	//make sure there are credits to purchase
 	if credits.Int64() == 0 {
-		return nil, fmt.Errorf("no credits can be purchased")
+		return nil, fmt.Errorf("no credits can be purchased with specified ACME amount %v", body.Amount)
 	}
 
 	recv, err := st.LoadUrl(body.Recipient)
@@ -93,7 +109,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
 	copy(sdc.Cause[:], tx.GetTxHash())
-	sdc.Amount = *credits
+	sdc.Amount = credits.Uint64()
 	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token

@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"math/big"
-
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -424,6 +422,7 @@ func (m *Executor) validateInternal(st *StateManager, env *protocol.Envelope) er
 
 	//placeholder for special validation rules for internal transactions.
 	//need to verify that the transaction came from one of the node's governors.
+	_ = env
 	return nil
 }
 
@@ -508,8 +507,8 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 		return false, fmt.Errorf("failed to get signatures: %v", err)
 	}
 
-	if !page.DebitCredits(*new(big.Int).SetUint64(uint64(fee))) {
-		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.Url, page.CreditBalance.String(), fee)
+	if !page.DebitCredits(fee.AsUInt64()) {
+		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.Url, page.CreditBalance, fee)
 	}
 
 	err = st.UpdateSignator(page)
@@ -560,8 +559,8 @@ func (m *Executor) validateLiteSigner(st *StateManager, env *protocol.Envelope, 
 		account.Nonce = timestamp
 	}
 
-	if !account.DebitCredits(*new(big.Int).SetUint64(uint64(fee))) {
-		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.Url, account.CreditBalance.String(), fee)
+	if !account.DebitCredits(uint64(fee)) {
+		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.Url, account.CreditBalance, fee)
 	}
 
 	return st.UpdateSignator(account)
@@ -683,7 +682,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 	if err != nil || fee > protocol.FeeFailedMaximum {
 		fee = protocol.FeeFailedMaximum
 	}
-	st.Signator.DebitCredits(*new(big.Int).SetUint64(uint64(fee)))
+	st.Signator.DebitCredits(fee.AsUInt64())
 
 	return sigRecord.PutState(st.Signator)
 }

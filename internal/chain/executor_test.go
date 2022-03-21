@@ -182,7 +182,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 		WithNonceTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
 			Cause:  [32]byte{1},
-			Amount: *big.NewInt(1),
+			Amount: 1,
 		}).
 		Initiate(protocol.SignatureTypeED25519, key)
 

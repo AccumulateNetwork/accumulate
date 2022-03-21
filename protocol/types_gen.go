@@ -261,7 +261,7 @@ type KeyBook struct {
 type KeyPage struct {
 	fieldsSet []bool
 	AccountHeader
-	CreditBalance        big.Int              `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	CreditBalance        uint64               `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 	Threshold            uint64               `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty" form:"transactionBlacklist" query:"transactionBlacklist"`
@@ -307,7 +307,7 @@ type LiteTokenAccount struct {
 	TokenUrl      *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
 	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	CreditBalance big.Int  `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 }
 
 type MetricsRequest struct {
@@ -438,7 +438,7 @@ type SyntheticCreateChain struct {
 type SyntheticDepositCredits struct {
 	fieldsSet []bool
 	Cause     [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
-	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
 type SyntheticDepositTokens struct {
@@ -1592,7 +1592,7 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
 	}
-	if !((&v.CreditBalance).Cmp(&u.CreditBalance) == 0) {
+	if !(v.CreditBalance == u.CreditBalance) {
 		return false
 	}
 	if !(v.Threshold == u.Threshold) {
@@ -1715,7 +1715,7 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	if !(v.Nonce == u.Nonce) {
 		return false
 	}
-	if !((&v.CreditBalance).Cmp(&u.CreditBalance) == 0) {
+	if !(v.CreditBalance == u.CreditBalance) {
 		return false
 	}
 
@@ -1978,7 +1978,7 @@ func (v *SyntheticDepositCredits) Equal(u *SyntheticDepositCredits) bool {
 	if !(v.Cause == u.Cause) {
 		return false
 	}
-	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+	if !(v.Amount == u.Amount) {
 		return false
 	}
 
@@ -4013,8 +4013,8 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, AccountTypeKeyPage)
 	writer.WriteValue(2, &v.AccountHeader)
-	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(3, &v.CreditBalance)
+	if !(v.CreditBalance == 0) {
+		writer.WriteUint(3, v.CreditBalance)
 	}
 	if !(v.Threshold == 0) {
 		writer.WriteUint(4, v.Threshold)
@@ -4040,7 +4040,7 @@ func (v *KeyPage) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field CreditBalance is missing")
-	} else if (v.CreditBalance).Cmp(new(big.Int)) == 0 {
+	} else if v.CreditBalance == 0 {
 		errs = append(errs, "field CreditBalance is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
@@ -4328,8 +4328,8 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Nonce == 0) {
 		writer.WriteUint(5, v.Nonce)
 	}
-	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(6, &v.CreditBalance)
+	if !(v.CreditBalance == 0) {
+		writer.WriteUint(6, v.CreditBalance)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
@@ -4359,7 +4359,7 @@ func (v *LiteTokenAccount) IsValid() error {
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field CreditBalance is missing")
-	} else if (v.CreditBalance).Cmp(new(big.Int)) == 0 {
+	} else if v.CreditBalance == 0 {
 		errs = append(errs, "field CreditBalance is not set")
 	}
 
@@ -5234,8 +5234,8 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	if !(v.Cause == ([32]byte{})) {
 		writer.WriteHash(2, &v.Cause)
 	}
-	if !((v.Amount).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(3, &v.Amount)
+	if !(v.Amount == 0) {
+		writer.WriteUint(3, v.Amount)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
@@ -5252,7 +5252,7 @@ func (v *SyntheticDepositCredits) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Amount is missing")
-	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+	} else if v.Amount == 0 {
 		errs = append(errs, "field Amount is not set")
 	}
 
@@ -7310,8 +7310,8 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
 
-	if x, ok := reader.ReadBigInt(3); ok {
-		v.CreditBalance = *x
+	if x, ok := reader.ReadUint(3); ok {
+		v.CreditBalance = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.Threshold = x
@@ -7479,8 +7479,8 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.Nonce = x
 	}
-	if x, ok := reader.ReadBigInt(6); ok {
-		v.CreditBalance = *x
+	if x, ok := reader.ReadUint(6); ok {
+		v.CreditBalance = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
@@ -7970,8 +7970,8 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Cause = *x
 	}
-	if x, ok := reader.ReadBigInt(3); ok {
-		v.Amount = *x
+	if x, ok := reader.ReadUint(3); ok {
+		v.Amount = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositCredits)
@@ -9018,7 +9018,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 		Url                  *url.URL             `json:"url,omitempty"`
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		ManagerKeyBook       *url.URL             `json:"managerKeyBook,omitempty"`
-		CreditBalance        *string              `json:"creditBalance,omitempty"`
+		CreditBalance        uint64               `json:"creditBalance,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
 		Keys                 []*KeySpec           `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty"`
@@ -9027,7 +9027,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.CreditBalance = v.CreditBalance
 	u.Threshold = v.Threshold
 	u.Keys = v.Keys
 	u.TransactionBlacklist = v.TransactionBlacklist
@@ -9115,7 +9115,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
-		CreditBalance  *string     `json:"creditBalance,omitempty"`
+		CreditBalance  uint64      `json:"creditBalance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -9124,7 +9124,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.Nonce = v.Nonce
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.CreditBalance = v.CreditBalance
 	return json.Marshal(&u)
 }
 
@@ -9355,11 +9355,11 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   TransactionType `json:"type"`
 		Cause  string          `json:"cause,omitempty"`
-		Amount *string         `json:"amount,omitempty"`
+		Amount uint64          `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Amount = v.Amount
 	return json.Marshal(&u)
 }
 
@@ -10370,7 +10370,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 		Url                  *url.URL             `json:"url,omitempty"`
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		ManagerKeyBook       *url.URL             `json:"managerKeyBook,omitempty"`
-		CreditBalance        *string              `json:"creditBalance,omitempty"`
+		CreditBalance        uint64               `json:"creditBalance,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
 		Keys                 []*KeySpec           `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty"`
@@ -10379,7 +10379,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.CreditBalance = v.CreditBalance
 	u.Threshold = v.Threshold
 	u.Keys = v.Keys
 	u.TransactionBlacklist = v.TransactionBlacklist
@@ -10389,11 +10389,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
-	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
-		return fmt.Errorf("error decoding CreditBalance: %w", err)
-	} else {
-		v.CreditBalance = *x
-	}
+	v.CreditBalance = u.CreditBalance
 	v.Threshold = u.Threshold
 	v.Keys = u.Keys
 	v.TransactionBlacklist = u.TransactionBlacklist
@@ -10537,7 +10533,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
-		CreditBalance  *string     `json:"creditBalance,omitempty"`
+		CreditBalance  uint64      `json:"creditBalance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -10546,7 +10542,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.Nonce = v.Nonce
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.CreditBalance = v.CreditBalance
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10560,11 +10556,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		v.Balance = *x
 	}
 	v.Nonce = u.Nonce
-	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
-		return fmt.Errorf("error decoding CreditBalance: %w", err)
-	} else {
-		v.CreditBalance = *x
-	}
+	v.CreditBalance = u.CreditBalance
 	return nil
 }
 
@@ -10975,11 +10967,11 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type   TransactionType `json:"type"`
 		Cause  string          `json:"cause,omitempty"`
-		Amount *string         `json:"amount,omitempty"`
+		Amount uint64          `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Amount = v.Amount
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10988,11 +10980,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cause = x
 	}
-	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
-		return fmt.Errorf("error decoding Amount: %w", err)
-	} else {
-		v.Amount = *x
-	}
+	v.Amount = u.Amount
 	return nil
 }
 

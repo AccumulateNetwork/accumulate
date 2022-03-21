@@ -437,7 +437,7 @@ SyntheticDepositCredits:
     - name: Cause
       type: chain
     - name: Amount
-      type: bigint
+      type: uvarint
 
 SyntheticBurnTokens:
   union: { type: transaction }

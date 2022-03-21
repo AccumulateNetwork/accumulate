@@ -84,7 +84,7 @@ func TestValidate(t *testing.T) {
 
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
-		assert.Equal(t, int64(1e5), account.CreditBalance.Int64())
+		assert.Equal(t, uint64(1e5), account.CreditBalance)
 
 		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.AccountID()})
 	})
@@ -137,7 +137,7 @@ func TestValidate(t *testing.T) {
 
 		page := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: pageUrl}, page)
-		assert.Equal(t, int64(1e5), page.CreditBalance.Int64())
+		assert.Equal(t, uint64(1e5), page.CreditBalance)
 	})
 
 	t.Run("Txn History", func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestValidate(t *testing.T) {
 
 		page := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, page)
-		assert.Equal(t, int64(1e5), page.CreditBalance.Int64())
+		assert.Equal(t, uint64(1e5), page.CreditBalance)
 	})
 
 	var adiKey2 ed25519.PrivateKey

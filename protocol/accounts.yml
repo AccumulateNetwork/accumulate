@@ -25,7 +25,7 @@ LiteTokenAccount:
     - name: Nonce
       type: uvarint
     - name: CreditBalance
-      type: bigint
+      type: uvarint
 
 LiteDataAccount:
   union: { type: account, value: LiteDataAccount }
@@ -61,7 +61,7 @@ KeyPage:
   - AccountHeader
   fields:
     - name: CreditBalance
-      type: bigint
+      type: uvarint
     - name: Threshold
       type: uvarint
     - name: Keys

@@ -669,13 +669,13 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
 	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
 
-	expectedCreditsToReceive := credits.Int64()
+	expectedCreditsToReceive := credits.Uint64()
 	//the balance of the account should be
 
 	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
 
-	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance.Int64())
+	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
 }
 
