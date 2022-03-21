@@ -105,6 +105,9 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 
 	newUrl, err := url2.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
 	if newUrl.Authority != originUrl.Authority {
 		return "", fmt.Errorf("the authority of book url to create (%s) doesn't match the origin adi's authority (%s)", newUrl.Authority, originUrl.Authority)
 	}

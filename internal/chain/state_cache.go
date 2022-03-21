@@ -166,7 +166,10 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 
 	for _, u := range u {
 		if !u.Equal(directory) {
-			getIndex(directory, "Directory", md.Count).Put([]byte(u.String()))
+			err := getIndex(directory, "Directory", md.Count).Put([]byte(u.String()))
+			if err != nil {
+				return fmt.Errorf("failed to write index: %v", err)
+			}
 			md.Count++
 		}
 	}
