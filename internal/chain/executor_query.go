@@ -704,6 +704,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 		}
+
+		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
 		account, err := m.queryAccount(batch.AccountByID(chr.ChainId[:]))
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}

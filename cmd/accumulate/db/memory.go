@@ -80,7 +80,7 @@ func (b *MemoryDB) Delete(bucket []byte, key []byte) (err error) {
 	}
 
 	if buck, ok := b.buckets[sha256.Sum256(bucket)]; ok {
-		buck.Delete(key)
+		err = buck.Delete(key)
 	} else {
 		err = fmt.Errorf("bucket not defined")
 	}
