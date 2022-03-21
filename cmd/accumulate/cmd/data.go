@@ -216,7 +216,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	}
 	wdt.Recipient = addr
 
-	lite, err := GetUrl(wdt.Recipient.String())
+	lite, _ := GetUrl(wdt.Recipient.String())
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
@@ -399,7 +399,10 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	lda := protocol.LiteDataAccount{}
 	q, err := GetUrl(wd.Recipient.String())
 	if err == nil {
-		Remarshal(q.Data, &lda)
+		err = Remarshal(q.Data, &lda)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	lde := protocol.LiteDataEntry{}

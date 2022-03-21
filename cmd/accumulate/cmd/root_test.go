@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	net2 "net"
-	"net/url"
-	"os/exec"
 	"reflect"
 	"runtime"
 	"sort"
@@ -78,12 +75,9 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 }
 
 type testCmd struct {
-	rootCmd        *cobra.Command
-	directoryCmd   *exec.Cmd
-	validatorCmd   *exec.Cmd
-	defaultWorkDir string
-	jsonRpcAddr    string
-	privKey        crypto.PrivKey
+	rootCmd     *cobra.Command
+	jsonRpcAddr string
+	privKey     crypto.PrivKey
 }
 
 //NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
@@ -122,7 +116,7 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	c.rootCmd.SetOut(b)
 	c.rootCmd.SetArgs(args)
 	DidError = nil
-	c.rootCmd.Execute()
+	_ = c.rootCmd.Execute()
 	if DidError != nil {
 		return "", DidError
 	}
@@ -144,36 +138,6 @@ func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (
 		waitForTxns(t, c, out)
 	}
 	return out, err
-}
-
-// listenHttpUrl
-// takes a string such as `http://localhost:123` and creates a TCP listener.
-func listenHttpUrl(s string) (net2.Listener, bool, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, false, fmt.Errorf("invalid address: %v", err)
-	}
-
-	if u.Path != "" && u.Path != "/" {
-		return nil, false, fmt.Errorf("invalid address: path is not empty")
-	}
-
-	var secure bool
-	switch u.Scheme {
-	case "tcp", "http":
-		secure = false
-	case "https":
-		secure = true
-	default:
-		return nil, false, fmt.Errorf("invalid address: unsupported scheme %q", u.Scheme)
-	}
-
-	l, err := net2.Listen("tcp", u.Host)
-	if err != nil {
-		return nil, false, err
-	}
-
-	return l, secure, nil
 }
 
 func waitForTxns(t *testing.T, tc *testCmd, jsonRes string) {
