@@ -154,7 +154,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	require.NotEqual(t, lite.Routing()%3, protocol.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
 
 	txResp := new(apiv2.TxResponse)
-	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite}, txResp)
+	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{}, txResp)
 	txqResp := new(apiv2.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
 	for _, txid := range txqResp.SyntheticTxids {

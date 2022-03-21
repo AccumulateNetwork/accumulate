@@ -30,7 +30,6 @@ type AccountHeader struct {
 
 type AcmeFaucet struct {
 	fieldsSet []bool
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 }
 
 type AcmeOracle struct {
@@ -1002,14 +1001,6 @@ func (v *AccountHeader) Equal(u *AccountHeader) bool {
 }
 
 func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
-	switch {
-	case v.Url == u.Url:
-		// equal
-	case v.Url == nil || u.Url == nil:
-		return false
-	case !((v.Url).Equal(u.Url)):
-		return false
-	}
 
 	return true
 }
@@ -2413,7 +2404,6 @@ func (v *AccountHeader) IsValid() error {
 
 var fieldNames_AcmeFaucet = []string{
 	1: "Type",
-	2: "Url",
 }
 
 func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
@@ -2421,9 +2411,6 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, TransactionTypeAcmeFaucet)
-	if !(v.Url == nil) {
-		writer.WriteUrl(2, v.Url)
-	}
 
 	_, _, err := writer.Reset(fieldNames_AcmeFaucet)
 	return buffer.Bytes(), err
@@ -2431,12 +2418,6 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 
 func (v *AcmeFaucet) IsValid() error {
 	var errs []string
-
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Url is missing")
-	} else if v.Url == nil {
-		errs = append(errs, "field Url is not set")
-	}
 
 	switch len(errs) {
 	case 0:
@@ -6326,10 +6307,6 @@ func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAcmeFaucet, typ)
 	}
 
-	if x, ok := reader.ReadUrl(2); ok {
-		v.Url = x
-	}
-
 	seen, err := reader.Reset(fieldNames_AcmeFaucet)
 	v.fieldsSet = seen
 	return err
@@ -8477,10 +8454,8 @@ func (v *ADI) MarshalJSON() ([]byte, error) {
 func (v *AcmeFaucet) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type TransactionType `json:"type"`
-		Url  *url.URL        `json:"url,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Url = v.Url
 	return json.Marshal(&u)
 }
 
@@ -9551,14 +9526,11 @@ func (v *ADI) UnmarshalJSON(data []byte) error {
 func (v *AcmeFaucet) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type TransactionType `json:"type"`
-		Url  *url.URL        `json:"url,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Url = v.Url
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Url = u.Url
 	return nil
 }
 

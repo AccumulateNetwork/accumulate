@@ -135,7 +135,6 @@ func TestFaucet(t *testing.T) {
 
 	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AcmeFaucet)
-		body.Url = aliceUrl
 
 		faucet := protocol.Faucet.Signer()
 		send(acctesting.NewTransaction().

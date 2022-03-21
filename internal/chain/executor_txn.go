@@ -182,9 +182,11 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 // updates the nonce, and charges the fee.
 func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
 	// Basic validation
-	err = m.validateBasic(batch, env)
-	if err != nil {
-		return nil, nil, false, err
+	if env.Transaction.Body.GetType() != protocol.TransactionTypeAcmeFaucet {
+		err = m.validateBasic(batch, env)
+		if err != nil {
+			return nil, nil, false, err
+		}
 	}
 
 	// Calculate the fee before modifying the transaction

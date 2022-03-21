@@ -15,13 +15,13 @@ func (AcmeFaucet) Type() protocol.TransactionType { return protocol.TransactionT
 
 func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
-	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
+	_, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AcmeFaucet), tx.Transaction.Body)
 	}
 
 	// Check the recipient
-	u := body.Url
+	u := st.OriginUrl
 	account := new(protocol.LiteTokenAccount)
 	err := st.LoadUrlAs(u, account)
 	switch {

@@ -82,7 +82,7 @@ var txnTests = []*TCG{
 		txnTest("adi", &WriteDataTo{Recipient: parseUrl("lite-data-account"), Entry: DataEntry{Data: []byte("foo"), ExtIds: [][]byte{[]byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "AcmeFaucet", Cases: []*TC{
-		txnTest("faucet", &AcmeFaucet{Url: parseUrl("lite-token-account")}),
+		txnTest("faucet", &AcmeFaucet{}),
 	}},
 	{Name: "CreateToken", Cases: []*TC{
 		txnTest("adi", &CreateToken{Url: parseUrl("adi/foocoin"), Symbol: "FOO", Precision: 10}),

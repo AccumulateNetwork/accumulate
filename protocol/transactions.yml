@@ -231,9 +231,7 @@ WriteDataTo:
 AcmeFaucet:
   union: { type: transaction }
   fields:
-    - name: Url
-      type: url
-      pointer: true
+    
 
 CreateToken:
   union: { type: transaction }

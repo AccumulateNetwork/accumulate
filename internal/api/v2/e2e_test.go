@@ -62,7 +62,7 @@ func TestValidate(t *testing.T) {
 		const count = 3
 		for i := 0; i < count; i++ {
 			xr := new(api.TxResponse)
-			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl}, xr)
+			callApi(t, japi, "faucet", &AcmeFaucet{}, xr)
 			require.Zero(t, xr.Code, xr.Message)
 			txWait(t, japi, xr.TransactionHash)
 		}
