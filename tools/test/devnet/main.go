@@ -87,7 +87,7 @@ func run() bool {
 	// Start the devnet
 	err = runCmd.Start()
 	checkf(err, "start devnet")
-	defer runCmd.Process.Kill()
+	defer func() { _ = runCmd.Process.Kill() }()
 	<-started
 
 	// Configure the validator script command
@@ -149,12 +149,6 @@ func run() bool {
 func fatalf(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
 	os.Exit(1)
-}
-
-func check(err error) {
-	if err != nil {
-		fatalf("%v", err)
-	}
 }
 
 func checkf(err error, format string, otherArgs ...interface{}) {

@@ -186,10 +186,10 @@ func TestAnchorChain(t *testing.T) {
 	// Sanity check
 	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url.String())
 
-	// Get the anchor chain manager
-	batch = n.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
+	// // Get the anchor chain manager
+	// batch = n.db.Begin(true)
+	// defer batch.Discard()
+	// ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// // Check each anchor
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
@@ -237,7 +237,7 @@ func TestAnchorChain(t *testing.T) {
 	// Get the anchor chain manager for DN
 	batch = dn.db.Begin(true)
 	defer batch.Discard()
-	ledger = batch.Account(dn.network.NodeUrl(protocol.Ledger))
+	ledger := batch.Account(dn.network.NodeUrl(protocol.Ledger))
 	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
@@ -368,10 +368,13 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	entry, err := dataChain.Entry(0)
 	require.NoError(t, err)
 	hashFromEntry, err := protocol.ComputeLiteEntryHashFromEntry(chainId, entry)
+	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
 	hashes, err := dataChain.GetHashes(0, 1)
+	require.NoError(t, err)
 	ent, err := dataChain.Entry(0)
+	require.NoError(t, err)
 	id := protocol.ComputeLiteDataAccountId(ent)
 	newh, err := protocol.ComputeLiteEntryHashFromEntry(id, ent)
 	require.NoError(t, err)

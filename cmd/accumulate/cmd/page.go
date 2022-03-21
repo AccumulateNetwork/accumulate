@@ -87,6 +87,7 @@ var pageSetThresholdCmd = &cobra.Command{
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(setKeyPageThreshold),
 }
+var _ = pageSetThresholdCmd // remove dead code removal
 
 var pageLockCmd = &cobra.Command{
 	Use:   "lock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
@@ -279,7 +280,7 @@ func setKeyPageThreshold(args []string) (string, error) {
 }
 
 func lockKeyPage(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	_, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}
@@ -293,7 +294,7 @@ func lockKeyPage(args []string) (string, error) {
 }
 
 func unlockKeyPage(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	_, principal, signer, err := parseArgsAndPrepareSigner(args)
 	if err != nil {
 		return "", err
 	}
