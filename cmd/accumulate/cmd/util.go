@@ -426,6 +426,15 @@ func (a *ActionResponse) Print() (string, error) {
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
 		}
+		if a.Result != nil {
+			d, err := json.Marshal(a.Result)
+			out += "Result\t\t:\t"
+			if err != nil {
+				out += fmt.Sprintf("error marshaling result %v\n", err)
+			} else {
+				out += fmt.Sprintf("%s\n", d)
+			}
+		}
 	}
 
 	if ok {
