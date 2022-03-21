@@ -31,12 +31,17 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	if body.Oracle != ledgerState.ActiveOracle {
 		return nil, fmt.Errorf("oracle doesn't match")
 	}
+
 	// If specifying amount of acme to spend
-	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
-	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
-	credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend
-	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
-	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
+	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits - credit units / dollar
+	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme  - oracle precision * dollar / acme
+	credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend - acme * acme precision
+	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units - oracle precision
+	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units - acme precision
+
+	if credits.Int64() == 0 {
+		return nil, fmt.Errorf("no credits can be purchased")
+	}
 
 	recv, err := st.LoadUrl(body.Recipient)
 	if err == nil {
@@ -82,9 +87,6 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	if !account.DebitTokens(&body.Amount) {
 		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Header.Principal)
 	}
-	if credits == big.NewInt(0) {
-		return nil, fmt.Errorf("%v credits", credits)
-	}
 
 	st.Update(account)
 
@@ -100,5 +102,9 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	burnAcme.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burnAcme)
 
-	return nil, nil
+	res := new(protocol.AddCreditsResult)
+	res.Oracle = ledgerState.ActiveOracle
+	res.Credits = credits.Uint64()
+	res.Amount = body.Amount
+	return res, nil
 }

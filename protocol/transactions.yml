@@ -530,6 +530,16 @@ WriteDataResult:
     - name: AccountID
       type: bytes
 
+AddCreditsResult:
+  union: { type: result }
+  fields:
+    - name: Amount
+      type: bigint
+    - name: Credits
+      type: uvarint
+    - name: Oracle
+      type: uvarint
+
 ##### Data Types #####
 
 UpdateAllowedTransactions:

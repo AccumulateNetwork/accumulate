@@ -32,7 +32,7 @@ func GetCreditValue() (string, error) {
 	var acmeOracle, _ = GetacmeOracle()
 
 	usd := float64(acmeOracle) / protocol.AcmeOraclePrecision
-	credits := (usd * protocol.CreditsPerFiatUnit) / protocol.CreditPrecision
+	credits := (usd * protocol.CreditUnitsPerFiatUnit) / protocol.CreditPrecision
 	out := "USD per ACME : $" + strconv.FormatFloat(usd, 'f', 4, 64)
 	out += "\nCredits per ACME : " + strconv.FormatFloat(credits, 'f', 2, 64)
 

@@ -45,6 +45,13 @@ type AddCredits struct {
 	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle"`
 }
 
+type AddCreditsResult struct {
+	fieldsSet []bool
+	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Credits   uint64  `json:"credits,omitempty" form:"credits" query:"credits" validate:"required"`
+	Oracle    uint64  `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
+}
+
 type AddKeyOperation struct {
 	fieldsSet []bool
 	Entry     KeySpecParams `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
@@ -671,6 +678,11 @@ func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
 // Deprated: use Type
 func (*AddCredits) GetType() TransactionType { return TransactionTypeAddCredits }
 
+func (*AddCreditsResult) Type() TransactionType { return TransactionTypeAddCredits }
+
+// Deprated: use Type
+func (*AddCreditsResult) GetType() TransactionType { return TransactionTypeAddCredits }
+
 func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeAdd }
 
 // Deprated: use Type
@@ -1033,6 +1045,20 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 		return false
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	if !(v.Oracle == u.Oracle) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddCreditsResult) Equal(u *AddCreditsResult) bool {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	if !(v.Credits == u.Credits) {
 		return false
 	}
 	if !(v.Oracle == u.Oracle) {
@@ -2525,6 +2551,61 @@ func (v *AddCredits) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AddCreditsResult = []string{
+	1: "Type",
+	2: "Amount",
+	3: "Credits",
+	4: "Oracle",
+}
+
+func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, TransactionTypeAddCredits)
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(2, &v.Amount)
+	}
+	if !(v.Credits == 0) {
+		writer.WriteUint(3, v.Credits)
+	}
+	if !(v.Oracle == 0) {
+		writer.WriteUint(4, v.Oracle)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AddCreditsResult)
+	return buffer.Bytes(), err
+}
+
+func (v *AddCreditsResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Credits is missing")
+	} else if v.Credits == 0 {
+		errs = append(errs, "field Credits is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Oracle is missing")
+	} else if v.Oracle == 0 {
+		errs = append(errs, "field Oracle is not set")
 	}
 
 	switch len(errs) {
@@ -6388,6 +6469,35 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *AddCreditsResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeAddCredits {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAddCredits, typ)
+	}
+
+	if x, ok := reader.ReadBigInt(2); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Credits = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Oracle = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AddCreditsResult)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *AddKeyOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8509,6 +8619,20 @@ func (v *AddCredits) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AddCreditsResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    TransactionType `json:"type"`
+		Amount  *string         `json:"amount,omitempty"`
+		Credits uint64          `json:"credits,omitempty"`
+		Oracle  uint64          `json:"oracle,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Credits = v.Credits
+	u.Oracle = v.Oracle
+	return json.Marshal(&u)
+}
+
 func (v *AddKeyOperation) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  KeyPageOperationType `json:"type"`
@@ -9595,6 +9719,30 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.Oracle = u.Oracle
+	return nil
+}
+
+func (v *AddCreditsResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    TransactionType `json:"type"`
+		Amount  *string         `json:"amount,omitempty"`
+		Credits uint64          `json:"credits,omitempty"`
+		Oracle  uint64          `json:"oracle,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Credits = v.Credits
+	u.Oracle = v.Oracle
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Credits = u.Credits
 	v.Oracle = u.Oracle
 	return nil
 }

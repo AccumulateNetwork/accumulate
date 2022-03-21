@@ -663,7 +663,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	//Credits I should have received
 
-	credits := big.NewInt(protocol.CreditsPerFiatUnit)                    // want to obtain credits
+	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
 	credits.Mul(credits, big.NewInt(acmeToSpendOnCredits))                // acme the user wants to spend
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
