@@ -2,6 +2,7 @@
 
 # Stop immediately on error
 set -e
+set -x
 
 # section <name> - Print a section header
 function section {
