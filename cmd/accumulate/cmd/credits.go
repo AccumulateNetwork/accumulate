@@ -56,7 +56,10 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	var acmeOracle, _ = GetacmeOracle()
+	acmeOracle, err := QueryAcmeOracle()
+	if err != nil {
+		return "", err
+	}
 
 	// credits desired
 	cred, err := strconv.ParseFloat(args[1], 64)
@@ -73,11 +76,9 @@ func AddCredits(origin string, args []string) (string, error) {
 
 	//dollars / ACME
 	estAcme.Mul(estAcme, big.NewInt(protocol.AcmeOraclePrecision)) // Oracle Precision
-	estAcme.Div(estAcme, big.NewInt(int64(acmeOracle)))            // Oracle Precision * Dollars / Acme
+	estAcme.Div(estAcme, big.NewInt(int64(acmeOracle.Price)))      // Oracle Precision * Dollars / Acme
 
-	// token units / -ACME- * -Credits- / -Credit- * -Dollar- * -Oracle Precision- / -Dollar- * -ACME- / -Oracle Precision-
-
-	//now test the cost of the credits against the max amount to spend
+	//now test the cost of the credits against the max amount the user wants to spend
 	if len(args) > 2 {
 		tstAmt, err := amountToBigInt(protocol.ACME, args[2]) // amount in acme
 		if err != nil {
@@ -107,7 +108,7 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
 	credits.Amount = *estAcme
-	credits.Oracle = acmeOracle
+	credits.Oracle = acmeOracle.Price
 
 	res, err := dispatchTxRequest("add-credits", &credits, nil, u, signer)
 	if err != nil {
