@@ -48,11 +48,9 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	}
 
 	// If specifying amount of acme to spend
-	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits - credit units / dollar
-	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme  - oracle precision * dollar / acme
-	credits.Mul(credits, &body.Amount)                                    // acme the user wants to spend - acme * acme precision
-	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units - oracle precision
-	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units - acme precision
+	credits := big.NewInt(int64(protocol.CreditUnitsPerFiatUnit * ledgerState.ActiveOracle))     // credit units / dollar * oracle precision * dollar / acme
+	credits.Mul(credits, &body.Amount)                                                           // acme the user wants to spend - acme * acme precision
+	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision*protocol.AcmePrecision))) // adjust the precision of oracle to real units - oracle precision and acme to spend with acme precision
 
 	//make sure there are credits to purchase
 	if credits.Int64() == 0 {
