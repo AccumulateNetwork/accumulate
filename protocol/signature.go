@@ -29,7 +29,6 @@ func (s *LegacyED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
 func (s *LegacyED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // GetSignature returns Signature.
-
 func (s *LegacyED25519Signature) GetSignature() []byte { return s.Signature }
 
 // InitiatorHash calculates the Merkle hash of the signature.

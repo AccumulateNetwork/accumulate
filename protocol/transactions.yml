@@ -26,13 +26,6 @@ TransactionHeader:
       type: url
       pointer: true
       alternative: Origin
-    - name: KeyPageHeight
-      type: uvarint
-    - name: KeyPageIndex
-      type: uvarint
-    - name: Timestamp
-      type: uvarint
-      alternative: Nonce
     - name: Initiator
       type: chain
     - name: Memo
