@@ -129,6 +129,8 @@ func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type {
 	case "bytes", "chain", "duration", "any":
 		return strings.Title(field.Type), false
+	case "hash":
+		return "Chain", false
 	case "bigint":
 		return strings.Title(field.Type), true
 	}
@@ -177,7 +179,7 @@ func GoJsonType(field *Field) string {
 		jtype = "*string"
 	case "bigint":
 		jtype = "*string"
-	case "chain":
+	case "chain", "hash":
 		jtype = "string"
 	case "duration", "any":
 		jtype = "interface{}"
@@ -217,7 +219,7 @@ func GoIsZero(field *Field, varName string) (string, error) {
 		return fmt.Sprintf("%s == 0", varName), nil
 	case "bigint":
 		return fmt.Sprintf("(%s).Cmp(new(big.Int)) == 0", varName), nil
-	case "url", "chain", "time":
+	case "url", "chain", "hash", "time":
 		return fmt.Sprintf("%s == (%s{})", varName, GoResolveType(field, false, false)), nil
 	}
 
@@ -241,7 +243,7 @@ func GoJsonZeroValue(field *Field) (string, error) {
 		return "nil", nil
 	case "bool":
 		return "false", nil
-	case "string", "chain":
+	case "string", "chain", "hash":
 		return `""`, nil
 	case "uvarint", "varint", "uint", "int":
 		return "0", nil
@@ -264,7 +266,7 @@ func GoAreEqual(field *Field, varName, otherName string) (string, error) {
 	var expr string
 	var wantPtr bool
 	switch field.Type {
-	case "bool", "string", "chain", "uvarint", "varint", "uint", "int", "duration", "time":
+	case "bool", "string", "chain", "hash", "uvarint", "varint", "uint", "int", "duration", "time":
 		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 	case "bytes", "rawJson":
 		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false

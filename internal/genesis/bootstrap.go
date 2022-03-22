@@ -66,7 +66,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
 
 		// Create the ledger
-		ledger := protocol.NewInternalLedger()
+		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
 		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1

@@ -132,8 +132,8 @@ func checkValidatorTransaction(st *StateManager, env *protocol.Envelope) (*proto
 
 	bookUrl := st.nodeUrl.JoinPath(protocol.ValidatorBook)
 	pageUrl := protocol.FormatKeyPageUrl(bookUrl, 0)
-	page := new(protocol.KeyPage)
-	err := st.LoadUrlAs(pageUrl, page)
+	var page *protocol.KeyPage
+	err := st.LoadUrlAs(pageUrl, &page)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
 	}

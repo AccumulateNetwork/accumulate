@@ -13,10 +13,10 @@ variables:
 
 merge request target:
   needs: []
-  only: [ merge_requests ]
   script:
   # Merge requests can only be merged into develop
   # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
+  - echo "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
   - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
 
 .go:
@@ -274,6 +274,7 @@ validate devnet:
   variables:
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
   script:
+  - apt-get -y update && apt-get -y install jq xxd
   - go run ./tools/test/devnet/ -v 1 -b 1 --reset
 
 validate:
