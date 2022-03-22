@@ -86,7 +86,8 @@ func TestEvilNode(t *testing.T) {
 	_, de, err := evData.GetLatest()
 	require.NoError(t, err)
 	var ev []types2.Evidence
-	err = json.Unmarshal(de.Data, &ev)
+	require.NotEqual(t, de.Data, nil, "no data")
+	err = json.Unmarshal(de.Data[0], &ev)
 	require.NoError(t, err)
 	require.Greaterf(t, len(ev), 0, "no evidence data")
 	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
@@ -214,13 +215,13 @@ func TestAnchorChain(t *testing.T) {
 
 	//set price of acme to $445.00 / token
 	price := 445.00
-	var err error
 	dn.Batch(func(send func(*Tx)) {
 		ao := new(protocol.AcmeOracle)
 		ao.Price = uint64(price * protocol.AcmeOraclePrecision)
 		wd := new(protocol.WriteData)
-		wd.Entry.Data, err = json.Marshal(&ao)
+		d, err := json.Marshal(&ao)
 		require.NoError(t, err)
+		wd.Entry.Data = append(wd.Entry.Data, d)
 
 		originUrl := protocol.PriceOracleAuthority
 
@@ -308,8 +309,9 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 	firstEntry := protocol.DataEntry{}
 
-	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Factom PRO"))
-	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Tutorial"))
+	firstEntry.Data = append(firstEntry.Data, []byte{})
+	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
+	firstEntry.Data = append(firstEntry.Data, []byte("Tutorial"))
 
 	//create a lite data account aka factom chainId
 	chainId := protocol.ComputeLiteDataAccountId(&firstEntry)
@@ -468,11 +470,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		wd := new(protocol.WriteData)
 		n.Batch(func(send func(*protocol.Envelope)) {
+			wd.Entry.Data = append(wd.Entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
 			for i := 0; i < 10; i++ {
-				wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("test id %d", i)))
+				wd.Entry.Data = append(wd.Entry.Data, []byte(fmt.Sprintf("test id %d", i)))
 			}
-
-			wd.Entry.Data = []byte("thequickbrownfoxjumpsoverthelazydog")
 
 			send(newTxn("FooBar/oof").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
