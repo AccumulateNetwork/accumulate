@@ -322,7 +322,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 		m.logger.Error("cannot marshal voting info data as json")
 	} else {
 		wd := protocol.WriteData{}
-		wd.Entry.Data = data
+		wd.Entry.Data = append(wd.Entry.Data, data)
 
 		err := m.processInternalDataTransaction(protocol.Votes, &wd)
 		if err != nil {
@@ -337,7 +337,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 			m.logger.Error("cannot marshal evidence as json")
 		} else {
 			wd := protocol.WriteData{}
-			wd.Entry.Data = data
+			wd.Entry.Data = append(wd.Entry.Data, data)
 
 			err := m.processInternalDataTransaction(protocol.Evidence, &wd)
 			if err != nil {
@@ -442,7 +442,10 @@ func (m *Executor) updateOraclePrice(ledgerState *protocol.InternalLedger) error
 	}
 
 	o := protocol.AcmeOracle{}
-	err = json.Unmarshal(e.Data, &o)
+	if e.Data == nil {
+		return fmt.Errorf("no data in oracle data account")
+	}
+	err = json.Unmarshal(e.Data[0], &o)
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal oracle data entry %x", e.Data)
 	}

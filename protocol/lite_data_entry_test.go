@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -26,8 +27,9 @@ func TestLiteDataEntry(t *testing.T) {
 
 	firstEntry := DataEntry{}
 
-	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Factom PRO"))
-	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Tutorial"))
+	firstEntry.Data = append(firstEntry.Data, []byte{})
+	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
+	firstEntry.Data = append(firstEntry.Data, []byte("Tutorial"))
 
 	//create a chainId
 	chainId := ComputeLiteDataAccountId(&firstEntry)
@@ -44,9 +46,9 @@ func TestLiteDataEntry(t *testing.T) {
 
 	lde := NewLiteDataEntry()
 	copy(lde.AccountId[:], chainId)
-	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
+	lde.Data = append(lde.Data, []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here."))
 	for i := 0; i < 3; i++ {
-		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
+		lde.Data = append(lde.Data, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
 	}
 
 	expectedHash := "1bd5955a72f8696416ac3ca39f7aa6a054e7209aa2f9a5f95d601640b8d047a5"
@@ -68,10 +70,18 @@ func TestLiteDataEntry(t *testing.T) {
 	}
 
 	de := NewLiteDataEntry()
-	de.Data = []byte("a cost test")
+
+	//add test for an empty entry to make sure function behaves as expected.
+	h := ComputeLiteDataAccountId(de.DataEntry)
+	if strings.Compare(fmt.Sprintf("%x", h),
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") != 0 {
+		t.Fatalf("invalid account id from empty lite entry")
+	}
+
+	de.Data = append(de.Data, []byte("a cost test"))
 	//now make the data entry larger and compute cost
 	for i := 0; i < 100; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
 	cost, err = de.Cost()
@@ -86,7 +96,7 @@ func TestLiteDataEntry(t *testing.T) {
 
 	//now let's blow up the size of the entry to > 10kB to make sure it fails.
 	for i := 0; i < 1000; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
 	//now the size of the entry is 10878 bytes, so the cost should fail.
