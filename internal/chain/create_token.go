@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
