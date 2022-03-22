@@ -103,24 +103,24 @@ func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error 
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
-func AddCredits(db DB, account *url.URL, acme float64) error {
+func AddCredits(db DB, account *url.URL, credits float64) error {
 	state, err := db.Account(account).GetState()
 	if err != nil {
 		return err
 	}
 
-	state.(protocol.CreditHolder).CreditCredits(uint64(acme * protocol.AcmePrecision))
+	state.(protocol.CreditHolder).CreditCredits(uint64(credits * protocol.CreditPrecision))
 	return db.Account(account).PutState(state)
 }
 
-func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, acmeForCredits float64) error {
+func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, credits float64) error {
 	url := AcmeLiteAddressTmPriv(key)
 	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
 	if err != nil {
 		return err
 	}
 
-	return AddCredits(db, url, acmeForCredits)
+	return AddCredits(db, url, credits)
 }
 
 func WriteStates(db DB, chains ...protocol.Account) error {
@@ -198,7 +198,7 @@ func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
 	return WriteStates(db, adi)
 }
 
-func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, acme float64) error {
+func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, credits float64) error {
 	err := CreateADI(db, key, urlStr)
 	if err != nil {
 		return err
@@ -209,7 +209,7 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, acm
 		return err
 	}
 
-	return AddCredits(db, u.JoinPath("book0/1"), acme)
+	return AddCredits(db, u.JoinPath("book0/1"), credits)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
