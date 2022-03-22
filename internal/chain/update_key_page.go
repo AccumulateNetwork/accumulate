@@ -15,6 +15,7 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 
 func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
+
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
 	}
@@ -65,7 +66,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		}
 
 		entry := new(protocol.KeySpec)
-		entry.PublicKey = op.Entry.PublicKey
+		entry.PublicKeyHash = op.Entry.KeyHash
 		entry.Owner = op.Entry.Owner
 		page.Keys = append(page.Keys, entry)
 
@@ -100,7 +101,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 			return nil, fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
-		entry.PublicKey = op.NewEntry.PublicKey
+		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Owner = op.NewEntry.Owner
 
 	case *protocol.SetThresholdKeyPageOperation:
@@ -160,8 +161,8 @@ func didUpdateKeyPage(page *protocol.KeyPage) {
 }
 
 func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (int, *protocol.KeySpec, bool) {
-	if len(search.PublicKey) > 0 {
-		return page.EntryByKeyHash(search.PublicKey)
+	if len(search.KeyHash) > 0 {
+		return page.EntryByKeyHash(search.KeyHash)
 	}
 
 	if search.Owner != nil {

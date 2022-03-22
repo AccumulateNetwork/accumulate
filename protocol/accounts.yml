@@ -121,8 +121,9 @@ Anchor:
 
 KeySpec:
   fields:
-    - name: PublicKey
+    - name: PublicKeyHash
       type: bytes
+      alternative: PublicKey
     - name: Nonce
       type: uvarint
     - name: Owner

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -121,7 +122,10 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	} else {
 		keyName = originKeyName
 	}
-	publicKeyHash, err := resolvePublicKey(keyName)
+	pbkey, err := resolvePublicKey(keyName)
+	ph := sha256.Sum256(pbkey)
+
+	publicKeyHash := ph[:]
 	if err != nil {
 		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
 	}

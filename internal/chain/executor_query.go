@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"crypto/sha256"
 	"encoding"
 	"encoding/hex"
 	"errors"
@@ -783,6 +784,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		response := query.ResponseKeyPageIndex{
 			KeyBook: keyBook.Url,
 		}
+		keyHash := sha256.Sum256(chr.Key)
+
 		for index := uint64(0); index < keyBook.PageCount; index++ {
 			pageUrl := protocol.FormatKeyPageUrl(keyBook.Url, index)
 			keyPage := new(protocol.KeyPage)
@@ -790,7 +793,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
-			if keyPage.FindKey(chr.Key) != nil {
+			if keyPage.FindKey(chr.Key) != nil || keyPage.FindKey(keyHash[:]) != nil {
 				response.KeyPage = keyPage.Url
 				response.Index = index
 				found = true
