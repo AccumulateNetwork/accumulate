@@ -34,8 +34,8 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 		return nil, fmt.Errorf("routing %v: %v", dest, err)
 	}
 
-	ledgerState := new(protocol.InternalLedger)
-	err = st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err = st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))

@@ -121,8 +121,8 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	batch := n.db.Begin(false)
 	defer batch.Discard()
 
-	ledger := protocol.NewInternalLedger()
-	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	var ledger *protocol.InternalLedger
+	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
 		n.height = ledger.Index
 	} else {
