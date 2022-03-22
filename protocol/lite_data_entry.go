@@ -76,17 +76,23 @@ func (e *LiteDataEntry) MarshalBinary() ([]byte, error) {
 
 	// Payload
 	var ex bytes.Buffer
-	for _, extID := range e.ExtIds {
-		n := len(extID)
+	n := len(e.Data)
+	if n == 0 {
+		return nil, fmt.Errorf("no data content provided")
+	}
+
+	//ExtId's are data entries 1..N if applicable
+	for i := 1; i < n; i++ {
+		n := len(e.Data[i])
 		binary.BigEndian.PutUint16(d[:], uint16(n))
 		ex.Write(d[:2])
-		ex.Write(extID)
+		ex.Write(e.Data[i])
 	}
 	binary.BigEndian.PutUint16(d[:], uint16(ex.Len()))
 	b.Write(d[:2])
 	b.Write(ex.Bytes())
 
-	b.Write(e.Data)
+	b.Write(e.Data[0])
 
 	return b.Bytes(), nil
 }
@@ -122,17 +128,19 @@ func (e *LiteDataEntry) UnmarshalBinary(data []byte) error {
 	}
 
 	//reset the extId's if present
-	e.ExtIds = e.ExtIds[0:0]
+	e.Data = nil
+	extIds := [][]byte{}
 	for n := 0; n < int(totalExtIdSize); {
 		extIdSize := binary.BigEndian.Uint16(data[j : j+2])
 		if extIdSize > totalExtIdSize {
 			return fmt.Errorf("malformed extId")
 		}
 		j += 2
-		e.ExtIds = append(e.ExtIds, data[j:j+int(extIdSize)])
+		extIds = append(extIds, data[j:j+int(extIdSize)])
 		j += n
 	}
 
-	e.Data = data[j:]
+	e.Data = append(e.Data, data[j:])
+	e.Data = append(e.Data, extIds...)
 	return nil
 }

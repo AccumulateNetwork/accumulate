@@ -44,12 +44,16 @@ func GetCreditValue() (string, error) {
 		return "", err
 	}
 
+	if entry.Entry.Data == nil {
+		return "", fmt.Errorf("no data in oracle account")
+	}
+
 	if WantJsonOutput {
-		return string(entry.Entry.Data), nil
+		return string(entry.Entry.Data[0]), nil
 	}
 
 	var acmeOracle protocol.AcmeOracle
-	if err = json.Unmarshal(entry.Entry.Data, &acmeOracle); err != nil {
+	if err = json.Unmarshal(entry.Entry.Data[0], &acmeOracle); err != nil {
 		return "", err
 	}
 

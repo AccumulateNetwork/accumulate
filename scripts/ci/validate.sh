@@ -89,7 +89,7 @@ section "Update oracle price to 1 dollar. Oracle price has precision of 4 decima
 if [ -f "$NODE_PRIV_VAL" ]; then
     wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
     RESULT=$(accumulate -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
+    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
     [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
     echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
@@ -379,18 +379,18 @@ RESULT=$(accumulate -j token get keytest/foocoin)
 success
 
 section "Query latest data entry by URL"
-RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
+RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data[0])
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo'"
 
 section "Query data entry at height 0 by URL"
-RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry at height 0 is not 'bar'"
+RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data[0])
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Entry at height 0 is not 'foo'"
 
 section "Query data entry with hash by URL"
 ENTRY=$(accumulate -j get keytest/data#data/0 | jq -re .data.entryHash)
-RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data)
+RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data[0])
 ENTRY2=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entryHash)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'bar'"
+[ "$RESULT" == $(echo -n foo | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'foo'"
 [ "$ENTRY" == "$ENTRY2" ] || die "Entry hash mismatch ${ENTRY} ${ENTRY2}"
 success
 
@@ -437,7 +437,7 @@ MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Fai
 section "Query votes chain"
 if [ -f "$NODE_PRIV_VAL" ]; then
     #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
-    RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+    RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
     #convert the node address to search for to base64
     NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
     VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')

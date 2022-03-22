@@ -81,6 +81,7 @@ var pageKeyUpdateCmd = &cobra.Command{
 	}),
 }
 
+////nolint
 var pageSetThresholdCmd = &cobra.Command{
 	Use:   "set-threshold [key page url] [signing key name] [key index (optional)] [key height (optional)] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",
