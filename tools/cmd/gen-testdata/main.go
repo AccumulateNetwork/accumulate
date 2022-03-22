@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -138,10 +137,10 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&TokenAccount{AccountHeader: AccountHeader{Url: parseUrl("adi/foo"), KeyBook: parseUrl("adi/book")}, TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *new(big.Int).SetInt64(12345), LastUsedOn: uint64(time.Now().Unix()), CreditBalance: *big.NewInt(9835)}),
+		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *new(big.Int).SetInt64(12345), LastUsedOn: uint64(rand.Uint32()), CreditBalance: *big.NewInt(9835)}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKey: key[32:], LastUsedOn: uint64(time.Now().Unix()), Owner: parseUrl("foo/bar")}}, CreditBalance: *big.NewInt(98532), Threshold: 3}),
+		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKey: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: *big.NewInt(98532), Threshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
 		testdata.NewAcntTest(&KeyBook{AccountHeader: AccountHeader{Url: parseUrl("adi/book")}}),
