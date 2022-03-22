@@ -380,19 +380,17 @@ success
 
 section "Query latest data entry by URL"
 RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data[0])
-echo $(accumulate -j get keytest/data#data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo'"
 
 section "Query data entry at height 0 by URL"
 RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data[0])
-echo $(accumulate -j get keytest/data#data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry at height 0 is not 'bar'"
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Entry at height 0 is not 'foo'"
 
 section "Query data entry with hash by URL"
 ENTRY=$(accumulate -j get keytest/data#data/0 | jq -re .data.entryHash)
 RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data[0])
 ENTRY2=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entryHash)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'bar'"
+[ "$RESULT" == $(echo -n foo | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'foo'"
 [ "$ENTRY" == "$ENTRY2" ] || die "Entry hash mismatch ${ENTRY} ${ENTRY2}"
 success
 
