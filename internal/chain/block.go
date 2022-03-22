@@ -36,6 +36,7 @@ type BlockState struct {
 	Delivered         uint64
 	SynthSigned       uint64
 	SynthSent         uint64
+	DnAnchors         []*protocol.SyntheticAnchor
 	ValidatorsUpdates []abci.ValidatorUpdate
 	ProducedTxns      []*protocol.Transaction
 	ChainUpdates      []ChainUpdate
@@ -46,6 +47,7 @@ func (s *BlockState) Empty() bool {
 	return s.Delivered == 0 &&
 		s.SynthSigned == 0 &&
 		s.SynthSent == 0 &&
+		len(s.DnAnchors) == 0 &&
 		len(s.ValidatorsUpdates) == 0 &&
 		len(s.ProducedTxns) == 0 &&
 		len(s.ChainUpdates) == 0
@@ -56,12 +58,17 @@ func (s *BlockState) Merge(r *BlockState) {
 	s.Delivered += r.Delivered
 	s.SynthSigned += r.SynthSigned
 	s.SynthSent += r.SynthSent
+	s.DnAnchors = append(s.DnAnchors, r.DnAnchors...)
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 
 	for _, u := range r.ChainUpdates {
 		s.DidUpdateChain(u)
 	}
+}
+
+func (s *BlockState) DidReceiveDnAnchor(anchor *protocol.SyntheticAnchor) {
+	s.DnAnchors = append(s.DnAnchors, anchor)
 }
 
 // DidUpdateChain records a chain update.

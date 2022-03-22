@@ -58,10 +58,16 @@ func (e *Envelope) EnvHash() []byte {
 
 // VerifyTxHash verifies that TxHash matches the hash of the transaction.
 func (e *Envelope) VerifyTxHash() bool {
-	if e.TxHash == nil {
+	switch {
+	case e.TxHash == nil || e.Transaction == nil:
+		// If neither are specified, it cannot be invalid
+		return true
+	case e.TxHash != nil && e.Transaction != nil:
+		return bytes.Equal(e.TxHash, e.Transaction.GetHash())
+	default:
+		// If only one is specified, it cannot be invalid
 		return true
 	}
-	return bytes.Equal(e.TxHash, e.Transaction.GetHash())
 }
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
@@ -71,7 +77,7 @@ func (t *Transaction) GetHash() []byte {
 		return t.hash
 	}
 
-	if t.Type() == TransactionTypeSignPending {
+	if t.Body.Type() == TransactionTypeSignPending {
 		// Do not use the hash for a signature transaction
 		return nil
 	}
@@ -100,9 +106,13 @@ func (t *Transaction) GetHash() []byte {
 	return h[:]
 }
 
-// Type decodes the transaction type from the body.
-func (t *Transaction) Type() TransactionType {
-	return t.Body.GetType()
+// TxType returns the type of the transaction body, or SignPending if the
+// transaction body is nil.
+func (e *Envelope) TxType() TransactionType {
+	if e.Transaction != nil {
+		return e.Transaction.Body.Type()
+	}
+	return TransactionTypeSignPending
 }
 
 // Verify verifies that the signatures are valid.

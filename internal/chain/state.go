@@ -29,7 +29,7 @@ type StateManager struct {
 func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (*StateManager, error) {
 	m := new(StateManager)
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
-	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
+	m.stateCache = *newStateCache(nodeUrl, env.TxType(), txid, batch)
 
 	// TODO Process each signature separately
 
@@ -42,7 +42,7 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Enve
 		// OK
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, err
-	case env.Transaction.Type() != protocol.TransactionTypeInternalGenesis:
+	case env.TxType() != protocol.TransactionTypeInternalGenesis:
 		// The signer must not be missing
 		return nil, fmt.Errorf("%v not found", m.SignatorUrl)
 	}

@@ -15,7 +15,7 @@ type Transaction struct {
 
 // Index returns a value that can read or write an index value.
 func (t *Transaction) Index(key ...interface{}) *Value {
-	return &Value{t.batch, t.key.Index(key...)}
+	return &Value{t.batch, t.key.Index(key...), true}
 }
 
 // Get loads the transaction state, status, and signatures.

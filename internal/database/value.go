@@ -2,14 +2,16 @@ package database
 
 import (
 	"encoding"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Value reads and writes a value.
 type Value struct {
-	batch *Batch
-	key   storage.Key
+	batch    *Batch
+	key      storage.Key
+	writable bool
 }
 
 // Key returns the value's storage key.
@@ -34,6 +36,9 @@ func (v *Value) GetAs(u encoding.BinaryUnmarshaler) error {
 
 // Put stores the value.
 func (v *Value) Put(data []byte) error {
+	if !v.writable {
+		return fmt.Errorf("value opened as read-only")
+	}
 	return v.batch.store.Put(v.key, data)
 }
 

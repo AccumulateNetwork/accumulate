@@ -25,6 +25,11 @@ func (b *objectBucket) State() storage.Key {
 	return b.Object().Append("State")
 }
 
+// Substate returns the storage key for a sub-state of the object.
+func (b *objectBucket) Substate(name string) storage.Key {
+	return b.Object().Append("State", name)
+}
+
 // Index returns the storage key for the given index of the object.
 func (b *objectBucket) Index(key ...interface{}) storage.Key {
 	return b.Object().Append("Index").Append(key...)

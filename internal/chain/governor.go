@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type governor struct {
@@ -146,16 +148,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	producedCount := countExceptAnchors2(msg.blockState.ProducedTxns)
 	unsignedCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
 	unsentCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
-
 	unsent := msg.ledger.Synthetic.Unsent
-	for _, entry := range msg.synthLedger.Pending {
-		if entry.NeedsReceipt {
-			unsignedCount++
-		} else {
-			unsent = append(unsent, entry.TransactionHash)
-			unsentCount++
-		}
-	}
 
 	g.logger.Info("Did commit",
 		"height", msg.blockMeta.Index,
@@ -178,6 +171,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	// Sign and send produced synthetic transactions
 	g.signTransactions(batch, msg.ledger)
 	g.sendTransactions(batch, unsent)
+	g.sendFullReceipts(batch, msg)
 
 	// Dispatch transactions asynchronously
 	errs := g.dispatcher.Send(context.Background())
@@ -268,7 +262,7 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 		}
 
 		// Send it
-		typ := env.Transaction.Type()
+		typ := env.TxType()
 		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
@@ -281,6 +275,103 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 	}
 
 	g.sendInternal(batch, body)
+}
+
+func (g *governor) sendFullReceipts(batch *database.Batch, msg *govDidCommit) {
+	if g.Network.Type != config.BlockValidator {
+		// TODO Support sending synthetic transactions to the DN?
+		return
+	}
+
+	// TODO This could be handled in the synthetic anchor executor, and the
+	// synthetic transactions could be executed immediately
+
+	synthLedger := batch.Account(g.Network.SyntheticLedger())
+
+	// For each anchor received from the DN
+	for _, anchor := range msg.blockState.DnAnchors {
+		// For each receipt in the anchor
+		for _, receipt := range anchor.Receipts {
+			// Look up pending synthetic transactions for the receipt
+			set := new(protocol.HashSet)
+			err := synthLedger.ReadSubstate(protocol.AnchorSubstate(receipt.Start)).GetAs(set)
+			if err != nil {
+				if !errors.Is(err, storage.ErrNotFound) {
+					g.logger.Error("Unable to load synthetic ledger substate for BVN anchor", "anchor", logging.AsHex(receipt.Start), "error", err)
+				}
+				continue
+			}
+
+			// For each pending synthetic transaction
+			for _, txid := range set.Hashes {
+				// Load the signatures
+				sigs, err := batch.Transaction(txid[:]).GetSignatures()
+				if err != nil {
+					g.logger.Error("Unable to load synthetic transaction signatures", "txid", logging.AsHex(txid), "error", err)
+					continue
+				}
+
+				// Find the corresponding partial receipt
+				var originSig *protocol.SyntheticSignature
+				var receiptSig *protocol.ReceiptSignature
+			outer:
+				for _, sig := range sigs.Signatures {
+					switch sig := sig.(type) {
+					case *protocol.SyntheticSignature:
+						originSig = sig
+					case *protocol.ReceiptSignature:
+						if !bytes.Equal(sig.Result, receipt.Start) {
+							continue
+						}
+
+						receiptSig = sig
+						break outer
+					}
+				}
+
+				if originSig == nil {
+					g.logger.Error("Missing origin for pending synthetic transaction", "txid", logging.AsHex(txid))
+					continue
+				}
+
+				if receiptSig == nil {
+					g.logger.Error("Missing receipt for pending synthetic transaction", "txid", logging.AsHex(txid), "anchor", logging.AsHex(receipt.Start))
+					continue
+				}
+
+				// Build the full receipt
+				sourceReceipt := receiptSig.Receipt.Convert()
+				fullReceipt, err := sourceReceipt.Combine(receipt.Convert())
+				if err != nil {
+					g.logger.Error("Unable to build full receipt for synthetic transaction", "txid", logging.AsHex(txid), "anchor", logging.AsHex(receipt.Start), "error", err)
+					continue
+				}
+
+				// Build the envelope - include the origin sig to make life
+				// easier for the executor
+				newSig := new(protocol.ReceiptSignature)
+				newSig.Receipt = *protocol.ReceiptFromManaged(fullReceipt)
+				env := new(protocol.Envelope)
+				env.TxHash = txid[:]
+				env.Signatures = append(env.Signatures, originSig, newSig)
+
+				// TODO This should not be necessary
+				env.Transaction = new(protocol.Transaction)
+				env.Transaction.Header.Principal = g.Network.NodeUrl()
+				env.Transaction.Body = new(protocol.SignPending)
+
+				// Marshal it
+				raw, err := env.MarshalBinary()
+				if err != nil {
+					g.logger.Error("Failed to marshal envelope (directory receipt)", "txid", logging.AsHex(txid), "error", err)
+					continue
+				}
+
+				// Send it
+				g.dispatcher.BroadcastTxLocal(context.Background(), raw)
+			}
+		}
+	}
 }
 
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {

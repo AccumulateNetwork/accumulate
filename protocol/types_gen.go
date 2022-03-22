@@ -183,6 +183,11 @@ type Envelope struct {
 	hash        []byte
 }
 
+type HashSet struct {
+	fieldsSet []bool
+	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
+}
+
 // IndexEntry represents an entry in an index chain.
 type IndexEntry struct {
 	fieldsSet []bool
@@ -225,7 +230,6 @@ type InternalSignature struct {
 type InternalSyntheticLedger struct {
 	fieldsSet []bool
 	AccountHeader
-	Pending []*SyntheticLedgerEntry `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 }
 
 type InternalTransactionsSent struct {
@@ -323,6 +327,7 @@ type ObjectMetadata struct {
 	fieldsSet []bool
 	Type      ObjectType      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Chains    []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Substate  []string        `json:"substate,omitempty" form:"substate" query:"substate" validate:"required"`
 }
 
 type RCD1Signature struct {
@@ -351,6 +356,7 @@ type ReceiptEntry struct {
 type ReceiptSignature struct {
 	fieldsSet []bool
 	Receipt
+	Partial bool `json:"partial,omitempty" form:"partial" query:"partial"`
 }
 
 type RemoveKeyOperation struct {
@@ -460,8 +466,6 @@ type SyntheticLedgerEntry struct {
 	SynthIndexIndex uint64 `json:"synthIndexIndex,omitempty" form:"synthIndexIndex" query:"synthIndexIndex" validate:"required"`
 	// RootIndexIndex is the index of the root index chain entry from the block.
 	RootIndexIndex uint64 `json:"rootIndexIndex,omitempty" form:"rootIndexIndex" query:"rootIndexIndex" validate:"required"`
-	// NeedsReceipt indicates whether the synthetic transaction is waiting for a receipt.
-	NeedsReceipt bool `json:"needsReceipt,omitempty" form:"needsReceipt" query:"needsReceipt" validate:"required"`
 }
 
 type SyntheticMirror struct {
@@ -478,6 +482,18 @@ type SyntheticSignature struct {
 	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
 	// SequenceNumber is the sequence number of the transaction.
 	SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+}
+
+type SyntheticStatus struct {
+	fieldsSet []bool
+	// GotSignature indicates that an ED25519 signature has been received.
+	GotSignature bool `json:"gotSignature,omitempty" form:"gotSignature" query:"gotSignature" validate:"required"`
+	// Source is the URL of the originating subnet.
+	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// SourceAnchor is the block anchor of the transaction from the originating subnet.
+	SourceAnchor [32]byte `json:"sourceAnchor,omitempty" form:"sourceAnchor" query:"sourceAnchor" validate:"required"`
+	// DirectoryAnchor is the block anchor of the transaction from the directory.
+	DirectoryAnchor [32]byte `json:"directoryAnchor,omitempty" form:"directoryAnchor" query:"directoryAnchor" validate:"required"`
 }
 
 type SyntheticWriteData struct {
@@ -538,6 +554,7 @@ type TransactionStatus struct {
 	Pending   bool              `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Synthetic *SyntheticStatus  `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
 }
 
@@ -1426,6 +1443,19 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	return true
 }
 
+func (v *HashSet) Equal(u *HashSet) bool {
+	if len(v.Hashes) != len(u.Hashes) {
+		return false
+	}
+	for i := range v.Hashes {
+		if !(v.Hashes[i] == u.Hashes[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *IndexEntry) Equal(u *IndexEntry) bool {
 	if !(v.Source == u.Source) {
 		return false
@@ -1492,14 +1522,6 @@ func (v *InternalSignature) Equal(u *InternalSignature) bool {
 func (v *InternalSyntheticLedger) Equal(u *InternalSyntheticLedger) bool {
 	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
-	}
-	if len(v.Pending) != len(u.Pending) {
-		return false
-	}
-	for i := range v.Pending {
-		if !((v.Pending[i]).Equal(u.Pending[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -1734,6 +1756,14 @@ func (v *ObjectMetadata) Equal(u *ObjectMetadata) bool {
 			return false
 		}
 	}
+	if len(v.Substate) != len(u.Substate) {
+		return false
+	}
+	for i := range v.Substate {
+		if !(v.Substate[i] == u.Substate[i]) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -1795,6 +1825,9 @@ func (v *ReceiptEntry) Equal(u *ReceiptEntry) bool {
 
 func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 	if !v.Receipt.Equal(&u.Receipt) {
+		return false
+	}
+	if !(v.Partial == u.Partial) {
 		return false
 	}
 
@@ -2014,9 +2047,6 @@ func (v *SyntheticLedgerEntry) Equal(u *SyntheticLedgerEntry) bool {
 	if !(v.RootIndexIndex == u.RootIndexIndex) {
 		return false
 	}
-	if !(v.NeedsReceipt == u.NeedsReceipt) {
-		return false
-	}
 
 	return true
 }
@@ -2052,6 +2082,28 @@ func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
 		return false
 	}
 	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticStatus) Equal(u *SyntheticStatus) bool {
+	if !(v.GotSignature == u.GotSignature) {
+		return false
+	}
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	if !(v.SourceAnchor == u.SourceAnchor) {
+		return false
+	}
+	if !(v.DirectoryAnchor == u.DirectoryAnchor) {
 		return false
 	}
 
@@ -2193,6 +2245,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	if !(v.Message == u.Message) {
+		return false
+	}
+	switch {
+	case v.Synthetic == u.Synthetic:
+		// equal
+	case v.Synthetic == nil || u.Synthetic == nil:
+		return false
+	case !((v.Synthetic).Equal(u.Synthetic)):
 		return false
 	}
 	if !(v.Result == u.Result) {
@@ -3456,6 +3516,43 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
+var fieldNames_HashSet = []string{
+	1: "Hashes",
+}
+
+func (v *HashSet) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Hashes) == 0) {
+		for _, v := range v.Hashes {
+			writer.WriteHash(1, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_HashSet)
+	return buffer.Bytes(), err
+}
+
+func (v *HashSet) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hashes is missing")
+	} else if len(v.Hashes) == 0 {
+		errs = append(errs, "field Hashes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
@@ -3702,7 +3799,6 @@ func (v *InternalSignature) IsValid() error {
 var fieldNames_InternalSyntheticLedger = []string{
 	1: "Type",
 	2: "AccountHeader",
-	3: "Pending",
 }
 
 func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -3711,11 +3807,6 @@ func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, AccountTypeInternalSyntheticLedger)
 	writer.WriteValue(2, &v.AccountHeader)
-	if !(len(v.Pending) == 0) {
-		for _, v := range v.Pending {
-			writer.WriteValue(3, v)
-		}
-	}
 
 	_, _, err := writer.Reset(fieldNames_InternalSyntheticLedger)
 	return buffer.Bytes(), err
@@ -3726,11 +3817,6 @@ func (v *InternalSyntheticLedger) IsValid() error {
 
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Pending is missing")
-	} else if len(v.Pending) == 0 {
-		errs = append(errs, "field Pending is not set")
 	}
 
 	switch len(errs) {
@@ -4386,6 +4472,7 @@ func (v *Object) IsValid() error {
 var fieldNames_ObjectMetadata = []string{
 	1: "Type",
 	2: "Chains",
+	3: "Substate",
 }
 
 func (v *ObjectMetadata) MarshalBinary() ([]byte, error) {
@@ -4398,6 +4485,11 @@ func (v *ObjectMetadata) MarshalBinary() ([]byte, error) {
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
 			writer.WriteValue(2, &v)
+		}
+	}
+	if !(len(v.Substate) == 0) {
+		for _, v := range v.Substate {
+			writer.WriteString(3, v)
 		}
 	}
 
@@ -4417,6 +4509,11 @@ func (v *ObjectMetadata) IsValid() error {
 		errs = append(errs, "field Chains is missing")
 	} else if len(v.Chains) == 0 {
 		errs = append(errs, "field Chains is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Substate is missing")
+	} else if len(v.Substate) == 0 {
+		errs = append(errs, "field Substate is not set")
 	}
 
 	switch len(errs) {
@@ -4599,6 +4696,7 @@ func (v *ReceiptEntry) IsValid() error {
 var fieldNames_ReceiptSignature = []string{
 	1: "Type",
 	2: "Receipt",
+	3: "Partial",
 }
 
 func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
@@ -4607,6 +4705,9 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, SignatureTypeReceipt)
 	writer.WriteValue(2, &v.Receipt)
+	if !(!v.Partial) {
+		writer.WriteBool(3, v.Partial)
+	}
 
 	_, _, err := writer.Reset(fieldNames_ReceiptSignature)
 	return buffer.Bytes(), err
@@ -5295,7 +5396,6 @@ var fieldNames_SyntheticLedgerEntry = []string{
 	3: "SynthIndex",
 	4: "SynthIndexIndex",
 	5: "RootIndexIndex",
-	6: "NeedsReceipt",
 }
 
 func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
@@ -5316,9 +5416,6 @@ func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.RootIndexIndex == 0) {
 		writer.WriteUint(5, v.RootIndexIndex)
-	}
-	if !(!v.NeedsReceipt) {
-		writer.WriteBool(6, v.NeedsReceipt)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticLedgerEntry)
@@ -5352,11 +5449,6 @@ func (v *SyntheticLedgerEntry) IsValid() error {
 		errs = append(errs, "field RootIndexIndex is missing")
 	} else if v.RootIndexIndex == 0 {
 		errs = append(errs, "field RootIndexIndex is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field NeedsReceipt is missing")
-	} else if !v.NeedsReceipt {
-		errs = append(errs, "field NeedsReceipt is not set")
 	}
 
 	switch len(errs) {
@@ -5451,6 +5543,68 @@ func (v *SyntheticSignature) IsValid() error {
 		errs = append(errs, "field SequenceNumber is missing")
 	} else if v.SequenceNumber == 0 {
 		errs = append(errs, "field SequenceNumber is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SyntheticStatus = []string{
+	1: "GotSignature",
+	2: "Source",
+	3: "SourceAnchor",
+	4: "DirectoryAnchor",
+}
+
+func (v *SyntheticStatus) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(!v.GotSignature) {
+		writer.WriteBool(1, v.GotSignature)
+	}
+	if !(v.Source == nil) {
+		writer.WriteUrl(2, v.Source)
+	}
+	if !(v.SourceAnchor == ([32]byte{})) {
+		writer.WriteHash(3, &v.SourceAnchor)
+	}
+	if !(v.DirectoryAnchor == ([32]byte{})) {
+		writer.WriteHash(4, &v.DirectoryAnchor)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticStatus)
+	return buffer.Bytes(), err
+}
+
+func (v *SyntheticStatus) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field GotSignature is missing")
+	} else if !v.GotSignature {
+		errs = append(errs, "field GotSignature is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field SourceAnchor is missing")
+	} else if v.SourceAnchor == ([32]byte{}) {
+		errs = append(errs, "field SourceAnchor is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field DirectoryAnchor is missing")
+	} else if v.DirectoryAnchor == ([32]byte{}) {
+		errs = append(errs, "field DirectoryAnchor is not set")
 	}
 
 	switch len(errs) {
@@ -5822,7 +5976,8 @@ var fieldNames_TransactionStatus = []string{
 	3: "Pending",
 	4: "Code",
 	5: "Message",
-	6: "Result",
+	6: "Synthetic",
+	7: "Result",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -5844,8 +5999,11 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(len(v.Message) == 0) {
 		writer.WriteString(5, v.Message)
 	}
+	if !(v.Synthetic == nil) {
+		writer.WriteValue(6, v.Synthetic)
+	}
 	if !(v.Result == (nil)) {
-		writer.WriteValue(6, v.Result)
+		writer.WriteValue(7, v.Result)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
@@ -5879,6 +6037,11 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field Message is missing")
 	} else if len(v.Message) == 0 {
 		errs = append(errs, "field Message is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Synthetic is missing")
+	} else if v.Synthetic == nil {
+		errs = append(errs, "field Synthetic is not set")
 	}
 
 	switch len(errs) {
@@ -6908,6 +7071,26 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *HashSet) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadHash(1); ok {
+			v.Hashes = append(v.Hashes, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_HashSet)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *IndexEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7054,14 +7237,6 @@ func (v *InternalSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
-	for {
-		if x := new(SyntheticLedgerEntry); reader.ReadValue(3, x.UnmarshalBinary) {
-			v.Pending = append(v.Pending, x)
-		} else {
-			break
-		}
-	}
 
 	seen, err := reader.Reset(fieldNames_InternalSyntheticLedger)
 	v.fieldsSet = seen
@@ -7429,6 +7604,13 @@ func (v *ObjectMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		if x, ok := reader.ReadString(3); ok {
+			v.Substate = append(v.Substate, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_ObjectMetadata)
 	v.fieldsSet = seen
@@ -7530,6 +7712,10 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	reader.ReadValue(2, v.Receipt.UnmarshalBinary)
+
+	if x, ok := reader.ReadBool(3); ok {
+		v.Partial = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ReceiptSignature)
 	v.fieldsSet = seen
@@ -7939,9 +8125,6 @@ func (v *SyntheticLedgerEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.RootIndexIndex = x
 	}
-	if x, ok := reader.ReadBool(6); ok {
-		v.NeedsReceipt = x
-	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticLedgerEntry)
 	v.fieldsSet = seen
@@ -8000,6 +8183,31 @@ func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticSignature)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *SyntheticStatus) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticStatus) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBool(1); ok {
+		v.GotSignature = x
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.SourceAnchor = *x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.DirectoryAnchor = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticStatus)
 	v.fieldsSet = seen
 	return err
 }
@@ -8210,7 +8418,10 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(5); ok {
 		v.Message = x
 	}
-	reader.ReadValue(6, func(b []byte) error {
+	if x := new(SyntheticStatus); reader.ReadValue(6, x.UnmarshalBinary) {
+		v.Synthetic = x
+	}
+	reader.ReadValue(7, func(b []byte) error {
 		x, err := UnmarshalTransactionResult(b)
 		if err == nil {
 			v.Result = x
@@ -8810,17 +9021,15 @@ func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 
 func (v *InternalSyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType             `json:"type"`
-		Url            *url.URL                `json:"url,omitempty"`
-		KeyBook        *url.URL                `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                `json:"managerKeyBook,omitempty"`
-		Pending        []*SyntheticLedgerEntry `json:"pending,omitempty"`
+		Type           AccountType `json:"type"`
+		Url            *url.URL    `json:"url,omitempty"`
+		KeyBook        *url.URL    `json:"keyBook,omitempty"`
+		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
 
@@ -9070,11 +9279,13 @@ func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 		Start   *string        `json:"start,omitempty"`
 		Result  *string        `json:"result,omitempty"`
 		Entries []ReceiptEntry `json:"entries,omitempty"`
+		Partial bool           `json:"partial,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.Result = encoding.BytesToJSON(v.Receipt.Result)
 	u.Entries = v.Receipt.Entries
+	u.Partial = v.Partial
 	return json.Marshal(&u)
 }
 
@@ -9265,14 +9476,12 @@ func (v *SyntheticLedgerEntry) MarshalJSON() ([]byte, error) {
 		SynthIndex      uint64 `json:"synthIndex,omitempty"`
 		SynthIndexIndex uint64 `json:"synthIndexIndex,omitempty"`
 		RootIndexIndex  uint64 `json:"rootIndexIndex,omitempty"`
-		NeedsReceipt    bool   `json:"needsReceipt,omitempty"`
 	}{}
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.SynthIndex = v.SynthIndex
 	u.SynthIndexIndex = v.SynthIndexIndex
 	u.RootIndexIndex = v.RootIndexIndex
-	u.NeedsReceipt = v.NeedsReceipt
 	return json.Marshal(&u)
 }
 
@@ -9412,18 +9621,20 @@ func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Remote    bool            `json:"remote,omitempty"`
-		Delivered bool            `json:"delivered,omitempty"`
-		Pending   bool            `json:"pending,omitempty"`
-		Code      uint64          `json:"code,omitempty"`
-		Message   string          `json:"message,omitempty"`
-		Result    json.RawMessage `json:"result,omitempty"`
+		Remote    bool             `json:"remote,omitempty"`
+		Delivered bool             `json:"delivered,omitempty"`
+		Pending   bool             `json:"pending,omitempty"`
+		Code      uint64           `json:"code,omitempty"`
+		Message   string           `json:"message,omitempty"`
+		Synthetic *SyntheticStatus `json:"synthetic,omitempty"`
+		Result    json.RawMessage  `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
+	u.Synthetic = v.Synthetic
 	if x, err := json.Marshal(v.Result); err != nil {
 		return nil, fmt.Errorf("error encoding Result: %w", err)
 	} else {
@@ -10093,24 +10304,21 @@ func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 
 func (v *InternalSyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType             `json:"type"`
-		Url            *url.URL                `json:"url,omitempty"`
-		KeyBook        *url.URL                `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                `json:"managerKeyBook,omitempty"`
-		Pending        []*SyntheticLedgerEntry `json:"pending,omitempty"`
+		Type           AccountType `json:"type"`
+		Url            *url.URL    `json:"url,omitempty"`
+		KeyBook        *url.URL    `json:"keyBook,omitempty"`
+		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.Pending = v.Pending
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
-	v.Pending = u.Pending
 	return nil
 }
 
@@ -10552,11 +10760,13 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 		Start   *string        `json:"start,omitempty"`
 		Result  *string        `json:"result,omitempty"`
 		Entries []ReceiptEntry `json:"entries,omitempty"`
+		Partial bool           `json:"partial,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.Result = encoding.BytesToJSON(v.Receipt.Result)
 	u.Entries = v.Receipt.Entries
+	u.Partial = v.Partial
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10571,6 +10781,7 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 		v.Receipt.Result = x
 	}
 	v.Receipt.Entries = u.Entries
+	v.Partial = u.Partial
 	return nil
 }
 
@@ -10897,14 +11108,12 @@ func (v *SyntheticLedgerEntry) UnmarshalJSON(data []byte) error {
 		SynthIndex      uint64 `json:"synthIndex,omitempty"`
 		SynthIndexIndex uint64 `json:"synthIndexIndex,omitempty"`
 		RootIndexIndex  uint64 `json:"rootIndexIndex,omitempty"`
-		NeedsReceipt    bool   `json:"needsReceipt,omitempty"`
 	}{}
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.SynthIndex = v.SynthIndex
 	u.SynthIndexIndex = v.SynthIndexIndex
 	u.RootIndexIndex = v.RootIndexIndex
-	u.NeedsReceipt = v.NeedsReceipt
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10921,7 +11130,6 @@ func (v *SyntheticLedgerEntry) UnmarshalJSON(data []byte) error {
 	v.SynthIndex = u.SynthIndex
 	v.SynthIndexIndex = u.SynthIndexIndex
 	v.RootIndexIndex = u.RootIndexIndex
-	v.NeedsReceipt = u.NeedsReceipt
 	return nil
 }
 
@@ -11160,18 +11368,20 @@ func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Remote    bool            `json:"remote,omitempty"`
-		Delivered bool            `json:"delivered,omitempty"`
-		Pending   bool            `json:"pending,omitempty"`
-		Code      uint64          `json:"code,omitempty"`
-		Message   string          `json:"message,omitempty"`
-		Result    json.RawMessage `json:"result,omitempty"`
+		Remote    bool             `json:"remote,omitempty"`
+		Delivered bool             `json:"delivered,omitempty"`
+		Pending   bool             `json:"pending,omitempty"`
+		Code      uint64           `json:"code,omitempty"`
+		Message   string           `json:"message,omitempty"`
+		Synthetic *SyntheticStatus `json:"synthetic,omitempty"`
+		Result    json.RawMessage  `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
+	u.Synthetic = v.Synthetic
 	if x, err := json.Marshal(v.Result); err != nil {
 		return fmt.Errorf("error encoding Result: %w", err)
 	} else {
@@ -11185,6 +11395,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.Pending = u.Pending
 	v.Code = u.Code
 	v.Message = u.Message
+	v.Synthetic = u.Synthetic
 	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
 		return fmt.Errorf("error decoding Result: %w", err)
 	} else {

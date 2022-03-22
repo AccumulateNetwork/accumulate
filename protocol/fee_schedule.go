@@ -142,27 +142,29 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 	return FeeSignature * Fee(count), nil
 }
 
-func ComputeTransactionFee(tx *Envelope) (Fee, error) {
-	// Do not charge fees for the DN or BVNs
-	if IsDnUrl(tx.Transaction.Header.Principal) {
-		return 0, nil
-	}
-	if _, ok := ParseBvnUrl(tx.Transaction.Header.Principal); ok {
-		return 0, nil
+func ComputeTransactionFee(env *Envelope) (Fee, error) {
+	if env.Transaction != nil {
+		// Do not charge fees for the DN or BVNs
+		if IsDnUrl(env.Transaction.Header.Principal) {
+			return 0, nil
+		}
+		if _, ok := ParseBvnUrl(env.Transaction.Header.Principal); ok {
+			return 0, nil
+		}
 	}
 
 	// Don't charge for synthetic and internal transactions
-	if !tx.Transaction.Type().IsUser() {
+	if !env.TxType().IsUser() {
 		return 0, nil
 	}
 
-	fee, err := BaseTransactionFee(tx.Transaction.Type())
+	fee, err := BaseTransactionFee(env.TxType())
 	if err != nil {
 		return 0, err
 	}
 
 	// Check the transaction size
-	count, size, err := dataCount(tx.Transaction)
+	count, size, err := dataCount(env.Transaction)
 	if err != nil {
 		return 0, err
 	}

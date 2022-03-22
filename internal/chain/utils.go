@@ -2,13 +2,16 @@ package chain
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -210,7 +213,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if txn.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -221,7 +224,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 func countExceptAnchors2(txns []*protocol.Transaction) int {
 	var count int
 	for _, txn := range txns {
-		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if txn.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -317,4 +320,30 @@ func combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Recei
 	}
 
 	return r, nil
+}
+
+func markSynthPending(net *config.Network, batch *database.Batch, txHash, anchor [32]byte, pending bool) error {
+	ss, err := batch.Account(net.SyntheticLedger()).Substate(protocol.AnchorSubstate(anchor[:]))
+	if err != nil {
+		return fmt.Errorf("unable to open synthetic transaction pending list for anchor %X", anchor)
+	}
+
+	set := new(protocol.HashSet)
+	err = ss.GetAs(set)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return fmt.Errorf("unable to load synthetic transaction pending list for anchor %X", anchor)
+	}
+
+	if pending {
+		set.Add(txHash)
+	} else {
+		set.Remove(txHash)
+	}
+
+	err = ss.PutAs(set)
+	if err != nil {
+		return fmt.Errorf("unable to store synthetic transaction pending list for anchor %X", anchor)
+	}
+
+	return nil
 }

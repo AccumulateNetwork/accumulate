@@ -570,7 +570,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) (*protocol.Syn
 		}
 	}
 
-	err = m.buildSynthReceipts(rootChain.Anchor(), int64(synthIndexIndex), int64(rootIndexIndex))
+	err = m.buildSynthReceipts(ledgerState, rootChain.Anchor(), int64(synthIndexIndex), int64(rootIndexIndex))
 	if err != nil {
 		return nil, err
 	}
@@ -626,12 +626,10 @@ func (m *Executor) anchorBPT(ledgerState *protocol.InternalLedger, rootChain *da
 
 // buildSynthReceipts builds partial receipts for produced synthetic
 // transactions and stores them in the synthetic transaction ledger.
-func (m *Executor) buildSynthReceipts(rootAnchor []byte, synthIndexIndex, rootIndexIndex int64) error {
-	ledger := m.blockBatch.Account(m.Network.SyntheticLedger())
-	ledgerState := new(protocol.InternalSyntheticLedger)
-	err := ledger.GetStateAs(ledgerState)
+func (m *Executor) buildSynthReceipts(ledgerState *protocol.InternalLedger, rootAnchor []byte, synthIndexIndex, rootIndexIndex int64) error {
+	rootChain, err := m.blockBatch.Account(m.Network.Ledger()).ReadChain(protocol.MinorRootChain)
 	if err != nil {
-		return fmt.Errorf("unable to load the synthetic transaction ledger: %w", err)
+		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
 	}
 
 	synthChain, err := m.blockBatch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
@@ -639,13 +637,28 @@ func (m *Executor) buildSynthReceipts(rootAnchor []byte, synthIndexIndex, rootIn
 		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
 	}
 
+	rootIndexChain, err := m.blockBatch.Account(m.Network.Ledger()).ReadChain(protocol.MinorRootIndexChain)
+	if err != nil {
+		return fmt.Errorf("unable to load root index chain: %w", err)
+	}
+
+	synthIndexChain, err := m.blockBatch.Account(m.Network.Ledger()).ReadIndexChain(protocol.SyntheticChain, false)
+	if err != nil {
+		return fmt.Errorf("unable to load synthetic transaction index chain: %w", err)
+	}
+
 	height := synthChain.Height()
 	offset := height - int64(len(m.blockState.ProducedTxns))
 	for i, txn := range m.blockState.ProducedTxns {
-		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
+		if txn.Body.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Body.Type() == protocol.TransactionTypeSyntheticMirror {
 			// Do not generate a receipt for the anchor
 			continue
 		}
+
+		// TODO This is doing a lot of unnecessary work because I just
+		// copy-pasted it out of somewhere else
+
+		m.logDebug("Adding synthetic transaction to the ledger", "hash", logging.AsHex(txn.GetHash()), "type", txn.Body.Type(), "anchor", logging.AsHex(rootAnchor), "module", "synthetic")
 
 		entry := new(protocol.SyntheticLedgerEntry)
 		entry.TransactionHash = *(*[32]byte)(txn.GetHash())
@@ -653,14 +666,57 @@ func (m *Executor) buildSynthReceipts(rootAnchor []byte, synthIndexIndex, rootIn
 		entry.SynthIndex = uint64(offset) + uint64(i)
 		entry.RootIndexIndex = uint64(rootIndexIndex)
 		entry.SynthIndexIndex = uint64(synthIndexIndex)
-		entry.NeedsReceipt = true
-		ledgerState.Pending = append(ledgerState.Pending, entry)
-		m.logDebug("Adding synthetic transaction to the ledger", "hash", logging.AsHex(txn.GetHash()), "type", txn.Type(), "anchor", logging.AsHex(rootAnchor), "module", "synthetic")
-	}
 
-	err = ledger.PutState(ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to store the synthetic transaction ledger: %w", err)
+		// Load the root index entry
+		rootEntry := new(protocol.IndexEntry)
+		err = rootIndexChain.EntryAs(int64(entry.RootIndexIndex), rootEntry)
+		if err != nil {
+			return fmt.Errorf("unable to load entry %d of the root index chain: %w", entry.RootIndexIndex, err)
+		}
+
+		// Load the synth index entry
+		synthEntry := new(protocol.IndexEntry)
+		err = synthIndexChain.EntryAs(int64(entry.SynthIndexIndex), synthEntry)
+		if err != nil {
+			return fmt.Errorf("unable to load entry %d of the synthetic transaction index chain: %w", entry.SynthIndexIndex, err)
+		}
+
+		// Get the receipt from the synth anchor to the root anchor
+		rootReceipt, err := rootChain.Receipt(int64(synthEntry.Anchor), int64(rootEntry.Source))
+		if err != nil {
+			return fmt.Errorf("unable to build a receipt for the root chain: %w", err)
+		}
+
+		// Get the receipt from the synth txn to the synth anchor
+		synthReceipt, err := synthChain.Receipt(int64(entry.SynthIndex), int64(synthEntry.Source))
+		if err != nil {
+			return fmt.Errorf("unable to build a receipt for the synthetic transaction chain: %w", err)
+		}
+
+		// Combine all of the receipts, from the txn to the synth anchor to the
+		// root anchor to the directory anchor
+		receipt, err := combineReceipts(nil, synthReceipt, rootReceipt)
+		if err != nil {
+			return err
+		}
+
+		sig := new(protocol.ReceiptSignature)
+		sig.Partial = true
+		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
+
+		txRec := m.blockBatch.Transaction(txn.GetHash())
+		sigSet, err := txRec.GetSignatures()
+		if err != nil {
+			return err
+		}
+
+		sigSet.Add(sig)
+		err = txRec.PutSignatures(sigSet)
+		if err != nil {
+			return err
+		}
+
+		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, *(*[32]byte)(txn.GetHash()))
 	}
 
 	return nil

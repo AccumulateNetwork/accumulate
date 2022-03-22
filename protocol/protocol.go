@@ -395,3 +395,9 @@ func ParseKeyPageUrl(keyPage *url.URL) (*url.URL, uint64, bool) {
 	keyBook.Path = keyBook.Path[:i]
 	return &keyBook, index, true
 }
+
+// AnchorSubstate returns the substate name for tracking pending synthetic
+// transactions belonging to the given anchor.
+func AnchorSubstate(anchor []byte) string {
+	return fmt.Sprintf("Anchor-%X", anchor)
+}

@@ -24,12 +24,7 @@ InternalSyntheticLedger:
   union: { type: account }
   embeddings:
     - AccountHeader
-  fields:
-    - name: Pending
-      type: SyntheticLedgerEntry
-      pointer: true
-      repeatable: true
-      marshal-as: reference
+  fields: []
 
 ##### Transactions #####
 
@@ -116,6 +111,3 @@ SyntheticLedgerEntry:
     - name: RootIndexIndex
       type: uint
       description: is the index of the root index chain entry from the block
-    - name: NeedsReceipt
-      type: bool
-      description: indicates whether the synthetic transaction is waiting for a receipt

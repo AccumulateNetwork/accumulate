@@ -24,7 +24,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 
 	results := make([]*protocol.TransactionStatus, len(envelopes))
 	for i, env := range envelopes {
-		typ := env.Transaction.Type()
+		typ := env.TxType()
 		txid := env.GetTxHash()
 		status := new(protocol.TransactionStatus)
 
@@ -32,7 +32,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		if err != nil {
 			sentry.CaptureException(err)
 			logger.Info("Transaction failed",
-				"type", env.Transaction.Type(),
+				"type", env.TxType(),
 				"txid", logging.AsHex(txid),
 				"hash", logging.AsHex(hash),
 				"error", err,

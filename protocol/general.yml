@@ -19,6 +19,9 @@ ObjectMetadata:
       repeatable: true
       type: ChainMetadata
       marshal-as: reference
+    - name: Substate
+      repeatable: true
+      type: string
 
 ChainMetadata:
   fields:
@@ -93,12 +96,38 @@ TransactionStatus:
       type: uvarint
     - name: Message
       type: string
+    - name: Synthetic
+      type: SyntheticStatus
+      marshal-as: reference
+      pointer: true
     - name: Result
       type: TransactionResult
       optional: true
       marshal-as: value
       zero-value: nil
       unmarshal-with: UnmarshalTransactionResult
+
+SyntheticStatus:
+  fields:
+    - name: GotSignature
+      description: indicates that an ED25519 signature has been received
+      type: bool
+    - name: Source
+      description: is the URL of the originating subnet
+      type: url
+      pointer: true
+    - name: SourceAnchor
+      description: is the block anchor of the transaction from the originating subnet
+      type: hash
+    - name: DirectoryAnchor
+      description: is the block anchor of the transaction from the directory
+      type: hash
+
+HashSet:
+  fields:
+    - name: Hashes
+      type: hash
+      repeatable: true
 
 Receipt:
   fields:

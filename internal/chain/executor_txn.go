@@ -85,8 +85,9 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 			return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 		}
 
-		status := &protocol.TransactionStatus{Pending: true}
-		err = m.putTransaction(st, env, status, false)
+		err = m.putTransaction(st, env, putTxnArgs{
+			Pending: true,
+		})
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
 		}
@@ -108,8 +109,10 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	}
 
 	// Store the tx state
-	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	err = m.putTransaction(st, env, status, false)
+	err = m.putTransaction(st, env, putTxnArgs{
+		Delivered: true,
+		Result:    result,
+	})
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
 	}
@@ -194,13 +197,13 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	}
 
 	// Load previous transaction state
-	txt := env.Transaction.Type()
+	txt := env.TxType()
 	txState, err := batch.Transaction(env.GetTxHash()).GetState()
 	switch {
 	case err == nil:
 		// Populate the transaction from the database
 		env.Transaction = txState
-		txt = env.Transaction.Type()
+		txt = env.TxType()
 
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, nil, false, fmt.Errorf("an error occured while looking up the transaction: %v", err)
@@ -225,7 +228,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 		hasEnoughSigs, err = m.validateUser(st, env, fee)
 
 	case txt.IsSynthetic():
-		hasEnoughSigs, err = true, m.validateSynthetic(batch, st, env)
+		hasEnoughSigs, err = m.validateSynthetic(batch, st, env)
 
 	case txt.IsInternal():
 		hasEnoughSigs, err = true, m.validateInternal(st, env)
@@ -248,7 +251,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
-	txt := env.Transaction.Type()
+	txt := env.TxType()
 	_, ok := m.executors[txt]
 	if !ok && txt != protocol.TransactionTypeSignPending {
 		return fmt.Errorf("unsupported TX type: %v", txt)
@@ -336,38 +339,48 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	return nil
 }
 
-func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, env *protocol.Envelope) error {
+func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, env *protocol.Envelope) (bool, error) {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 	//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
 	//sender is legit.
 
-	// TODO Get rid of this hack and actually check the nonce. But first we have
-	// to implement transaction batching.
-	v := st.RecordIndex(m.Network.NodeUrl(), "SeenSynth", env.GetTxHash())
-	_, err := v.Get()
-	if err == nil {
-		return fmt.Errorf("duplicate synthetic transaction %X", env.GetTxHash())
-	} else if errors.Is(err, storage.ErrNotFound) {
-		err = v.Put([]byte{1})
-		if err != nil {
-			return err
+	status, err := batch.Transaction(st.txHash[:]).GetStatus()
+	switch {
+	case err == nil:
+		if status.Synthetic == nil {
+			status.Synthetic = new(protocol.SyntheticStatus)
 		}
-	} else {
-		return err
+	case errors.Is(err, storage.ErrNotFound):
+		status = new(protocol.TransactionStatus)
+		status.Synthetic = new(protocol.SyntheticStatus)
+	default:
+		return false, err
 	}
 
-	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
-	for _, sig := range env.Signatures {
+	for i, sig := range env.Signatures {
 		switch sig := sig.(type) {
 		case *protocol.SyntheticSignature:
-			gotSynthSig = true
+			if env.TxType() != protocol.TransactionTypeSyntheticAnchor {
+				m.logDebug("Got origin for synthetic transaction", "txid", logging.AsHex(env.GetTxHash()), "type", env.TxType(), "source", sig.SourceNetwork, "module", "synthetic")
+			}
+
+			// TODO Check the sequence number
+			status.Synthetic.Source = sig.SourceNetwork
 			if !m.Network.NodeUrl().Equal(sig.DestinationNetwork) {
-				return fmt.Errorf("destination network %v is not this network", sig.DestinationNetwork)
+				return false, fmt.Errorf("destination network %v is not this network", sig.DestinationNetwork)
 			}
 
 		case *protocol.ReceiptSignature:
+			if env.TxType() != protocol.TransactionTypeSyntheticAnchor {
+				if sig.Partial {
+					m.logDebug("Got partial receipt for synthetic transaction", "txid", logging.AsHex(env.GetTxHash()), "type", env.TxType(), "anchor", logging.AsHex(sig.Result), "module", "synthetic")
+				} else {
+					m.logDebug("Got full receipt for synthetic transaction", "txid", logging.AsHex(env.GetTxHash()), "type", env.TxType(), "anchor", logging.AsHex(sig.Result), "module", "synthetic")
+				}
+			}
+
 			// TODO We should add something so we know which subnet originated
 			// the transaction. That way, the DN can also check receipts.
 			if m.Network.Type != config.BlockValidator {
@@ -375,12 +388,17 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 				continue
 			}
 
-			gotReceiptSig = true
+			if sig.Partial {
+				status.Synthetic.SourceAnchor = *(*[32]byte)(sig.Result)
+				break
+			} else {
+				status.Synthetic.DirectoryAnchor = *(*[32]byte)(sig.Result)
+			}
 
 			// Load the anchor chain
 			anchorChain, err := batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
 			if err != nil {
-				return fmt.Errorf("unable to load the DN intermediate anchor chain: %w", err)
+				return false, fmt.Errorf("unable to load the DN intermediate anchor chain: %w", err)
 			}
 
 			// Is the result a valid DN anchor?
@@ -389,48 +407,128 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 			case err == nil:
 				// OK
 			case errors.Is(err, storage.ErrNotFound):
-				return fmt.Errorf("invalid receipt: result is not a known DN anchor")
+				return false, fmt.Errorf("invalid receipt: result is not a known DN anchor")
 			default:
-				return fmt.Errorf("unable to check if a DN anchor is valid: %w", err)
+				return false, fmt.Errorf("unable to check if a DN anchor is valid: %w", err)
 			}
 
 		case *protocol.ED25519Signature, *protocol.LegacyED25519Signature:
-			// TODO Check the key
-			gotED25519Sig = true
+			if env.TxType() != protocol.TransactionTypeSyntheticAnchor {
+				m.logDebug("Got signature for synthetic transaction", "txid", logging.AsHex(env.GetTxHash()), "type", env.TxType(), "module", "synthetic")
+			}
+			status.Synthetic.GotSignature = true
+
+			if false {
+				// TODO This is disabled because the current test configuration
+				// (and devnet) does not include BVN keys within the DN key set
+
+				// TODO Change to operators (and move out of the loop)
+				dnValidatorsUrl := protocol.FormatKeyPageUrl(protocol.DnUrl().JoinPath(protocol.ValidatorBook), 0)
+				dnValidators := new(protocol.KeyPage)
+				err = st.LoadUrlAs(dnValidatorsUrl, dnValidators)
+				if err != nil {
+					return false, fmt.Errorf("unable to load DN validator key page: %v", err)
+				}
+
+				_, _, ok := dnValidators.EntryByKey(sig.GetPublicKey())
+				if !ok {
+					return false, fmt.Errorf("no operator key spec matches signature %d", i)
+				}
+			}
 
 		default:
-			return fmt.Errorf("synthetic transaction do not support %T signatures", sig)
-		}
-	}
-	if !gotSynthSig {
-		return fmt.Errorf("missing synthetic transaction origin")
-	}
-	if st.txType == protocol.TransactionTypeSyntheticAnchor {
-		if !gotED25519Sig {
-			return fmt.Errorf("missing ED25519 signature")
-		}
-	} else {
-		if !gotReceiptSig {
-			return fmt.Errorf("missing synthetic transaction receipt")
+			return false, fmt.Errorf("synthetic transaction do not support %T signatures", sig)
 		}
 	}
 
-	// Does the origin exist?
-	if st.Origin != nil {
-		return nil
+	switch st.txType {
+	case protocol.TransactionTypeSyntheticAnchor:
+		return m.validateSyntheticAnchor(batch, st, env, status)
+
+	default:
+		return m.validateSyntheticOther(batch, st, env, status)
+	}
+}
+
+func (m *Executor) validateSyntheticAnchor(batch *database.Batch, st *StateManager, env *protocol.Envelope, status *protocol.TransactionStatus) (bool, error) {
+	// We need a synthetic signature to know where the synthetic transaction
+	// came from
+	if status.Synthetic.Source == nil {
+		return false, fmt.Errorf("missing synthetic transaction origin")
+	}
+
+	// We need an ED25519 signature
+	if !status.Synthetic.GotSignature {
+		return false, fmt.Errorf("missing ED25519 signature")
+	}
+
+	// TODO Verify that the public key of the ED25519 signature actually belongs
+	// to the sender subnet. For example, if the sender is a BVN, make sure the
+	// key is actually a validator for that BVN.
+
+	// The origin must not be missing
+	if st.Origin == nil {
+		return false, fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
+	}
+
+	// Save the status
+	err := batch.Transaction(st.txHash[:]).PutStatus(status)
+	if err != nil {
+		return false, err
+	}
+
+	// An ED25519 signature is enough
+	return true, nil
+}
+
+func (m *Executor) validateSyntheticOther(batch *database.Batch, st *StateManager, env *protocol.Envelope, status *protocol.TransactionStatus) (bool, error) {
+	// We need a synthetic signature to know where the synthetic transaction
+	// came from
+	if status.Synthetic.Source == nil {
+		return false, fmt.Errorf("missing synthetic transaction origin")
+	}
+
+	// We need a receipt from the subnet that produced the transaction
+	if status.Synthetic.SourceAnchor == ([32]byte{}) {
+		return false, fmt.Errorf("missing receipt from the source subnet")
+	}
+
+	// We need an ED25519 signature, though we only verify that the key belongs
+	// to an operator, we do not verify that operator is a validator for the
+	// source subnet
+	if !status.Synthetic.GotSignature {
+		return false, fmt.Errorf("missing ED25519 signature")
 	}
 
 	// Is it OK for the origin to be missing?
-	switch st.txType {
-	case protocol.TransactionTypeSyntheticCreateChain,
-		protocol.TransactionTypeSyntheticDepositTokens,
-		protocol.TransactionTypeSyntheticWriteData:
-		// These transactions allow for a missing origin
-		return nil
+	if st.Origin == nil {
+		switch st.txType {
+		case protocol.TransactionTypeSyntheticCreateChain,
+			protocol.TransactionTypeSyntheticDepositTokens,
+			protocol.TransactionTypeSyntheticWriteData:
+			// These transactions allow for a missing origin
 
-	default:
-		return fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
+		default:
+			return false, fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
+		}
 	}
+
+	// Save the status
+	err := batch.Transaction(st.txHash[:]).PutStatus(status)
+	if err != nil {
+		return false, err
+	}
+
+	// Do we have a full receipt from the directory?
+	hasEnoughSigs := status.Synthetic.DirectoryAnchor != ([32]byte{})
+
+	// Un/mark the transaction as waiting for an anchor
+	err = markSynthPending(&m.Network, batch, st.txHash, status.Synthetic.SourceAnchor, !hasEnoughSigs)
+	if err != nil {
+		return false, err
+	}
+
+	return hasEnoughSigs, nil
 }
 
 func (m *Executor) validateInternal(st *StateManager, env *protocol.Envelope) error {
@@ -476,9 +574,9 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 	}
 
 	// Verify that the key page is allowed to sign the transaction
-	bit, ok := env.Transaction.Type().AllowedTransactionBit()
+	bit, ok := env.TxType().AllowedTransactionBit()
 	if ok && page.TransactionBlacklist.IsSet(bit) {
-		return false, fmt.Errorf("page %s is not authorized to sign %v", st.SignatorUrl, env.Transaction.Type())
+		return false, fmt.Errorf("page %s is not authorized to sign %v", st.SignatorUrl, env.TxType())
 	}
 
 	var firstKeySpec *protocol.KeySpec
@@ -584,25 +682,54 @@ func (m *Executor) validateLiteSigner(st *StateManager, env *protocol.Envelope, 
 }
 
 func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, postCommit bool, failure *protocol.Error) *protocol.Error {
-	status := &protocol.TransactionStatus{
-		Delivered: true,
-		Code:      uint64(failure.Code),
-		Message:   failure.Error(),
-	}
-	err := m.putTransaction(st, env, status, postCommit)
+	err := m.putTransaction(st, env, putTxnArgs{
+		PostCommit: postCommit,
+		Delivered:  true,
+		Code:       failure.Code,
+		Message:    failure.Error(),
+	})
 	if err != nil {
 		m.logError("Failed to store transaction", "txid", logging.AsHex(env.GetTxHash()), "origin", env.Transaction.Header.Principal, "error", err)
 	}
 	return failure
 }
 
-func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, status *protocol.TransactionStatus, postCommit bool) (err error) {
+type putTxnArgs struct {
+	PostCommit bool
+	Pending    bool
+	Delivered  bool
+	Code       protocol.ErrorCode
+	Message    string
+	Result     protocol.TransactionResult
+}
+
+func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, args putTxnArgs) (err error) {
 	// Don't add internal transactions to chains. Internal transactions are
 	// exclusively used for communication between the governor and the state
 	// machine.
-	txt := env.Transaction.Type()
+	txt := env.TxType()
 	if txt.IsInternal() {
 		return nil
+	}
+
+	// Load current status
+	status, err := m.blockBatch.Transaction(env.GetTxHash()).GetStatus()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, storage.ErrNotFound):
+		status = new(protocol.TransactionStatus)
+	default:
+		return fmt.Errorf("unable to load transaction status: %v", err)
+	}
+
+	// Update status
+	status.Pending = args.Pending
+	status.Delivered = args.Delivered
+	status.Code = uint64(args.Code)
+	status.Message = args.Message
+	if args.Result != nil {
+		status.Result = args.Result
 	}
 
 	// Store against the transaction hash
@@ -621,7 +748,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 		return nil // Check failed
 	}
 
-	if postCommit {
+	if args.PostCommit {
 		return nil // Failure after commit
 	}
 

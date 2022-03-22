@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -12,17 +13,14 @@ func (k *KeySpecParams) IsEmpty() bool {
 }
 
 func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
-	// Check each key
-	for _, candidate := range ms.Keys {
-		// Try with each supported hash algorithm
-		for _, ha := range []HashAlgorithm{Unhashed, SHA256, SHA256D} {
-			if bytes.Equal(ha.MustApply(pubKey), candidate.PublicKey) {
-				return candidate
-			}
-		}
-	}
+	_, ks, _ := ms.EntryByKey(pubKey)
+	return ks
+}
 
-	return nil
+// EntryByKey finds the entry that matches the hash of the key.
+func (p *KeyPage) EntryByKey(key []byte) (int, *KeySpec, bool) {
+	keyHash := sha256.Sum256(key)
+	return p.EntryByKeyHash(keyHash[:])
 }
 
 // EntryByKeyHash finds the entry with a matching key hash.

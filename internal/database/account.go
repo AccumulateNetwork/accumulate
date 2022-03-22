@@ -1,10 +1,10 @@
 package database
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -15,8 +15,9 @@ type Account struct {
 	key   accountBucket
 }
 
-// ensureObject ensures that the record's object metadata is up to date.
-func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.ObjectMetadata, error) {
+// getObjectOrNew loads the object metadata or returns a new object metadata
+// struct.
+func (r *Account) getObjectOrNew() (*protocol.ObjectMetadata, error) {
 	// Load the current metadata, if any
 	meta := new(protocol.ObjectMetadata)
 	err := r.batch.getAs(r.key.Object(), meta)
@@ -29,8 +30,19 @@ func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.O
 		return nil, err
 	}
 
+	return meta, nil
+}
+
+// ensureHasChain ensures that the record's object metadata includes the
+// specified chains.
+func (r *Account) ensureHasChain(addChains ...protocol.ChainMetadata) error {
+	meta, err := r.getObjectOrNew()
+	if err != nil {
+		return err
+	}
+
 	if len(addChains) == 0 {
-		return meta, nil
+		return nil
 	}
 
 	// Check for existing chains
@@ -54,21 +66,39 @@ func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.O
 		}
 
 		if i <= origLen {
-			return nil, fmt.Errorf("cannot alter metadata for chain %s", chain.Name)
+			return fmt.Errorf("cannot alter metadata for chain %s", chain.Name)
 		}
-		return nil, fmt.Errorf("attempted to add chain %s multiple times with different types", chain.Name)
+		return fmt.Errorf("attempted to add chain %s multiple times with different types", chain.Name)
 	}
 
 	if len(meta.Chains) == origLen {
-		return meta, nil
+		return nil
 	}
 
 	err = r.batch.putAs(r.key.Object(), meta)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return meta, nil
+	return nil
+}
+
+// ensureHasSubstate ensures that the record's object metadata includes the
+// named substate.
+func (r *Account) ensureHasSubstate(name string) error {
+	meta, err := r.getObjectOrNew()
+	if err != nil {
+		return err
+	}
+
+	for _, existing := range meta.Substate {
+		if existing == name {
+			return nil
+		}
+	}
+
+	meta.Substate = append(meta.Substate, name)
+	return r.batch.putAs(r.key.Object(), meta)
 }
 
 // GetObject loads the object metadata.
@@ -155,7 +185,7 @@ func (r *Account) chain(name string, writable bool) (*Chain, error) {
 
 // Chain returns a chain manager for the given chain.
 func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
-	_, err := r.ensureObject(protocol.ChainMetadata{Name: name, Type: typ})
+	err := r.ensureHasChain(protocol.ChainMetadata{Name: name, Type: typ})
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +209,22 @@ func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
 
 // Index returns a value that can read or write an index value.
 func (r *Account) Index(key ...interface{}) *Value {
-	return &Value{r.batch, r.key.Index(key...)}
+	return &Value{r.batch, r.key.Index(key...), true}
+}
+
+// Substate ensures the object metadata includes the substate and returns a
+// Value for the substate.
+func (r *Account) Substate(name string) (*Value, error) {
+	err := r.ensureHasSubstate(name)
+	if err != nil {
+		return nil, err
+	}
+	return &Value{r.batch, r.key.Substate(name), true}, nil
+}
+
+// ReadSubstate returns a read-only Value for the substate.
+func (r *Account) ReadSubstate(name string) *Value {
+	return &Value{r.batch, r.key.Substate(name), false}
 }
 
 // Data returns a data chain manager for the data chain.
@@ -194,7 +239,7 @@ func (r *Account) Data() (*Data, error) {
 
 // StateHash derives a hash from the full state of an account.
 func (r *Account) StateHash() ([]byte, error) {
-	var hashes [][]byte
+	var hashes hash.Hasher
 
 	state, err := r.GetState()
 	if err != nil {
@@ -205,9 +250,7 @@ func (r *Account) StateHash() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal account state: %w", err)
 	}
-
-	h := sha256.Sum256(data)
-	hashes = append(hashes, h[:])
+	hashes.AddBytes(data)
 
 	obj, err := r.GetObject()
 	if err != nil {
@@ -217,11 +260,20 @@ func (r *Account) StateHash() ([]byte, error) {
 	for _, chainMeta := range obj.Chains {
 		chain, err := r.ReadChain(chainMeta.Name)
 		if err != nil {
-			return nil, fmt.Errorf("load account chain: %w", err)
+			return nil, fmt.Errorf("load account chain %q: %w", chainMeta.Name, err)
 		}
 
-		hashes = append(hashes, chain.Anchor())
+		hashes.AddHash((*[32]byte)(chain.Anchor()))
 	}
 
-	return protocol.ComputeEntryHash(hashes), nil
+	for _, name := range obj.Substate {
+		data, err := r.ReadSubstate(name).Get()
+		if err != nil {
+			return nil, fmt.Errorf("load account substate %q: %w", name, err)
+		}
+
+		hashes.AddBytes(data)
+	}
+
+	return hashes.MerkleHash(), nil
 }

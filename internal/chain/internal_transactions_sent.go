@@ -41,23 +41,5 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope
 
 	st.Update(ledger)
 
-	// Update the synth ledger
-	synthLedger := new(protocol.InternalSyntheticLedger)
-	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), synthLedger)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load synthetic transaction ledger: %w", err)
-	}
-
-	pending := synthLedger.Pending
-	synthLedger.Pending = make([]*protocol.SyntheticLedgerEntry, 0, len(pending))
-	for _, entry := range pending {
-		if !confirmed[entry.TransactionHash] {
-			synthLedger.Pending = append(synthLedger.Pending, entry)
-			continue
-		}
-	}
-
-	st.Update(synthLedger)
-
 	return nil, nil
 }
