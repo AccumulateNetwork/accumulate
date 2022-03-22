@@ -57,7 +57,7 @@ func TestProofADI(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 	})
 
-	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance, int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
 	n.GetADI("RoadRunner")
 	n.GetTokenAccount("RoadRunner/Baz")
 
