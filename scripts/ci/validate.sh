@@ -380,10 +380,12 @@ success
 
 section "Query latest data entry by URL"
 RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data[0])
+echo $(accumulate -j get keytest/data#data)
 [ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
 
 section "Query data entry at height 0 by URL"
 RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data[0])
+echo $(accumulate -j get keytest/data#data)
 [ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry at height 0 is not 'bar'"
 
 section "Query data entry with hash by URL"
