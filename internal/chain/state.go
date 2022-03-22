@@ -23,6 +23,10 @@ type StateManager struct {
 	SignatorUrl *url.URL
 }
 
+type SynthTxnWithOrigin interface {
+	SetSyntheticOrigin(txid []byte, source *url.URL)
+}
+
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
@@ -101,8 +105,6 @@ func (m *StateManager) Commit() error {
 		}
 
 		scc = new(protocol.SyntheticCreateChain)
-		scc.Source = m.OriginUrl
-		scc.Cause = m.txHash
 		scc.Chains = []protocol.ChainParams{params}
 		create[id.String()] = scc
 		m.Submit(id, scc)
@@ -115,6 +117,11 @@ func (m *StateManager) Commit() error {
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 	if m.txType.IsSynthetic() && body.GetType() != protocol.TransactionTypeSyntheticReceipt {
 		panic("Called stateCache.Submit from a synthetic transaction!")
+	}
+
+	swo, ok := body.(SynthTxnWithOrigin)
+	if ok {
+		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
 	}
 
 	m.blockState.DidProduceTxn(url, body)

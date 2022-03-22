@@ -1,10 +1,9 @@
 package chain
 
 import (
-	"bytes"
 	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -22,56 +21,12 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
 	}
-	newStatus := body.Status
 
-	// Load the transaction status & state
-	synthTx := st.batch.Transaction(body.SynthTxHash[:])
-	curStatus, err := synthTx.GetStatus()
-	if err != nil {
-		st.logger.Error("received SyntheticReceipt from", body.Source.URL(), "but the status for tx", logging.AsHex(body.SynthTxHash),
-			"could not be retrieved:", err)
-	}
+	st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash),
+		". Updating status")
+	st.UpdateStatus(body.SynthTxHash[:], body.Status)
 
-	// Update the status when changed
-	if curStatus == nil || !statusEqual(curStatus, newStatus) {
-		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash),
-			"and the status was changed. Updating status")
-		synthTx.PutStatus(newStatus)
-	} else {
-		st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash),
-			"and the status was not changed. Skipping status update")
-	}
 	return nil, nil
-}
-
-// statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
-func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
-	if !(v.Remote == u.Remote) {
-		return false
-	}
-	if !(v.Delivered == u.Delivered) {
-		return false
-	}
-	if !(v.Pending == u.Pending) {
-		return false
-	}
-	if !(v.Code == u.Code) {
-		return false
-	}
-	if !(v.Message == u.Message) {
-		return false
-	}
-	if !(v.Result.Type() == u.Result.Type()) {
-		return false
-	}
-
-	rv, _ := v.Result.MarshalBinary()
-	ru, _ := u.Result.MarshalBinary()
-	if bytes.Compare(rv, ru) != 0 {
-		return false
-	}
-
-	return true
 }
 
 /* === Receipt generation === */
@@ -91,10 +46,10 @@ func NeedsReceipt(txt protocol.TransactionType) bool {
 
 // CreateReceipt creates a receipt used to return the status of synthetic transactions to its sender
 func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, nodeUrl *url.URL) (*protocol.SyntheticReceipt, *url.URL) {
-	sr := new(protocol.SyntheticReceipt)
-	sr.SetSyntheticOrigin(env.GetTxHash(), nodeUrl)
 	synthOrigin := getSyntheticOrigin(env.Transaction)
-	sr.Cause = synthOrigin.Cause
+	sr := new(protocol.SyntheticReceipt)
+	sr.SetSyntheticOrigin(synthOrigin.Cause[:], nodeUrl)
+	sr.SynthTxHash = *(*[32]byte)(env.GetTxHash())
 	sr.Status = status
 
 	return sr, synthOrigin.Source

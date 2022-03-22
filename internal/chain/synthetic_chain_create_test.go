@@ -47,13 +47,13 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
 	receipt, _ := CreateReceipt(env, status, acctesting.FakeBvn)
-	originUrl := env.Transaction.Origin.String()
+	principalUrl := env.Transaction.Header.Principal
 	env = acctesting.NewTransaction().
-		WithOriginStr(originUrl).
-		WithKeyPage(0, 1).
+		WithPrincipal(principalUrl).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithNonce(1).
 		WithBody(receipt).
-		SignLegacyED25519(fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 	_, err = SyntheticReceipt{}.Validate(st, env)
 	require.NoError(t, err)
 

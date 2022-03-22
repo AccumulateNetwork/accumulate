@@ -3,6 +3,7 @@ package chain
 import (
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -52,6 +53,31 @@ func (m *stateCache) Update(record ...protocol.Account) {
 		m.chains[r.Header().Url.AccountID32()] = r
 		m.operations = append(m.operations, &updateRecord{r.Header().Url, r})
 	}
+}
+
+type updateTxStatus struct {
+	txid   []byte
+	status *protocol.TransactionStatus
+}
+
+func (m *StateManager) UpdateStatus(txid []byte, status *protocol.TransactionStatus) {
+	m.operations = append(m.operations, &updateTxStatus{txid, status})
+}
+
+func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
+	// Load the transaction status & state
+	tx := st.batch.Transaction(u.txid)
+	curStatus, err := tx.GetStatus()
+	if err != nil {
+		return nil, fmt.Errorf("retrieving status for transaction %s failed: %w", logging.AsHex(u.txid), err)
+	}
+
+	// Update the status when changed
+	if curStatus == nil || !statusEqual(curStatus, u.status) {
+		tx.PutStatus(u.status)
+	}
+
+	return make([]protocol.Account, 0), nil
 }
 
 func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
