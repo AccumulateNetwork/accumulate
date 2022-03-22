@@ -104,12 +104,12 @@ TokenIssuer:
     - name: Properties
       type: url
       pointer: true
-    - name: Supply
+    - name: Issued
       type: bigint
-      optional: true
-    - name: HasSupplyLimit
-      type: bool
-      optional: true
+      pointer: true
+    - name: SupplyLimit
+      type: bigint
+      pointer: true
 
 Anchor:
   union: { type: account }

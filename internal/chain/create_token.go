@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -23,8 +24,8 @@ func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 	token := protocol.NewTokenIssuer()
 	token.Url = body.Url
 	token.Precision = body.Precision
-	token.Supply = body.InitialSupply
-	token.HasSupplyLimit = body.HasSupplyLimit
+	token.SupplyLimit = body.InitialSupply
+	token.Issued = big.NewInt(0)
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
 	token.ManagerKeyBook = body.Manager

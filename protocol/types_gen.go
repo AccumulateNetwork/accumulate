@@ -496,11 +496,11 @@ type TokenAccount struct {
 type TokenIssuer struct {
 	fieldsSet []bool
 	AccountHeader
-	Symbol         string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision      uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties     *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
-	Supply         big.Int  `json:"supply,omitempty" form:"supply" query:"supply"`
-	HasSupplyLimit bool     `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
+	Symbol      string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision   uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
+	Issued      *big.Int `json:"issued,omitempty" form:"issued" query:"issued" validate:"required"`
+	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit" validate:"required"`
 }
 
 type TokenRecipient struct {
@@ -2105,10 +2105,20 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 	case !((v.Properties).Equal(u.Properties)):
 		return false
 	}
-	if !((&v.Supply).Cmp(&u.Supply) == 0) {
+	switch {
+	case v.Issued == u.Issued:
+		// equal
+	case v.Issued == nil || u.Issued == nil:
+		return false
+	case !((v.Issued).Cmp(u.Issued) == 0):
 		return false
 	}
-	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
+	switch {
+	case v.SupplyLimit == u.SupplyLimit:
+		// equal
+	case v.SupplyLimit == nil || u.SupplyLimit == nil:
+		return false
+	case !((v.SupplyLimit).Cmp(u.SupplyLimit) == 0):
 		return false
 	}
 
@@ -5568,8 +5578,8 @@ var fieldNames_TokenIssuer = []string{
 	3: "Symbol",
 	4: "Precision",
 	5: "Properties",
-	6: "Supply",
-	7: "HasSupplyLimit",
+	6: "Issued",
+	7: "SupplyLimit",
 }
 
 func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
@@ -5587,11 +5597,11 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	if !(v.Properties == nil) {
 		writer.WriteUrl(5, v.Properties)
 	}
-	if !((v.Supply).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(6, &v.Supply)
+	if !(v.Issued == nil) {
+		writer.WriteBigInt(6, v.Issued)
 	}
-	if !(!v.HasSupplyLimit) {
-		writer.WriteBool(7, v.HasSupplyLimit)
+	if !(v.SupplyLimit == nil) {
+		writer.WriteBigInt(7, v.SupplyLimit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenIssuer)
@@ -5618,6 +5628,16 @@ func (v *TokenIssuer) IsValid() error {
 		errs = append(errs, "field Properties is missing")
 	} else if v.Properties == nil {
 		errs = append(errs, "field Properties is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Issued is missing")
+	} else if v.Issued == nil {
+		errs = append(errs, "field Issued is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field SupplyLimit is missing")
+	} else if v.SupplyLimit == nil {
+		errs = append(errs, "field SupplyLimit is not set")
 	}
 
 	switch len(errs) {
@@ -8082,10 +8102,10 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Properties = x
 	}
 	if x, ok := reader.ReadBigInt(6); ok {
-		v.Supply = *x
+		v.Issued = x
 	}
-	if x, ok := reader.ReadBool(7); ok {
-		v.HasSupplyLimit = x
+	if x, ok := reader.ReadBigInt(7); ok {
+		v.SupplyLimit = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TokenIssuer)
@@ -9334,8 +9354,8 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 		Symbol         string      `json:"symbol,omitempty"`
 		Precision      uint64      `json:"precision,omitempty"`
 		Properties     *url.URL    `json:"properties,omitempty"`
-		Supply         *string     `json:"supply,omitempty"`
-		HasSupplyLimit bool        `json:"hasSupplyLimit,omitempty"`
+		Issued         *string     `json:"issued,omitempty"`
+		SupplyLimit    *string     `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -9344,8 +9364,8 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.Supply = encoding.BigintToJSON(&v.Supply)
-	u.HasSupplyLimit = v.HasSupplyLimit
+	u.Issued = encoding.BigintToJSON(v.Issued)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	return json.Marshal(&u)
 }
 
@@ -11008,8 +11028,8 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 		Symbol         string      `json:"symbol,omitempty"`
 		Precision      uint64      `json:"precision,omitempty"`
 		Properties     *url.URL    `json:"properties,omitempty"`
-		Supply         *string     `json:"supply,omitempty"`
-		HasSupplyLimit bool        `json:"hasSupplyLimit,omitempty"`
+		Issued         *string     `json:"issued,omitempty"`
+		SupplyLimit    *string     `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -11018,8 +11038,8 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.Supply = encoding.BigintToJSON(&v.Supply)
-	u.HasSupplyLimit = v.HasSupplyLimit
+	u.Issued = encoding.BigintToJSON(v.Issued)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -11029,12 +11049,16 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	v.Symbol = u.Symbol
 	v.Precision = u.Precision
 	v.Properties = u.Properties
-	if x, err := encoding.BigintFromJSON(u.Supply); err != nil {
-		return fmt.Errorf("error decoding Supply: %w", err)
+	if x, err := encoding.BigintFromJSON(u.Issued); err != nil {
+		return fmt.Errorf("error decoding Issued: %w", err)
 	} else {
-		v.Supply = *x
+		v.Issued = x
 	}
-	v.HasSupplyLimit = u.HasSupplyLimit
+	if x, err := encoding.BigintFromJSON(u.SupplyLimit); err != nil {
+		return fmt.Errorf("error decoding SupplyLimit: %w", err)
+	} else {
+		v.SupplyLimit = x
+	}
 	return nil
 }
 
