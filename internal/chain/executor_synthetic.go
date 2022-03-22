@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -65,13 +64,6 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++
-
-	// Append the ID
-	if body.Type() == protocol.TransactionTypeSyntheticAnchor || body.Type() == protocol.TransactionTypeSyntheticReceipt {
-		txid := types.Bytes(txn.GetHash()).AsBytes32()
-		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
-	}
-
 	st.Update(ledgerState)
 
 	// Store the transaction, its status, and the initiator

@@ -75,7 +75,7 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// Set up the state manager and validate the signatures
 	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return nil, m.recordTransactionError(nil, env, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	if !hasEnoughSigs {
