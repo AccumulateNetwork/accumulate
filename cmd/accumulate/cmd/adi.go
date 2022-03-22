@@ -74,6 +74,9 @@ func PrintADICreate() {
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
 	u, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
 
 	st, err := strconv.ParseInt(start, 10, 64)
 	if err != nil {
@@ -125,11 +128,7 @@ func GetADI(url string) (string, error) {
 }
 
 func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
-	var si *protocol.TransactionHeader
-	var privKey []byte
-	var err error
-
-	args, si, privKey, err = prepareSigner(origin, args)
+	args, signer, err := prepareSigner(origin, args)
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +178,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	idc.PublicKey = pubKey
 	idc.KeyBookUrl = bookUrl
 
-	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
+	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, signer)
 	if err != nil {
 		return "", err
 	}

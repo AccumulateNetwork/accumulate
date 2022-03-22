@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
@@ -10,69 +11,104 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func init() {
+	pageCmd.AddCommand(
+		pageGetCmd,
+		pageCreateCmd,
+		pageKeyCmd,
+		// pageSetThresholdCmd,
+		pageLockCmd,
+		pageUnlockCmd)
+
+	pageKeyCmd.AddCommand(
+		pageKeyAddCmd,
+		pageKeyUpdateCmd,
+		pageKeyRemoveCmd)
+}
+
 var pageCmd = &cobra.Command{
 	Use:   "page",
 	Short: "Create and manage Keys, Books, and Pages",
-	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
-		if len(args) == 2 {
-			if args[0] == "get" {
-				out, err = GetAndPrintKeyPage(args[1])
-			} else {
-				fmt.Println("Usage:")
-				PrintKeyPageGet()
-				PrintKeyPageCreate()
-				PrintKeyUpdate()
-			}
-		} else if len(args) > 3 {
-			if args[0] == "create" {
-				out, err = CreateKeyPage(args[1], args[2:])
-			} else if args[0] == "key" {
-				switch arg := args[1]; arg {
-				case "update":
-					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationUpdate, args[3:])
-				case "add":
-					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationAdd, args[3:])
-				case "remove":
-					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationRemove, args[3:])
-				default:
-					fmt.Println("Usage:")
-					PrintKeyPageCreate()
-					PrintKeyUpdate()
-				}
-			} else {
-				PrintPage()
-			}
-		} else {
-			PrintPage()
-		}
-		printOutput(cmd, out, err)
-	},
 }
 
-func PrintKeyPageGet() {
-	fmt.Println("  accumulate page get [URL]			Get existing Key Page by URL")
+var pageGetCmd = &cobra.Command{
+	Use:   "get [url]",
+	Short: "Get existing Key Page by URL",
+	Args:  cobra.ExactArgs(1),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return GetAndPrintKeyPage(args[0])
+	}),
 }
 
-func PrintKeyPageCreate() {
-	fmt.Println("  accumulate page create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
-	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon/RedBook redKey5 redKey1 redKey2 redKey3")
-}
-func PrintKeyUpdate() {
-	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate page key update acc://RedWagon/RedBook/1 redKey1 redKey2 redKey3")
-	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
-	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedBook/2 redKey2 redKey1")
-	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
-	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedBook/1 redKey1 redKey2")
+var pageCreateCmd = &cobra.Command{
+	Use:   "create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1]",
+	Short: "Create a key page",
+	Args:  cobra.MinimumNArgs(3),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return CreateKeyPage(args[0], args[1:])
+	}),
 }
 
-func PrintPage() {
-	PrintKeyPageCreate()
-	PrintKeyPageGet()
-	PrintKeyUpdate()
+var pageKeyCmd = &cobra.Command{
+	Use:   "key",
+	Short: "Add, update, or remove keys from a key page",
 }
+
+var pageKeyAddCmd = &cobra.Command{
+	Use:   "add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name]",
+	Short: "Add a key to a key page",
+	Args:  cobra.RangeArgs(3, 5),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return KeyPageUpdate(args[0], protocol.KeyPageOperationTypeAdd, args[1:])
+	}),
+}
+
+var pageKeyRemoveCmd = &cobra.Command{
+	Use:   "remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name]",
+	Short: "Remove a key from a key page",
+	Args:  cobra.RangeArgs(3, 5),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return KeyPageUpdate(args[0], protocol.KeyPageOperationTypeRemove, args[1:])
+	}),
+}
+
+var pageKeyUpdateCmd = &cobra.Command{
+	Use:   "update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name]",
+	Short: "Update a key on a key page",
+	Args:  cobra.RangeArgs(4, 6),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return KeyPageUpdate(args[0], protocol.KeyPageOperationTypeUpdate, args[1:])
+	}),
+}
+
+var pageSetThresholdCmd = &cobra.Command{
+	Use:   "set-threshold [key page url] [signing key name] [key index (optional)] [key height (optional)] [threshold]",
+	Short: "Set the M-of-N signature threshold for a key page",
+	Args:  cobra.RangeArgs(3, 5),
+	Run:   runCmdFunc(setKeyPageThreshold),
+}
+var _ = pageSetThresholdCmd // remove dead code removal
+
+var pageLockCmd = &cobra.Command{
+	Use:   "lock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
+	Short: "Lock a key page",
+	Args:  cobra.RangeArgs(2, 4),
+	Run:   runCmdFunc(lockKeyPage),
+}
+
+var pageUnlockCmd = &cobra.Command{
+	Use:   "unlock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
+	Short: "Unlock a key page",
+	Args:  cobra.RangeArgs(2, 4),
+	Run:   runCmdFunc(unlockKeyPage),
+}
+
+// func keyPageExamples() {
+// 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon/RedBook redKey5 redKey1 redKey2 redKey3")
+// 	fmt.Println("\t\t example usage: accumulate page key update acc://RedWagon/RedBook/1 redKey1 redKey2 redKey3")
+// 	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedBook/2 redKey2 redKey1")
+// 	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedBook/1 redKey1 redKey2")
+// }
 
 func GetAndPrintKeyPage(url string) (string, error) {
 	res, _, err := GetKeyPage(url)
@@ -108,7 +144,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(bookUrl, args)
+	args, signer, err := prepareSigner(bookUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -138,7 +174,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	res, err := dispatchTxRequest("create-key-page", &ckp, nil, bookUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-page", &ckp, nil, bookUrl, signer)
 	if err != nil {
 		return "", err
 	}
@@ -157,13 +193,13 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 
 }
 
-func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (string, error) {
+func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []string) (string, error) {
 	u, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -172,10 +208,9 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	var oldKey []byte
 
 	ukp := protocol.UpdateKeyPage{}
-	ukp.Operation = op
 
 	switch op {
-	case protocol.KeyPageOperationUpdate:
+	case protocol.KeyPageOperationTypeUpdate:
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -187,7 +222,11 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
-	case protocol.KeyPageOperationAdd:
+		ukp.Operation = &protocol.UpdateKeyOperation{
+			OldEntry: protocol.KeySpecParams{PublicKey: oldKey},
+			NewEntry: protocol.KeySpecParams{PublicKey: newKey},
+		}
+	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -195,7 +234,10 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
-	case protocol.KeyPageOperationRemove:
+		ukp.Operation = &protocol.AddKeyOperation{
+			Entry: protocol.KeySpecParams{PublicKey: newKey},
+		}
+	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -203,15 +245,64 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
+		ukp.Operation = &protocol.RemoveKeyOperation{
+			Entry: protocol.KeySpecParams{PublicKey: oldKey},
+		}
 	}
 
-	ukp.Key = oldKey[:]
-	ukp.NewKey = newKey[:]
-
-	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, si, privKey)
+	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
 
 	return ActionResponseFrom(res).Print()
+}
+
+func setKeyPageThreshold(args []string) (string, error) {
+	// TODO If the user passes "key/book/1 name-of-key 2", the last value is
+	// interpreted as a key page index or height, so `args` ends up empty
+	args, principal, signer, err := parseArgsAndPrepareSigner(args)
+	if err != nil {
+		return "", err
+	}
+
+	value, err := strconv.ParseUint(args[0], 10, 16)
+	if err != nil {
+		return "", fmt.Errorf("invalid threshold: %v", err)
+	}
+
+	op := new(protocol.SetThresholdKeyPageOperation)
+	op.Threshold = uint64(value)
+	txn := new(protocol.UpdateKeyPage)
+	txn.Operation = op
+
+	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
+}
+
+func lockKeyPage(args []string) (string, error) {
+	_, principal, signer, err := parseArgsAndPrepareSigner(args)
+	if err != nil {
+		return "", err
+	}
+
+	op := new(protocol.UpdateAllowedKeyPageOperation)
+	op.Deny = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
+	txn := new(protocol.UpdateKeyPage)
+	txn.Operation = op
+
+	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
+}
+
+func unlockKeyPage(args []string) (string, error) {
+	_, principal, signer, err := parseArgsAndPrepareSigner(args)
+	if err != nil {
+		return "", err
+	}
+
+	op := new(protocol.UpdateAllowedKeyPageOperation)
+	op.Allow = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
+	txn := new(protocol.UpdateKeyPage)
+	txn.Operation = op
+
+	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }

@@ -48,22 +48,12 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*protocol.Envelo
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
 
-	tx := new(protocol.Envelope)
-	tx.Transaction = new(protocol.Transaction)
-	tx.Transaction.Body = deposit
-	tx.Transaction.Origin = recipientAdi
-	tx.Transaction.KeyPageHeight = 1
-
-	ed := new(protocol.LegacyED25519Signature)
-	tx.Transaction.Nonce = 1
-	ed.PublicKey = recipient.PubKey().Bytes()
-	err := ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
-	if err != nil {
-		return nil, err
-	}
-
-	tx.Signatures = append(tx.Signatures, ed)
-	return tx, nil
+	return NewTransaction().
+		WithPrincipal(recipientAdi).
+		WithSigner(protocol.FaucetUrl, 1).
+		WithNonce(1).
+		WithBody(deposit).
+		Initiate(protocol.SignatureTypeLegacyED25519, recipient), nil
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*protocol.Envelope, error) {
@@ -78,22 +68,12 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	gtx := new(protocol.Envelope)
-	gtx.Transaction = new(protocol.Transaction)
-	gtx.Transaction.Body = &send
-	gtx.Transaction.Origin = from
-
-	ed := new(protocol.LegacyED25519Signature)
-	gtx.Transaction.Nonce = 1
-	ed.PublicKey = sponsor[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign TX: %v", err)
-	}
-
-	gtx.Signatures = append(gtx.Signatures, ed)
-
-	return gtx, nil
+	return NewTransaction().
+		WithPrincipal(from).
+		WithSigner(from, 1).
+		WithNonce(1).
+		WithBody(&send).
+		Initiate(protocol.SignatureTypeLegacyED25519, sponsor), nil
 }
 
 func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *protocol.Envelope, error) {
@@ -112,22 +92,14 @@ func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *protocol.Envelop
 	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
 	// deposit.TokenUrl = tokenUrl
 
-	gtx := new(protocol.Envelope)
-	gtx.Transaction = new(protocol.Transaction)
-	gtx.Transaction.Body = deposit
-	gtx.Transaction.Origin = destAddress
+	env := NewTransaction().
+		WithPrincipal(destAddress).
+		WithSigner(protocol.FaucetUrl, 1).
+		WithNonce(1).
+		WithBody(deposit).
+		Initiate(protocol.SignatureTypeLegacyED25519, privateKey)
 
-	ed := new(protocol.LegacyED25519Signature)
-	gtx.Transaction.Nonce = 1
-	ed.PublicKey = privateKey[32:]
-	err := ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
-	}
-
-	gtx.Signatures = append(gtx.Signatures, ed)
-
-	return destAddress.String(), privateKey, gtx, nil
+	return destAddress.String(), privateKey, env, nil
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {

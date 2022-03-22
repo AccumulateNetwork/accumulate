@@ -33,23 +33,24 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
+	bookUrl := url.MustParse("foo/book")
+
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
+			op := new(protocol.UpdateKeyOperation)
+			op.OldEntry.PublicKey = testKey.PubKey().Bytes()
+			op.NewEntry.PublicKey = newKey.PubKey().Bytes()
 			body := new(protocol.UpdateKeyPage)
-			body.Operation = protocol.KeyPageOperationUpdate
-			body.Key = testKey.PubKey().Bytes()
-			body.NewKey = newKey.PubKey().Bytes()
-
-			u, err := url.Parse("foo/book/2")
-			require.NoError(t, err)
+			body.Operation = op
 
 			env := acctesting.NewTransaction().
-				WithOrigin(u).
-				WithKeyPage(idx, 1).
+				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
+				WithSigner(protocol.FormatKeyPageUrl(bookUrl, idx), 1).
+				WithNonce(1).
 				WithBody(body).
-				SignLegacyED25519(testKey)
+				Initiate(protocol.SignatureTypeED25519, testKey)
 
-			st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
+			st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 			require.NoError(t, err)
 
 			_, err = UpdateKeyPage{}.Validate(st, env)

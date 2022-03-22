@@ -34,7 +34,12 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.Require().Equal(int64(acctesting.TestTokenAmount*acctesting.TokenMx), account.Balance.Int64())
 
 	var nonce uint64 = 1
-	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl, Amount: 1e8})
+	tx = acctesting.NewTransaction().
+		WithPrincipal(senderUrl).
+		WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
+		WithNonce(nonce).
+		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: 1e8}).
+		Initiate(protocol.SignatureTypeLegacyED25519, sender)
 	s.dut.SubmitTxn(tx)
 	s.dut.WaitForTxns(tx.GetTxHash())
 
@@ -64,7 +69,12 @@ func (s *Suite) TestCreateLiteAccount() {
 		}
 
 		nonce++
-		tx := s.newTx(senderUrl, sender, nonce, exch)
+		tx := acctesting.NewTransaction().
+			WithPrincipal(senderUrl).
+			WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
+			WithNonce(nonce).
+			WithBody(exch).
+			Initiate(protocol.SignatureTypeLegacyED25519, sender)
 		s.dut.SubmitTxn(tx)
 		txids = append(txids, tx.GetTxHash())
 	}

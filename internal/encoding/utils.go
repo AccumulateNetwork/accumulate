@@ -386,7 +386,7 @@ func AnyFromJSON(v interface{}) (interface{}, error) {
 	return v, nil
 }
 
-func UnmarshalEnumType(r io.Reader, value interface{ Set(uint64) bool }) error {
+func UnmarshalEnumType(r io.Reader, value EnumValueSetter) error {
 	reader := NewReader(r)
 	v, ok := reader.ReadUint(1)
 	_, err := reader.Reset([]string{"Type"})
@@ -397,7 +397,7 @@ func UnmarshalEnumType(r io.Reader, value interface{ Set(uint64) bool }) error {
 		return fmt.Errorf("field Type: missing")
 	}
 
-	if !value.Set(v) {
+	if !value.SetEnumValue(v) {
 		return fmt.Errorf("field Type: invalid value %d", v)
 	}
 	return nil

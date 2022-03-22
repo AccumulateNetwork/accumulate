@@ -8,6 +8,8 @@ variables:
   BOLD_RED: '\e[1;31m'
   NO_COLOR: '\e[0m'
   SECTION: '\e[0K'
+  PRODUCTION_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
+  VALIDATION_IMAGE: ${CI_REGISTRY_IMAGE}/validation:${CI_COMMIT_REF_SLUG}
 
 .go:
   image: golang:1.17
@@ -70,7 +72,7 @@ docker buildx:
   services: [ docker:20-dind ]
   script:
     - export DOCKER_BUILDKIT=1
-    - git clone git://github.com/docker/buildx ./docker-buildx
+    - git clone https://github.com/docker/buildx ./docker-buildx
     - docker build --platform=local -o . ./docker-buildx
 
 build images:
@@ -79,11 +81,9 @@ build images:
   services: [ docker:20-dind ]
   needs: []
   script:
-    - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
-    - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+    - docker build -t ${VALIDATION_IMAGE} .
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
-    - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+    - docker push ${VALIDATION_IMAGE}
 
 build multiarch images:
   stage: build
@@ -102,19 +102,22 @@ build multiarch images:
   script:
     - docker buildx create --use
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
-    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+    - docker buildx build --platform linux/amd64,linux/arm64 --push -t ${PRODUCTION_IMAGE} .
 
 lint:
   stage: build
   extends: .go
   needs: [ ]
-  script:
+  before_script:
     - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
-
+  script:
     - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
     - go vet ./...
     - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
+
+    - echo -e "${SECTION}section_start:`date +%s`:lint\r${SECTION}Lint"
+    - go run github.com/golangci/golangci-lint/cmd/golangci-lint run --verbose --timeout=10m ./...
+    - echo -e "${SECTION}section_end:`date +%s`:lint\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
     - go mod tidy
@@ -249,11 +252,11 @@ validate docker:
     NODE_ROOT: /nodes/dn/Node0
   script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} init devnet -w /nodes --docker --tag ${CI_COMMIT_REF_SLUG} --compose -b 3 -v 3
+  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT="${NODE_ROOT}" --rm tools /scripts/ci/validate.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT="${NODE_ROOT}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose down
 
 validate devnet:
@@ -341,5 +344,4 @@ validate:
   - echo "$REG_SHA256  /usr/local/bin/reg" | sha256sum -c -
   - chmod a+x /usr/local/bin/reg
   script:
-  - /usr/local/bin/reg rm -d --auth-url $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
-  - /usr/local/bin/reg rm -d --auth-url $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+  - /usr/local/bin/reg rm -d --auth-url $CI_REGISTRY -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD ${VALIDATION_IMAGE}
