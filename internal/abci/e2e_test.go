@@ -46,8 +46,8 @@ func TestCreateLiteAccount(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	var count = 11
-	acmeToSpendOnCredits := 100.0
-	originAddr, balances := n.testLiteTx(count, acmeToSpendOnCredits)
+	credits := 100.0
+	originAddr, balances := n.testLiteTx(count, credits)
 	amountSent := float64(count * 1000)
 	initialAmount := acctesting.TestTokenAmount * protocol.AcmePrecision
 	currentBalance := n.GetLiteTokenAccount(originAddr).Balance.Int64()
@@ -71,8 +71,8 @@ func TestEvilNode(t *testing.T) {
 	n := nodes[bvn][0]
 
 	var count = 11
-	acmeToSpendOnCredits := 100.0
-	originAddr, balances := n.testLiteTx(count, acmeToSpendOnCredits)
+	credits := 100.0
+	originAddr, balances := n.testLiteTx(count, credits)
 	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
@@ -165,8 +165,7 @@ func TestAnchorChain(t *testing.T) {
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 
 	batch := n.db.Begin(true)
-	acmeToSpend := 1e6 / 5
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, acmeToSpend))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*Tx)) {
@@ -326,7 +325,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 	adiKey := generateKey()
 	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e4))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 	require.NoError(t, batch.Commit())
 	ids := n.Batch(func(send func(*protocol.Envelope)) {
 		wdt := new(protocol.WriteDataTo)
