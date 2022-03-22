@@ -8,6 +8,10 @@ import (
 // the names as part of the external id's
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#chainid
 func ComputeLiteDataAccountId(firstEntry *DataEntry) []byte {
+	var chainId [32]byte
+	if firstEntry == nil {
+		return chainId[:]
+	}
 	hash := sha256.New()
 
 	n := len(firstEntry.Data)
@@ -17,7 +21,6 @@ func ComputeLiteDataAccountId(firstEntry *DataEntry) []byte {
 	}
 
 	c := hash.Sum(nil)
-	var chainId [32]byte
 	copy(chainId[:], c)
 	return chainId[:]
 }

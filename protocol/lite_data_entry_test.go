@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -69,6 +70,14 @@ func TestLiteDataEntry(t *testing.T) {
 	}
 
 	de := NewLiteDataEntry()
+
+	//add test for an empty entry to make sure function behaves as expected.
+	h := ComputeLiteDataAccountId(de.DataEntry)
+	if strings.Compare(fmt.Sprintf("%x", h),
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") != 0 {
+		t.Fatalf("invalid account id from empty lite entry")
+	}
+
 	de.Data = append(de.Data, []byte("a cost test"))
 	//now make the data entry larger and compute cost
 	for i := 0; i < 100; i++ {
