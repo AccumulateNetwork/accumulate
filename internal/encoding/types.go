@@ -8,6 +8,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
+type EnumValueGetter interface {
+	GetEnumValue() uint64
+}
+
+type EnumValueSetter interface {
+	SetEnumValue(uint64) bool
+}
+
 type BinaryValue interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler

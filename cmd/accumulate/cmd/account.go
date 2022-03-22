@@ -202,7 +202,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -248,7 +248,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.KeyBookUrl = keybook
 	tac.Scratch = flagAccount.Scratch
 
-	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
+	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, signer)
 	if err != nil {
 		return "", err
 	}

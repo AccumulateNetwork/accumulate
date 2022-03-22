@@ -93,10 +93,12 @@ if [ -f "$NODE_PRIV_VAL" ]; then
     [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
     echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+    echo
 fi
 
 section "Setup"
-if ! which accumulate > /dev/null ; then
+if which go > /dev/null || ! which accumulate > /dev/null ; then
+    echo "Installing CLI"
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
@@ -169,6 +171,29 @@ accumulate page get keytest/book/3 1> /dev/null || die "Cannot find page keytest
 success
 
 section "Add credits to the ADI's key page 2"
+wait-for cli-tx credits ${LITE} keytest/book/2 1000
+BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 1000 ] && success || die "keytest/book/2 should have 1000 credits but has ${BALANCE}"
+
+section "Attempting to log key page 2 using itself fails"
+wait-for cli-tx page lock keytest/book/2 keytest-2-0 && die "Key page 2 locked itself" || success
+
+section "Lock key page 2 using page 1"
+wait-for cli-tx page lock keytest/book/2 keytest-1-0
+success
+
+section "Attempting to update key page 3 using page 2 fails"
+cli-tx page key add keytest/book/3 keytest-2-0 1 keytest-3-1 && die "Executed disallowed operation" || success
+
+section "Unlock key page 2 using page 1"
+wait-for cli-tx page unlock keytest/book/2 keytest-1-0
+success
+
+section "Update key page 3 using page 2"
+cli-tx page key add keytest/book/3 keytest-2-0 keytest-3-1
+success
+
+section "Add credits to the ADI's key page 2"
 wait-for cli-tx credits ${LITE} keytest/book/2 100
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "keytest/book/2 should have 100 credits but has ${BALANCE}"
@@ -178,12 +203,8 @@ wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-1
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
 success
 
-section "Add a key to page 2 using a key from page 1"
-wait-for cli-tx page key add keytest/book/3 keytest-2-0 1 keytest-3-1
-success
-
 section "Set threshold to 2 of 2"
-wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
+wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": { "type": "setThreshold", "threshold": 2 }}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
 
@@ -213,8 +234,9 @@ wait-for-tx $TXID
 success
 
 section "Query pending by URL"
-accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
-
+accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null|| die "Failed to retrieve pending transactions"
+accumulate -j get keytest/tokens#signature | jq -re .items[0] &> /dev/null|| die "Failed to retrieve signature transactions"
+success
 
 section "Query pending chain at height 0 by URL"
 TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
@@ -226,6 +248,11 @@ RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionH
 section "Query pending chain range by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
+
+section "Query signature chain range by URL"
+RESULT=$(accumulate -j get "keytest/tokens#signature" | jq -re .total) || die "Failed to get entries"
+[ "$RESULT" -eq 2 ] || die "Wrong total: want 2, got $RESULT"
+success
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
@@ -404,7 +431,7 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 section "Transaction with Memo"
 TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
 wait-for-tx $TXID
-MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.memo)
+MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Query votes chain"

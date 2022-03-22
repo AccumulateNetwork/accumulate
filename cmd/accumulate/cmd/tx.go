@@ -14,7 +14,6 @@ import (
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -325,7 +324,7 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, pk, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 
 	if len(args) < 2 {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
@@ -351,7 +350,7 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	send.AddRecipient(u2, amt)
 
-	res, err := dispatchTxRequest("send-tokens", send, nil, u, si, pk)
+	res, err := dispatchTxRequest("send-tokens", send, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -391,13 +390,13 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, pk, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
 	var typ struct {
-		Type types.TransactionType
+		Type protocol.TransactionType
 	}
 	err = json.Unmarshal([]byte(args[0]), &typ)
 	if err != nil {
@@ -414,7 +413,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", txn, nil, u, si, pk)
+	res, err := dispatchTxRequest("execute", txn, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -428,7 +427,7 @@ func SignTX(sender string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, pk, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
@@ -442,7 +441,7 @@ func SignTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to parse transaction hash: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", nil, txHash, u, si, pk)
+	res, err := dispatchTxRequest("execute", nil, txHash, u, signer)
 	if err != nil {
 		return "", err
 	}

@@ -39,7 +39,7 @@ type Network struct {
 
 func loadNetworkConfiguration(file string) (ret Network, err error) {
 	jsonFile, err := os.Open(file)
-	defer jsonFile.Close()
+	defer func() { _ = jsonFile.Close() }()
 	// if we os.Open returns an error then handle it
 	if err != nil {
 		return ret, err
@@ -70,7 +70,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		//while we are at it, also find the directory.
 		if v.Type == config.Directory {
 			if directory != nil {
-				check(fmt.Errorf("more than one directory subnet is defined, can only have 1"))
+				fatalf("more than one directory subnet is defined, can only have 1")
 			}
 			directory = &network.Subnet[i]
 		}
@@ -80,11 +80,12 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	if directory == nil {
-		check(fmt.Errorf("cannot find directory configuration in %v", networkConfigFile))
+		fatalf("cannot find directory configuration in %v", networkConfigFile)
+		panic("not reached") // For static analysis
 	}
 
 	if directory.Name != "Directory" {
-		check(fmt.Errorf("directory name specified in file was %s, but accumulated requires it to be \"Directory\"", directory.Name))
+		fatalf("directory name specified in file was %s, but accumulated requires it to be \"Directory\"", directory.Name)
 	}
 	//quick validation to make sure the directory node maps to each of the BVN's defined
 	for _, dnn := range directory.Nodes {
@@ -105,7 +106,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			}
 		}
 		if !found {
-			check(fmt.Errorf("%s is defined in the directory nodes networks file, but has no supporting BVN node", dnn.IP))
+			fatalf("%s is defined in the directory nodes networks file, but has no supporting BVN node", dnn.IP)
 		}
 	}
 
@@ -152,7 +153,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	//need to configure the dn for each BVN assuming 1 bvn
-	for i, _ := range directory.Nodes {
+	for i := range directory.Nodes {
 		var remotes []string
 		dnConfig[i], remotes, dnListen[i] = initNetworkNode(network.Network, directory.Name, directory.Nodes, cfg.Directory,
 			cfg.Validator, i, i, compose)
@@ -188,7 +189,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	bvnRemote := make([][]string, len(bvnSubnet)) //numBvns)
 
 	for i, v := range bvnSubnet {
-		for j, _ := range v.Nodes {
+		for j := range v.Nodes {
 			bvnConfig[i][j], bvnRemote[i], bvnListen[i][j] = initNetworkNode(network.Network, v.Name, v.Nodes, cfg.BlockValidator,
 				cfg.Validator, i, j, compose)
 			if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
@@ -218,7 +219,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	for i, v := range bvnSubnet {
-		for j, _ := range v.Nodes {
+		for j := range v.Nodes {
 			c := bvnConfig[i][j]
 			if flagInit.NoEmptyBlocks {
 				c.Consensus.CreateEmptyBlocks = false
@@ -249,7 +250,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			Logger:   logger.With("subnet", protocol.Directory),
 		}))
 
-		for i, _ := range bvnSubnet {
+		for i := range bvnSubnet {
 			check(node.Init(node.InitOptions{
 				WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:     bvns[i].Port,
@@ -266,10 +267,10 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:" + flagInitDevnet.DockerTag
+	svc.Image = flagInitDevnet.DockerImage
 	svc.Environment = map[string]*string{"ACC_API": &api}
 
-	svc.Command = dc.ShellCommand{"accumulated", "init", "devnet", "-w", "/nodes", "--docker"}
+	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
 
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
@@ -352,7 +353,7 @@ func initNetworkNode(networkName string, subnetName string, nodes []Node, netTyp
 	var svc dc.ServiceConfig
 	svc.Name = name
 	svc.ContainerName = networkName + "-" + name
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:" + flagInitDevnet.DockerTag
+	svc.Image = flagInitDevnet.DockerImage
 	svc.DependsOn = []string{"tools"}
 
 	if flagInitDevnet.UseVolumes {

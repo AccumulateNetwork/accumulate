@@ -9,6 +9,10 @@ ChainQueryResponse:
       pointer: true
       marshal-as: reference
       alternative: MerkleState
+    - name: Chains
+      type: query.ChainState
+      repeatable: true
+      marshal-as: reference
     - name: Data
       type: any
     - name: ChainId
@@ -31,10 +35,6 @@ TransactionQueryResponse:
       type: url
       pointer: true
       alternative: Sponsor
-    - name: KeyPage
-      type: KeyPage
-      pointer: true
-      marshal-as: reference
     - name: TransactionHash
       type: bytes
       alternative: Txid
@@ -103,13 +103,6 @@ KeyPage:
   fields:
     - name: Height
       type: uvarint
-    - name: Index
-      type: uvarint
-      optional: true
-      keep-empty: true
-    - name: Threshold
-      type: uvarint
-      optional: true
 
 Signer:
   non-binary: true
@@ -119,6 +112,9 @@ Signer:
     type: bytes
   - name: Nonce
     type: uvarint
+  - name: Url
+    type: url
+    pointer: true
 
 TokenSend:
   non-binary: true

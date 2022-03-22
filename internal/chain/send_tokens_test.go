@@ -32,8 +32,9 @@ func TestLiteTokenTransactions(t *testing.T) {
 	//now move some tokens around
 	destAddr := testing2.AcmeLiteAddressStdPriv(destPrivKey).String()
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
+	require.NoError(t, err)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), gtx)
+	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), gtx)
 	require.NoError(t, err)
 
 	_, err = SendTokens{}.Validate(st, gtx)

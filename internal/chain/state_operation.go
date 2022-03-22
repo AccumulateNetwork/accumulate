@@ -9,69 +9,52 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type stateOperation interface {
 	// Execute executes the operation and returns any chains that should be
 	// created via a synthetic transaction.
-	Execute(*stateCache) ([]state.Chain, error)
+	Execute(*stateCache) ([]protocol.Account, error)
 }
 
 type createRecords struct {
-	records []state.Chain
+	records []protocol.Account
 }
 
 // Create queues a record for a synthetic chain create transaction. Will panic
 // if called by a synthetic transaction. Will panic if the record is a
 // transaction.
-func (m *stateCache) Create(record ...state.Chain) {
+func (m *stateCache) Create(record ...protocol.Account) {
 	if m.txType.IsSynthetic() {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
 	for _, r := range record {
-		if r.GetType().IsTransaction() {
-			panic("Called StateManager.Create with a transaction record!")
-		}
-
-		u, err := r.Header().ParseUrl()
-		if err != nil {
-			// TODO Return error
-			panic(fmt.Errorf("invalid URL: %v", err))
-		}
-
-		m.chains[u.AccountID32()] = r
+		m.chains[r.Header().Url.AccountID32()] = r
 	}
 
 	m.operations = append(m.operations, &createRecords{record})
 }
 
-func (op *createRecords) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *createRecords) Execute(st *stateCache) ([]protocol.Account, error) {
 	return op.records, nil
 }
 
 type updateRecord struct {
 	url    *url.URL
-	record state.Chain
+	record protocol.Account
 }
 
 // Update queues a record for storage in the database. The queued update will
 // fail if the record does not already exist, unless it is created by a
 // synthetic transaction, or the record is a transaction.
-func (m *stateCache) Update(record ...state.Chain) {
+func (m *stateCache) Update(record ...protocol.Account) {
 	for _, r := range record {
-		u, err := r.Header().ParseUrl()
-		if err != nil {
-			// TODO Return error
-			panic(fmt.Errorf("invalid URL: %v", err))
-		}
-
-		m.chains[u.AccountID32()] = r
-		m.operations = append(m.operations, &updateRecord{u, r})
+		m.chains[r.Header().Url.AccountID32()] = r
+		m.operations = append(m.operations, &updateRecord{r.Header().Url, r})
 	}
 }
 
-func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
 	// Update: update an existing record. Non-synthetic transactions are
 	// not allowed to create accounts, so we must check if the record
 	// already exists. The record may have been added to the DB
@@ -112,17 +95,12 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 
 type updateSignator struct {
 	url    *url.URL
-	record state.Chain
+	record protocol.Account
 }
 
-func (m *stateCache) UpdateSignator(record state.Chain) error {
-	u, err := record.Header().ParseUrl()
-	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
-	}
-
+func (m *stateCache) UpdateSignator(record protocol.Account) error {
 	// Load the previous state of the record
-	rec := m.batch.Account(u)
+	rec := m.batch.Account(record.Header().Url)
 	old, err := rec.GetState()
 	if err != nil {
 		return fmt.Errorf("failed to load state for %q", record.Header().Url)
@@ -152,24 +130,24 @@ func (m *stateCache) UpdateSignator(record state.Chain) error {
 		return fmt.Errorf("account type %d is not a signator", old.GetType())
 	}
 
-	m.chains[u.AccountID32()] = record
-	m.operations = append(m.operations, &updateSignator{u, record})
+	m.chains[record.Header().Url.AccountID32()] = record
+	m.operations = append(m.operations, &updateSignator{record.Header().Url, record})
 	return nil
 }
 
-func (op *updateSignator) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *updateSignator) Execute(st *stateCache) ([]protocol.Account, error) {
 	record := st.batch.Account(op.url)
 	err := record.PutState(op.record)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addDataEntry struct {
 	url          *url.URL
-	liteStateRec state.Chain
+	liteStateRec protocol.Account
 	hash         []byte
 	entry        *protocol.DataEntry
 }
@@ -177,23 +155,17 @@ type addDataEntry struct {
 //UpdateData will cache a data associated with a DataAccount chain.
 //the cache data will not be stored directly in the state but can be used
 //upstream for storing a chain in the state database.
-func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry *protocol.DataEntry) {
-	u, err := record.Header().ParseUrl()
-	if err != nil {
-		// TODO Return error
-		panic(fmt.Errorf("invalid URL: %v", err))
-	}
-
-	var stateRec state.Chain
+func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataEntry *protocol.DataEntry) {
+	var stateRec protocol.Account
 
 	if record.GetType() == protocol.AccountTypeLiteDataAccount {
 		stateRec = record
 	}
 
-	m.operations = append(m.operations, &addDataEntry{u, stateRec, entryHash, dataEntry})
+	m.operations = append(m.operations, &addDataEntry{record.Header().Url, stateRec, entryHash, dataEntry})
 }
 
-func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 	// Add entry to data chain
 	record := st.batch.Account(op.url)
 
@@ -242,7 +214,7 @@ type addChainEntryOp struct {
 func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// The main and pending chain cannot be updated this way
 	switch strings.ToLower(name) {
-	case protocol.MainChain, protocol.PendingChain:
+	case protocol.MainChain, protocol.SignatureChain:
 		return fmt.Errorf("invalid operation: cannot update %s chain with AddChainEntry", name)
 	}
 
@@ -256,7 +228,7 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 	return nil
 }
 
-func (op *addChainEntryOp) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *addChainEntryOp) Execute(st *stateCache) ([]protocol.Account, error) {
 	return nil, addChainEntry(&st.blockState, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
 }
 
@@ -293,33 +265,39 @@ func (op *writeIndex) Get() ([]byte, error) {
 	return op.value, nil
 }
 
-func (op *writeIndex) Put(data []byte) {
+func (op *writeIndex) Put(data []byte) error {
 	op.value, op.put = data, true
+	return nil
 }
 
-func (op *writeIndex) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *writeIndex) Execute(st *stateCache) ([]protocol.Account, error) {
 	if !op.put {
 		return nil, nil
 	}
-	op.index.Put(op.value)
-	return nil, nil
+	return nil, op.index.Put(op.value)
 }
 
 type signTransaction struct {
-	txid      []byte
-	signature protocol.Signature
+	txid       []byte
+	signatures []protocol.Signature
 }
 
-func (m *stateCache) SignTransaction(txid []byte, signature protocol.Signature) {
+func (m *stateCache) SignTransaction(txid []byte, signatures ...protocol.Signature) {
 	m.operations = append(m.operations, &signTransaction{
-		txid:      txid,
-		signature: signature,
+		txid:       txid,
+		signatures: signatures,
 	})
 }
 
-func (op *signTransaction) Execute(st *stateCache) ([]state.Chain, error) {
-	_, err := st.batch.Transaction(op.txid).AddSignatures(op.signature)
-	return nil, err
+func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
+	t := st.batch.Transaction(op.txid)
+	ss, err := st.batch.Transaction(op.txid).GetSignatures()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+
+	ss.Add(op.signatures...)
+	return nil, t.PutSignatures(ss)
 }
 
 type addSyntheticTxns struct {
@@ -334,6 +312,6 @@ func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
 	})
 }
 
-func (op *addSyntheticTxns) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *addSyntheticTxns) Execute(st *stateCache) ([]protocol.Account, error) {
 	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth...)
 }
