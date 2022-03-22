@@ -152,8 +152,7 @@ type DataAccount struct {
 
 type DataEntry struct {
 	fieldsSet []bool
-	ExtIds    [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds"`
-	Data      []byte   `json:"data,omitempty" form:"data" query:"data"`
+	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
 type DirectoryIndexMetadata struct {
@@ -1352,16 +1351,13 @@ func (v *DataAccount) Equal(u *DataAccount) bool {
 }
 
 func (v *DataEntry) Equal(u *DataEntry) bool {
-	if len(v.ExtIds) != len(u.ExtIds) {
+	if len(v.Data) != len(u.Data) {
 		return false
 	}
-	for i := range v.ExtIds {
-		if !(bytes.Equal(v.ExtIds[i], u.ExtIds[i])) {
+	for i := range v.Data {
+		if !(bytes.Equal(v.Data[i], u.Data[i])) {
 			return false
 		}
-	}
-	if !(bytes.Equal(v.Data, u.Data)) {
-		return false
 	}
 
 	return true
@@ -3259,21 +3255,17 @@ func (v *DataAccount) IsValid() error {
 }
 
 var fieldNames_DataEntry = []string{
-	1: "ExtIds",
-	2: "Data",
+	1: "Data",
 }
 
 func (v *DataEntry) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.ExtIds) == 0) {
-		for _, v := range v.ExtIds {
+	if !(len(v.Data) == 0) {
+		for _, v := range v.Data {
 			writer.WriteBytes(1, v)
 		}
-	}
-	if !(len(v.Data) == 0) {
-		writer.WriteBytes(2, v.Data)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntry)
@@ -3282,6 +3274,12 @@ func (v *DataEntry) MarshalBinary() ([]byte, error) {
 
 func (v *DataEntry) IsValid() error {
 	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -6832,13 +6830,10 @@ func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	for {
 		if x, ok := reader.ReadBytes(1); ok {
-			v.ExtIds = append(v.ExtIds, x)
+			v.Data = append(v.Data, x)
 		} else {
 			break
 		}
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.Data = x
 	}
 
 	seen, err := reader.Reset(fieldNames_DataEntry)
@@ -8748,14 +8743,12 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 
 func (v *DataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ExtIds []*string `json:"extIds,omitempty"`
-		Data   *string   `json:"data,omitempty"`
+		Data []*string `json:"data,omitempty"`
 	}{}
-	u.ExtIds = make([]*string, len(v.ExtIds))
-	for i, x := range v.ExtIds {
-		u.ExtIds[i] = encoding.BytesToJSON(x)
+	u.Data = make([]*string, len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
 	}
-	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
@@ -9969,29 +9962,22 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 
 func (v *DataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ExtIds []*string `json:"extIds,omitempty"`
-		Data   *string   `json:"data,omitempty"`
+		Data []*string `json:"data,omitempty"`
 	}{}
-	u.ExtIds = make([]*string, len(v.ExtIds))
-	for i, x := range v.ExtIds {
-		u.ExtIds[i] = encoding.BytesToJSON(x)
+	u.Data = make([]*string, len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
 	}
-	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.ExtIds = make([][]byte, len(u.ExtIds))
-	for i, x := range u.ExtIds {
+	v.Data = make([][]byte, len(u.Data))
+	for i, x := range u.Data {
 		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ExtIds: %w", err)
+			return fmt.Errorf("error decoding Data: %w", err)
 		} else {
-			v.ExtIds[i] = x
+			v.Data[i] = x
 		}
-	}
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
 	}
 	return nil
 }

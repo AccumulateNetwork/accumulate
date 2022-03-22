@@ -109,7 +109,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		//create a vote scratch chain
 		wd := new(protocol.WriteData)
 		lci := types.LastCommitInfo{}
-		wd.Entry.Data, err = json.Marshal(&lci)
+		d, err := json.Marshal(&lci)
+		if err != nil {
+			return err
+		}
+		wd.Entry.Data = append(wd.Entry.Data, d)
 
 		da := new(protocol.DataAccount)
 		da.Scratch = true
@@ -134,7 +138,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			oracle := new(protocol.AcmeOracle)
 			oracle.Price = oraclePrice
 			wd := new(protocol.WriteData)
-			wd.Entry.Data, err = json.Marshal(&oracle)
+			d, err = json.Marshal(&oracle)
+			if err != nil {
+				return err
+			}
+			wd.Entry.Data = append(wd.Entry.Data, d)
 
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)

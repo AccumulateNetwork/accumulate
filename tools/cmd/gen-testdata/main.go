@@ -76,10 +76,10 @@ var txnTests = []*TCG{
 		txnTest("adi", &CreateDataAccount{Url: parseUrl("adi/data")}),
 	}},
 	{Name: "WriteData", Cases: []*TC{
-		txnTest("adi", &WriteData{Entry: DataEntry{Data: []byte("foo"), ExtIds: [][]byte{[]byte("bar"), []byte("baz")}}}),
+		txnTest("adi", &WriteData{Entry: DataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "WriteDataTo", Cases: []*TC{
-		txnTest("adi", &WriteDataTo{Recipient: parseUrl("lite-data-account"), Entry: DataEntry{Data: []byte("foo"), ExtIds: [][]byte{[]byte("bar"), []byte("baz")}}}),
+		txnTest("adi", &WriteDataTo{Recipient: parseUrl("lite-data-account"), Entry: DataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "AcmeFaucet", Cases: []*TC{
 		txnTest("faucet", &AcmeFaucet{Url: parseUrl("lite-token-account")}),
@@ -112,7 +112,7 @@ var txnTests = []*TCG{
 		txnTest("adi", &SyntheticCreateChain{Cause: [32]byte{1}, Chains: []ChainParams{{Data: []byte{1, 2, 3}}}}),
 	}},
 	{Name: "SyntheticWriteData", Cases: []*TC{
-		txnTest("adi", &SyntheticWriteData{Cause: [32]byte{1}, Entry: DataEntry{Data: []byte("foo"), ExtIds: [][]byte{[]byte("bar"), []byte("baz")}}}),
+		txnTest("adi", &SyntheticWriteData{Cause: [32]byte{1}, Entry: DataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "SyntheticDepositTokens", Cases: []*TC{
 		txnTest("adi", &SyntheticDepositTokens{Cause: [32]byte{1}, Token: parseUrl("ACME"), Amount: *new(big.Int).SetInt64(10000)}),
