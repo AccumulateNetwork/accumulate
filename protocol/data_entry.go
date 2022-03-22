@@ -20,7 +20,7 @@ const TransactionSizeMax = 10240
 const SignatureSizeMax = 1024
 
 func (e *DataEntry) Hash() []byte {
-	return ComputeEntryHash(append(e.ExtIds, e.Data))
+	return ComputeEntryHash(e.Data)
 }
 
 //CheckSize is the marshaled size minus the implicit type header,
