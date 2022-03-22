@@ -949,8 +949,11 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 		return nil, err
 	}
 
+	if entry.Entry.Data == nil {
+		return nil, fmt.Errorf("no data in oracle account")
+	}
 	acmeOracle := new(protocol.AcmeOracle)
-	if err = json.Unmarshal(entry.Entry.Data, acmeOracle); err != nil {
+	if err = json.Unmarshal(entry.Entry.Data[0], acmeOracle); err != nil {
 		return nil, err
 	}
 	return acmeOracle, err
