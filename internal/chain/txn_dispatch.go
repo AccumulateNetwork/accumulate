@@ -110,7 +110,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			}
 
 			if resp == nil {
-				//Guard put here to prevent nil responses.  This error may be a symptom of something else...
+				//Guard put here to prevent nil responses.
 				errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
 				return
 			}
