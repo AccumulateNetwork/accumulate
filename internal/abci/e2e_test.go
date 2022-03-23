@@ -1135,7 +1135,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body := new(protocol.AddCredits)
 		//burn the underLimit amount to see if that gets returned to the pool
 		body.Recipient = liteAddr
-		body.Amount = 500 * protocol.CreditPrecision
+		body.Amount.SetUint64(500 * protocol.CreditPrecision)
 
 		send(newTxn(liteAcmeAddr.String()).
 			WithSigner(liteAcmeAddr, 1).
