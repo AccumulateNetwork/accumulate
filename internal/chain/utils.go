@@ -321,30 +321,7 @@ func combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Recei
 
 // statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
 func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
-	if !(v.Remote == u.Remote) {
-		return false
-	}
-	if !(v.Delivered == u.Delivered) {
-		return false
-	}
-	if !(v.Pending == u.Pending) {
-		return false
-	}
-	if !(v.Code == u.Code) {
-		return false
-	}
-	if !(v.Message == u.Message) {
-		return false
-	}
-	if !(v.Result.Type() == u.Result.Type()) {
-		return false
-	}
-
-	rv, _ := v.Result.MarshalBinary()
-	ru, _ := u.Result.MarshalBinary()
-	if bytes.Compare(rv, ru) != 0 {
-		return false
-	}
-
-	return true
+	vb, _ := v.MarshalBinary()
+	ub, _ := u.MarshalBinary()
+	return bytes.Equal(vb, ub)
 }

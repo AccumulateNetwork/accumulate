@@ -74,7 +74,10 @@ func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
 
 	// Update the status when changed
 	if curStatus == nil || !statusEqual(curStatus, u.status) {
-		tx.PutStatus(u.status)
+		err := tx.PutStatus(u.status)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return make([]protocol.Account, 0), nil
