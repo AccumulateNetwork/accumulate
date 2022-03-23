@@ -41,10 +41,10 @@ func (e *DataEntry) CheckSize() (int, error) {
 }
 
 //Cost will return the number of credits to be used for the data write
-func (e *DataEntry) Cost() (int, error) {
+func (e *DataEntry) Cost() (uint64, error) {
 	size, err := e.CheckSize()
 	if err != nil {
 		return 0, err
 	}
-	return FeeWriteData.AsInt() * (size/256 + 1), nil
+	return FeeWriteData.AsUInt64() * uint64(size/256+1), nil
 }

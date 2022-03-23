@@ -6,10 +6,10 @@ import (
 )
 
 // Fee is the unit cost of a transaction.
-type Fee int
+type Fee uint64
 
-func (n Fee) AsInt() int {
-	return int(n)
+func (n Fee) AsUInt64() uint64 {
+	return uint64(n)
 }
 
 // Fee Schedule
