@@ -13,7 +13,7 @@ import (
 
 func TestProofADI(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
 	const initialCredits = 1e6
@@ -39,7 +39,7 @@ func TestProofADI(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey))
 	})
 
-	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKey)
 
 	batch = n.db.Begin(true)
@@ -57,7 +57,7 @@ func TestProofADI(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, adiKey))
 	})
 
-	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
+	require.Less(t, n.GetKeyPage("RoadRunner/book0/1").CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
 	n.GetADI("RoadRunner")
 	n.GetTokenAccount("RoadRunner/Baz")
 
