@@ -38,7 +38,6 @@ func (UpdateKey) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tra
 	// old key, can't have the old key, and don't care about the old key.
 	var bodyKey *protocol.KeySpec
 	indexKey := -1
-	indexNewKey := -1
 
 	for i, key := range page.Keys { // Look for the old key
 		if bytes.Equal(key.PublicKey, tx.Signatures[0].GetPublicKey()) { // User must supply an exact match of the key as is on the key page
@@ -67,9 +66,6 @@ func (UpdateKey) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tra
 	// is not already on the Key Page
 	if indexKey < 0 { // The Key to update is on key page
 		return nil, fmt.Errorf("key to be updated not found on the key page")
-	}
-	if indexNewKey >= 0 { // The new key is not on the key page
-		return nil, fmt.Errorf("key must be updated to a key not found on key page")
 	}
 
 	bodyKey.PublicKey = body.Key
