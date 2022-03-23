@@ -33,10 +33,11 @@ func TestStateDBConsistency(t *testing.T) {
 	}
 
 	getDb := func(d *accumulated.Daemon) (*database.Database, error) { return database.New(stores[d], d.Logger), nil }
-	nodes := RunTestNet(t, subnets, daemons, getDb, true)
+	nodes := RunTestNet(t, subnets, daemons, getDb, true, nil)
 	n := nodes[subnets[1]][0]
 
-	n.testLiteTx(10)
+	credits := 40.0
+	n.testLiteTx(10, credits)
 
 	for _, nodes := range nodes {
 		for _, node := range nodes {
@@ -69,7 +70,8 @@ func TestStateDBConsistency(t *testing.T) {
 	batch.Discard()
 
 	// Recreate the app and try to do more transactions
-	nodes = RunTestNet(t, subnets, daemons, getDb, false)
+	nodes = RunTestNet(t, subnets, daemons, getDb, false, nil)
 	n = nodes[subnets[1]][0]
-	n.testLiteTx(10)
+
+	n.testLiteTx(10, credits)
 }

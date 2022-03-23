@@ -23,7 +23,7 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (pr
 		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
 	}
 
-	account.Supply.Add(&account.Supply, &body.Amount)
+	account.Issued.Sub(&account.Issued, &body.Amount)
 
 	st.Update(account)
 	return nil, nil

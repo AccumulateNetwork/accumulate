@@ -242,7 +242,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	return db.Account(u).PutState(chain)
 }
 
-func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
+func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLimit *big.Int) error {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return err
@@ -253,6 +253,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	issuer.KeyBook = u.Identity().JoinPath("book0")
 	issuer.Symbol = symbol
 	issuer.Precision = precision
+	issuer.SupplyLimit = supplyLimit
 
 	return db.Account(u).PutState(issuer)
 }

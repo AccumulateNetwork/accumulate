@@ -40,7 +40,7 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000", liteAccounts[2])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[2])
 	require.NoError(t, err)
 
 	r, err := tc.executeTx(t, "page key add acc://RedWagon/book/1 red2 red4")
