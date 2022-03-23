@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -107,20 +108,25 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				errs <- err
 				return
 			}
-			if resp != nil { // When err is "tx already exists in cache" we don't have resp
-				// Parse the results
-				rd := bytes.NewReader(resp.Data)
-				for rd.Len() > 0 {
-					status := new(protocol.TransactionStatus)
-					err := status.UnmarshalBinaryFrom(rd)
-					if err != nil {
-						errs <- err
-						break
-					}
 
-					if status.Code != 0 {
-						errs <- errors.New(status.Message)
-					}
+			if resp == nil {
+				//Guard put here to prevent nil responses.
+				errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
+				return
+			}
+
+			// Parse the results
+			rd := bytes.NewReader(resp.Data)
+			for rd.Len() > 0 {
+				status := new(protocol.TransactionStatus)
+				err := status.UnmarshalBinaryFrom(rd)
+				if err != nil {
+					errs <- err
+					break
+				}
+
+				if status.Code != 0 {
+					errs <- errors.New(status.Message)
 				}
 			}
 		}()
