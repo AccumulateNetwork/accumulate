@@ -34,11 +34,12 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.Require().Equal(int64(acctesting.TestTokenAmount*acctesting.TokenMx), account.Balance.Int64())
 
 	var nonce uint64 = 1
+	amtAcmeToBuyCredits := int64(10 * protocol.AcmePrecision)
 	tx = acctesting.NewTransaction().
 		WithPrincipal(senderUrl).
 		WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
 		WithNonce(nonce).
-		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: 1e8}).
+		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: *big.NewInt(amtAcmeToBuyCredits)}).
 		Initiate(protocol.SignatureTypeLegacyED25519, sender)
 	s.dut.SubmitTxn(tx)
 	s.dut.WaitForTxns(tx.GetTxHash())
@@ -78,6 +79,7 @@ func (s *Suite) TestCreateLiteAccount() {
 		s.dut.SubmitTxn(tx)
 		txids = append(txids, tx.GetTxHash())
 	}
+	total += amtAcmeToBuyCredits
 
 	s.dut.WaitForTxns(txids...)
 
