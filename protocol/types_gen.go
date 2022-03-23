@@ -517,14 +517,11 @@ type Transaction struct {
 }
 
 type TransactionHeader struct {
-	fieldsSet     []bool
-	Principal     *url.URL `json:"principal,omitempty" form:"principal" query:"principal" validate:"required"`
-	KeyPageHeight uint64   `json:"keyPageHeight,omitempty" form:"keyPageHeight" query:"keyPageHeight" validate:"required"`
-	KeyPageIndex  uint64   `json:"keyPageIndex,omitempty" form:"keyPageIndex" query:"keyPageIndex" validate:"required"`
-	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	Initiator     [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
-	Memo          string   `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata      []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	fieldsSet []bool
+	Principal *url.URL `json:"principal,omitempty" form:"principal" query:"principal" validate:"required"`
+	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
+	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TransactionSignature struct {
@@ -2152,15 +2149,6 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	case v.Principal == nil || u.Principal == nil:
 		return false
 	case !((v.Principal).Equal(u.Principal)):
-		return false
-	}
-	if !(v.KeyPageHeight == u.KeyPageHeight) {
-		return false
-	}
-	if !(v.KeyPageIndex == u.KeyPageIndex) {
-		return false
-	}
-	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 	if !(v.Initiator == u.Initiator) {
@@ -5732,12 +5720,9 @@ func (v *Transaction) IsValid() error {
 
 var fieldNames_TransactionHeader = []string{
 	1: "Principal",
-	2: "KeyPageHeight",
-	3: "KeyPageIndex",
-	4: "Timestamp",
-	5: "Initiator",
-	6: "Memo",
-	7: "Metadata",
+	2: "Initiator",
+	3: "Memo",
+	4: "Metadata",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -5747,23 +5732,14 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(v.Principal == nil) {
 		writer.WriteUrl(1, v.Principal)
 	}
-	if !(v.KeyPageHeight == 0) {
-		writer.WriteUint(2, v.KeyPageHeight)
-	}
-	if !(v.KeyPageIndex == 0) {
-		writer.WriteUint(3, v.KeyPageIndex)
-	}
-	if !(v.Timestamp == 0) {
-		writer.WriteUint(4, v.Timestamp)
-	}
 	if !(v.Initiator == ([32]byte{})) {
-		writer.WriteHash(5, &v.Initiator)
+		writer.WriteHash(2, &v.Initiator)
 	}
 	if !(len(v.Memo) == 0) {
-		writer.WriteString(6, v.Memo)
+		writer.WriteString(3, v.Memo)
 	}
 	if !(len(v.Metadata) == 0) {
-		writer.WriteBytes(7, v.Metadata)
+		writer.WriteBytes(4, v.Metadata)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
@@ -5779,21 +5755,6 @@ func (v *TransactionHeader) IsValid() error {
 		errs = append(errs, "field Principal is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field KeyPageHeight is missing")
-	} else if v.KeyPageHeight == 0 {
-		errs = append(errs, "field KeyPageHeight is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field KeyPageIndex is missing")
-	} else if v.KeyPageIndex == 0 {
-		errs = append(errs, "field KeyPageIndex is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Timestamp is missing")
-	} else if v.Timestamp == 0 {
-		errs = append(errs, "field Timestamp is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Initiator is missing")
 	} else if v.Initiator == ([32]byte{}) {
 		errs = append(errs, "field Initiator is not set")
@@ -8184,22 +8145,13 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Principal = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.KeyPageHeight = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.KeyPageIndex = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.Timestamp = x
-	}
-	if x, ok := reader.ReadHash(5); ok {
+	if x, ok := reader.ReadHash(2); ok {
 		v.Initiator = *x
 	}
-	if x, ok := reader.ReadString(6); ok {
+	if x, ok := reader.ReadString(3); ok {
 		v.Memo = x
 	}
-	if x, ok := reader.ReadBytes(7); ok {
+	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
 	}
 
@@ -9427,22 +9379,14 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Principal     *url.URL `json:"principal,omitempty"`
-		Origin        *url.URL `json:"origin,omitempty"`
-		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
-		Timestamp     uint64   `json:"timestamp,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
-		Initiator     string   `json:"initiator,omitempty"`
-		Memo          string   `json:"memo,omitempty"`
-		Metadata      *string  `json:"metadata,omitempty"`
+		Principal *url.URL `json:"principal,omitempty"`
+		Origin    *url.URL `json:"origin,omitempty"`
+		Initiator string   `json:"initiator,omitempty"`
+		Memo      string   `json:"memo,omitempty"`
+		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Origin = v.Principal
-	u.KeyPageHeight = v.KeyPageHeight
-	u.KeyPageIndex = v.KeyPageIndex
-	u.Timestamp = v.Timestamp
-	u.Nonce = v.Timestamp
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
@@ -11155,22 +11099,14 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Principal     *url.URL `json:"principal,omitempty"`
-		Origin        *url.URL `json:"origin,omitempty"`
-		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
-		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
-		Timestamp     uint64   `json:"timestamp,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
-		Initiator     string   `json:"initiator,omitempty"`
-		Memo          string   `json:"memo,omitempty"`
-		Metadata      *string  `json:"metadata,omitempty"`
+		Principal *url.URL `json:"principal,omitempty"`
+		Origin    *url.URL `json:"origin,omitempty"`
+		Initiator string   `json:"initiator,omitempty"`
+		Memo      string   `json:"memo,omitempty"`
+		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
 	u.Principal = v.Principal
 	u.Origin = v.Principal
-	u.KeyPageHeight = v.KeyPageHeight
-	u.KeyPageIndex = v.KeyPageIndex
-	u.Timestamp = v.Timestamp
-	u.Nonce = v.Timestamp
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
@@ -11181,13 +11117,6 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 		v.Principal = u.Principal
 	} else {
 		v.Principal = u.Origin
-	}
-	v.KeyPageHeight = u.KeyPageHeight
-	v.KeyPageIndex = u.KeyPageIndex
-	if u.Timestamp != 0 {
-		v.Timestamp = u.Timestamp
-	} else {
-		v.Timestamp = u.Nonce
 	}
 	if x, err := encoding.ChainFromJSON(u.Initiator); err != nil {
 		return fmt.Errorf("error decoding Initiator: %w", err)
