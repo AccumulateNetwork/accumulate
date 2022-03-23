@@ -107,19 +107,20 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				errs <- err
 				return
 			}
+			if resp != nil { // When err is "tx already exists in cache" we don't have resp
+				// Parse the results
+				rd := bytes.NewReader(resp.Data)
+				for rd.Len() > 0 {
+					status := new(protocol.TransactionStatus)
+					err := status.UnmarshalBinaryFrom(rd)
+					if err != nil {
+						errs <- err
+						break
+					}
 
-			// Parse the results
-			rd := bytes.NewReader(resp.Data)
-			for rd.Len() > 0 {
-				status := new(protocol.TransactionStatus)
-				err := status.UnmarshalBinaryFrom(rd)
-				if err != nil {
-					errs <- err
-					break
-				}
-
-				if status.Code != 0 {
-					errs <- errors.New(status.Message)
+					if status.Code != 0 {
+						errs <- errors.New(status.Message)
+					}
 				}
 			}
 		}()

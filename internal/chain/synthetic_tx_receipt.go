@@ -2,8 +2,8 @@ package chain
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )

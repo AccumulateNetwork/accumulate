@@ -93,25 +93,33 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 		return new(protocol.EmptyResult), nil
 	}
 
+	var txError *protocol.Error = nil
 	result, err := executor.Validate(st, env)
 	if err != nil {
-		return nil, m.recordTransactionError(st, env, false, &protocol.Error{Code: protocol.ErrorCodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		// We may get a receipt synth tx containing the error status that still needs to be sent out
+		st.blockState.ProducedTxns = make([]*protocol.Transaction, 0) // TODO is this really needed?
+		txError = m.recordTransactionError(st, env, false, &protocol.Error{Code: protocol.ErrorCodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		if len(st.blockState.ProducedTxns) == 0 {
+			return nil, txError
+		}
 	}
 	if result == nil {
 		result = new(protocol.EmptyResult)
 	}
 
-	// Store pending state updates, queue state creates for synthetic transactions
-	err = st.Commit()
-	if err != nil {
-		return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
-	}
+	if txError == nil {
+		// Store pending state updates, queue state creates for synthetic transactions
+		err = st.Commit()
+		if err != nil {
+			return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
+		}
 
-	// Store the tx state
-	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	err = m.putTransaction(st, env, status, false)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
+		// Store the tx state
+		status := &protocol.TransactionStatus{Delivered: true, Result: result}
+		err = m.putTransaction(st, env, status, false)
+		if err != nil {
+			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnStateError, Message: err}
+		}
 	}
 
 	m.blockState.Merge(&st.blockState)
@@ -128,8 +136,10 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 		return nil, m.recordTransactionError(st, env, true, &protocol.Error{Code: protocol.ErrorCodeRecordTxnError, Message: err})
 	}
 
-	m.blockState.Delivered++
-	return result, nil
+	if txError == nil {
+		m.blockState.Delivered++
+	}
+	return result, txError
 }
 
 func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd *protocol.WriteData) error {
