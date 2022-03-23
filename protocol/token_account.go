@@ -56,19 +56,15 @@ func (acct *TokenAccount) GetTokenUrl() *url.URL {
 }
 
 func (ms *KeyPage) CreditCredits(amount uint64) {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	ms.CreditBalance.Add(&ms.CreditBalance, amt)
+	ms.CreditBalance = amount
 }
 
 func (ms *KeyPage) DebitCredits(amount uint64) bool {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	if amt.Cmp(&ms.CreditBalance) > 0 {
+	if amount > ms.CreditBalance {
 		return false
 	}
 
-	ms.CreditBalance.Sub(&ms.CreditBalance, amt)
+	ms.CreditBalance -= amount
 	return true
 }
 
@@ -99,19 +95,14 @@ func (acct *LiteTokenAccount) DebitTokens(amount *big.Int) bool {
 }
 
 func (acct *LiteTokenAccount) CreditCredits(amount uint64) {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	acct.CreditBalance.Add(&acct.CreditBalance, amt)
+	acct.CreditBalance += amount
 }
 
 func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	if amt.Cmp(&acct.CreditBalance) > 0 {
+	if amount > acct.CreditBalance {
 		return false
 	}
-
-	acct.CreditBalance.Sub(&acct.CreditBalance, amt)
+	acct.CreditBalance -= amount
 	return true
 }
 

@@ -9,7 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
-const AcmeFaucetAmount = 2000
+const AcmeFaucetAmount = 2000000
 
 var FaucetUrl *url.URL
 var Faucet faucet
