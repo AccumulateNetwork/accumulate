@@ -19,7 +19,7 @@ func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, 
 	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
-	st, executor, hasEnoughSigs, err := m.validate(batch, env)
+	st, executor, hasEnoughSigs, err := m.validate(batch, env, true)
 	var notFound bool
 	switch {
 	case err == nil:
@@ -29,6 +29,7 @@ func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, 
 	default:
 		return nil, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: err}
 	}
+	defer st.Discard()
 
 	// Do not run transaction-specific validation for a synthetic transaction. A
 	// synthetic transaction will be rejected by `m.validate` unless it is
@@ -73,10 +74,11 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// }
 
 	// Set up the state manager and validate the signatures
-	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
+	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env, false)
 	if err != nil {
 		return nil, m.recordTransactionError(nil, env, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
+	defer st.Discard()
 
 	if !hasEnoughSigs {
 		// Write out changes to the nonce and credit balance
@@ -157,6 +159,7 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 	if err != nil {
 		return err
 	}
+	defer st.Discard()
 	st.logger.L = m.logger
 
 	var da *protocol.DataAccount
@@ -180,7 +183,7 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
-func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
+func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isCheck bool) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
 	// Basic validation
 	err = m.validateBasic(batch, env)
 	if err != nil {
@@ -217,7 +220,16 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	if err != nil {
 		return nil, nil, false, err
 	}
-	st.logger.L = m.logger
+	defer func() {
+		if err != nil {
+			st.Discard()
+		}
+	}()
+	if isCheck {
+		st.logger.L = m.logger.With("operation", "Check")
+	} else {
+		st.logger.L = m.logger.With("operation", "Deliver")
+	}
 
 	// Validate the transaction
 	switch {
@@ -225,7 +237,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 		hasEnoughSigs, err = m.validateUser(st, env, fee)
 
 	case txt.IsSynthetic():
-		hasEnoughSigs, err = true, m.validateSynthetic(batch, st, env)
+		hasEnoughSigs, err = true, m.validateSynthetic(st, env)
 
 	case txt.IsInternal():
 		hasEnoughSigs, err = true, m.validateInternal(st, env)
@@ -336,7 +348,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	return nil
 }
 
-func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, env *protocol.Envelope) error {
+func (m *Executor) validateSynthetic(st *StateManager, env *protocol.Envelope) error {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
@@ -374,7 +386,7 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 			}
 
 			// Load the anchor chain
-			anchorChain, err := batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
+			anchorChain, err := st.batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
 			if err != nil {
 				return fmt.Errorf("unable to load the DN intermediate anchor chain: %w", err)
 			}

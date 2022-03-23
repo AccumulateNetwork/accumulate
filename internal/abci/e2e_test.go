@@ -642,6 +642,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	fooKey := generateKey()
 	batch := n.db.Begin(true)
+	defer batch.Discard()
 	acmeAmount := 100.00
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
@@ -660,6 +661,8 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
 
+	batch = n.db.Begin(false)
+	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
