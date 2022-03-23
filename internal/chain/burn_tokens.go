@@ -26,14 +26,20 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.GetType())
 	}
 
+	//ensure user cannot burn more than is in the account
+	if !account.CanDebitTokens(&body.Amount) {
+		return nil, fmt.Errorf("cannot burn more tokens than is available in account")
+	}
+
+	if !account.DebitTokens(&body.Amount) {
+		return nil, fmt.Errorf("unable to debit balance from account")
+	}
+
 	burn := new(protocol.SyntheticBurnTokens)
 	copy(burn.Cause[:], tx.GetTxHash())
 	burn.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burn)
 
-	if !account.DebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("unable to debit balance from account")
-	}
 	st.Update(account)
 	return nil, nil
 }

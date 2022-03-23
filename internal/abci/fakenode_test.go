@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -50,7 +51,7 @@ type FakeNode struct {
 	require *require.Assertions
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool) map[string][]*FakeNode {
+func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
@@ -69,7 +70,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb, isEvil)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
@@ -85,7 +86,18 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	return allNodes
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
+func NewDefaultErrorHandler(t *testing.T) func(err error) {
+	return func(err error) {
+		t.Helper()
+		assert.NoError(t, err)
+	}
+}
+
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
+	if errorHandler == nil {
+		errorHandler = NewDefaultErrorHandler(t)
+	}
+
 	pv, err := privval.LoadFilePV(
 		d.Config.PrivValidator.KeyFile(),
 		d.Config.PrivValidator.StateFile(),
@@ -121,10 +133,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
-	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, func(err error) {
-		t.Helper()
-		assert.NoError(t, err)
-	}, 100*time.Millisecond, isEvil)
+	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, errorHandler, 100*time.Millisecond, isEvil)
 
 	return n, appChan
 }
@@ -251,7 +260,7 @@ func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
 	n.Require().NoError(json.Unmarshal(data, result))
 }
 
-func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
+func (n *FakeNode) BatchWithError(inBlock func(func(*protocol.Envelope))) ([][32]byte, error) {
 	n.t.Helper()
 
 	var ids [][32]byte
@@ -268,16 +277,31 @@ func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
 	// Submit all the transactions as a batch
 	st := n.client.SubmitTx(context.Background(), blob, true)
 	n.require.NotNil(st)
+	if st.CheckResult != nil && st.CheckResult.Code != 0 {
+		d, err := st.CheckResult.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%s", d)
+	}
 
-	n.waitForTxns(nil, convertIds32(ids...)...)
-	return ids
+	err := n.waitForTxnsWithErrors(nil, convertIds32(ids...)...)
+	return ids, err
+}
+
+func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
+	n.t.Helper()
+
+	res, err := n.BatchWithError(inBlock)
+	require.NoError(n.t, err)
+	return res
 }
 
 func (n *FakeNode) WaitForTxns(ids ...[]byte) {
 	n.waitForTxns(nil, ids...)
 }
 
-func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) {
+func (n *FakeNode) waitForTxnsWithErrors(cause []byte, ids ...[]byte) error {
 	for _, id := range ids {
 		if cause == nil {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id))
@@ -285,9 +309,16 @@ func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
 		}
 		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
-		n.Require().NoErrorf(err, "Failed to query TX %X", id)
+		if err != nil {
+			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
+		}
 		n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
 	}
+	return nil
+}
+
+func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) {
+	n.Require().NoError(n.waitForTxnsWithErrors(cause, ids...))
 }
 
 func convertIds32(ids ...[32]byte) [][]byte {
