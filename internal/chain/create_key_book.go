@@ -25,7 +25,6 @@ func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 	st.Submit(st.OriginUrl, scc)
 
 	page := new(protocol.KeyPage)

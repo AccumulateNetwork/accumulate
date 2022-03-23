@@ -97,13 +97,11 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	sdc.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 	sdc.Amount = body.Amount
 	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token
 	burnAcme := new(protocol.SyntheticBurnTokens)
-	sdc.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 	burnAcme.Amount = amount.Int
 	st.Submit(account.GetTokenUrl(), burnAcme)
 

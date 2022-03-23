@@ -27,7 +27,6 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	}
 
 	burn := new(protocol.SyntheticBurnTokens)
-	burn.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 	burn.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burn)
 

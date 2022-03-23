@@ -47,7 +47,6 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
-		deposit.SetSyntheticOrigin(tx.GetTxHash(), st.OriginUrl)
 		deposit.Token = account.GetTokenUrl()
 		deposit.Amount = body.To[i].Amount
 		st.Submit(u, deposit)
