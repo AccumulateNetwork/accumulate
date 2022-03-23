@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
@@ -24,6 +25,7 @@ import (
 const nodeDirPerm = 0755
 
 type InitOptions struct {
+	Version    int
 	WorkDir    string
 	Port       int
 	GenesisDoc *types.GenesisDoc
@@ -33,10 +35,208 @@ type InitOptions struct {
 	Logger     log.Logger
 }
 
+/// /path/workdirs/config/directory.toml
+/// /path/workdirs/config/bvn0.toml
+/// /path/workdirs/config/node_key.json
+/// /path/workdirs/config/priv_validator_key.json
+
+/// /path/workdirs/config/directory/config.toml <- defines the local api port
+/// /path/workdirs/config/directory/genesis.toml
+/// /path/workdirs/config/directory/accumulate.toml
+/// /path/workdirs/config/bvn0/config.toml
+/// /path/workdirs/config/bvn0/genesis.toml
+/// /path/workdirs/config/bvn0/accumulate.toml
+/// /path/workdirs/data/directory/priv_validator_state.json
+/// /path/workdirs/data/directory/*.db|wal
+/// /path/workdirs/data/bvn0/*.db|wal
+func initV2(opts InitOptions) (err error) {
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(opts.WorkDir)
+		}
+	}()
+
+	fmt.Println("Bootstrap Initialize")
+
+	config := opts.Config
+	subnetID := config[0].Accumulate.Network.LocalSubnetID
+	genVals := make([]types.GenesisValidator, 0, len(config))
+
+	var networkType cfg.NetworkType
+	for i, config := range config {
+		if i == 0 {
+			networkType = config.Accumulate.Network.Type
+		} else if config.Accumulate.Network.Type != networkType {
+			return errors.New("Cannot initialize multiple networks at once")
+		}
+
+		configDir := path.Join(opts.WorkDir, "config")
+		dataDir := path.Join(opts.WorkDir, "data")
+
+		nodeConfigDir := path.Join(configDir, strings.ToLower(subnetID))
+		nodeDataDir := path.Join(dataDir, strings.ToLower(subnetID))
+		config.SetRoot(opts.WorkDir)
+
+		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
+
+		err = os.MkdirAll(nodeConfigDir, nodeDirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to create config dir: %v", err)
+		}
+
+		err = os.MkdirAll(nodeDataDir, nodeDirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to create data dir: %v", err)
+		}
+
+		var pv *privval.FilePV
+		if err := initFilesWithConfig(config, &subnetID); err != nil {
+			return err
+		}
+
+		pvKeyFile := path.Join(nodeConfigDir, config.PrivValidator.Key)
+		pvStateFile := path.Join(nodeConfigDir, config.PrivValidator.State)
+		pv, err := privval.LoadFilePV(pvKeyFile, pvStateFile)
+		if err != nil {
+			return fmt.Errorf("failed to load private validator: %v", err)
+		}
+
+		pubKey, err := pv.GetPubKey(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to get public key: %v", err)
+		}
+
+		if config.Mode == tmcfg.ModeValidator {
+			genVals = append(genVals, types.GenesisValidator{
+				Address: pubKey.Address(),
+				PubKey:  pubKey,
+				Power:   1,
+				Name:    strings.ToLower(subnetID),
+			})
+		}
+	}
+
+	// Generate genesis doc from generated validators
+	genDoc := opts.GenesisDoc
+	if genDoc == nil {
+		genTime := tmtime.Now()
+
+		db := memory.New(opts.Logger.With("module", "storage"))
+		root, err := genesis.Init(db, genesis.InitOpts{
+			Network:     config[0].Accumulate.Network,
+			GenesisTime: genTime,
+			Validators:  genVals,
+			Logger:      opts.Logger,
+		})
+		if err != nil {
+			return err
+		}
+
+		state, err := db.MarshalJSON()
+		if err != nil {
+			return err
+		}
+
+		genDoc = &types.GenesisDoc{
+			ChainID:         subnetID,
+			GenesisTime:     genTime,
+			InitialHeight:   protocol.GenesisBlock + 1,
+			Validators:      genVals,
+			ConsensusParams: types.DefaultConsensusParams(),
+			AppState:        state,
+			AppHash:         root,
+		}
+	}
+
+	// Write genesis file.
+	for _, config := range config {
+		if err := genDoc.SaveAs(path.Join(config.RootDir, config.BaseConfig.Genesis)); err != nil {
+			return fmt.Errorf("failed to save gen doc: %v", err)
+		}
+	}
+
+	// Gather validator peer addresses.
+	validatorPeers := map[int]string{}
+	for i, config := range config {
+		// if config.Mode != tmcfg.ModeValidator {
+		// 	continue
+		// }
+
+		nodeKey, err := types.LoadNodeKey(config.NodeKeyFile())
+		if err != nil {
+			return fmt.Errorf("failed to load node key: %v", err)
+		}
+		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], opts.Port))
+	}
+
+	// Overwrite default config.
+	nConfig := len(config)
+	for i, config := range config {
+		if nConfig > 1 {
+			config.P2P.AddrBookStrict = false
+			config.P2P.AllowDuplicateIP = true
+			config.P2P.PersistentPeers = ""
+			if config.P2P.PersistentPeers == "" {
+				for j, peer := range validatorPeers {
+					if j != i {
+						config.P2P.PersistentPeers += "," + peer
+					}
+				}
+				config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
+			}
+		} else {
+			config.P2P.AddrBookStrict = true
+			config.P2P.AllowDuplicateIP = false
+		}
+		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
+
+		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
+
+		err := cfg.Store(config)
+		if err != nil {
+			return err
+		}
+	}
+
+	logMsg := []interface{}{"module", "init"}
+	switch nValidators := len(genVals); nValidators {
+	case 0:
+		logMsg = append(logMsg, "followers", nConfig)
+	case nConfig:
+		logMsg = append(logMsg, "validators", nConfig)
+	default:
+		logMsg = append(logMsg, "validators", nValidators, "followers", nConfig-nValidators)
+	}
+	opts.Logger.Info("Successfully initialized nodes", logMsg...)
+	return nil
+
+}
+
 // Init creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
 func Init(opts InitOptions) (err error) {
+	switch opts.Version {
+	case 0:
+		fallthrough
+	case 1:
+		err = initV1(opts)
+	case 2:
+		err = initV2(opts)
+	default:
+		return fmt.Errorf("unknown version to init")
+	}
+	return err
+}
+
+// initV1 creates the initial configuration for a set of nodes, using
+// the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
+// length.
+func initV1(opts InitOptions) (err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(opts.WorkDir)

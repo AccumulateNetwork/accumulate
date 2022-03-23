@@ -386,6 +386,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	check(node.Init(node.InitOptions{
+		Version:    2,
 		WorkDir:    flagMain.WorkDir,
 		Port:       nodePort,
 		GenesisDoc: genDoc,
