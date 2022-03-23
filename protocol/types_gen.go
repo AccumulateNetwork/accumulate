@@ -399,7 +399,7 @@ type SignPending struct {
 
 type SyntheticAnchor struct {
 	fieldsSet []bool
-	// Source is the subnet the anchor originates from.
+	// Source is the principal of the transaction that produced this transaction.
 	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	// Major indicates whether the anchor is a major block anchor.
 	Major bool `json:"major,omitempty" form:"major" query:"major" validate:"required"`
@@ -470,7 +470,7 @@ type SyntheticMirror struct {
 
 type SyntheticOrigin struct {
 	fieldsSet []bool
-	// Source is the subnet the anchor originates from.
+	// Source is the principal of the transaction that produced this transaction.
 	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Cause  [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 }

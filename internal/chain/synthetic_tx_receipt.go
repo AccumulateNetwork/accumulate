@@ -22,8 +22,7 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
 	}
 
-	st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash),
-		". Updating status")
+	st.logger.Debug("received SyntheticReceipt, updating status", "from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash))
 	st.UpdateStatus(body.SynthTxHash[:], body.Status)
 
 	return nil, nil

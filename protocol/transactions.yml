@@ -373,7 +373,7 @@ SignPending:
 SyntheticOrigin:
   fields:
     - name: Source
-      description: is the subnet the anchor originates from
+      description: is the principal of the transaction that produced this transaction
       type: url
       pointer: true
     - name: Cause
@@ -414,7 +414,7 @@ SyntheticAnchor:
   union: { type: transaction }
   fields:
     - name: Source
-      description: is the subnet the anchor originates from
+      description: is the principal of the transaction that produced this transaction
       type: url
       pointer: true
     - name: Major
