@@ -124,7 +124,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
-	req.KeyPage.Height = env.Signatures[0].GetSignerHeight()
+	req.KeyPage.Version = env.Signatures[0].GetSignerHeight()
 	req.Payload = env.Transaction.Body
 	return req
 }
@@ -162,7 +162,7 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUr
 	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
-	req.KeyPage.Height = env.Signatures[0].GetSignerHeight()
+	req.KeyPage.Version = env.Signatures[0].GetSignerHeight()
 	req.Payload = env.Transaction.Body
 
 	resp := new(api.TxResponse)
@@ -223,7 +223,7 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	pl.Signer.Url = tx.Signatures[0].GetSigner()
 	pl.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	pl.Signature = tx.Signatures[0].GetSignature()
-	pl.KeyPage.Height = tx.Signatures[0].GetSignerHeight()
+	pl.KeyPage.Version = tx.Signatures[0].GetSignerHeight()
 	pl.Payload = data
 
 	data, err = pl.MarshalJSON()

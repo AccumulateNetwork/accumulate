@@ -64,6 +64,8 @@ KeyPage:
       type: bigint
     - name: Threshold
       type: uvarint
+    - name: Version
+      type: uvarint
     - name: Keys
       repeatable: true
       type: KeySpec

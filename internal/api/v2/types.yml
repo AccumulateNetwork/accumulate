@@ -101,8 +101,9 @@ KeyPage:
   non-binary: true
   incomparable: true
   fields:
-    - name: Height
+    - name: Version
       type: uvarint
+      alternative: Height
 
 Signer:
   non-binary: true

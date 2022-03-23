@@ -46,6 +46,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 
 		page := protocol.NewKeyPage()
 		page.KeyBook = bookUrl
+		page.Version = 1
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 		page.Threshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
