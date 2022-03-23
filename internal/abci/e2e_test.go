@@ -243,8 +243,6 @@ func TestAnchorChain(t *testing.T) {
 	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
-	ledgerState = protocol.NewInternalLedger()
-	require.NoError(t, ledger.GetStateAs(ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
 	require.Equal(t, expected, ledgerState.ActiveOracle)
 
@@ -1040,6 +1038,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	var err error
+
 	// issue tokens with supply limit
 	n.Batch(func(send func(*protocol.Envelope)) {
 		body := new(protocol.CreateToken)
@@ -1135,7 +1134,8 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body := new(protocol.AddCredits)
 		//burn the underLimit amount to see if that gets returned to the pool
 		body.Recipient = liteAddr
-		body.Amount.SetUint64(500 * protocol.CreditPrecision)
+		body.Amount.SetUint64(100 * protocol.AcmePrecision)
+		body.Oracle = n.GetOraclePrice()
 
 		send(newTxn(liteAcmeAddr.String()).
 			WithSigner(liteAcmeAddr, 1).
