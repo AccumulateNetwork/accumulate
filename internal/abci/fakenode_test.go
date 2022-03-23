@@ -424,6 +424,15 @@ func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
 	return mss
 }
 
+func (n *FakeNode) GetOraclePrice() uint64 {
+	batch := n.db.Begin(true)
+	defer batch.Discard()
+	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	require.NoError(n.t, ledger.GetStateAs(ledgerState))
+	return ledgerState.ActiveOracle
+}
+
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
