@@ -96,13 +96,15 @@ const AcmeOraclePrecision = 10000
 // CreditPrecision is the precision of credit balances.
 const CreditPrecision = 1e2
 
-// CreditsPerFiatUnit is the conversion rate from credit balances to fiat
+// CreditsPerDollar is the credits per dollar in external units (100.00)
+const CreditsPerDollar = 1e2
+
+// CreditUnitsPerFiatUnit is the conversion rate from credit balances to fiat
 // currency. We expect to use USD indefinitely as the fiat currency.
 //
 // 100 credits converts to 1 dollar, but we charge down to 0.01 credits. So the
-// actual conversion rate of the credit balance field to dollars is 10,000 to
-// 1.
-const CreditsPerFiatUnit = 1e2 * CreditPrecision
+// actual conversion rate of the credit balance field to dollars is 10,000 to 1.
+const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 
 // LiteDataAddress returns a lite address for the given chain id as
 // `acc://<chain-id-hash-and-checksum>`.

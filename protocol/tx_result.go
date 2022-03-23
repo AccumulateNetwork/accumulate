@@ -10,7 +10,8 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 	switch typ {
 	case TransactionTypeWriteData:
 		return new(WriteDataResult), nil
-
+	case TransactionTypeAddCredits:
+		return new(AddCreditsResult), nil
 	case TransactionTypeUnknown:
 		return new(EmptyResult), nil
 	}
