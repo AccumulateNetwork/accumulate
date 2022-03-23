@@ -23,7 +23,7 @@ func TestDataEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cost != FeeWriteData.AsInt() {
+	if cost != FeeWriteData.AsUInt64() {
 		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
 	}
 
@@ -38,7 +38,7 @@ func TestDataEntry(t *testing.T) {
 	}
 
 	//the size is now 987 bytes so it should cost 50 credits
-	if cost != 5*FeeWriteData.AsInt() {
+	if cost != 5*FeeWriteData.AsUInt64() {
 		t.Fatalf("expected a cost of 50 credits, but computed %d", cost)
 	}
 

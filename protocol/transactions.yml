@@ -310,7 +310,10 @@ AddCredits:
       type: url
       pointer: true
     - name: Amount
+      type: bigint
+    - name: Oracle
       type: uvarint
+      optional: true
 
 UpdateKeyPage:
   union: { type: transaction }
@@ -524,6 +527,16 @@ WriteDataResult:
       pointer: true
     - name: AccountID
       type: bytes
+
+AddCreditsResult:
+  union: { type: result }
+  fields:
+    - name: Amount
+      type: bigint
+    - name: Credits
+      type: uvarint
+    - name: Oracle
+      type: uvarint
 
 ##### Data Types #####
 
