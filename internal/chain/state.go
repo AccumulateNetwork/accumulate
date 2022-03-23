@@ -118,6 +118,9 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 	if m.txType.IsSynthetic() && body.GetType() != protocol.TransactionTypeSyntheticReceipt {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
+	if url == nil {
+		panic("No destination URL specified!")
+	}
 
 	swo, ok := body.(SynthTxnWithOrigin)
 	if ok {
