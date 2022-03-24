@@ -30,8 +30,8 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
-	ledgerState := new(protocol.InternalLedger)
-	err := st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))

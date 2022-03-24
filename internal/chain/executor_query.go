@@ -481,8 +481,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
-	qr.TxSynthTxIds = make(types.Bytes, 0, len(synth)*32)
-	for _, synth := range synth {
+	qr.TxSynthTxIds = make(types.Bytes, 0, len(synth.Hashes)*32)
+	for _, synth := range synth.Hashes {
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
@@ -785,8 +785,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		}
 		for index := uint64(0); index < keyBook.PageCount; index++ {
 			pageUrl := protocol.FormatKeyPageUrl(keyBook.Url, index)
-			keyPage := new(protocol.KeyPage)
-			err = batch.Account(pageUrl).GetStateAs(keyPage)
+			var keyPage *protocol.KeyPage
+			err = batch.Account(pageUrl).GetStateAs(&keyPage)
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}

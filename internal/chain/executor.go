@@ -72,8 +72,8 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 	defer batch.Discard()
 
 	var height int64
-	ledger := protocol.NewInternalLedger()
-	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	var ledger *protocol.InternalLedger
+	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
 		height = ledger.Index
@@ -192,21 +192,17 @@ func (m *Executor) InitChain(data []byte, time time.Time) ([]byte, error) {
 	}
 
 	// Check if InitChain already happened
-	var rootHash []byte
-	err := m.DB.View(func(batch *database.Batch) error {
-		_, err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetState()
-		if err != nil {
-			return err
-		}
-
-		rootHash = batch.BptRootHash()
-		return nil
+	var anchor []byte
+	var err error
+	err = m.DB.View(func(batch *database.Batch) error {
+		anchor, err = batch.GetMinorRootChainAnchor(&m.Network)
+		return err
 	})
-	if err == nil {
-		return rootHash, nil
-	}
-	if !errors.Is(err, storage.ErrNotFound) {
+	if err != nil {
 		return nil, err
+	}
+	if len(anchor) > 0 {
+		return anchor, nil
 	}
 
 	// Load the genesis state (JSON) into an in-memory key-value store
@@ -242,7 +238,7 @@ func (m *Executor) InitChain(data []byte, time time.Time) ([]byte, error) {
 	batch = m.DB.Begin(false)
 	defer batch.Discard()
 
-	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
+	anchor, err = batch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
 		return nil, err
 	}
@@ -291,8 +287,8 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (resp abci.BeginBlockR
 
 	// Load the ledger state
 	ledger := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err = ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err = ledger.GetStateAs(&ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
@@ -367,8 +363,8 @@ func (m *Executor) commit(force bool) ([]byte, error) {
 
 	// Load the ledger
 	ledger := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return nil, err
 	}
@@ -613,7 +609,7 @@ func (m *Executor) anchorSynthChain(ledger *database.Account, ledgerUrl *url.URL
 
 // anchorBPT anchors the BPT after ensuring any pending changes have been flushed.
 func (m *Executor) anchorBPT(ledgerState *protocol.InternalLedger, rootChain *database.Chain) error {
-	err := m.blockBatch.UpdateBpt()
+	root, err := m.blockBatch.CommitBpt()
 	if err != nil {
 		return err
 	}
@@ -624,7 +620,7 @@ func (m *Executor) anchorBPT(ledgerState *protocol.InternalLedger, rootChain *da
 		Index:   uint64(m.blockMeta.Index - 1),
 	})
 
-	return rootChain.AddEntry(m.blockBatch.BptRootHash(), false)
+	return rootChain.AddEntry(root, false)
 }
 
 // buildSynthReceipts builds partial receipts for produced synthetic
@@ -632,7 +628,7 @@ func (m *Executor) anchorBPT(ledgerState *protocol.InternalLedger, rootChain *da
 func (m *Executor) buildSynthReceipts(rootAnchor []byte, synthIndexIndex, rootIndexIndex int64) error {
 	ledger := m.blockBatch.Account(m.Network.SyntheticLedger())
 	ledgerState := new(protocol.InternalSyntheticLedger)
-	err := ledger.GetStateAs(ledgerState)
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return fmt.Errorf("unable to load the synthetic transaction ledger: %w", err)
 	}

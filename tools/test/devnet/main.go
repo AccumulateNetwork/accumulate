@@ -143,7 +143,7 @@ func run() bool {
 		fmt.Printf("Error: wait for devnet: %v\n", err)
 	}
 
-	return !ok
+	return ok
 }
 
 func fatalf(format string, args ...interface{}) {
