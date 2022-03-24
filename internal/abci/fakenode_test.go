@@ -121,8 +121,8 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	batch := n.db.Begin(false)
 	defer batch.Discard()
 
-	ledger := protocol.NewInternalLedger()
-	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	var ledger *protocol.InternalLedger
+	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
 		n.height = ledger.Index
 	} else {
@@ -428,8 +428,8 @@ func (n *FakeNode) GetOraclePrice() uint64 {
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	require.NoError(n.t, ledger.GetStateAs(ledgerState))
+	var ledgerState *protocol.InternalLedger
+	require.NoError(n.t, ledger.GetStateAs(&ledgerState))
 	return ledgerState.ActiveOracle
 }
 

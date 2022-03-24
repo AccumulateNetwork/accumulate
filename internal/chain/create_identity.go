@@ -1,10 +1,12 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type CreateIdentity struct{}
@@ -34,12 +36,17 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 	identity.ManagerKeyBook = body.Manager
 
 	accounts := []protocol.Account{identity}
-	book := protocol.NewKeyBook()
-	bookExists := st.LoadUrlAs(bookUrl, book) == nil
-	if !bookExists {
+	var book *protocol.KeyBook
+	err = st.LoadUrlAs(bookUrl, &book)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, storage.ErrNotFound):
 		if len(body.PublicKey) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
+
+		book = new(protocol.KeyBook)
 		book.Url = bookUrl
 		book.PageCount = 1
 		accounts = append(accounts, book)
@@ -52,6 +59,8 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 		keySpec.PublicKey = body.PublicKey
 		page.Keys = append(page.Keys, keySpec)
 		accounts = append(accounts, page)
+	default:
+		return nil, err
 	}
 
 	st.Create(accounts...)
