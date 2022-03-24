@@ -110,8 +110,9 @@ Signer:
   fields:
   - name: PublicKey
     type: bytes
-  - name: Nonce
+  - name: Timestamp
     type: uvarint
+    alternative: Nonce
   - name: Url
     type: url
     pointer: true

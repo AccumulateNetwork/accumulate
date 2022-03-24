@@ -515,11 +515,11 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 			return false, fmt.Errorf("invalid initiator: missing timestamp")
 		}
 
-		if firstKeySpec.Nonce >= timestamp {
-			return false, fmt.Errorf("invalid nonce: have %d, received %d", firstKeySpec.Nonce, timestamp)
+		if firstKeySpec.LastUsedOn >= timestamp {
+			return false, fmt.Errorf("invalid nonce: have %d, received %d", firstKeySpec.LastUsedOn, timestamp)
 		}
 
-		firstKeySpec.Nonce = timestamp
+		firstKeySpec.LastUsedOn = timestamp
 
 	default:
 		return false, fmt.Errorf("failed to get signatures: %v", err)
@@ -570,11 +570,11 @@ func (m *Executor) validateLiteSigner(st *StateManager, env *protocol.Envelope, 
 			return fmt.Errorf("invalid initiator: missing timestamp")
 		}
 
-		if account.Nonce >= timestamp {
-			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, timestamp)
+		if account.LastUsedOn >= timestamp {
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.LastUsedOn, timestamp)
 		}
 
-		account.Nonce = timestamp
+		account.LastUsedOn = timestamp
 	}
 
 	if !account.DebitCredits(uint64(fee)) {
@@ -691,7 +691,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 
 	// TODO Make sure this is the initiator
 	sig := env.Signatures[0]
-	err = st.Signator.SetNonce(sig.GetPublicKey(), sig.GetTimestamp())
+	err = st.Signator.SetLastUsedOn(sig.GetPublicKey(), sig.GetTimestamp())
 	if err != nil {
 		return err
 	}

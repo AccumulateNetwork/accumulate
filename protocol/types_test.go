@@ -44,7 +44,7 @@ func TestKeyPage_MofN(t *testing.T) {
 	for i := 1; i < 11; i++ {
 		key := new(KeySpec)
 		key.PublicKey = rh.Next()
-		key.Nonce = 0
+		key.LastUsedOn = 0
 		kp.Keys = append(kp.Keys, key)
 		for j := 1; j < 12; j++ {
 			err := kp.SetThreshold(uint64(j))

@@ -217,7 +217,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
 	req.Origin = env.Transaction.Header.Principal
-	req.Signer.Nonce = sig.GetTimestamp()
+	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()
 	req.KeyPage.Height = sig.GetSignerHeight()
@@ -749,9 +749,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
-		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
+		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
+		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
@@ -810,7 +810,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKey, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
