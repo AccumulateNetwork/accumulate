@@ -22,7 +22,7 @@ func TestLiteTokenTransactions(t *testing.T) {
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
 
 	batch := db.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(privKey), acctesting.TestTokenAmount))
+	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(privKey), protocol.AcmeFaucetAmount))
 	require.NoError(t, batch.Commit())
 
 	sponsorUrl := acctesting.AcmeLiteAddressStdPriv(privKey)

@@ -51,7 +51,7 @@ func TestCreateLiteAccount(t *testing.T) {
 	credits := 100.0
 	originAddr, balances := n.testLiteTx(count, credits)
 	amountSent := float64(count * 1000)
-	initialAmount := acctesting.TestTokenAmount * protocol.AcmePrecision
+	initialAmount := protocol.AcmeFaucetAmount * protocol.AcmePrecision
 	currentBalance := n.GetLiteTokenAccount(originAddr).Balance.Int64()
 	totalAmountSent := initialAmount - amountSent
 	require.Equal(t, int64(totalAmountSent), currentBalance)
@@ -75,7 +75,7 @@ func TestEvilNode(t *testing.T) {
 	var count = 11
 	credits := 100.0
 	originAddr, balances := n.testLiteTx(count, credits)
-	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
@@ -97,9 +97,8 @@ func TestEvilNode(t *testing.T) {
 }
 
 func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]int64) {
-	_, sponsor, gtx, err := acctesting.BuildTestSynthDepositGenTx()
-	require.NoError(n.t, err)
-	sponsorAddr := acctesting.AcmeLiteAddressStdPriv(sponsor).String()
+	sender := generateKey()
+	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
 
 	recipients := make([]string, count)
 	for i := range recipients {
@@ -108,13 +107,19 @@ func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]in
 	}
 
 	n.Batch(func(send func(*protocol.Envelope)) {
-		send(gtx)
+		body := new(protocol.AcmeFaucet)
+		body.Url = senderUrl
+
+		send(acctesting.NewTransaction().
+			WithPrincipal(protocol.FaucetUrl).
+			WithBody(body).
+			Faucet())
 	})
 
 	batch := n.db.Begin(true)
 	//acme to credits @ $0.05 acme price is 1:5
 
-	n.Require().NoError(acctesting.AddCredits(batch, acctesting.AcmeLiteAddressStdPriv(sponsor), credits))
+	n.Require().NoError(acctesting.AddCredits(batch, senderUrl, credits))
 	n.require.NoError(batch.Commit())
 
 	balance := map[string]int64{}
@@ -125,13 +130,13 @@ func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]in
 
 			exch := new(protocol.SendTokens)
 			exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
-			send(newTxn(sponsorAddr).
+			send(newTxn(senderUrl.String()).
 				WithBody(exch).
-				Initiate(protocol.SignatureTypeLegacyED25519, sponsor))
+				Initiate(protocol.SignatureTypeLegacyED25519, sender))
 		}
 	})
 
-	return sponsorAddr, balance
+	return senderUrl.String(), balance
 }
 
 func TestFaucet(t *testing.T) {
@@ -168,7 +173,7 @@ func TestAnchorChain(t *testing.T) {
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 
 	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*Tx)) {
@@ -275,7 +280,7 @@ func TestCreateADI(t *testing.T) {
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, acctesting.TestTokenAmount, 1e6))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*Tx)) {
@@ -581,7 +586,7 @@ func TestLiteAccountTx(t *testing.T) {
 
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	batch := n.db.Begin(true)
-	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, acctesting.TestTokenAmount, 1e9))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, bob, 0))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
 	require.NoError(t, batch.Commit())
@@ -601,7 +606,7 @@ func TestLiteAccountTx(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, alice))
 	})
 
-	require.Equal(t, int64(acctesting.TestTokenAmount*acctesting.TokenMx-3000), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl).Balance.Int64())
 	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
 }
@@ -629,7 +634,7 @@ func TestAdiAccountTx(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
 	})
 
-	require.Equal(t, int64(acctesting.TokenMx-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
+	require.Equal(t, int64(protocol.AcmePrecision-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 }
 
