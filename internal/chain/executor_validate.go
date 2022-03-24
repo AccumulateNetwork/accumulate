@@ -18,7 +18,7 @@ import (
 //
 // ValidateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
-func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.Envelope) error {
+func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
@@ -27,33 +27,33 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 		txnType = envelope.Transaction.Body.Type()
 		_, ok := x.executors[txnType]
 		if !ok {
-			return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "unsupported transaction type: %v", txnType)
+			return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "unsupported transaction type: %v", txnType)
 		}
 	}
 
 	// An envelope with no signatures is invalid
 	if len(envelope.Signatures) == 0 {
-		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has no signatures")
+		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has no signatures")
 	}
 
 	// The transaction hash must be specified for signature transactions
 	if len(envelope.TxHash) == 0 && txnType == protocol.TransactionTypeSignPending {
-		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "cannot sign pending transaction: missing transaction hash")
+		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "cannot sign pending transaction: missing transaction hash")
 	}
 
 	// The transaction hash and/or the transaction itself must be specified
 	if len(envelope.TxHash) == 0 && envelope.Transaction == nil {
-		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has neither transaction nor hash")
+		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has neither transaction nor hash")
 	}
 
 	// The transaction hash must be the correct size
 	if len(envelope.TxHash) > 0 && len(envelope.TxHash) != sha256.Size {
-		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash is the wrong size")
+		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash is the wrong size")
 	}
 
 	// If a transaction and a hash are specified, they must match
 	if !envelope.VerifyTxHash() {
-		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash does not match transaction")
+		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash does not match transaction")
 	}
 
 	status, err := batch.Transaction(envelope.GetTxHash()).GetStatus()
@@ -63,19 +63,26 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 
 	case err != nil:
 		// Unknown error
-		return fmt.Errorf("load transaction status: %w", err)
+		return nil, fmt.Errorf("load transaction status: %w", err)
 
 	case status.Delivered:
 		// Transaction has already been delivered
-		return protocol.Errorf(protocol.ErrorCodeAlreadyDelivered, "transaction has already been delivered")
+		return nil, protocol.Errorf(protocol.ErrorCodeAlreadyDelivered, "transaction has already been delivered")
 	}
 
-	// Calculate the transaction fee
-	var txnFee protocol.Fee
-	if txnType != protocol.TransactionTypeSignPending {
-		txnFee, err = protocol.ComputeTransactionFee(envelope)
-		if err != nil {
-			return err
+	// Load previous transaction state
+	transaction := envelope.Transaction
+	if transaction == nil {
+		txState, err := batch.Transaction(envelope.GetTxHash()).GetState()
+		switch {
+		case err == nil:
+			// Populate the transaction from the database
+			transaction = txState.Transaction
+
+		default:
+			// If the envelope does not include the transaction, it must exist
+			// in the database
+			return nil, fmt.Errorf("load transaction: %v", err)
 		}
 	}
 
@@ -86,43 +93,51 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 			// Verify that the initiator signature matches the transaction
 			initHash, err := signature.InitiatorHash()
 			if err != nil {
-				return err
+				return nil, protocol.NewError(protocol.ErrorCodeInvalidSignature, err)
 			}
 
 			if envelope.Transaction.Header.Initiator != *(*[32]byte)(initHash) {
-				return protocol.Errorf(protocol.ErrorCodeInvalidSignature, "initiator signature does not match initiator hash")
+				return nil, protocol.Errorf(protocol.ErrorCodeInvalidSignature, "initiator signature does not match initiator hash")
 			}
 		}
 
-		err := x.validateSignature(batch, signature, isInitiator, envelope.GetTxHash(), txnType, txnFee)
+		err := x.validateEnvelopeSignature(batch, transaction, signature, isInitiator)
 		if err != nil {
-			return protocol.Errorf(protocol.ErrorCodeInvalidSignature, "signature %d: %w", i, err)
+			return nil, protocol.Errorf(protocol.ErrorCodeInvalidSignature, "signature %d: %w", i, err)
 		}
 	}
 
 	switch {
 	case txnType.IsUser():
-		return x.validateUserEnvelope(batch, envelope, txnType)
+		err = x.validateUserEnvelope(batch, envelope, txnType)
 	case txnType.IsSynthetic():
-		return x.validateSyntheticEnvelope(batch, envelope)
+		err = x.validateSyntheticEnvelope(batch, envelope)
 	case txnType.IsInternal():
 		// TODO Validate internal transactions
-		return nil
 	default:
 		// Should be unreachable
-		return protocol.Errorf(protocol.ErrorCodeInternal, "transaction type %v is not user, synthetic, or internal", txnType)
+		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "transaction type %v is not user, synthetic, or internal", txnType)
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	return transaction, nil
 }
 
-func (x *Executor) validateSignature(batch *database.Batch, signature protocol.Signature, isInitiator bool, txnHash []byte, txnType protocol.TransactionType, txnFee protocol.Fee) error {
+func (x *Executor) validateEnvelopeSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) error {
 	// Basic validation
-	if !signature.Verify(txnHash) {
+	if !signature.Verify(transaction.GetHash()) {
 		return errors.New("invalid")
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
 	switch signature := signature.(type) {
 	case *protocol.SyntheticSignature:
+		if !transaction.Body.Type().IsSynthetic() {
+			return fmt.Errorf("synthetic signatures are not allowed for non-synthetic transactions")
+		}
+
 		if !x.Network.NodeUrl().Equal(signature.DestinationNetwork) {
 			return fmt.Errorf("wrong destination network: %v is not this network", signature.DestinationNetwork)
 		}
@@ -130,6 +145,10 @@ func (x *Executor) validateSignature(batch *database.Batch, signature protocol.S
 		// TODO Check the sequence number
 
 	case *protocol.ReceiptSignature:
+		if !transaction.Body.Type().IsSynthetic() {
+			return fmt.Errorf("receipt signatures are not allowed for non-synthetic transactions")
+		}
+
 		// TODO We should add something so we know which subnet originated
 		// the transaction. That way, the DN can also check receipts.
 		if x.Network.Type != config.BlockValidator {
@@ -155,6 +174,10 @@ func (x *Executor) validateSignature(batch *database.Batch, signature protocol.S
 		}
 
 	case *protocol.InternalSignature:
+		if !transaction.Body.Type().IsInternal() {
+			return fmt.Errorf("internal signatures are not allowed for non-internal transactions")
+		}
+
 		if !x.Network.NodeUrl().Equal(signature.Network) {
 			return fmt.Errorf("wrong destination network: %v is not this network", signature.Network)
 		}
@@ -162,98 +185,31 @@ func (x *Executor) validateSignature(batch *database.Batch, signature protocol.S
 		// TODO Check something?
 
 	default:
-		if txnType.IsSynthetic() {
+		if transaction.Body.Type().IsSynthetic() {
 			// TODO Check the key
 			return nil
 		}
 
-		// Load the signer
-		var signer creditChain
-		signerUrl := signature.GetSigner()
-		err := batch.Account(signerUrl).GetStateAs(&signer)
-		if err != nil {
-			return fmt.Errorf("load signer: %w", err)
+		// Require a timestamp for the initiator
+		if isInitiator && signature.GetTimestamp() == 0 {
+			return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "initial signature does not have a timestamp")
 		}
 
-		// Sanity check
-		if !signer.Header().Url.Equal(signerUrl) {
-			return protocol.Errorf(protocol.ErrorCodeInternal, "invalid state: URL does not match")
-		}
-
-		// Check the height, except for lite accounts
-		if signer.Type() != protocol.AccountTypeLiteTokenAccount {
-			chain, err := batch.Account(signerUrl).ReadChain(protocol.MainChain)
-			if err != nil {
-				return protocol.Errorf(protocol.ErrorCodeInternal, "read %v main chain: %v", signerUrl, err)
-			}
-
-			if signature.GetSignerHeight() != uint64(chain.Height()) {
-				return protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", chain.Height(), signature.GetSignerHeight())
-			}
-		}
-
-		// Calculate the signature fee
-		sigFee, err := protocol.ComputeSignatureFee(signature)
+		// Load the signer and validate the signature against it
+		signer, _, err := validateSignature(batch, transaction, signature)
 		if err != nil {
 			return err
 		}
 
-		// The initiator pays the transaction fee minus the base signature fee
-		if isInitiator {
-			sigFee += txnFee - protocol.FeeSignature
+		// Ensure the signer has sufficient credits for the fee
+		fee, err := computeSignerFee(transaction, signature, isInitiator)
+		if err != nil {
+			return fmt.Errorf("calculating fee: %w", err)
 		}
-
-		// Ensure the signer has sufficient credits
-		if !signer.CanDebitCredits(sigFee.AsUInt64()) {
+		if !signer.CanDebitCredits(fee.AsUInt64()) {
 			return protocol.Errorf(protocol.ErrorCodeInsufficientCredits, "insufficient credits: have %s, want %s",
 				protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecision),
-				protocol.FormatAmount(sigFee.AsUInt64(), protocol.CreditPrecision))
-		}
-
-		// TODO Move this to ProcessSignature
-		if !signer.DebitCredits(sigFee.AsUInt64()) {
-			panic("should be unreachable")
-		}
-		err = batch.Account(signerUrl).PutState(signer)
-		if err != nil {
-			return err
-		}
-
-		// Find the key entry
-		_, entry, ok := signer.EntryByKey(signature.GetPublicKey())
-		if !ok {
-			// TODO Remove this second call once AC-972 is merged.
-			_, entry, ok = signer.EntryByKeyHash(signature.GetPublicKey())
-			if !ok {
-				return fmt.Errorf("key does not belong to signer")
-			}
-		}
-
-		// Only check the timestamp for the initiator
-		if !isInitiator {
-			break
-		}
-
-		// Don't bother with timestamps for the faucet
-		if txnType == protocol.TransactionTypeAcmeFaucet {
-			break
-		}
-
-		// Don't bother with timestamps for non-user transactions
-		if !txnType.IsUser() {
-			break
-		}
-
-		// Check the timestamp
-		if entry.GetLastUsedOn() >= signature.GetTimestamp() {
-			return protocol.Errorf(protocol.ErrorCodeBadNonce, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
-		}
-
-		// TODO Move this to ProcessSignature
-		entry.SetLastUsedOn(signature.GetTimestamp())
-		err = batch.Account(signerUrl).PutState(signer)
-		if err != nil {
-			return err
+				protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecision))
 		}
 	}
 

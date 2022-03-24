@@ -80,6 +80,7 @@ type KeyHolder interface {
 	EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)
 }
 
+
 // EntryByKeyHash checks if the key hash matches the lite token account URL.
 // EntryByKeyHash will panic if the lite token account URL is invalid.
 func (l *LiteTokenAccount) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
