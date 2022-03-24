@@ -695,7 +695,7 @@ func TestCreateKeyPage(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	fooKey, testKey := generateKey(), generateKey()
-	// fkh := sha256.Sum256(fooKey.PubKey().Bytes())
+	fkh := sha256.Sum256(fooKey.PubKey().Bytes())
 	tkh := sha256.Sum256(testKey.PubKey().Bytes())
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
@@ -705,7 +705,7 @@ func TestCreateKeyPage(t *testing.T) {
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
 	require.Equal(t, uint64(0), key.LastUsedOn)
-	require.Equal(t, fooKey.PubKey().Bytes(), key.PublicKeyHash)
+	require.Equal(t, fkh, key.PublicKeyHash)
 
 	n.Batch(func(send func(*protocol.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
