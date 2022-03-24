@@ -48,7 +48,7 @@ func (tb TransactionBuilder) WithSigner(signer *url.URL, height uint64) Transact
 	return tb
 }
 
-func (tb TransactionBuilder) WithNonce(nonce uint64) TransactionBuilder {
+func (tb TransactionBuilder) WithTimestamp(nonce uint64) TransactionBuilder {
 	tb.signer.SetTimestamp(nonce)
 	return tb
 }
@@ -58,7 +58,7 @@ func (tb TransactionBuilder) WithNonceVar(nonce *uint64) TransactionBuilder {
 	return tb
 }
 
-func (tb TransactionBuilder) WithNonceTimestamp() TransactionBuilder {
+func (tb TransactionBuilder) WithCurrentTimestamp() TransactionBuilder {
 	tb.signer.SetTimestamp(uint64(time.Now().UTC().UnixNano()))
 	return tb
 }
