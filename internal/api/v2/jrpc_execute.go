@@ -71,7 +71,6 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Header.Principal = protocol.FaucetUrl
 	env.Transaction.Body = req
-
 	sig, err := signing.Faucet(env.Transaction)
 	if err != nil {
 		return accumulateError(err)
@@ -80,7 +79,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	txrq := new(TxRequest)
 	txrq.Origin = env.Transaction.Header.Principal
-	txrq.Signer.Nonce = env.Signatures[0].GetTimestamp()
+	txrq.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	txrq.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	txrq.Signer.Url = protocol.FaucetUrl
 	txrq.KeyPage.Height = env.Signatures[0].GetSignerHeight()
@@ -111,7 +110,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 
 		// Build the initiator
 		initSig := new(protocol.LegacyED25519Signature)
-		initSig.Timestamp = req.Signer.Nonce
+		initSig.Timestamp = req.Signer.Timestamp
 		initSig.PublicKey = req.Signer.PublicKey
 		initSig.Signer = req.Signer.Url
 		initSig.SignerHeight = req.KeyPage.Height

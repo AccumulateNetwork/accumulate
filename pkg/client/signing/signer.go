@@ -209,7 +209,7 @@ func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	sig := new(protocol.LegacyED25519Signature)
 	sig.Signer = protocol.FaucetUrl
 	sig.SignerHeight = 1
-	sig.Timestamp = fs.Nonce()
+	sig.Timestamp = fs.Timestamp()
 	sig.PublicKey = fs.PublicKey()
 
 	init, err := sig.InitiatorHash()

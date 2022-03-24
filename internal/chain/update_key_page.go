@@ -155,7 +155,7 @@ func getKeyPageIndex(page *url.URL) (uint64, bool) {
 func didUpdateKeyPage(page *protocol.KeyPage) {
 	// We're changing the height of the key page, so reset all the nonces
 	for _, key := range page.Keys {
-		key.Nonce = 0
+		key.LastUsedOn = 0
 	}
 }
 
