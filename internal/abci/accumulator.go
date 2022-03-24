@@ -132,8 +132,8 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	defer batch.Discard()
 
 	var height int64
-	ledger := protocol.NewInternalLedger()
-	err = batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	var ledger *protocol.InternalLedger
+	err = batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
 		height = ledger.Index
