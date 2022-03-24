@@ -408,23 +408,40 @@ func (a *ActionResponse) Print() (string, error) {
 		}
 		out = string(b)
 	} else {
-		out += fmt.Sprintf("\n\tTransaction Hash\t:\t%x\n", a.TransactionHash)
-		out += fmt.Sprintf("\tEnvelope Hash\t\t:\t%x\n", a.EnvelopeHash)
-		out += fmt.Sprintf("\tSimple Hash\t\t:\t%x\n", a.SimpleHash)
+		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
+		out += fmt.Sprintf("\tEnvelope Hash\t\t: %x\n", a.EnvelopeHash)
+		out += fmt.Sprintf("\tSimple Hash\t\t: %x\n", a.SimpleHash)
 		if !ok {
-			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
+			out += fmt.Sprintf("\tError code\t\t: %s\n", a.Code)
 		} else {
 			//nolint:gosimple
-			out += fmt.Sprintf("\tError code\t\t:\tok\n")
+			out += fmt.Sprintf("\tError code\t\t: ok\n")
 		}
 		if a.Error != "" {
-			out += fmt.Sprintf("\tError\t\t\t:\t%s\n", a.Error)
+			out += fmt.Sprintf("\tError\t\t\t: %s\n", a.Error)
 		}
 		if a.Log != "" {
-			out += fmt.Sprintf("\tLog\t\t\t:\t%s\n", a.Log)
+			out += fmt.Sprintf("\tLog\t\t\t: %s\n", a.Log)
 		}
 		if a.Codespace != "" {
-			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
+			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
+		}
+		if a.Result != nil {
+			r := a.Result.(map[string]interface{})
+			out += "\tResult\t\t\t: "
+			if t, ok := r["result"]; ok {
+				d, err := json.Marshal(t)
+				if err != nil {
+					out += fmt.Sprintf("error remarshaling result %v\n", t)
+				} else {
+					v, err := protocol.UnmarshalTransactionResultJSON(d)
+					if err != nil {
+						out += fmt.Sprintf("error unmarshaling transaction result %v", err)
+					} else {
+						out += outputTransactionResultForHumans(v)
+					}
+				}
+			}
 		}
 	}
 
@@ -432,6 +449,26 @@ func (a *ActionResponse) Print() (string, error) {
 		return out, nil
 	}
 	return "", errors.New(out)
+}
+
+func outputTransactionResultForHumans(t protocol.TransactionResult) string {
+	var out string
+
+	switch c := t.(type) {
+	case *protocol.AddCreditsResult:
+		amt, err := formatAmount(protocol.ACME, &c.Amount)
+		if err != nil {
+			amt = "unknown"
+		}
+		out += fmt.Sprintf("Oracle\t$%.2f / ACME\n", float64(c.Oracle)/protocol.AcmeOraclePrecision)
+		out += fmt.Sprintf("\t\t\t\t  Credits\t%.2f\n", float64(c.Credits)/protocol.CreditPrecision)
+		out += fmt.Sprintf("\t\t\t\t  Amount\t%s\n", amt)
+	case *protocol.WriteDataResult:
+		out += fmt.Sprintf("Account URL\t%s\n", c.AccountUrl)
+		out += fmt.Sprintf("\t\t\t\t  Account ID\t%x\n", c.AccountID)
+		out += fmt.Sprintf("\t\t\t\t  Entry Hash\t%x\n", c.EntryHash)
+	}
+	return out
 }
 
 type JsonRpcError struct {
@@ -712,9 +749,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", amountToString(2, &ata.CreditBalance))
-		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
 
+		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
+		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
@@ -765,7 +802,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", amountToString(2, &ss.CreditBalance))
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%d\n", protocol.CreditPrecision*ss.CreditBalance)
 		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
@@ -782,16 +819,14 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		hasSupplyLimit := "no"
-		if ti.HasSupplyLimit {
-			hasSupplyLimit = "yes"
-		}
 
 		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.Url)
 		out += fmt.Sprintf("\n\tSymbol\t\t:\t%s", ti.Symbol)
 		out += fmt.Sprintf("\n\tPrecision\t:\t%d", ti.Precision)
-		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", amountToString(ti.Precision, &ti.Supply))
-		out += fmt.Sprintf("\n\tSupply Limit\t:\t%s", hasSupplyLimit)
+		if ti.SupplyLimit != nil {
+			out += fmt.Sprintf("\n\tSupply Limit\t\t:\t%s", amountToString(ti.Precision, ti.SupplyLimit))
+		}
+		out += fmt.Sprintf("\n\tTokens Issued\t:\t%s", amountToString(ti.Precision, &ti.Issued))
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
 		return out, nil
@@ -897,4 +932,27 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 func nonceFromTimeNow() uint64 {
 	t := time.Now()
 	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
+}
+
+func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
+	params := api.DataEntryQuery{}
+	params.Url = protocol.PriceOracle()
+
+	res := new(api.ChainQueryResponse)
+	entry := new(api.DataEntryQueryResponse)
+	res.Data = entry
+
+	err := Client.RequestAPIv2(context.Background(), "query-data", &params, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	if entry.Entry.Data == nil {
+		return nil, fmt.Errorf("no data in oracle account")
+	}
+	acmeOracle := new(protocol.AcmeOracle)
+	if err = json.Unmarshal(entry.Entry.Data[0], acmeOracle); err != nil {
+		return nil, err
+	}
+	return acmeOracle, err
 }
