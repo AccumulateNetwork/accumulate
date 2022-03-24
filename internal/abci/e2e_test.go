@@ -705,7 +705,7 @@ func TestCreateKeyPage(t *testing.T) {
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
 	require.Equal(t, uint64(0), key.LastUsedOn)
-	require.Equal(t, fkh, key.PublicKeyHash)
+	require.Equal(t, fkh[:], key.PublicKeyHash)
 
 	n.Batch(func(send func(*protocol.Envelope)) {
 		cms := new(protocol.CreateKeyPage)
@@ -723,7 +723,7 @@ func TestCreateKeyPage(t *testing.T) {
 	require.Len(t, spec.Keys, 1)
 	key = spec.Keys[0]
 	require.Equal(t, uint64(0), key.LastUsedOn)
-	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKeyHash)
+	require.Equal(t, tkh[:], key.PublicKeyHash)
 }
 
 func TestCreateKeyBook(t *testing.T) {
