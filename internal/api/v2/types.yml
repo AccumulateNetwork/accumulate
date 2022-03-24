@@ -190,6 +190,13 @@ DirectoryQuery:
     - QueryPagination
     - QueryOptions
 
+MinorBlocksQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
+
 QueryOptions:
   non-binary: true
   incomparable: true

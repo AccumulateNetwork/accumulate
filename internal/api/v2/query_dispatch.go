@@ -150,3 +150,12 @@ func (q *queryDispatch) QueryDataSet(url *url.URL, pagination QueryPagination, q
 
 	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
+
+func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+	r, err := q.Router.RouteAccount(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryMinorBlocks(url, pagination)
+}

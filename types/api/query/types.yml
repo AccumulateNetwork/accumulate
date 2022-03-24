@@ -220,3 +220,30 @@ ResponseAccount:
       type: ChainState
       marshal-as: reference
       repeatable: true
+
+RequestMinorBlocks:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: Limit
+      type: uint
+
+ResponseMinorBlocks:
+  fields:
+    - name: Start
+      type: uint
+      keep-empty: true
+    - name: End
+      type: uint
+      keep-empty: true
+    - name: Total
+      type: uint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: protocol.IndexEntry
+      pointer: true
+      marshal-as: reference

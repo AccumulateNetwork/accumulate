@@ -804,6 +804,41 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
 		}
+	case types.QueryTypeMinorBlocks:
+		req := query.RequestMinorBlocks{}
+		err := req.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+		}
+
+		ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+
+		chain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+		}
+		idxEntries, err := chain.Entries(int64(req.Start), int64(req.Start+req.Limit))
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+		}
+
+		resp := query.ResponseMinorBlocks{}
+		for _, idxData := range idxEntries {
+			entry := new(protocol.IndexEntry)
+			err := entry.UnmarshalBinary(idxData)
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+			}
+
+			resp.Entries = append(resp.Entries, entry)
+		}
+
+		k = []byte("minor-block")
+		v, err = resp.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+		}
+
 	default:
 		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
 	}

@@ -92,6 +92,11 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type MinorBlocksQuery struct {
+	UrlQuery
+	QueryPagination
+}
+
 type MultiResponse struct {
 	Type       string        `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Items      []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
@@ -563,6 +568,18 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 		Value interface{} `json:"value,omitempty"`
 	}{}
 	u.Value = encoding.AnyToJSON(v.Value)
+	return json.Marshal(&u)
+}
+
+func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url   *url.URL `json:"url,omitempty"`
+		Start uint64   `json:"start,omitempty"`
+		Count uint64   `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
 	return json.Marshal(&u)
 }
 
@@ -1045,6 +1062,24 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	return nil
+}
+
+func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url   *url.URL `json:"url,omitempty"`
+		Start uint64   `json:"start,omitempty"`
+		Count uint64   `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
 	return nil
 }
 

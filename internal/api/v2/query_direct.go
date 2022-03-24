@@ -500,3 +500,58 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	res.Type = "key-page-index"
 	return res, nil
 }
+
+func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+	// TODO move to pagination.validate()
+	if pagination.Count == 0 {
+		// TODO Return an empty array plus the total count?
+		return nil, validatorError(errors.New("count must be greater than 0"))
+	}
+
+	if pagination.Start > math.MaxInt64 {
+		return nil, errors.New("start is too large")
+	}
+
+	if pagination.Count > math.MaxInt64 {
+		return nil, errors.New("count is too large")
+	}
+
+	req := new(query.RequestMinorBlocks)
+	req.Account = u
+	req.Start = pagination.Start
+	req.Limit = pagination.Count
+	k, v, err := q.query(req, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if k != "minor-block" {
+		return nil, fmt.Errorf("unknown response type: want minor-block, got %q", k)
+	}
+
+	res := new(query.ResponseMinorBlocks)
+	err = res.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+
+	mres := new(MultiResponse)
+	mres.Type = "txHistory"
+	mres.Items = make([]interface{}, len(res.Entries))
+	mres.Start = pagination.Start
+	mres.Count = pagination.Count
+	mres.Total = res.Total
+	for _, entry := range res.Entries {
+		/*		queryRes, err := packTxResponse(entry.TxId, entry.TxSynthTxIds, nil, entry.Envelope, entry.Status)
+				if err != nil {
+					return nil, err
+				}
+				queryRes.Invalidated = entry.Invalidated
+				queryRes.SignatureThreshold = entry.SignatureThreshold
+
+				mres.Items[i] = queryRes
+		*/
+		fmt.Println(entry)
+	}
+
+	return mres, nil
+}

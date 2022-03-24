@@ -59,6 +59,13 @@ type RequestKeyPageIndex struct {
 	Key       []byte   `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 }
 
+type RequestMinorBlocks struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+}
+
 type RequestTxHistory struct {
 	fieldsSet []bool
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -117,6 +124,14 @@ type ResponseKeyPageIndex struct {
 	KeyBook   *url.URL `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
 	KeyPage   *url.URL `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
+}
+
+type ResponseMinorBlocks struct {
+	fieldsSet []bool
+	Start     uint64                 `json:"start" form:"start" query:"start" validate:"required"`
+	End       uint64                 `json:"end" form:"end" query:"end" validate:"required"`
+	Total     uint64                 `json:"total" form:"total" query:"total" validate:"required"`
+	Entries   []*protocol.IndexEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 }
 
 type ResponsePending struct {
@@ -234,6 +249,25 @@ func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Key, u.Key)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.Limit == u.Limit) {
 		return false
 	}
 
@@ -414,6 +448,28 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	}
 	if !(v.Index == u.Index) {
 		return false
+	}
+
+	return true
+}
+
+func (v *ResponseMinorBlocks) Equal(u *ResponseMinorBlocks) bool {
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.End == u.End) {
+		return false
+	}
+	if !(v.Total == u.Total) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -780,6 +836,59 @@ func (v *RequestKeyPageIndex) IsValid() error {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
 		errs = append(errs, "field Key is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RequestMinorBlocks = []string{
+	1: "Account",
+	2: "Start",
+	3: "Limit",
+}
+
+func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(2, v.Start)
+	}
+	if !(v.Limit == 0) {
+		writer.WriteUint(3, v.Limit)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestMinorBlocks) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Limit is missing")
+	} else if v.Limit == 0 {
+		errs = append(errs, "field Limit is not set")
 	}
 
 	switch len(errs) {
@@ -1252,6 +1361,64 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 	}
 }
 
+var fieldNames_ResponseMinorBlocks = []string{
+	1: "Start",
+	2: "End",
+	3: "Total",
+	4: "Entries",
+}
+
+func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, v.Start)
+	writer.WriteUint(2, v.End)
+	writer.WriteUint(3, v.Total)
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(4, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ResponseMinorBlocks)
+	return buffer.Bytes(), err
+}
+
+func (v *ResponseMinorBlocks) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field End is missing")
+	} else if v.End == 0 {
+		errs = append(errs, "field End is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Total is missing")
+	} else if v.Total == 0 {
+		errs = append(errs, "field Total is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ResponsePending = []string{
 	1: "Transactions",
 }
@@ -1568,6 +1735,28 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Limit = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *RequestTxHistory) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1780,6 +1969,35 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseKeyPageIndex)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *ResponseMinorBlocks) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ResponseMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.End = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Total = x
+	}
+	for {
+		if x := new(protocol.IndexEntry); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ResponseMinorBlocks)
 	v.fieldsSet = seen
 	return err
 }
