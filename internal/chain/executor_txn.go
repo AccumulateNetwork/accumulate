@@ -221,7 +221,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isChe
 		return nil, nil, false, err
 	}
 	defer func() {
-		if err != nil {
+		if st != nil && err != nil {
 			st.Discard()
 		}
 	}()
