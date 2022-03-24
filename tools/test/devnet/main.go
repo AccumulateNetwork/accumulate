@@ -141,7 +141,7 @@ func run() bool {
 
 	go func() {
 		time.Sleep(time.Minute)
-		runCmd.Process.Kill()
+		_ = runCmd.Process.Kill()
 	}()
 
 	err = runCmd.Wait()
