@@ -23,6 +23,15 @@ type DebugBatch struct {
 	Logger Logger
 }
 
+var _ KeyValueTxn = (*DebugBatch)(nil)
+
+func (b *DebugBatch) Begin() KeyValueTxn {
+	c := new(DebugBatch)
+	c.Batch = b.Batch.Begin()
+	c.Logger = b.Logger
+	return c
+}
+
 func (b *DebugBatch) Put(key Key, value []byte) error {
 	if debug&debugPut != 0 {
 		b.Logger.Debug("Put", "key", key)

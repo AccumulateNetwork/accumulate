@@ -17,6 +17,8 @@ type Batch struct {
 	values map[storage.Key][]byte
 }
 
+var _ storage.KeyValueTxn = (*Batch)(nil)
+
 func NewBatch(get GetFunc, commit CommitFunc) storage.KeyValueTxn {
 	return &Batch{
 		get:    get,
@@ -34,9 +36,17 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	return &storage.DebugBatch{Batch: b, Logger: db.logger}
 }
 
-var _ storage.KeyValueTxn = (*Batch)(nil)
+func (b *Batch) Begin() storage.KeyValueTxn {
+	if b.commit == nil {
+		return NewBatch(b.Get, nil)
+	}
+	return NewBatch(b.Get, b.PutAll)
+}
 
 func (b *Batch) Put(key storage.Key, value []byte) error {
+	if b.commit == nil {
+		return fmt.Errorf("transaction is not writable")
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.values[key] = value
@@ -44,6 +54,9 @@ func (b *Batch) Put(key storage.Key, value []byte) error {
 }
 
 func (b *Batch) PutAll(values map[storage.Key][]byte) error {
+	if b.commit == nil {
+		return fmt.Errorf("transaction is not writable")
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for k, v := range values {
@@ -77,6 +90,10 @@ func (b *Batch) Commit() error {
 	values := b.values
 	b.values = nil // Prevent reuse
 	b.mu.Unlock()
+
+	if b.commit == nil {
+		return nil
+	}
 
 	return b.commit(values)
 }
