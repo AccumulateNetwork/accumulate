@@ -487,13 +487,13 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 			return false, err
 		}
 
-		if page.Version != height {
-			return false, fmt.Errorf("invalid key page version: want %d, got %d", page.Version, height)
-		}
-
 		initiator := env.Signatures[0]
 		if height != initiator.GetSignerHeight() {
 			return false, fmt.Errorf("invalid height: want %d, got %d", height, initiator.GetSignerHeight())
+		}
+
+		if page.Version != initiator.GetSignerHeight() {
+			return false, fmt.Errorf("invalid key page version: want %d, got %d", page.Version, initiator.GetSignerHeight())
 		}
 
 		timestamp := initiator.GetTimestamp()
