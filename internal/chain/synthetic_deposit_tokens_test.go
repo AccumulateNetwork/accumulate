@@ -27,6 +27,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 
 	st, err := NewStateManager(batch, protocol.SubnetUrl(t.Name()), gtx)
 	require.NoError(t, err)
+	defer st.Discard()
 
 	_, err = SyntheticDepositTokens{}.Validate(st, gtx)
 	require.NoError(t, err)

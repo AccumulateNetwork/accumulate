@@ -52,6 +52,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 
 			st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 			require.NoError(t, err)
+			defer st.Discard()
 
 			_, err = UpdateKeyPage{}.Validate(st, env)
 			if idx <= 1 {
