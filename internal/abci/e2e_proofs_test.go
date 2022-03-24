@@ -22,7 +22,7 @@ func TestProofADI(t *testing.T) {
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
 	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, acctesting.TestTokenAmount, initialCredits))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, protocol.AcmeFaucetAmount, initialCredits))
 	require.NoError(t, batch.Commit())
 	liteAddr := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
 
