@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -22,7 +23,10 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (proto
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
 	}
 
-	st.logger.Debug("received SyntheticReceipt, updating status", "from", body.Source.URL(), "for tx ", logging.AsHex(body.SynthTxHash))
+	stx, _ := st.LoadTxn(body.SynthTxHash)
+	fmt.Println("------------ received SyntheticReceipt for type ", stx.Type(), "from", body.Source.URL(), "for tx ", hex.EncodeToString(logging.AsHex(body.SynthTxHash)))
+
+	st.logger.Debug("received SyntheticReceipt from", body.Source.URL(), "for tx", logging.AsHex(body.SynthTxHash))
 	st.UpdateStatus(body.SynthTxHash[:], body.Status)
 
 	return nil, nil
@@ -50,6 +54,7 @@ func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, n
 	sr.SetSyntheticOrigin(synthOrigin.Cause[:], nodeUrl)
 	sr.SynthTxHash = *(*[32]byte)(env.GetTxHash())
 	sr.Status = status
+	fmt.Println("********* creating SyntheticReceipt from", env.Transaction.Header.Principal, "for tx", hex.EncodeToString(logging.AsHex(sr.SynthTxHash)))
 
 	return sr, synthOrigin.Source
 }
@@ -78,6 +83,7 @@ func getSyntheticOrigin(tx *protocol.Transaction) protocol.SyntheticOrigin {
 			return body.SyntheticOrigin
 		}
 	case protocol.TransactionTypeSyntheticBurnTokens:
+		fmt.Println("********* creating SyntheticReceipt type TransactionTypeSyntheticBurnTokens")
 		body, ok := tx.Body.(*protocol.SyntheticBurnTokens)
 		if ok {
 			return body.SyntheticOrigin

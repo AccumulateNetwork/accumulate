@@ -656,7 +656,7 @@ func (m *Executor) buildSynthReceipts(rootAnchor []byte, synthIndexIndex, rootIn
 		entry.SynthIndex = uint64(offset) + uint64(i)
 		entry.RootIndexIndex = uint64(rootIndexIndex)
 		entry.SynthIndexIndex = uint64(synthIndexIndex)
-		entry.NeedsReceipt = true
+		entry.NeedsReceipt = txn.Type() != protocol.TransactionTypeSyntheticReceipt
 		ledgerState.Pending = append(ledgerState.Pending, entry)
 		m.logDebug("Adding synthetic transaction to the ledger", "hash", logging.AsHex(txn.GetHash()), "type", txn.Type(), "anchor", logging.AsHex(rootAnchor), "module", "synthetic")
 	}
