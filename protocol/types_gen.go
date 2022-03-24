@@ -189,6 +189,11 @@ type Envelope struct {
 	hash        []byte
 }
 
+type HashSet struct {
+	fieldsSet []bool
+	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
+}
+
 // IndexEntry represents an entry in an index chain.
 type IndexEntry struct {
 	fieldsSet []bool
@@ -266,10 +271,10 @@ type KeyPage struct {
 }
 
 type KeySpec struct {
-	fieldsSet []bool
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	fieldsSet  []bool
+	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	LastUsedOn uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
+	Owner      *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
@@ -304,7 +309,7 @@ type LiteTokenAccount struct {
 	AccountHeader
 	TokenUrl      *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 }
 
@@ -1453,6 +1458,19 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	return true
 }
 
+func (v *HashSet) Equal(u *HashSet) bool {
+	if len(v.Hashes) != len(u.Hashes) {
+		return false
+	}
+	for i := range v.Hashes {
+		if !(v.Hashes[i] == u.Hashes[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *IndexEntry) Equal(u *IndexEntry) bool {
 	if !(v.Source == u.Source) {
 		return false
@@ -1619,7 +1637,7 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
 	switch {
@@ -1709,7 +1727,7 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
 	if !(v.CreditBalance == u.CreditBalance) {
@@ -3545,6 +3563,43 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
+var fieldNames_HashSet = []string{
+	1: "Hashes",
+}
+
+func (v *HashSet) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Hashes) == 0) {
+		for _, v := range v.Hashes {
+			writer.WriteHash(1, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_HashSet)
+	return buffer.Bytes(), err
+}
+
+func (v *HashSet) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hashes is missing")
+	} else if len(v.Hashes) == 0 {
+		errs = append(errs, "field Hashes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
@@ -4066,7 +4121,7 @@ func (v *KeyPage) IsValid() error {
 
 var fieldNames_KeySpec = []string{
 	1: "PublicKey",
-	2: "Nonce",
+	2: "LastUsedOn",
 	3: "Owner",
 }
 
@@ -4077,8 +4132,8 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(1, v.PublicKey)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(2, v.Nonce)
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(2, v.LastUsedOn)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
@@ -4097,9 +4152,9 @@ func (v *KeySpec) IsValid() error {
 		errs = append(errs, "field PublicKey is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Owner is missing")
@@ -4309,7 +4364,7 @@ var fieldNames_LiteTokenAccount = []string{
 	2: "AccountHeader",
 	3: "TokenUrl",
 	4: "Balance",
-	5: "Nonce",
+	5: "LastUsedOn",
 	6: "CreditBalance",
 }
 
@@ -4325,8 +4380,8 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Balance)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(5, v.Nonce)
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(5, v.LastUsedOn)
 	}
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(6, v.CreditBalance)
@@ -4353,9 +4408,9 @@ func (v *LiteTokenAccount) IsValid() error {
 		errs = append(errs, "field Balance is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field CreditBalance is missing")
@@ -7028,6 +7083,26 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *HashSet) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadHash(1); ok {
+			v.Hashes = append(v.Hashes, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_HashSet)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *IndexEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -7342,7 +7417,7 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.PublicKey = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
-		v.Nonce = x
+		v.LastUsedOn = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
@@ -7476,7 +7551,7 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Balance = *x
 	}
 	if x, ok := reader.ReadUint(5); ok {
-		v.Nonce = x
+		v.LastUsedOn = x
 	}
 	if x, ok := reader.ReadUint(6); ok {
 		v.CreditBalance = x
@@ -8888,6 +8963,17 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *HashSet) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Hashes []string `json:"hashes,omitempty"`
+	}{}
+	u.Hashes = make([]string, len(v.Hashes))
+	for i, x := range v.Hashes {
+		u.Hashes[i] = encoding.ChainToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *InternalGenesis) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type TransactionType `json:"type"`
@@ -9031,12 +9117,14 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKey  *string  `json:"publicKey,omitempty"`
+		LastUsedOn uint64   `json:"lastUsedOn,omitempty"`
+		Nonce      uint64   `json:"nonce,omitempty"`
+		Owner      *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
@@ -9109,6 +9197,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
+		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
 		CreditBalance  uint64      `json:"creditBalance,omitempty"`
 	}{}
@@ -9118,7 +9207,8 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.CreditBalance = v.CreditBalance
 	return json.Marshal(&u)
 }
@@ -10170,6 +10260,28 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *HashSet) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Hashes []string `json:"hashes,omitempty"`
+	}{}
+	u.Hashes = make([]string, len(v.Hashes))
+	for i, x := range v.Hashes {
+		u.Hashes[i] = encoding.ChainToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Hashes = make([][32]byte, len(u.Hashes))
+	for i, x := range u.Hashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Hashes: %w", err)
+		} else {
+			v.Hashes[i] = x
+		}
+	}
+	return nil
+}
+
 func (v *InternalGenesis) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type TransactionType `json:"type"`
@@ -10383,12 +10495,14 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKey  *string  `json:"publicKey,omitempty"`
+		LastUsedOn uint64   `json:"lastUsedOn,omitempty"`
+		Nonce      uint64   `json:"nonce,omitempty"`
+		Owner      *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -10398,7 +10512,11 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	v.Nonce = u.Nonce
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
+	} else {
+		v.LastUsedOn = u.Nonce
+	}
 	v.Owner = u.Owner
 	return nil
 }
@@ -10517,6 +10635,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
+		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
 		CreditBalance  uint64      `json:"creditBalance,omitempty"`
 	}{}
@@ -10526,7 +10645,8 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Nonce = v.Nonce
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.CreditBalance = v.CreditBalance
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -10540,7 +10660,11 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
-	v.Nonce = u.Nonce
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
+	} else {
+		v.LastUsedOn = u.Nonce
+	}
 	v.CreditBalance = u.CreditBalance
 	return nil
 }

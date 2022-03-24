@@ -15,6 +15,7 @@ import (
 
 type StateManager struct {
 	stateCache
+	parentBatch *database.Batch
 
 	Origin    protocol.Account
 	OriginUrl *url.URL
@@ -26,15 +27,24 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (*StateManager, error) {
-	m := new(StateManager)
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (m *StateManager, err error) {
+	m = new(StateManager)
+	m.parentBatch = batch
+
+	// Use a nested batch to ensure isolation
+	batch = batch.Begin()
+	defer func() {
+		if err != nil {
+			batch.Discard()
+		}
+	}()
+
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
 
 	// TODO Process each signature separately
 
 	// Find the signator
-	var err error
 	m.SignatorUrl = env.Signatures[0].GetSigner()
 	err = m.LoadUrlAs(m.SignatorUrl, &m.Signator)
 	switch {
@@ -68,6 +78,8 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Enve
 }
 
 func (m *StateManager) Reset() {
+	m.batch.Discard()
+	m.batch = m.parentBatch.Begin()
 	m.stateCache.Reset()
 	m.blockState = BlockState{}
 }
@@ -107,7 +119,11 @@ func (m *StateManager) Commit() error {
 		m.Submit(id, scc)
 	}
 
-	return nil
+	return m.batch.Commit()
+}
+
+func (m *StateManager) Discard() {
+	m.batch.Discard()
 }
 
 // Submit queues a synthetic transaction for submission.
@@ -140,8 +156,8 @@ func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
 		return nil
 	}
 
-	book := new(protocol.KeyBook)
-	err := m.LoadUrlAs(u, book)
+	var book *protocol.KeyBook
+	err := m.LoadUrlAs(u, &book)
 	if err != nil {
 		return fmt.Errorf("invalid key book %q: %v", u, err)
 	}

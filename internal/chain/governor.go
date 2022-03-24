@@ -14,6 +14,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+const debugSendAnchor = false
+
 type governor struct {
 	ExecutorOptions
 	logger     logging.OptionalLogger
@@ -21,6 +23,7 @@ type governor struct {
 	started    int32
 	messages   chan interface{}
 	done       chan struct{}
+	sent       map[[32]byte]bool
 }
 
 type govStop struct{}
@@ -41,6 +44,7 @@ func newGovernor(opts ExecutorOptions) *governor {
 	g.ExecutorOptions = opts
 	g.messages = make(chan interface{})
 	g.done = make(chan struct{})
+	g.sent = map[[32]byte]bool{}
 	g.dispatcher = newDispatcher(opts)
 	g.logger.L = opts.Logger
 	g.logger.L = g.logger.With("module", "governor")
@@ -72,15 +76,13 @@ func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, meta BlockMe
 	}
 
 	ledger := batch.Account(g.Network.Ledger())
-	msg.ledger = new(protocol.InternalLedger)
-	err := ledger.GetStateAs(msg.ledger)
+	err := ledger.GetStateAs(&msg.ledger)
 	if err != nil {
 		return err
 	}
 
 	synthLedger := batch.Account(g.Network.SyntheticLedger())
-	msg.synthLedger = new(protocol.InternalSyntheticLedger)
-	err = synthLedger.GetStateAs(msg.synthLedger)
+	err = synthLedger.GetStateAs(&msg.synthLedger)
 	if err != nil {
 		return err
 	}
@@ -177,7 +179,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 
 	// Sign and send produced synthetic transactions
 	g.signTransactions(batch, msg.ledger)
-	g.sendTransactions(batch, unsent)
+	g.sendTransactions(batch, msg, unsent)
 
 	// Dispatch transactions asynchronously
 	errs := g.dispatcher.Send(context.Background())
@@ -233,7 +235,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 	g.sendInternal(batch, body)
 }
 
-func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
+func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, unsent [][32]byte) {
 	if len(unsent) == 0 {
 		return
 	}
@@ -267,11 +269,18 @@ func (g *governor) sendTransactions(batch *database.Batch, unsent [][32]byte) {
 			continue
 		}
 
-		// Send it
 		typ := env.Transaction.Type()
-		if typ != protocol.TransactionTypeSyntheticAnchor {
-			g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
+		txid32 := *(*[32]byte)(env.GetTxHash())
+		if g.sent[txid32] {
+			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.blockMeta.Index)
+		} else {
+			if debugSendAnchor || typ != protocol.TransactionTypeSyntheticAnchor {
+				g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.blockMeta.Index)
+			}
+			g.sent[txid32] = true
 		}
+
+		// Send it
 		err = g.dispatcher.BroadcastTx(context.Background(), env.Transaction.Header.Principal, raw)
 		if err != nil {
 			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id), "error", err)
@@ -396,8 +405,8 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
 
 	// Construct the signature transaction
-	ledgerState := new(protocol.InternalLedger)
-	err := st.LoadUrlAs(g.Network.Ledger(), ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := st.LoadUrlAs(g.Network.Ledger(), &ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))

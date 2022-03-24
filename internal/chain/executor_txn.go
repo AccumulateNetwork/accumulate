@@ -19,7 +19,7 @@ func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, 
 	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
-	st, executor, hasEnoughSigs, err := m.validate(batch, env)
+	st, executor, hasEnoughSigs, err := m.validate(batch, env, true)
 	var notFound bool
 	switch {
 	case err == nil:
@@ -29,6 +29,7 @@ func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, 
 	default:
 		return nil, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: err}
 	}
+	defer st.Discard()
 
 	// Do not run transaction-specific validation for a synthetic transaction. A
 	// synthetic transaction will be rejected by `m.validate` unless it is
@@ -73,10 +74,11 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// }
 
 	// Set up the state manager and validate the signatures
-	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
+	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env, false)
 	if err != nil {
 		return nil, m.recordTransactionError(nil, env, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
+	defer st.Discard()
 
 	if !hasEnoughSigs {
 		// Write out changes to the nonce and credit balance
@@ -157,11 +159,12 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 	if err != nil {
 		return err
 	}
+	defer st.Discard()
 	st.logger.L = m.logger
 
-	da := new(protocol.DataAccount)
+	var da *protocol.DataAccount
 	va := m.blockBatch.Account(dataAccountUrl)
-	err = va.GetStateAs(da)
+	err = va.GetStateAs(&da)
 	if err != nil {
 		return err
 	}
@@ -180,7 +183,7 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
-func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
+func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isCheck bool) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
 	// Basic validation
 	err = m.validateBasic(batch, env)
 	if err != nil {
@@ -217,7 +220,16 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 	if err != nil {
 		return nil, nil, false, err
 	}
-	st.logger.L = m.logger
+	defer func() {
+		if st != nil && err != nil {
+			st.Discard()
+		}
+	}()
+	if isCheck {
+		st.logger.L = m.logger.With("operation", "Check")
+	} else {
+		st.logger.L = m.logger.With("operation", "Deliver")
+	}
 
 	// Validate the transaction
 	switch {
@@ -225,7 +237,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope) (st *
 		hasEnoughSigs, err = m.validateUser(st, env, fee)
 
 	case txt.IsSynthetic():
-		hasEnoughSigs, err = true, m.validateSynthetic(batch, st, env)
+		hasEnoughSigs, err = true, m.validateSynthetic(st, env)
 
 	case txt.IsInternal():
 		hasEnoughSigs, err = true, m.validateInternal(st, env)
@@ -336,7 +348,7 @@ func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) 
 	return nil
 }
 
-func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, env *protocol.Envelope) error {
+func (m *Executor) validateSynthetic(st *StateManager, env *protocol.Envelope) error {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
@@ -358,14 +370,18 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 		return err
 	}
 
+	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
 	for _, sig := range env.Signatures {
 		switch sig := sig.(type) {
 		case *protocol.SyntheticSignature:
+			gotSynthSig = true
 			if !m.Network.NodeUrl().Equal(sig.DestinationNetwork) {
 				return fmt.Errorf("destination network %v is not this network", sig.DestinationNetwork)
 			}
 
 		case *protocol.ReceiptSignature:
+			gotReceiptSig = true
+
 			// TODO We should add something so we know which subnet originated
 			// the transaction. That way, the DN can also check receipts.
 			if m.Network.Type != config.BlockValidator {
@@ -374,7 +390,7 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 			}
 
 			// Load the anchor chain
-			anchorChain, err := batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
+			anchorChain, err := st.batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
 			if err != nil {
 				return fmt.Errorf("unable to load the DN intermediate anchor chain: %w", err)
 			}
@@ -392,9 +408,22 @@ func (m *Executor) validateSynthetic(batch *database.Batch, st *StateManager, en
 
 		case *protocol.ED25519Signature, *protocol.LegacyED25519Signature:
 			// TODO Check the key
+			gotED25519Sig = true
 
 		default:
 			return fmt.Errorf("synthetic transaction do not support %T signatures", sig)
+		}
+	}
+	if !gotSynthSig {
+		return fmt.Errorf("missing synthetic transaction origin")
+	}
+	if st.txType == protocol.TransactionTypeSyntheticAnchor {
+		if !gotED25519Sig {
+			return fmt.Errorf("missing ED25519 signature")
+		}
+	} else {
+		if !gotReceiptSig {
+			return fmt.Errorf("missing synthetic transaction receipt")
 		}
 	}
 
@@ -498,11 +527,11 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 			return false, fmt.Errorf("invalid initiator: missing timestamp")
 		}
 
-		if firstKeySpec.Nonce >= timestamp {
-			return false, fmt.Errorf("invalid nonce: have %d, received %d", firstKeySpec.Nonce, timestamp)
+		if firstKeySpec.LastUsedOn >= timestamp {
+			return false, fmt.Errorf("invalid nonce: have %d, received %d", firstKeySpec.LastUsedOn, timestamp)
 		}
 
-		firstKeySpec.Nonce = timestamp
+		firstKeySpec.LastUsedOn = timestamp
 
 	default:
 		return false, fmt.Errorf("failed to get signatures: %v", err)
@@ -553,11 +582,11 @@ func (m *Executor) validateLiteSigner(st *StateManager, env *protocol.Envelope, 
 			return fmt.Errorf("invalid initiator: missing timestamp")
 		}
 
-		if account.Nonce >= timestamp {
-			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, timestamp)
+		if account.LastUsedOn >= timestamp {
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.LastUsedOn, timestamp)
 		}
 
-		account.Nonce = timestamp
+		account.LastUsedOn = timestamp
 	}
 
 	if !account.DebitCredits(uint64(fee)) {
@@ -667,14 +696,14 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 	// signator to ensure we don't push any invalid changes. Use the database
 	// directly, since the state manager won't be committed.
 	sigRecord := m.blockBatch.Account(st.SignatorUrl)
-	err = sigRecord.GetStateAs(st.Signator)
+	err = sigRecord.GetStateAs(&st.Signator)
 	if err != nil {
 		return err
 	}
 
 	// TODO Make sure this is the initiator
 	sig := env.Signatures[0]
-	err = st.Signator.SetNonce(sig.GetPublicKey(), sig.GetTimestamp())
+	err = st.Signator.SetLastUsedOn(sig.GetPublicKey(), sig.GetTimestamp())
 	if err != nil {
 		return err
 	}

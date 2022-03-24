@@ -19,10 +19,6 @@ import (
 
 type DB = *database.Batch
 
-// Token multiplier
-const TokenMx = protocol.AcmePrecision
-const TestTokenAmount = 5e5
-
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
@@ -34,23 +30,6 @@ func MustParseUrl(s string) *url.URL {
 		panic(err)
 	}
 	return u
-}
-
-func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*protocol.Envelope, error) {
-	recipientAdi := AcmeLiteAddressTmPriv(recipient)
-
-	//create a fake synthetic deposit for faucet.
-	deposit := new(protocol.SyntheticDepositTokens)
-	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.AcmeUrl()
-	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
-
-	return NewTransaction().
-		WithPrincipal(recipientAdi).
-		WithSigner(protocol.FaucetUrl, 1).
-		WithNonce(1).
-		WithBody(deposit).
-		Initiate(protocol.SignatureTypeLegacyED25519, recipient), nil
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*protocol.Envelope, error) {
@@ -68,34 +47,9 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	return NewTransaction().
 		WithPrincipal(from).
 		WithSigner(from, 1).
-		WithNonce(1).
+		WithTimestamp(1).
 		WithBody(&send).
 		Initiate(protocol.SignatureTypeLegacyED25519, sponsor), nil
-}
-
-func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *protocol.Envelope, error) {
-	_, privateKey, _ := ed25519.GenerateKey(nil)
-	//set destination url address
-	destAddress := AcmeLiteAddressStdPriv(privateKey)
-
-	//create a fake synthetic deposit for faucet.
-	deposit := new(protocol.SyntheticDepositTokens)
-	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.AcmeUrl()
-	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
-	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
-	// amtToDeposit := int64(50000)                             //deposit 50k tokens
-	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
-	// deposit.TokenUrl = tokenUrl
-
-	env := NewTransaction().
-		WithPrincipal(destAddress).
-		WithSigner(protocol.FaucetUrl, 1).
-		WithNonce(1).
-		WithBody(deposit).
-		Initiate(protocol.SignatureTypeLegacyED25519, privateKey)
-
-	return destAddress.String(), privateKey, env, nil
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
@@ -228,14 +182,14 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account := new(protocol.LiteTokenAccount)
 		account.Url = u
 		account.TokenUrl = tu
-		account.Balance.SetInt64(int64(tokens * TokenMx))
+		account.Balance.SetInt64(int64(tokens * protocol.AcmePrecision))
 		chain = account
 	} else {
 		account := protocol.NewTokenAccount()
 		account.Url = u
 		account.TokenUrl = tu
 		account.KeyBook = u.Identity().JoinPath("book0")
-		account.Balance.SetInt64(int64(tokens * TokenMx))
+		account.Balance.SetInt64(int64(tokens * protocol.AcmePrecision))
 		chain = account
 	}
 

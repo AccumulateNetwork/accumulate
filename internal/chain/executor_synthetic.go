@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -29,33 +30,23 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
-	destSubnet, err := m.Router.RouteAccount(dest)
-	if err != nil {
-		return nil, fmt.Errorf("routing %v: %v", dest, err)
-	}
-
-	ledgerState := new(protocol.InternalLedger)
-	err = st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
-	initSig := new(protocol.SyntheticSignature)
-	initSig.SourceNetwork = m.Network.NodeUrl()
-	initSig.DestinationNetwork = protocol.SubnetUrl(destSubnet)
-	initSig.SequenceNumber = ledgerState.Synthetic.Nonce
-
-	initHash, err := initSig.InitiatorHash()
-	if err != nil {
-		// This should never happen
-		panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
-	}
-
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
-	txn.Header.Initiator = *(*[32]byte)(initHash)
 	txn.Body = body
+	initSig, err := new(signing.Signer).
+		SetUrl(m.Network.NodeUrl()).
+		SetHeight(ledgerState.Synthetic.Nonce).
+		InitiateSynthetic(txn, m.Router)
+	if err != nil {
+		return nil, err
+	}
 
 	// Append the ID
 	if body.Type() == protocol.TransactionTypeSyntheticAnchor {

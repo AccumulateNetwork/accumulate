@@ -46,12 +46,13 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			env := acctesting.NewTransaction().
 				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
 				WithSigner(protocol.FormatKeyPageUrl(bookUrl, idx), 1).
-				WithNonce(1).
+				WithTimestamp(1).
 				WithBody(body).
 				Initiate(protocol.SignatureTypeED25519, testKey)
 
 			st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 			require.NoError(t, err)
+			defer st.Discard()
 
 			_, err = UpdateKeyPage{}.Validate(st, env)
 			if idx <= 1 {

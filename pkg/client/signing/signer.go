@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -90,7 +91,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 			return nil, errors.New("cannot prepare signature: invalid private key")
 		}
 
-	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic:
+	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeInternal:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
 		panic(fmt.Errorf("invalid attempt to generate signature of type %v!", s.Type))
 
@@ -171,12 +172,44 @@ func (s *Signer) Initiate(txn *protocol.Transaction) (protocol.Signature, error)
 	return sig, nil
 }
 
+func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Router) (protocol.Signature, error) {
+	var errs []string
+	if s.Url == nil {
+		errs = append(errs, "missing signer")
+	}
+	if s.Height == 0 {
+		errs = append(errs, "missing timestamp")
+	}
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
+	}
+
+	destSubnet, err := router.RouteAccount(txn.Header.Principal)
+	if err != nil {
+		return nil, fmt.Errorf("routing %v: %v", txn.Header.Principal, err)
+	}
+
+	initSig := new(protocol.SyntheticSignature)
+	initSig.SourceNetwork = s.Url
+	initSig.DestinationNetwork = protocol.SubnetUrl(destSubnet)
+	initSig.SequenceNumber = s.Height
+
+	initHash, err := initSig.InitiatorHash()
+	if err != nil {
+		// This should never happen
+		panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
+	}
+
+	txn.Header.Initiator = *(*[32]byte)(initHash)
+	return initSig, nil
+}
+
 func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	fs := protocol.Faucet.Signer()
 	sig := new(protocol.LegacyED25519Signature)
 	sig.Signer = protocol.FaucetUrl
 	sig.SignerHeight = 1
-	sig.Timestamp = fs.Nonce()
+	sig.Timestamp = fs.Timestamp()
 	sig.PublicKey = fs.PublicKey()
 
 	init, err := sig.InitiatorHash()

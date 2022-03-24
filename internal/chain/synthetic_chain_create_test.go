@@ -34,12 +34,13 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithNonce(1).
+		WithTimestamp(1).
 		WithBody(body).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 
 	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 	require.NoError(t, err)
+	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
@@ -69,12 +70,13 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithNonce(1).
+		WithTimestamp(1).
 		WithBody(body).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 
 	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
 	require.NoError(t, err)
+	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
 	require.NoError(t, err) // We created ADI acc://foo not acc://foo/bar

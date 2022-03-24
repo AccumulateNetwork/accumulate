@@ -1,29 +1,42 @@
 package memory
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+const debugLogWrites = false
+
 type GetFunc func(storage.Key) ([]byte, error)
 type CommitFunc func(map[storage.Key][]byte) error
 
 type Batch struct {
-	get    GetFunc
-	commit CommitFunc
-	mu     *sync.RWMutex
-	values map[storage.Key][]byte
+	get           GetFunc
+	commit        CommitFunc
+	mu            *sync.RWMutex
+	values        map[storage.Key][]byte
+	debugWriteLog []writeLogEntry
 }
 
+type writeLogEntry struct {
+	key    storage.Key
+	keyStr string
+	value  string
+}
+
+var _ storage.KeyValueTxn = (*Batch)(nil)
+
 func NewBatch(get GetFunc, commit CommitFunc) storage.KeyValueTxn {
-	return &Batch{
+	b := &Batch{
 		get:    get,
 		commit: commit,
 		mu:     new(sync.RWMutex),
 		values: map[storage.Key][]byte{},
 	}
+	return b
 }
 
 func (db *DB) Begin(writable bool) storage.KeyValueTxn {
@@ -31,23 +44,48 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	if db.logger == nil {
 		return b
 	}
-	return &storage.DebugBatch{Batch: b, Logger: db.logger}
+	return &storage.DebugBatch{Batch: b, Logger: db.logger, Writable: writable}
 }
 
-var _ storage.KeyValueTxn = (*Batch)(nil)
+func (b *Batch) Begin() storage.KeyValueTxn {
+	if b.commit == nil {
+		return NewBatch(b.Get, nil)
+	}
+	return NewBatch(b.Get, b.PutAll)
+}
 
 func (b *Batch) Put(key storage.Key, value []byte) error {
+	if b.commit == nil {
+		return fmt.Errorf("transaction is not writable")
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.values[key] = value
+	if debugLogWrites {
+		b.debugWriteLog = append(b.debugWriteLog, writeLogEntry{
+			key:    key,
+			keyStr: key.String(),
+			value:  hex.EncodeToString(value),
+		})
+	}
 	return nil
 }
 
 func (b *Batch) PutAll(values map[storage.Key][]byte) error {
+	if b.commit == nil {
+		return fmt.Errorf("transaction is not writable")
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for k, v := range values {
 		b.values[k] = v
+		if debugLogWrites {
+			b.debugWriteLog = append(b.debugWriteLog, writeLogEntry{
+				key:    k,
+				keyStr: k.String(),
+				value:  hex.EncodeToString(v),
+			})
+		}
 	}
 	return nil
 }
@@ -77,6 +115,10 @@ func (b *Batch) Commit() error {
 	values := b.values
 	b.values = nil // Prevent reuse
 	b.mu.Unlock()
+
+	if b.commit == nil {
+		return nil
+	}
 
 	return b.commit(values)
 }
