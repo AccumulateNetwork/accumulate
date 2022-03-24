@@ -13,6 +13,8 @@ variables:
 
 merge request target:
   needs: []
+  rules:
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
   script:
   # Merge requests can only be merged into develop
   # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
@@ -46,6 +48,9 @@ test:
   stage: test
   extends: .go
   needs: []
+  rules:
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: $CI_PIPELINE_SOURCE == 'push'
   artifacts:
     when: always
     reports:
@@ -57,6 +62,9 @@ test:
 git describe:
   stage: build
   needs: []
+  rules:
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  - if: $CI_PIPELINE_SOURCE == 'push'
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
