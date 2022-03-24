@@ -12,15 +12,24 @@ var ErrNotFound = errors.New("not found")
 var ErrNotOpen = errors.New("not open")
 
 type KeyValueTxn interface {
+	// Get gets a value.
 	Get(key Key) ([]byte, error)
+	// Put puts a value.
 	Put(key Key, value []byte) error
+	// PutAll puts many values.
 	PutAll(map[Key][]byte) error
+	// Commit commits the transaction.
 	Commit() error
+	// Discard discards the transaction.
 	Discard()
+	// Begin begins a sub-transaction.
+	Begin() KeyValueTxn
 }
 
 type KeyValueStore interface {
-	Close() error // Returns an error if the close fails
+	// Close closes the store.
+	Close() error
+	// Begin begins a transaction.
 	Begin(writable bool) KeyValueTxn
 }
 
