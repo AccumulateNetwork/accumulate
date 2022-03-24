@@ -183,8 +183,8 @@ func (c *FakeTendermint) getSynthHeight() int64 {
 
 	// Load the ledger state
 	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return 0
@@ -206,8 +206,8 @@ func (c *FakeTendermint) addSynthTxns(blockIndex, lastHeight int64) (int64, bool
 
 	// Load the ledger state
 	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		c.onError(err)
 		return 0, false

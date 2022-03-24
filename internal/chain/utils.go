@@ -250,7 +250,8 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 		return nil
 	default:
 		// Load the origin's key book
-		err := batch.Account(origin.Header().KeyBook).GetStateAs(new(protocol.KeyBook))
+		var keyBook *protocol.KeyBook
+		err := batch.Account(origin.Header().KeyBook).GetStateAs(&keyBook)
 		if err != nil {
 			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
 		}
@@ -270,8 +271,8 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	}
 
 	// Load the page's state
-	keyPage := new(protocol.KeyPage)
-	err = pageAcnt.GetStateAs(keyPage)
+	var keyPage *protocol.KeyPage
+	err = pageAcnt.GetStateAs(&keyPage)
 	if err != nil {
 		return fmt.Errorf("failed to load %v: %v", signatures[0].GetSigner(), err)
 	}
