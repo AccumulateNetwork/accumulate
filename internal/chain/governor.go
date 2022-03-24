@@ -72,15 +72,13 @@ func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, meta BlockMe
 	}
 
 	ledger := batch.Account(g.Network.Ledger())
-	msg.ledger = new(protocol.InternalLedger)
-	err := ledger.GetStateAs(msg.ledger)
+	err := ledger.GetStateAs(&msg.ledger)
 	if err != nil {
 		return err
 	}
 
 	synthLedger := batch.Account(g.Network.SyntheticLedger())
-	msg.synthLedger = new(protocol.InternalSyntheticLedger)
-	err = synthLedger.GetStateAs(msg.synthLedger)
+	err = synthLedger.GetStateAs(&msg.synthLedger)
 	if err != nil {
 		return err
 	}
@@ -396,8 +394,8 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
 
 	// Construct the signature transaction
-	ledgerState := new(protocol.InternalLedger)
-	err := st.LoadUrlAs(g.Network.Ledger(), ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := st.LoadUrlAs(g.Network.Ledger(), &ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
