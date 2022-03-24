@@ -143,6 +143,8 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	if err != nil {
 		return nil, err
 	}
+	defer st.Discard()
+
 	if st.Origin != nil {
 		return nil, errors.New("already initialized")
 	}
@@ -213,7 +215,7 @@ func (m *Executor) InitChain(data []byte, time time.Time) ([]byte, error) {
 	}
 
 	// Load the root anchor chain so we can verify the system state
-	srcBatch := database.New(src, nil).Begin(true)
+	srcBatch := database.New(src, nil).Begin(false)
 	defer srcBatch.Discard()
 	srcAnchor, err := srcBatch.GetMinorRootChainAnchor(&m.Network)
 	if err != nil {
