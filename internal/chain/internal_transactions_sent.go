@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,6 +38,7 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope
 			ledger.Synthetic.Unsent = append(ledger.Synthetic.Unsent, id)
 			continue
 		}
+		st.logger.Debug("Did send transaction", "txid", logging.AsHex(id), "module", "governor")
 	}
 
 	st.Update(ledger)
