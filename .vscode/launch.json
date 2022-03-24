@@ -39,6 +39,21 @@
       ]
     },
     {
+      "name": "Init and run DevNet",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "preLaunchTask": "Init DevNet",
+      "args": [
+        "run",
+        "devnet",
+        "-w",
+        "${workspaceFolder}/.nodes",
+        "--truncate"
+      ]
+    },
+    {
       "name": "Run Dual",
       "type": "go",
       "request": "launch",
