@@ -11,6 +11,14 @@ variables:
   PRODUCTION_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
   VALIDATION_IMAGE: ${CI_REGISTRY_IMAGE}/validation:${CI_COMMIT_REF_SLUG}
 
+merge request target:
+  needs: []
+  only: [ merge_requests ]
+  script:
+  # Merge requests can only be merged into develop
+  # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
+  - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
+
 .go:
   image: golang:1.17
   cache:
