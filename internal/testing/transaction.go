@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"fmt"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -104,6 +105,7 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 		panic("cannot initiate transaction: already initiated")
 	}
 
+	tb.signer.Type = typ
 	tb.signer.PrivateKey = privateKey
 	sig, err := tb.signer.Initiate(tb.Transaction)
 	if err != nil {
@@ -112,6 +114,36 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 
 	tb.Signatures = append(tb.Signatures, sig)
 	return tb.Envelope
+}
+
+func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) TransactionBuilder {
+	if tb.TxHash != nil {
+		panic("cannot initiate transaction: have hash instead of body")
+	}
+	if tb.Transaction.Header.Initiator != ([32]byte{}) {
+		panic("cannot initiate transaction: already initiated")
+	}
+	if tb.signer.Url == nil {
+		panic("missing signer")
+	}
+	if tb.signer.Height == 0 {
+		panic("missing timestamp")
+	}
+
+	initSig := new(protocol.SyntheticSignature)
+	initSig.SourceNetwork = tb.signer.Url
+	initSig.DestinationNetwork = destSubnetUrl
+	initSig.SequenceNumber = tb.signer.Height
+
+	initHash, err := initSig.InitiatorHash()
+	if err != nil {
+		// This should never happen
+		panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
+	}
+
+	tb.Transaction.Header.Initiator = *(*[32]byte)(initHash)
+	tb.Signatures = append(tb.Signatures, initSig)
+	return tb
 }
 
 func (tb TransactionBuilder) Faucet() *protocol.Envelope {
