@@ -41,7 +41,7 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	if db.logger == nil {
 		return b
 	}
-	return &storage.DebugBatch{Batch: b, Logger: db.logger}
+	return &storage.DebugBatch{Batch: b, Logger: db.logger, Writable: writable}
 }
 
 func (db *DB) key(key storage.Key) string {
