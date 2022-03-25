@@ -93,7 +93,7 @@ type TxExecutor interface {
 
 type creditChain interface {
 	protocol.Account
-	SetLastUsedOn(key []byte, timestamp uint64) error
+	protocol.KeyHolder
 	protocol.CreditHolder
 }
 

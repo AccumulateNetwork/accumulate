@@ -58,7 +58,7 @@ func (e *Envelope) EnvHash() []byte {
 
 // VerifyTxHash verifies that TxHash matches the hash of the transaction.
 func (e *Envelope) VerifyTxHash() bool {
-	if e.TxHash == nil {
+	if e.TxHash == nil || e.Transaction == nil || e.Transaction.Body.Type() == TransactionTypeSignPending {
 		return true
 	}
 	return bytes.Equal(e.TxHash, e.Transaction.GetHash())
@@ -98,6 +98,14 @@ func (t *Transaction) GetHash() []byte {
 	h := sha256.Sum256(header)
 	t.hash = h[:]
 	return h[:]
+}
+
+func (e *Envelope) Type() TransactionType {
+	// If there's no transaction, it must be sign pending
+	if e.Transaction == nil {
+		return TransactionTypeSignPending
+	}
+	return e.Transaction.Body.Type()
 }
 
 // Type decodes the transaction type from the body.

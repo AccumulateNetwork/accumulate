@@ -53,7 +53,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				WithBody(body).
 				Initiate(protocol.SignatureTypeED25519, testKey)
 
-			st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), env)
+			st, err := NewStateManager(db.Begin(true), nil, protocol.SubnetUrl(t.Name()), env)
 			require.NoError(t, err)
 			defer st.Discard()
 
