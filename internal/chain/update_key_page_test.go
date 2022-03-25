@@ -2,6 +2,7 @@ package chain_test
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 
@@ -38,8 +39,10 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
 			op := new(protocol.UpdateKeyOperation)
-			op.OldEntry.PublicKey = testKey.PubKey().Bytes()
-			op.NewEntry.PublicKey = newKey.PubKey().Bytes()
+			kh := sha256.Sum256(testKey.PubKey().Bytes())
+			nkh := sha256.Sum256(newKey.PubKey().Bytes())
+			op.OldEntry.KeyHash = kh[:]
+			op.NewEntry.KeyHash = nkh[:]
 			body := new(protocol.UpdateKeyPage)
 			body.Operation = op
 

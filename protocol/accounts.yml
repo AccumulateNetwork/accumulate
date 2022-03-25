@@ -122,8 +122,9 @@ Anchor:
 
 KeySpec:
   fields:
-    - name: PublicKey
+    - name: PublicKeyHash
       type: bytes
+      alternative: PublicKey
     - name: LastUsedOn
       type: uvarint
       alternative: Nonce
