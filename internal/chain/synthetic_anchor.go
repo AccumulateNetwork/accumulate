@@ -54,7 +54,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 		var issuerState *protocol.TokenIssuer
 		err = st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
 		if err != nil {
-			fmt.Errorf("unable to load acme ledger")
+			return nil, fmt.Errorf("unable to load acme ledger")
 		}
 		issuerState.SupplyLimit.Sub(issuerState.SupplyLimit, &body.AcmeBurnt)
 		st.Update(issuerState)
@@ -65,7 +65,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 		var issuerState *protocol.TokenIssuer
 		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
 		if err != nil {
-			fmt.Errorf("unable to load acme ledger")
+			return nil, fmt.Errorf("unable to load acme ledger")
 		}
 		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
 		st.Update(issuerState)
