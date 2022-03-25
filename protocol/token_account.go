@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"errors"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -16,8 +15,10 @@ type TokenHolder interface {
 }
 
 type CreditHolder interface {
+	GetCreditBalance() uint64
 	CreditCredits(amount uint64)
 	DebitCredits(amount uint64) bool
+	CanDebitCredits(amount uint64) bool
 }
 
 var _ TokenHolder = (*TokenAccount)(nil)
@@ -55,16 +56,24 @@ func (acct *TokenAccount) GetTokenUrl() *url.URL {
 	return acct.TokenUrl
 }
 
-func (ms *KeyPage) CreditCredits(amount uint64) {
-	ms.CreditBalance = amount
+func (page *KeyPage) CreditCredits(amount uint64) {
+	page.CreditBalance = amount
 }
 
-func (ms *KeyPage) DebitCredits(amount uint64) bool {
-	if amount > ms.CreditBalance {
+func (page *KeyPage) GetCreditBalance() uint64 {
+	return page.CreditBalance
+}
+
+func (page *KeyPage) CanDebitCredits(amount uint64) bool {
+	return amount <= page.CreditBalance
+}
+
+func (page *KeyPage) DebitCredits(amount uint64) bool {
+	if !page.CanDebitCredits(amount) {
 		return false
 	}
 
-	ms.CreditBalance -= amount
+	page.CreditBalance -= amount
 	return true
 }
 
@@ -98,8 +107,16 @@ func (acct *LiteTokenAccount) CreditCredits(amount uint64) {
 	acct.CreditBalance += amount
 }
 
+func (acct *LiteTokenAccount) GetCreditBalance() uint64 {
+	return acct.CreditBalance
+}
+
+func (acct *LiteTokenAccount) CanDebitCredits(amount uint64) bool {
+	return amount <= acct.CreditBalance
+}
+
 func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
-	if amount > acct.CreditBalance {
+	if !acct.CanDebitCredits(amount) {
 		return false
 	}
 	acct.CreditBalance -= amount
@@ -108,21 +125,4 @@ func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
 
 func (acct *LiteTokenAccount) GetTokenUrl() *url.URL {
 	return acct.TokenUrl
-}
-
-func (acct *LiteTokenAccount) SetLastUsedOn(key []byte, lastUsedOn uint64) error {
-	// TODO Check the key hash?
-	acct.LastUsedOn = lastUsedOn
-	return nil
-}
-
-func (page *KeyPage) SetLastUsedOn(key []byte, lastUsedOn uint64) error {
-	ks := page.FindKey(key)
-	if ks == nil {
-		// Should never happen
-		return errors.New("failed to find key spec")
-	}
-
-	ks.LastUsedOn = lastUsedOn
-	return nil
 }
