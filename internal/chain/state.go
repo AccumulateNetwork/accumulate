@@ -46,10 +46,25 @@ func NewStateManager(parentBatch, batch *database.Batch, nodeUrl *url.URL, env *
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
 
+	var firstSig protocol.Signature
+	sigs, err := m.LoadSignatures(*(*[32]byte)(env.GetTxHash()))
+	if err != nil {
+		return nil, err
+	}
+	if sigs.Count() == 0 {
+		firstSig = env.Signatures[0]
+	} else {
+		firstSig = sigs.Signatures[0]
+	}
+
+	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
+		return nil, fmt.Errorf("invalid transaction: initiated by receipt signature")
+	}
+
 	// TODO Process each signature separately
 
 	// Find the signator
-	m.SignatorUrl = env.Signatures[0].GetSigner()
+	m.SignatorUrl = firstSig.GetSigner()
 	err = m.LoadUrlAs(m.SignatorUrl, &m.Signator)
 	switch {
 	case err == nil:
