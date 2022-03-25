@@ -24,9 +24,9 @@ func (tb *TransactionBuilder) ensureTxn() {
 	if tb.Transaction != nil {
 		return
 	}
-	if tb.TxHash != nil {
-		panic("can't have both a transaction hash and body")
-	}
+	// if tb.TxHash != nil {
+	// 	panic("can't have both a transaction hash and body")
+	// }
 	tb.Transaction = new(protocol.Transaction)
 }
 
@@ -70,9 +70,9 @@ func (tb TransactionBuilder) WithBody(body protocol.TransactionBody) Transaction
 }
 
 func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
-	if tb.Transaction != nil {
-		panic("can't have both a transaction hash and body")
-	}
+	// if tb.Transaction != nil {
+	// 	panic("can't have both a transaction hash and body")
+	// }
 	tb.TxHash = hash
 	return tb
 }

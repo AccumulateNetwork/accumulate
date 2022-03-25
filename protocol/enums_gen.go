@@ -210,7 +210,7 @@ const SignatureTypeSynthetic SignatureType = 5
 const SignatureTypeInternal SignatureType = 6
 
 // TransactionMaxUser is the highest number reserved for user transactions.
-const TransactionMaxUser TransactionMax = 47
+const TransactionMaxUser TransactionMax = 48
 
 // TransactionMaxSynthetic is the highest number reserved for synthetic transactions.
 const TransactionMaxSynthetic TransactionMax = 95

@@ -22,10 +22,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
-	var txnType protocol.TransactionType
-	if envelope.Transaction == nil {
-		txnType = protocol.TransactionTypeSignPending
-	} else {
+	txnType := envelope.Type()
+	if txnType != protocol.TransactionTypeSignPending {
 		txnType = envelope.Transaction.Body.Type()
 		_, ok := x.executors[txnType]
 		if !ok {

@@ -71,7 +71,7 @@ KeyPageOperationType:
 
 TransactionMax:
   User:
-    value: 0x2F
+    value: 0x30
     description: is the highest number reserved for user transactions
   Synthetic:
     value: 0x5F
