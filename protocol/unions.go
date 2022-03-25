@@ -26,6 +26,17 @@ type Account interface {
 	Header() *AccountHeader
 }
 
+type SignerAccount interface {
+	Account
+	KeyHolder
+	CreditHolder
+}
+
+type TokenHolderAccount interface {
+	Account
+	TokenHolder
+}
+
 type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
