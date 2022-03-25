@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -175,7 +176,8 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 
 	idc := protocol.CreateIdentity{}
 	idc.Url = adiUrl
-	idc.PublicKey = pubKey
+	kh := sha256.Sum256(pubKey)
+	idc.KeyHash = kh[:]
 	idc.KeyBookUrl = bookUrl
 
 	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, signer)
