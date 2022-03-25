@@ -9,7 +9,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
