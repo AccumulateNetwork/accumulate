@@ -257,11 +257,11 @@ func (x *Executor) validateSyntheticEnvelope(batch *database.Batch, envelope *pr
 	if err == nil {
 		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", envelope.GetTxHash())
 	} else if errors.Is(err, storage.ErrNotFound) {
-		// TODO We probably shouldn't be writing during validation
-		err = v.Put([]byte{1})
-		if err != nil {
-			return err
-		}
+		// // TODO We probably shouldn't be writing during validation
+		// err = v.Put([]byte{1})
+		// if err != nil {
+		// 	return err
+		// }
 	} else {
 		return err
 	}
