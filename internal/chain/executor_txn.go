@@ -482,18 +482,9 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 
 	case errors.Is(err, storage.ErrNotFound):
 		// Initiating a new transaction
-		height, err := st.GetHeight(st.SignatorUrl)
-		if err != nil {
-			return false, err
-		}
-
 		initiator := env.Signatures[0]
-		if height != initiator.GetSignerHeight() {
-			return false, fmt.Errorf("invalid height: want %d, got %d", height, initiator.GetSignerHeight())
-		}
-
-		if page.Version != initiator.GetSignerHeight() {
-			return false, fmt.Errorf("invalid key page version: want %d, got %d", page.Version, initiator.GetSignerHeight())
+		if page.Version != initiator.GetSignerVersion() {
+			return false, fmt.Errorf("invalid key page version: want %d, got %d", page.Version, initiator.GetSignerVersion())
 		}
 
 		timestamp := initiator.GetTimestamp()

@@ -83,7 +83,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	txrq.Signer.Nonce = env.Signatures[0].GetTimestamp()
 	txrq.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	txrq.Signer.Url = protocol.FaucetUrl
-	txrq.KeyPage.Version = env.Signatures[0].GetSignerHeight()
+	txrq.KeyPage.Version = env.Signatures[0].GetSignerVersion()
 	txrq.Signature = env.Signatures[0].GetSignature()
 
 	body, err := env.Transaction.Body.MarshalBinary()
@@ -114,7 +114,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		initSig.Timestamp = req.Signer.Nonce
 		initSig.PublicKey = req.Signer.PublicKey
 		initSig.Signer = req.Signer.Url
-		initSig.SignerHeight = req.KeyPage.Version
+		initSig.SignerVersion = req.KeyPage.Version
 		initSig.Signature = req.Signature
 		initHash, err := initSig.InitiatorHash()
 		if err != nil {

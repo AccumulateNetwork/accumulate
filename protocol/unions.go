@@ -33,7 +33,7 @@ type Signature interface {
 	InitiatorHash() ([]byte, error)
 
 	GetSigner() *url.URL
-	GetSignerHeight() uint64 // TODO Rename to GetSignerVersion
+	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion
 	GetTimestamp() uint64
 	GetPublicKey() []byte
 	GetSignature() []byte // TODO Remove once the API is improved

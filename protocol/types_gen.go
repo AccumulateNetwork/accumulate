@@ -161,13 +161,13 @@ type DirectoryIndexMetadata struct {
 }
 
 type ED25519Signature struct {
-	fieldsSet    []bool
-	privateKey   []byte
-	PublicKey    []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Signature    []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Signer       *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	SignerHeight uint64   `json:"signerHeight,omitempty" form:"signerHeight" query:"signerHeight" validate:"required"`
-	Timestamp    uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	fieldsSet     []bool
+	privateKey    []byte
+	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 }
 
 type EmptyResult struct {
@@ -273,13 +273,13 @@ type KeySpecParams struct {
 }
 
 type LegacyED25519Signature struct {
-	fieldsSet    []bool
-	privateKey   []byte
-	Timestamp    uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	PublicKey    []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Signature    []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Signer       *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	SignerHeight uint64   `json:"signerHeight,omitempty" form:"signerHeight" query:"signerHeight" validate:"required"`
+	fieldsSet     []bool
+	privateKey    []byte
+	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
 }
 
 type LiteDataAccount struct {
@@ -326,13 +326,13 @@ type ObjectMetadata struct {
 }
 
 type RCD1Signature struct {
-	fieldsSet    []bool
-	privateKey   []byte
-	PublicKey    []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Signature    []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Signer       *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	SignerHeight uint64   `json:"signerHeight,omitempty" form:"signerHeight" query:"signerHeight" validate:"required"`
-	Timestamp    uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	fieldsSet     []bool
+	privateKey    []byte
+	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 }
 
 type Receipt struct {
@@ -1384,7 +1384,7 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
-	if !(v.SignerHeight == u.SignerHeight) {
+	if !(v.SignerVersion == u.SignerVersion) {
 		return false
 	}
 	if !(v.Timestamp == u.Timestamp) {
@@ -1641,7 +1641,7 @@ func (v *LegacyED25519Signature) Equal(u *LegacyED25519Signature) bool {
 	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
-	if !(v.SignerHeight == u.SignerHeight) {
+	if !(v.SignerVersion == u.SignerVersion) {
 		return false
 	}
 
@@ -1753,7 +1753,7 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
-	if !(v.SignerHeight == u.SignerHeight) {
+	if !(v.SignerVersion == u.SignerVersion) {
 		return false
 	}
 	if !(v.Timestamp == u.Timestamp) {
@@ -3323,7 +3323,7 @@ var fieldNames_ED25519Signature = []string{
 	2: "PublicKey",
 	3: "Signature",
 	4: "Signer",
-	5: "SignerHeight",
+	5: "SignerVersion",
 	6: "Timestamp",
 }
 
@@ -3341,8 +3341,8 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
-	if !(v.SignerHeight == 0) {
-		writer.WriteUint(5, v.SignerHeight)
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
 	}
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
@@ -3371,9 +3371,9 @@ func (v *ED25519Signature) IsValid() error {
 		errs = append(errs, "field Signer is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field SignerHeight is missing")
-	} else if v.SignerHeight == 0 {
-		errs = append(errs, "field SignerHeight is not set")
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
 	}
 
 	switch len(errs) {
@@ -4084,7 +4084,7 @@ var fieldNames_LegacyED25519Signature = []string{
 	3: "PublicKey",
 	4: "Signature",
 	5: "Signer",
-	6: "SignerHeight",
+	6: "SignerVersion",
 }
 
 func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
@@ -4104,8 +4104,8 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	if !(v.Signer == nil) {
 		writer.WriteUrl(5, v.Signer)
 	}
-	if !(v.SignerHeight == 0) {
-		writer.WriteUint(6, v.SignerHeight)
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(6, v.SignerVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LegacyED25519Signature)
@@ -4136,9 +4136,9 @@ func (v *LegacyED25519Signature) IsValid() error {
 		errs = append(errs, "field Signer is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field SignerHeight is missing")
-	} else if v.SignerHeight == 0 {
-		errs = append(errs, "field SignerHeight is not set")
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
 	}
 
 	switch len(errs) {
@@ -4445,7 +4445,7 @@ var fieldNames_RCD1Signature = []string{
 	2: "PublicKey",
 	3: "Signature",
 	4: "Signer",
-	5: "SignerHeight",
+	5: "SignerVersion",
 	6: "Timestamp",
 }
 
@@ -4463,8 +4463,8 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
-	if !(v.SignerHeight == 0) {
-		writer.WriteUint(5, v.SignerHeight)
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
 	}
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
@@ -4493,9 +4493,9 @@ func (v *RCD1Signature) IsValid() error {
 		errs = append(errs, "field Signer is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field SignerHeight is missing")
-	} else if v.SignerHeight == 0 {
-		errs = append(errs, "field SignerHeight is not set")
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
 	}
 
 	switch len(errs) {
@@ -6855,7 +6855,7 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Signer = x
 	}
 	if x, ok := reader.ReadUint(5); ok {
-		v.SignerHeight = x
+		v.SignerVersion = x
 	}
 	if x, ok := reader.ReadUint(6); ok {
 		v.Timestamp = x
@@ -7290,7 +7290,7 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Signer = x
 	}
 	if x, ok := reader.ReadUint(6); ok {
-		v.SignerHeight = x
+		v.SignerVersion = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LegacyED25519Signature)
@@ -7470,7 +7470,7 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Signer = x
 	}
 	if x, ok := reader.ReadUint(5); ok {
-		v.SignerHeight = x
+		v.SignerVersion = x
 	}
 	if x, ok := reader.ReadUint(6); ok {
 		v.Timestamp = x
@@ -8722,18 +8722,18 @@ func (v *DataEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type         SignatureType `json:"type"`
-		PublicKey    *string       `json:"publicKey,omitempty"`
-		Signature    *string       `json:"signature,omitempty"`
-		Signer       *url.URL      `json:"signer,omitempty"`
-		SignerHeight uint64        `json:"signerHeight,omitempty"`
-		Timestamp    uint64        `json:"timestamp,omitempty"`
+		Type          SignatureType `json:"type"`
+		PublicKey     *string       `json:"publicKey,omitempty"`
+		Signature     *string       `json:"signature,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
-	u.SignerHeight = v.SignerHeight
+	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
 	return json.Marshal(&u)
 }
@@ -8932,13 +8932,13 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 
 func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type         SignatureType `json:"type"`
-		Timestamp    uint64        `json:"timestamp,omitempty"`
-		Nonce        uint64        `json:"nonce,omitempty"`
-		PublicKey    *string       `json:"publicKey,omitempty"`
-		Signature    *string       `json:"signature,omitempty"`
-		Signer       *url.URL      `json:"signer,omitempty"`
-		SignerHeight uint64        `json:"signerHeight,omitempty"`
+		Type          SignatureType `json:"type"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
+		Nonce         uint64        `json:"nonce,omitempty"`
+		PublicKey     *string       `json:"publicKey,omitempty"`
+		Signature     *string       `json:"signature,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
@@ -8946,7 +8946,7 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
-	u.SignerHeight = v.SignerHeight
+	u.SignerVersion = v.SignerVersion
 	return json.Marshal(&u)
 }
 
@@ -9037,18 +9037,18 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type         SignatureType `json:"type"`
-		PublicKey    *string       `json:"publicKey,omitempty"`
-		Signature    *string       `json:"signature,omitempty"`
-		Signer       *url.URL      `json:"signer,omitempty"`
-		SignerHeight uint64        `json:"signerHeight,omitempty"`
-		Timestamp    uint64        `json:"timestamp,omitempty"`
+		Type          SignatureType `json:"type"`
+		PublicKey     *string       `json:"publicKey,omitempty"`
+		Signature     *string       `json:"signature,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
-	u.SignerHeight = v.SignerHeight
+	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
 	return json.Marshal(&u)
 }
@@ -9942,18 +9942,18 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type         SignatureType `json:"type"`
-		PublicKey    *string       `json:"publicKey,omitempty"`
-		Signature    *string       `json:"signature,omitempty"`
-		Signer       *url.URL      `json:"signer,omitempty"`
-		SignerHeight uint64        `json:"signerHeight,omitempty"`
-		Timestamp    uint64        `json:"timestamp,omitempty"`
+		Type          SignatureType `json:"type"`
+		PublicKey     *string       `json:"publicKey,omitempty"`
+		Signature     *string       `json:"signature,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
-	u.SignerHeight = v.SignerHeight
+	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -9969,7 +9969,7 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.Signer = u.Signer
-	v.SignerHeight = u.SignerHeight
+	v.SignerVersion = u.SignerVersion
 	v.Timestamp = u.Timestamp
 	return nil
 }
@@ -10282,13 +10282,13 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 
 func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type         SignatureType `json:"type"`
-		Timestamp    uint64        `json:"timestamp,omitempty"`
-		Nonce        uint64        `json:"nonce,omitempty"`
-		PublicKey    *string       `json:"publicKey,omitempty"`
-		Signature    *string       `json:"signature,omitempty"`
-		Signer       *url.URL      `json:"signer,omitempty"`
-		SignerHeight uint64        `json:"signerHeight,omitempty"`
+		Type          SignatureType `json:"type"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
+		Nonce         uint64        `json:"nonce,omitempty"`
+		PublicKey     *string       `json:"publicKey,omitempty"`
+		Signature     *string       `json:"signature,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
@@ -10296,7 +10296,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
-	u.SignerHeight = v.SignerHeight
+	u.SignerVersion = v.SignerVersion
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10316,7 +10316,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.Signer = u.Signer
-	v.SignerHeight = u.SignerHeight
+	v.SignerVersion = u.SignerVersion
 	return nil
 }
 
@@ -10476,18 +10476,18 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 
 func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type         SignatureType `json:"type"`
-		PublicKey    *string       `json:"publicKey,omitempty"`
-		Signature    *string       `json:"signature,omitempty"`
-		Signer       *url.URL      `json:"signer,omitempty"`
-		SignerHeight uint64        `json:"signerHeight,omitempty"`
-		Timestamp    uint64        `json:"timestamp,omitempty"`
+		Type          SignatureType `json:"type"`
+		PublicKey     *string       `json:"publicKey,omitempty"`
+		Signature     *string       `json:"signature,omitempty"`
+		Signer        *url.URL      `json:"signer,omitempty"`
+		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Timestamp     uint64        `json:"timestamp,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
-	u.SignerHeight = v.SignerHeight
+	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -10503,7 +10503,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.Signer = u.Signer
-	v.SignerHeight = u.SignerHeight
+	v.SignerVersion = u.SignerVersion
 	v.Timestamp = u.Timestamp
 	return nil
 }
