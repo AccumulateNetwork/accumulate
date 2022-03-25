@@ -33,14 +33,14 @@ func TestProofADI(t *testing.T) {
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
 		require.NoError(t, err)
-		adi.PublicKey = keyHash[:]
+		adi.KeyHash = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey))
 	})
 
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
-	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKey)
+	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKeyHash)
 
 	batch = n.db.Begin(true)
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/book0/1"), initialCredits))

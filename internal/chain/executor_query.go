@@ -790,7 +790,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
-			if keyPage.FindKey(chr.Key) != nil {
+			_, _, ok := keyPage.EntryByKeyHash(chr.Key)
+			if ok || keyPage.FindKey(chr.Key) != nil {
 				response.KeyPage = keyPage.Url
 				response.Index = index
 				found = true
