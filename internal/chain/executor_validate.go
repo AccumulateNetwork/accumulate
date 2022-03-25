@@ -186,7 +186,7 @@ func (x *Executor) validateEnvelopeSignature(batch *database.Batch, transaction 
 		// TODO Check something?
 
 	default:
-		if transaction.Body.Type().IsSynthetic() {
+		if !transaction.Body.Type().IsUser() {
 			// TODO Check the key
 			return nil
 		}

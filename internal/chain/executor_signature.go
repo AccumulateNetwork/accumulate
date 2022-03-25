@@ -115,6 +115,7 @@ func (x *processSignatureContext) processSystemSignature() error {
 func (x *processSignatureContext) processNormalSignature(isInitiator bool) error {
 	// Skip for non-user transactions
 	if !x.Transaction.Body.Type().IsUser() {
+		// TODO Check the key
 		return nil
 	}
 
