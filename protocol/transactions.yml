@@ -145,7 +145,7 @@ CreateIdentity:
     - name: Url
       type: url
       pointer: true
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
       optional: true
     - name: KeyBookUrl
@@ -360,9 +360,9 @@ RemoveValidator:
 UpdateValidatorKey:
   union: { type: transaction }
   fields:
-    - name: OldKey
+    - name: KeyHash
       type: bytes
-    - name: NewKey
+    - name: NewKeyHash
       type: bytes
 
 SignPending:
@@ -570,7 +570,7 @@ ChainParams:
 
 KeySpecParams:
   fields:
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
     - name: Owner
       type: url
