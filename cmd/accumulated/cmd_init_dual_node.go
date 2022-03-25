@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"path"
 	"strconv"
 
@@ -13,7 +14,6 @@ import (
 
 // initDualNode accumulate init dual BVN0 http://ip:dnport
 func initDualNode(cmd *cobra.Command, args []string) {
-
 	subnetName := args[0]
 	u, err := url.Parse(args[1])
 	check(err)
@@ -112,7 +112,9 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	args = []string{bvnHost.Address}
 	initNode(cmd, args)
 
-	c, err = cfg.Load(path.Join(flagMain.WorkDir, "Node0"))
+	bvnNodePath := path.Join(flagMain.WorkDir, "Node0")
+
+	c, err = cfg.Load(bvnNodePath)
 
 	checkf(err, "cannot load configuration file for node")
 
@@ -125,6 +127,13 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	webPort, err := strconv.ParseUint(dnWebHostUrl.Port(), 10, 16)
 	checkf(err, "invalid port for bvn website (%v)", dnWebHostUrl.Port())
 	c.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:%d", dnWebHostUrl.Hostname(), webPort+1)
+
+	//in dual mode, the key between bvn and dn is shared.
+	//This will be cleaned up when init system is overhauled with AC-1263
+	if c.PrivValidator != nil {
+		c.PrivValidator.Key = "../../dn/Node0/config/priv_validator_key.json"
+	}
+	os.Remove(path.Join(bvnNodePath, "priv_validator_key.json"))
 	if len(c.P2P.PersistentPeers) > 0 {
 		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""
@@ -132,5 +141,4 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	err = cfg.Store(c)
 	checkf(err, "cannot store configuration file for node")
-
 }
