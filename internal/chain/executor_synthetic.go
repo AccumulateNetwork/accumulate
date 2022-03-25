@@ -58,8 +58,10 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	st.Update(ledgerState)
 
 	// Store the transaction, its status, and the initiator
+	env := new(protocol.Envelope)
+	env.Transaction = txn
 	status := &protocol.TransactionStatus{Remote: true}
-	err = m.blockBatch.Transaction(txn.GetHash()).Put(txn, status, []protocol.Signature{initSig})
+	err = m.blockBatch.Transaction(txn.GetHash()).Put(env, status, []protocol.Signature{initSig})
 	if err != nil {
 		return nil, err
 	}
