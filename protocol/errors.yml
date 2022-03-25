@@ -33,6 +33,9 @@ ErrorCode:
   Internal:
     value: 31
     description: indicates an internal error
+  AlreadyDelivered:
+    value: 32
+    description: indicates the transaction has already been delivered
 
   TxnRange:
     value: 6

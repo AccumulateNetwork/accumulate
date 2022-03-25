@@ -56,9 +56,22 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash does not match transaction")
 	}
 
+	status, err := batch.Transaction(envelope.GetTxHash()).GetStatus()
+	switch {
+	case errors.Is(err, storage.ErrNotFound):
+		// Not found means the transaction is new
+
+	case err != nil:
+		// Unknown error
+		return fmt.Errorf("load transaction status: %w", err)
+
+	case status.Delivered:
+		// Transaction has already been delivered
+		return protocol.Errorf(protocol.ErrorCodeAlreadyDelivered, "transaction has already been delivered")
+	}
+
 	// Calculate the transaction fee
 	var txnFee protocol.Fee
-	var err error
 	if txnType != protocol.TransactionTypeSignPending {
 		txnFee, err = protocol.ComputeTransactionFee(envelope)
 		if err != nil {

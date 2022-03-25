@@ -1318,11 +1318,13 @@ func TestUpdateValidators(t *testing.T) {
 }
 
 func TestMultisig(t *testing.T) {
+	check := CheckError{NewDefaultErrorHandler(t)}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
 	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
 
+	t.Log("Setup")
 	n := nodes[subnets[1]][0]
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
@@ -1336,6 +1338,7 @@ func TestMultisig(t *testing.T) {
 	}))
 	require.NoError(t, batch.Commit())
 
+	t.Log("Initiate the transaction")
 	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		send(newTxn("foo").
 			WithSigner(url.MustParse("foo/book0/1"), 1).
@@ -1350,7 +1353,25 @@ func TestMultisig(t *testing.T) {
 	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
 	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
 
+	t.Log("Double signing with key 1 should complete the transaction")
 	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithNonceVar(&globalNonce).
+			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithTxnHash(ids[0][:]).
+			// TODO Eliminate transaction body
+			WithPrincipal(url.MustParse("foo")).
+			WithBody(&protocol.SignPending{}).
+			Sign(protocol.SignatureTypeED25519, key1.Bytes()))
+	})
+	n.MustWaitForTxns(convertIds32(envHashes...)...)
+
+	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
+	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
+	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
+
+	t.Log("Signing with key 2 should complete the transaction")
+	envHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithNonceVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
@@ -1365,4 +1386,20 @@ func TestMultisig(t *testing.T) {
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
 	require.True(t, txnResp.Status.Delivered, "Transaction is was not delivered")
 	require.False(t, txnResp.Status.Pending, "Transaction is still pending")
+
+	// this should fail, so tell fake tendermint not to give up
+	// an error will be displayed on the console, but this is exactly what we expect so don't panic
+	check.H = func(err error) {}
+	t.Log("Signing a complete transaction should fail")
+	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithNonceVar(&globalNonce).
+			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithTxnHash(ids[0][:]).
+			// TODO Eliminate transaction body
+			WithPrincipal(url.MustParse("foo")).
+			WithBody(&protocol.SignPending{}).
+			Sign(protocol.SignatureTypeED25519, key2.Bytes()))
+	})
+	require.Error(t, err)
 }

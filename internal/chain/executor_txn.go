@@ -75,10 +75,6 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// 	return nil, m.recordTransactionError(tx, nil, nil, &chainId, tx.GetTxHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
 	// }
 
-	if env.Type() == protocol.TransactionTypeSignPending {
-		print("")
-	}
-
 	batch := m.blockBatch.Begin()
 	defer batch.Discard()
 

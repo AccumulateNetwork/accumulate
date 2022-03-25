@@ -161,6 +161,9 @@ const ErrorCodeBadVersion ErrorCode = 30
 // ErrorCodeInternal indicates an internal error.
 const ErrorCodeInternal ErrorCode = 31
 
+// ErrorCodeAlreadyDelivered indicates the transaction has already been delivered.
+const ErrorCodeAlreadyDelivered ErrorCode = 32
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -558,7 +561,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered:
 		*v = u
 		return true
 	default:
@@ -633,6 +636,8 @@ func (v ErrorCode) String() string {
 		return "badVersion"
 	case ErrorCodeInternal:
 		return "internal"
+	case ErrorCodeAlreadyDelivered:
+		return "alreadyDelivered"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -705,6 +710,8 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeBadVersion, true
 	case "internal":
 		return ErrorCodeInternal, true
+	case "alreadyDelivered":
+		return ErrorCodeAlreadyDelivered, true
 	default:
 		return 0, false
 	}
