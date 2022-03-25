@@ -305,10 +305,14 @@ func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*protocol.Envelope))) []
 func (n *FakeNode) MustWaitForTxns(ids ...[]byte) {
 	n.t.Helper()
 
-	n.Require().NoError(n.WaitForTxns(nil, ids...))
+	n.Require().NoError(n.WaitForTxns(ids...))
 }
 
-func (n *FakeNode) WaitForTxns(cause []byte, ids ...[]byte) error {
+func (n *FakeNode) WaitForTxns(ids ...[]byte) error {
+	return n.waitForTxns(nil, ids...)
+}
+
+func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) error {
 	n.t.Helper()
 
 	for _, id := range ids {
@@ -321,7 +325,7 @@ func (n *FakeNode) WaitForTxns(cause []byte, ids ...[]byte) error {
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
-		err = n.WaitForTxns(id, convertIds32(res.SyntheticTxids...)...)
+		err = n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
 		if err != nil {
 			return err
 		}
