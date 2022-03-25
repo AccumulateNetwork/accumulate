@@ -111,7 +111,7 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 	}
 
 	// Update the key hash
-	entry.PublicKeyHash = newKeyHash[:]
+	entry.(*protocol.KeySpec).PublicKeyHash = newKeyHash[:]
 
 	// Record the update
 	didUpdateKeyPage(page)

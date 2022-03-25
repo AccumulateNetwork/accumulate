@@ -4,7 +4,7 @@ ErrorCode:
     description: indicates the request succeeded
   EncodingError:
     value: 1
-    description: indicates the request could not be decoded
+    description: indicates something could not be decoded or encoded
   BadNonce:
     value: 2
     description: indicates the transaction nonce was rejected
@@ -17,6 +17,26 @@ ErrorCode:
   NotFound:
     value: 5
     description: indicates the request specified a record that does not exist
+
+  InvalidRequest:
+    value: 27
+    description: indicates the request was invalid
+  InvalidSignature:
+    value: 28
+    description: indicates an envelope signature was invalid
+  InsufficientCredits:
+    value: 29
+    description: indicates the signer does not have sufficient credits to execute the transaction
+  BadVersion:
+    value: 30
+    description: indicates the signature refers to an out of date version of the signer
+  Internal:
+    value: 31
+    description: indicates an internal error
+  AlreadyDelivered:
+    value: 32
+    description: indicates the transaction has already been delivered
+
   TxnRange:
     value: 6
     description: is returned when txn range query fails

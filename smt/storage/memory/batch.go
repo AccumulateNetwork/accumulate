@@ -40,7 +40,12 @@ func NewBatch(get GetFunc, commit CommitFunc) storage.KeyValueTxn {
 }
 
 func (db *DB) Begin(writable bool) storage.KeyValueTxn {
-	b := NewBatch(db.get, db.commit)
+	var b storage.KeyValueTxn
+	if writable {
+		b = NewBatch(db.get, db.commit)
+	} else {
+		b = NewBatch(db.get, nil)
+	}
 	if db.logger == nil {
 		return b
 	}

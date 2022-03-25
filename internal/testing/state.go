@@ -24,6 +24,10 @@ func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed(h[:])
 }
 
+func GenerateTmKey(seed ...interface{}) tmed25519.PrivKey {
+	return tmed25519.PrivKey(GenerateKey(seed...))
+}
+
 func MustParseUrl(s string) *url.URL {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -241,7 +245,7 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	return WriteStates(db, page, book)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey) error {
+func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) error {
 	bookUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -255,17 +259,28 @@ func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey
 	page.KeyBook = bookUrl
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
-	if len(publicKeyHash) == 1 {
+	if len(publicKey) == 1 {
 		key := new(protocol.KeySpec)
-		hash := sha256.Sum256(publicKeyHash[0])
+		hash := sha256.Sum256(publicKey[0])
 		key.PublicKeyHash = hash[:]
 		page.Keys = []*protocol.KeySpec{key}
-	} else if len(publicKeyHash) > 1 {
+	} else if len(publicKey) > 1 {
 		return errors.New("CreateKeyBook only supports one page key at the moment") // TOOO do we need to suport this? (Also in create_book.go)
 	}
 
 	accounts := []protocol.Account{book, page}
 	return WriteStates(db, accounts...)
+}
+
+func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
+	var page *protocol.KeyPage
+	err := db.Account(account).GetStateAs(&page)
+	if err != nil {
+		return err
+	}
+
+	fn(page)
+	return db.Account(account).PutState(page)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
