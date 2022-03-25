@@ -27,7 +27,7 @@ func TestProofADI(t *testing.T) {
 	liteAddr := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
 
 	// Create ADI
-	n.Batch(func(send func(*Tx)) {
+	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
 		var err error
@@ -47,7 +47,7 @@ func TestProofADI(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
-	n.Batch(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = n.ParseUrl("RoadRunner/Baz")
 		tac.TokenUrl = protocol.AcmeUrl()

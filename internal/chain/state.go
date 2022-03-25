@@ -15,7 +15,8 @@ import (
 
 type StateManager struct {
 	stateCache
-	parentBatch *database.Batch
+	parentBatch       *database.Batch
+	didCreateSubBatch bool
 
 	Origin    protocol.Account
 	OriginUrl *url.URL
@@ -27,17 +28,20 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (m *StateManager, err error) {
+func NewStateManager(parentBatch, batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (m *StateManager, err error) {
 	m = new(StateManager)
-	m.parentBatch = batch
+	m.parentBatch = parentBatch
 
 	// Use a nested batch to ensure isolation
-	batch = batch.Begin()
-	defer func() {
-		if err != nil {
-			batch.Discard()
-		}
-	}()
+	if batch == nil {
+		m.didCreateSubBatch = true
+		batch = parentBatch.Begin()
+		defer func() {
+			if err != nil {
+				batch.Discard()
+			}
+		}()
+	}
 
 	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
@@ -78,7 +82,10 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *protocol.Enve
 }
 
 func (m *StateManager) Reset() {
-	m.batch.Discard()
+	if m.didCreateSubBatch {
+		m.batch.Discard()
+	}
+	m.didCreateSubBatch = true
 	m.batch = m.parentBatch.Begin()
 	m.stateCache.Reset()
 	m.blockState = BlockState{}

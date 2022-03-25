@@ -56,6 +56,22 @@ type cachedValue struct {
 	dirty bool
 }
 
+func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
+	if txn, ok := value.(*protocol.Transaction); ok {
+		if txn.Body == nil {
+			print("")
+		}
+	}
+
+	// Cache the value, preserve dirtiness
+	cv := b.values[key]
+	cv.value = value
+	if dirty {
+		cv.dirty = true
+	}
+	b.values[key] = cv
+}
+
 func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	if b.done {
 		panic("attempted to use a commited or discarded batch")
@@ -79,7 +95,7 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (TypedVa
 		v, err := b.parent.getValue(key, unmarshal)
 		switch {
 		case err == nil:
-			b.values[key] = cachedValue{value: v}
+			b.cacheValue(key, v, false)
 			return v, nil
 
 		case errors.Is(err, storage.ErrNotFound):
@@ -99,7 +115,7 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (TypedVa
 			return nil, err
 		}
 
-		b.values[key] = cachedValue{value: v}
+		b.cacheValue(key, v, false)
 		return v, nil
 
 	default:
@@ -122,7 +138,7 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 	case errors.Is(err, storage.ErrNotFound) && newValue != nil:
 		// Value is not found, cache the new value
 		v = newValue
-		b.values[key] = cachedValue{value: v}
+		b.cacheValue(key, v, false)
 		notFound = err
 
 	default:
@@ -139,11 +155,15 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 func (b *Batch) getValuePtr(key storage.Key, value interface {
 	TypedValue
 	encoding.BinaryUnmarshaler
-}, valuePtr interface{}) error {
+}, valuePtr interface{}, addNew bool) error {
+	var newValue TypedValue
+	if addNew {
+		newValue = value
+	}
 	return b.getValueAs(key, func(b []byte) (TypedValue, error) {
 		err := value.UnmarshalBinary(b)
 		return value, err
-	}, value, valuePtr)
+	}, newValue, valuePtr)
 }
 
 func (b *Batch) putValue(key storage.Key, value TypedValue) {
@@ -160,7 +180,7 @@ func (b *Batch) putValue(key storage.Key, value TypedValue) {
 	} else if cv.value != value {
 		b.logger.Debug("Overwriting a cached value", "key", key)
 	}
-	b.values[key] = cachedValue{value: value, dirty: true}
+	b.cacheValue(key, value, true)
 }
 
 func (b *Batch) getAccountStateAs(key storage.Key, newValue protocol.Account, target interface{}) error {
@@ -210,7 +230,7 @@ func (b *Batch) Commit() error {
 			if !v.dirty {
 				continue
 			}
-			b.parent.values[k] = v
+			b.parent.cacheValue(k, v.value, v.dirty)
 		}
 		for k, v := range b.bptEntries {
 			b.parent.bptEntries[k] = v
