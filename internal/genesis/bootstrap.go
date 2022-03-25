@@ -3,6 +3,7 @@ package genesis
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
@@ -99,6 +100,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		acme.Precision = 8
 		acme.Symbol = "ACME"
 		records = append(records, acme)
+		acme.SupplyLimit = big.NewInt(10000000000)
 
 		type DataRecord struct {
 			Account *protocol.DataAccount

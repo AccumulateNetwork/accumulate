@@ -111,10 +111,13 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	st.Submit(body.Recipient, sdc)
 
 	//Create synthetic burn token
-	burnAcme := new(protocol.SyntheticBurnTokens)
-	copy(sdc.Cause[:], tx.GetTxHash())
-	burnAcme.Amount = body.Amount
-	st.Submit(account.GetTokenUrl(), burnAcme)
+	/*	burnAcme := new(protocol.SyntheticBurnTokens)
+		copy(sdc.Cause[:], tx.GetTxHash())
+		burnAcme.Amount = body.Amount
+		st.Submit(account.GetTokenUrl(), burnAcme)*/
+
+	ledgerState.AcmeBurnt = *ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
+	st.Update(ledgerState)
 
 	res := new(protocol.AddCreditsResult)
 	res.Oracle = ledgerState.ActiveOracle

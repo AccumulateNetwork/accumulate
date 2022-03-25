@@ -674,7 +674,7 @@ func (m *Executor) buildAnchorTxn(ledger *protocol.InternalLedger, rootChain *da
 	txn.RootIndex = uint64(rootChain.Height() - 1)
 	txn.RootAnchor = *(*[32]byte)(rootChain.Anchor())
 	txn.Block = uint64(m.blockMeta.Index)
-
+	txn.AcmeBurnt = ledger.AcmeBurnt
 	if m.Network.Type == config.Directory {
 		txn.AcmeOraclePrice = ledger.PendingOracle
 	}
