@@ -103,7 +103,15 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 
 // LoadTxn loads and unmarshals a saved transaction
 func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
-	return c.batch.Transaction(txid[:]).GetState()
+	env, err := c.batch.Transaction(txid[:]).GetState()
+	if err != nil {
+		return nil, err
+	}
+	if env.Transaction == nil {
+		// This is a signature, not an envelope
+		return nil, fmt.Errorf("transaction %X %w", txid, storage.ErrNotFound)
+	}
+	return env.Transaction, nil
 }
 
 // LoadSignatures loads and unmarshals a transaction's signatures
