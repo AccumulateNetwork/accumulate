@@ -156,7 +156,7 @@ func (x *processSignatureContext) processNormalSignature(isInitiator bool) error
 
 	// Update the timestamp - the value is validated by validateSignature
 	if x.Signature.GetTimestamp() != 0 {
-		entry.SetTimestamp(x.Signature.GetTimestamp())
+		entry.SetLastUsedOn(x.Signature.GetTimestamp())
 	}
 
 	// Store changes to the signer
@@ -217,8 +217,8 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	// Check the timestamp, except for faucet transactions
 	if transaction.Body.Type() != protocol.TransactionTypeAcmeFaucet &&
 		signature.GetTimestamp() != 0 &&
-		entry.GetTimestamp() >= signature.GetTimestamp() {
-		return nil, nil, protocol.Errorf(protocol.ErrorCodeBadNonce, "invalid timestamp: have %d, got %d", entry.GetTimestamp(), signature.GetTimestamp())
+		entry.GetLastUsedOn() >= signature.GetTimestamp() {
+		return nil, nil, protocol.Errorf(protocol.ErrorCodeBadNonce, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
 	}
 
 	return signer, entry, nil
