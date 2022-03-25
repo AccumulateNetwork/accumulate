@@ -56,7 +56,7 @@ func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, 
 	}
 
 	// Only validate the transaction when we first receive it
-	if isInitial {
+	if !isInitial {
 		return new(protocol.EmptyResult), nil
 	}
 

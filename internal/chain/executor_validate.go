@@ -72,7 +72,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 
 	// Load previous transaction state
 	transaction := envelope.Transaction
-	if transaction == nil {
+	if envelope.Type() == protocol.TransactionTypeSignPending {
 		txState, err := batch.Transaction(envelope.GetTxHash()).GetState()
 		switch {
 		case err == nil:
@@ -114,6 +114,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 		err = x.validateSyntheticEnvelope(batch, envelope)
 	case txnType.IsInternal():
 		// TODO Validate internal transactions
+		err = nil
 	default:
 		// Should be unreachable
 		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "transaction type %v is not user, synthetic, or internal", txnType)
