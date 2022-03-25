@@ -9,6 +9,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
@@ -107,21 +108,53 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		if err != nil {
 			return accumulateError(err)
 		}
-
+		env := new(protocol.Envelope)
+		var initHash []byte
 		// Build the initiator
-		initSig := new(protocol.LegacyED25519Signature)
-		initSig.Timestamp = req.Signer.Timestamp
-		initSig.PublicKey = req.Signer.PublicKey
-		initSig.Signer = req.Signer.Url
-		initSig.SignerHeight = req.KeyPage.Height
-		initSig.Signature = req.Signature
-		initHash, err := initSig.InitiatorHash()
-		if err != nil {
-			return validatorError(err)
+		switch req.Signer.SignatureType {
+		case protocol.SignatureTypeED25519:
+			initSig := new(protocol.ED25519Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerHeight = req.KeyPage.Height
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		case protocol.SignatureTypeRCD1:
+			initSig := new(protocol.RCD1Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerHeight = req.KeyPage.Height
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		default:
+			initSig := new(protocol.LegacyED25519Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerHeight = req.KeyPage.Height
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+
 		}
 
 		// Build the envelope
-		env := new(protocol.Envelope)
 		env.TxHash = req.TxHash
 		env.Transaction = new(protocol.Transaction)
 		env.Transaction.Body = body
@@ -129,7 +162,6 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		env.Transaction.Header.Initiator = *(*[32]byte)(initHash)
 		env.Transaction.Header.Memo = req.Memo
 		env.Transaction.Header.Metadata = req.Metadata
-		env.Signatures = append(env.Signatures, initSig)
 		envs = append(envs, env)
 	}
 
