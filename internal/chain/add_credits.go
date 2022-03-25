@@ -109,8 +109,8 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	copy(sdc.Cause[:], tx.GetTxHash())
 	sdc.Amount = credits.Uint64()
 	st.Submit(body.Recipient, sdc)
-
-	ledgerState.AcmeBurnt = *ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
+	//Add the burnt acme to the internal ledger and send it with the anchor transaction
+	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
 	st.Update(ledgerState)
 
 	res := new(protocol.AddCreditsResult)

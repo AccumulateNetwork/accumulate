@@ -94,14 +94,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			urls[i] = r.Header().Url
 		}
 
-		acme := new(protocol.TokenIssuer)
-		acme.KeyBook = uBook
-		acme.Url = protocol.AcmeUrl()
-		acme.Precision = 8
-		acme.Symbol = "ACME"
-		records = append(records, acme)
-		acme.SupplyLimit = big.NewInt(10000000000)
-
 		type DataRecord struct {
 			Account *protocol.DataAccount
 			Entry   *protocol.DataEntry
@@ -153,6 +145,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			records = append(records, da)
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+
+			acme := new(protocol.TokenIssuer)
+			acme.KeyBook = uBook
+			acme.Url = protocol.AcmeUrl()
+			acme.Precision = 8
+			acme.Symbol = "ACME"
+			records = append(records, acme)
+			acme.SupplyLimit = big.NewInt(500000000 * protocol.AcmePrecision)
 
 			// TODO Move ACME to DN
 
