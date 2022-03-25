@@ -36,6 +36,9 @@ ErrorCode:
   AlreadyDelivered:
     value: 32
     description: indicates the transaction has already been delivered
+  Unauthorized:
+    value: 33
+    description: indicates the signer is not authorized to sign a transaction
 
   TxnRange:
     value: 6
