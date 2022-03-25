@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -121,12 +122,14 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	} else {
 		keyName = originKeyName
 	}
-	publicKeyHash, err := resolvePublicKey(keyName)
+	pbkey, err := resolvePublicKey(keyName)
 	if err != nil {
 		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
 	}
-	keyBook.PublicKeyHash = publicKeyHash
 
+	ph := sha256.Sum256(pbkey)
+	publicKeyHash := ph[:]
+	keyBook.PublicKeyHash = publicKeyHash
 	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
 	if err != nil {
 		return "", err
