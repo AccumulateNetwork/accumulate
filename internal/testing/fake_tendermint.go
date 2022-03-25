@@ -462,9 +462,9 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 
 func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
 	for _, env := range env {
-		txt := env.Transaction.Type()
-		if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor {
-			c.logger.Info(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
+		txnType := env.Type()
+		if !txnType.IsInternal() && txnType != protocol.TransactionTypeSyntheticAnchor {
+			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
 		}
 	}
 }

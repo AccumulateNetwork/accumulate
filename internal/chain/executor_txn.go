@@ -1,12 +1,9 @@
 package chain
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -19,7 +16,12 @@ func (m *Executor) CheckTx(env *protocol.Envelope) (protocol.TransactionResult, 
 	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
-	st, executor, hasEnoughSigs, err := m.validate(batch, env, true)
+	err := m.ValidateEnvelope(batch, env)
+	if err != nil {
+		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+	}
+
+	st, executor, hasEnoughSigs, err := m.validate(nil, batch, env, true)
 	var notFound bool
 	switch {
 	case err == nil:
@@ -73,8 +75,16 @@ func (m *Executor) DeliverTx(env *protocol.Envelope) (protocol.TransactionResult
 	// 	return nil, m.recordTransactionError(tx, nil, nil, &chainId, tx.GetTxHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
 	// }
 
+	batch := m.blockBatch.Begin()
+	defer batch.Discard()
+
+	err := m.ValidateEnvelope(batch, env)
+	if err != nil {
+		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+	}
+
 	// Set up the state manager and validate the signatures
-	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env, false)
+	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, batch, env, false)
 	if err != nil {
 		return nil, m.recordTransactionError(nil, env, false, &protocol.Error{Code: protocol.ErrorCodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
@@ -155,7 +165,7 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 	sw.EntryUrl = env.Transaction.Header.Principal
 	env.Transaction.Body = &sw
 
-	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(internalAccountPath), env)
+	st, err := NewStateManager(m.blockBatch, nil, m.Network.NodeUrl(internalAccountPath), env)
 	if err != nil {
 		return err
 	}
@@ -183,19 +193,7 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
-func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isCheck bool) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
-	// Basic validation
-	err = m.validateBasic(batch, env)
-	if err != nil {
-		return nil, nil, false, err
-	}
-
-	// Calculate the fee before modifying the transaction
-	fee, err := protocol.ComputeTransactionFee(env)
-	if err != nil {
-		return nil, nil, false, err
-	}
-
+func (m *Executor) validate(parentBatch *database.Batch, batch *database.Batch, env *protocol.Envelope, isCheck bool) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
 	// Load previous transaction state
 	txt := env.Transaction.Type()
 	txState, err := batch.Transaction(env.GetTxHash()).GetState()
@@ -216,7 +214,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isChe
 	}
 
 	// Set up the state manager
-	st, err = NewStateManager(batch, m.Network.NodeUrl(), env)
+	st, err = NewStateManager(parentBatch, batch, m.Network.NodeUrl(), env)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -231,6 +229,12 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isChe
 		st.logger.L = m.logger.With("operation", "Deliver")
 	}
 
+	// Calculate the fee before modifying the transaction
+	fee, err := protocol.ComputeTransactionFee(env)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
 	// Validate the transaction
 	switch {
 	case txt.IsUser():
@@ -240,7 +244,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isChe
 		hasEnoughSigs, err = true, m.validateSynthetic(st, env)
 
 	case txt.IsInternal():
-		hasEnoughSigs, err = true, m.validateInternal(st, env)
+		hasEnoughSigs, err = true, nil
 
 	default:
 		return nil, nil, false, fmt.Errorf("invalid transaction type %v", txt)
@@ -256,177 +260,7 @@ func (m *Executor) validate(batch *database.Batch, env *protocol.Envelope, isChe
 	}
 }
 
-func (m *Executor) validateBasic(batch *database.Batch, env *protocol.Envelope) error {
-	// If the transaction is borked, the transaction type is probably invalid,
-	// so check that first. "Invalid transaction type" is a more useful error
-	// than "invalid signature" if the real error is the transaction got borked.
-	txt := env.Transaction.Type()
-	_, ok := m.executors[txt]
-	if !ok && txt != protocol.TransactionTypeSignPending {
-		return fmt.Errorf("unsupported TX type: %v", txt)
-	}
-
-	// All transactions must be signed
-	if len(env.Signatures) == 0 {
-		return fmt.Errorf("transaction is not signed")
-	}
-
-	switch {
-	case len(env.TxHash) == 0:
-		// TxHash must be specified for signature transactions
-		if txt == protocol.TransactionTypeSignPending {
-			return fmt.Errorf("invalid signature transaction: missing transaction hash")
-		}
-
-	case len(env.TxHash) != sha256.Size:
-		// TxHash must either be empty or a SHA-256 hash
-		return fmt.Errorf("invalid hash: not a SHA-256 hash")
-
-	case !env.VerifyTxHash():
-		// TxHash must match the transaction
-		if txt != protocol.TransactionTypeSignPending {
-			return fmt.Errorf("invalid hash: does not match transaction")
-		}
-	}
-
-	// TxHash must either be empty or a SHA-256 hash
-	if len(env.TxHash) != 0 && len(env.TxHash) != sha256.Size {
-		return fmt.Errorf("invalid hash")
-	}
-
-	// TxHash must be specified for signature transactions
-	if txt == protocol.TransactionTypeSignPending && len(env.TxHash) == 0 {
-		return fmt.Errorf("invalid signature transaction: missing transaction hash")
-	}
-
-	// Verify the transaction's signatures
-	txid := env.GetTxHash()
-	for i, v := range env.Signatures {
-		if !v.Verify(txid) {
-			return fmt.Errorf("signature %d is invalid", i)
-		}
-	}
-
-	// // TODO Do we need this check? It appears to be causing issues and we can't guarantee that the governor sends transactions only once.
-	// // Check the envelope
-	// _, err := batch.Transaction(env.EnvHash()).GetState()
-	// switch {
-	// case err == nil:
-	// 	return fmt.Errorf("duplicate envelope")
-	// case errors.Is(err, storage.ErrNotFound):
-	// 	// OK
-	// default:
-	// 	return fmt.Errorf("error while checking envelope state: %v", err)
-	// }
-
-	// Check the transaction
-	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
-	switch {
-	case err == nil:
-		// Signing an existing transaction
-		if status.Delivered {
-			return fmt.Errorf("transaction has already been delivered")
-		}
-	case errors.Is(err, storage.ErrNotFound):
-		// Initiating a new transaction
-		if txt == protocol.TransactionTypeSignPending {
-			return fmt.Errorf("transaction not found")
-		}
-
-		initHash, err := env.Signatures[0].InitiatorHash()
-		if err != nil {
-			return fmt.Errorf("failed to initiate a transaction: %v", err)
-		}
-
-		if env.Transaction.Header.Initiator != *(*[32]byte)(initHash) {
-			return fmt.Errorf("invalid initiator: hash does not match")
-		}
-	default:
-		return fmt.Errorf("failed to load transaction status: %v", err)
-	}
-
-	return nil
-}
-
 func (m *Executor) validateSynthetic(st *StateManager, env *protocol.Envelope) error {
-	//placeholder for special validation rules for synthetic transactions.
-	//need to verify the sender is a legit bvc validator also need the dbvc receipt
-	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
-	//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
-	//sender is legit.
-
-	// TODO Get rid of this hack and actually check the nonce. But first we have
-	// to implement transaction batching.
-	v := st.RecordIndex(m.Network.NodeUrl(), "SeenSynth", env.GetTxHash())
-	_, err := v.Get()
-	if err == nil {
-		return fmt.Errorf("duplicate synthetic transaction %X", env.GetTxHash())
-	} else if errors.Is(err, storage.ErrNotFound) {
-		err = v.Put([]byte{1})
-		if err != nil {
-			return err
-		}
-	} else {
-		return err
-	}
-
-	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
-	for _, sig := range env.Signatures {
-		switch sig := sig.(type) {
-		case *protocol.SyntheticSignature:
-			gotSynthSig = true
-			if !m.Network.NodeUrl().Equal(sig.DestinationNetwork) {
-				return fmt.Errorf("destination network %v is not this network", sig.DestinationNetwork)
-			}
-
-		case *protocol.ReceiptSignature:
-			gotReceiptSig = true
-
-			// TODO We should add something so we know which subnet originated
-			// the transaction. That way, the DN can also check receipts.
-			if m.Network.Type != config.BlockValidator {
-				// TODO Check receipts on the DN
-				continue
-			}
-
-			// Load the anchor chain
-			anchorChain, err := st.batch.Account(m.Network.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
-			if err != nil {
-				return fmt.Errorf("unable to load the DN intermediate anchor chain: %w", err)
-			}
-
-			// Is the result a valid DN anchor?
-			_, err = anchorChain.HeightOf(sig.Result)
-			switch {
-			case err == nil:
-				// OK
-			case errors.Is(err, storage.ErrNotFound):
-				return fmt.Errorf("invalid receipt: result is not a known DN anchor")
-			default:
-				return fmt.Errorf("unable to check if a DN anchor is valid: %w", err)
-			}
-
-		case *protocol.ED25519Signature, *protocol.LegacyED25519Signature:
-			// TODO Check the key
-			gotED25519Sig = true
-
-		default:
-			return fmt.Errorf("synthetic transaction do not support %T signatures", sig)
-		}
-	}
-	if !gotSynthSig {
-		return fmt.Errorf("missing synthetic transaction origin")
-	}
-	if st.txType == protocol.TransactionTypeSyntheticAnchor {
-		if !gotED25519Sig {
-			return fmt.Errorf("missing ED25519 signature")
-		}
-	} else {
-		if !gotReceiptSig {
-			return fmt.Errorf("missing synthetic transaction receipt")
-		}
-	}
-
 	// Does the origin exist?
 	if st.Origin != nil {
 		return nil
@@ -445,21 +279,13 @@ func (m *Executor) validateSynthetic(st *StateManager, env *protocol.Envelope) e
 	}
 }
 
-func (m *Executor) validateInternal(st *StateManager, env *protocol.Envelope) error {
-	if st.Origin == nil {
-		return fmt.Errorf("origin %q %w", st.OriginUrl, storage.ErrNotFound)
-	}
-
-	//placeholder for special validation rules for internal transactions.
-	//need to verify that the transaction came from one of the node's governors.
-	_ = env
-	return nil
-}
-
 func (m *Executor) validateUser(st *StateManager, env *protocol.Envelope, fee protocol.Fee) (bool, error) {
 	switch signer := st.Signator.(type) {
 	case *protocol.LiteTokenAccount:
-		return true, m.validateLiteSigner(st, env, signer, fee)
+		if !st.SignatorUrl.Equal(st.OriginUrl) {
+			return false, fmt.Errorf("%v is not authorized to sign transactions for %v", st.SignatorUrl, st.OriginUrl)
+		}
+		return true, nil
 
 	case *protocol.KeyPage:
 		return m.validatePageSigner(st, env, signer, fee)
@@ -494,56 +320,9 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 		return false, fmt.Errorf("page %s is not authorized to sign %v", st.SignatorUrl, env.Transaction.Type())
 	}
 
-	var firstKeySpec *protocol.KeySpec
-	for i, sig := range env.Signatures {
-		ks := page.FindKey(sig.GetPublicKey())
-		if ks == nil {
-			return false, fmt.Errorf("no key spec matches signature %d", i)
-		}
-		if i == 0 {
-			firstKeySpec = ks
-		}
-	}
-
 	sigs, err := st.batch.Transaction(env.GetTxHash()).GetSignatures()
-	switch {
-	case err == nil:
-		// Signing an existing transaction
-
-	case errors.Is(err, storage.ErrNotFound):
-		// Initiating a new transaction
-		height, err := st.GetHeight(st.SignatorUrl)
-		if err != nil {
-			return false, err
-		}
-
-		initiator := env.Signatures[0]
-		if height != initiator.GetSignerHeight() {
-			return false, fmt.Errorf("invalid height: want %d, got %d", height, initiator.GetSignerHeight())
-		}
-
-		timestamp := initiator.GetTimestamp()
-		if timestamp == 0 {
-			return false, fmt.Errorf("invalid initiator: missing timestamp")
-		}
-
-		if firstKeySpec.LastUsedOn >= timestamp {
-			return false, fmt.Errorf("invalid nonce: have %d, received %d", firstKeySpec.LastUsedOn, timestamp)
-		}
-
-		firstKeySpec.LastUsedOn = timestamp
-
-	default:
+	if err != nil && errors.Is(err, storage.ErrNotFound) {
 		return false, fmt.Errorf("failed to get signatures: %v", err)
-	}
-
-	if !page.DebitCredits(fee.AsUInt64()) {
-		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.Url, page.CreditBalance, fee)
-	}
-
-	err = st.UpdateSignator(page)
-	if err != nil {
-		return false, err
 	}
 
 	// Add to the sig set to get the resulting count
@@ -554,46 +333,6 @@ func (m *Executor) validatePageSigner(st *StateManager, env *protocol.Envelope, 
 
 	// If the number of signatures is less than the threshold, the transaction is pending
 	return sigCount >= int(page.Threshold), nil
-}
-
-func (m *Executor) validateLiteSigner(st *StateManager, env *protocol.Envelope, account *protocol.LiteTokenAccount, fee protocol.Fee) error {
-	if !st.SignatorUrl.Equal(st.OriginUrl) {
-		return fmt.Errorf("%v is not authorized to sign transactions for %v", st.SignatorUrl, st.OriginUrl)
-	}
-
-	urlKH, _, err := protocol.ParseLiteTokenAddress(st.OriginUrl)
-	if err != nil {
-		// This shouldn't happen because invalid URLs should never make it
-		// into the database.
-		return fmt.Errorf("invalid lite token URL: %v", err)
-	}
-
-	for i, sig := range env.Signatures {
-		sigKH := sha256.Sum256(sig.GetPublicKey())
-		if !bytes.Equal(urlKH, sigKH[:20]) {
-			return fmt.Errorf("signature %d's public key does not match the origin record", i)
-		}
-	}
-
-	// Don't bother with nonces for the faucet
-	if st.txType != protocol.TransactionTypeAcmeFaucet {
-		timestamp := env.Signatures[0].GetTimestamp()
-		if timestamp == 0 {
-			return fmt.Errorf("invalid initiator: missing timestamp")
-		}
-
-		if account.LastUsedOn >= timestamp {
-			return fmt.Errorf("invalid nonce: have %d, received %d", account.LastUsedOn, timestamp)
-		}
-
-		account.LastUsedOn = timestamp
-	}
-
-	if !account.DebitCredits(uint64(fee)) {
-		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.Url, account.CreditBalance, fee)
-	}
-
-	return st.UpdateSignator(account)
 }
 
 func (m *Executor) recordTransactionError(st *StateManager, env *protocol.Envelope, postCommit bool, failure *protocol.Error) *protocol.Error {
@@ -703,10 +442,11 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 
 	// TODO Make sure this is the initiator
 	sig := env.Signatures[0]
-	err = st.Signator.SetLastUsedOn(sig.GetPublicKey(), sig.GetTimestamp())
-	if err != nil {
-		return err
+	_, entry, ok := st.Signator.EntryByKey(sig.GetPublicKey())
+	if !ok {
+		return fmt.Errorf("initiator is no longer valid")
 	}
+	entry.SetLastUsedOn(sig.GetTimestamp())
 
 	fee, err := protocol.ComputeTransactionFee(env)
 	if err != nil || fee > protocol.FeeFailedMaximum {
