@@ -8,6 +8,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
+func (p *KeyPage) GetSignatureThreshold() uint64 {
+	return p.Threshold
+}
+
+func (*LiteTokenAccount) GetSignatureThreshold() uint64 {
+	return 1
+}
+
 func (k *KeySpecParams) IsEmpty() bool {
 	return len(k.KeyHash) == 0 && k.Owner == nil
 }
