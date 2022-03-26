@@ -116,6 +116,10 @@ Signer:
   - name: Url
     type: url
     pointer: true
+  - name: SignatureType
+    type: protocol.SignatureType
+    optional: true
+
 
 TokenSend:
   non-binary: true
