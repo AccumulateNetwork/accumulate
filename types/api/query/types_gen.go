@@ -140,6 +140,255 @@ type TxReceipt struct {
 	Error     string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
+func (v *ChainState) Copy() *ChainState {
+	u := new(ChainState)
+
+	u.Name = v.Name
+	u.Type = v.Type
+	u.Height = v.Height
+	u.Roots = make([][]byte, len(v.Roots))
+	for i, v := range v.Roots {
+		u.Roots[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *ChainState) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DirectoryQueryResult) Copy() *DirectoryQueryResult {
+	u := new(DirectoryQueryResult)
+
+	u.Entries = make([]string, len(v.Entries))
+	for i, v := range v.Entries {
+		u.Entries[i] = v
+	}
+	u.ExpandedEntries = make([]protocol.Account, len(v.ExpandedEntries))
+	for i, v := range v.ExpandedEntries {
+		u.ExpandedEntries[i] = v
+	}
+	u.Total = v.Total
+
+	return u
+}
+
+func (v *DirectoryQueryResult) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestDataEntry) Copy() *RequestDataEntry {
+	u := new(RequestDataEntry)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.EntryHash = v.EntryHash
+
+	return u
+}
+
+func (v *RequestDataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestDataEntrySet) Copy() *RequestDataEntrySet {
+	u := new(RequestDataEntrySet)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Start = v.Start
+	u.Count = v.Count
+	u.ExpandChains = v.ExpandChains
+
+	return u
+}
+
+func (v *RequestDataEntrySet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
+	u := new(RequestKeyPageIndex)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Key = encoding.BytesCopy(v.Key)
+
+	return u
+}
+
+func (v *RequestKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestTxHistory) Copy() *RequestTxHistory {
+	u := new(RequestTxHistory)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Start = v.Start
+	u.Limit = v.Limit
+
+	return u
+}
+
+func (v *RequestTxHistory) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseAccount) Copy() *ResponseAccount {
+	u := new(ResponseAccount)
+
+	u.Account = v.Account
+	u.ChainState = make([]ChainState, len(v.ChainState))
+	for i, v := range v.ChainState {
+		u.ChainState[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *ResponseAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseByTxId) Copy() *ResponseByTxId {
+	u := new(ResponseByTxId)
+
+	u.TxId = v.TxId
+	if v.Envelope != nil {
+		u.Envelope = (v.Envelope).Copy()
+	}
+	if v.Status != nil {
+		u.Status = (v.Status).Copy()
+	}
+	u.TxSynthTxIds = encoding.BytesCopy(v.TxSynthTxIds)
+	u.Height = v.Height
+	u.ChainState = make([][]byte, len(v.ChainState))
+	for i, v := range v.ChainState {
+		u.ChainState[i] = encoding.BytesCopy(v)
+	}
+	u.Receipts = make([]*TxReceipt, len(v.Receipts))
+	for i, v := range v.Receipts {
+		if v != nil {
+			u.Receipts[i] = (v).Copy()
+		}
+	}
+	u.SignatureThreshold = v.SignatureThreshold
+	u.Invalidated = v.Invalidated
+
+	return u
+}
+
+func (v *ResponseByTxId) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseChainEntry) Copy() *ResponseChainEntry {
+	u := new(ResponseChainEntry)
+
+	u.Height = v.Height
+	u.Entry = encoding.BytesCopy(v.Entry)
+	u.State = make([][]byte, len(v.State))
+	for i, v := range v.State {
+		u.State[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *ResponseChainEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseChainRange) Copy() *ResponseChainRange {
+	u := new(ResponseChainRange)
+
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = make([][]byte, len(v.Entries))
+	for i, v := range v.Entries {
+		u.Entries[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *ResponseChainRange) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
+	u := new(ResponseDataEntry)
+
+	u.EntryHash = v.EntryHash
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *ResponseDataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseDataEntrySet) Copy() *ResponseDataEntrySet {
+	u := new(ResponseDataEntrySet)
+
+	u.DataEntries = make([]ResponseDataEntry, len(v.DataEntries))
+	for i, v := range v.DataEntries {
+		u.DataEntries[i] = *(&v).Copy()
+	}
+	u.Total = v.Total
+
+	return u
+}
+
+func (v *ResponseDataEntrySet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
+	u := new(ResponseKeyPageIndex)
+
+	if v.KeyBook != nil {
+		u.KeyBook = (v.KeyBook).Copy()
+	}
+	if v.KeyPage != nil {
+		u.KeyPage = (v.KeyPage).Copy()
+	}
+	u.Index = v.Index
+
+	return u
+}
+
+func (v *ResponseKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponsePending) Copy() *ResponsePending {
+	u := new(ResponsePending)
+
+	u.Transactions = make([][32]byte, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = v
+	}
+
+	return u
+}
+
+func (v *ResponsePending) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseTxHistory) Copy() *ResponseTxHistory {
+	u := new(ResponseTxHistory)
+
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Transactions = make([]ResponseByTxId, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *ResponseTxHistory) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TxReceipt) Copy() *TxReceipt {
+	u := new(TxReceipt)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Chain = v.Chain
+	u.Receipt = *(&v.Receipt).Copy()
+	u.Error = v.Error
+
+	return u
+}
+
+func (v *TxReceipt) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ChainState) Equal(u *ChainState) bool {
 	if !(v.Name == u.Name) {
 		return false
