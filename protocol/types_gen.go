@@ -41,7 +41,15 @@ type AcmeOracle struct {
 type AddCredits struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
-	Amount    uint64   `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle"`
+}
+
+type AddCreditsResult struct {
+	fieldsSet []bool
+	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Credits   uint64  `json:"credits,omitempty" form:"credits" query:"credits" validate:"required"`
+	Oracle    uint64  `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
 }
 
 type AddKeyOperation struct {
@@ -105,7 +113,7 @@ type CreateDataAccount struct {
 type CreateIdentity struct {
 	fieldsSet  []bool
 	Url        *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	PublicKey  []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey"`
+	KeyHash    []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
@@ -124,15 +132,14 @@ type CreateKeyPage struct {
 }
 
 type CreateToken struct {
-	fieldsSet      []bool
-	Url            *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	KeyBookUrl     *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
-	Symbol         string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision      uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties     *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
-	InitialSupply  big.Int  `json:"initialSupply,omitempty" form:"initialSupply" query:"initialSupply"`
-	HasSupplyLimit bool     `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
-	Manager        *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	fieldsSet   []bool
+	Url         *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	KeyBookUrl  *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
+	Symbol      string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision   uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
+	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
+	Manager     *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
 }
 
 type CreateTokenAccount struct {
@@ -180,6 +187,11 @@ type Envelope struct {
 	TxHash      []byte       `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Transaction *Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	hash        []byte
+}
+
+type HashSet struct {
+	fieldsSet []bool
+	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -252,7 +264,7 @@ type KeyBook struct {
 type KeyPage struct {
 	fieldsSet []bool
 	AccountHeader
-	CreditBalance        big.Int              `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	CreditBalance        uint64               `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 	Threshold            uint64               `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
 	Version              uint64               `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
@@ -260,15 +272,15 @@ type KeyPage struct {
 }
 
 type KeySpec struct {
-	fieldsSet []bool
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	fieldsSet     []bool
+	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
+	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
+	Owner         *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
 	fieldsSet []bool
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyHash   []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
 }
 
@@ -298,8 +310,8 @@ type LiteTokenAccount struct {
 	AccountHeader
 	TokenUrl      *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	Nonce         uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	CreditBalance big.Int  `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
+	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 }
 
 type MetricsRequest struct {
@@ -497,11 +509,11 @@ type TokenAccount struct {
 type TokenIssuer struct {
 	fieldsSet []bool
 	AccountHeader
-	Symbol         string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision      uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties     *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
-	Supply         big.Int  `json:"supply,omitempty" form:"supply" query:"supply"`
-	HasSupplyLimit bool     `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
+	Symbol      string   `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision   uint64   `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
+	Issued      big.Int  `json:"issued,omitempty" form:"issued" query:"issued" validate:"required"`
+	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
 }
 
 type TokenRecipient struct {
@@ -572,9 +584,9 @@ type UpdateManager struct {
 }
 
 type UpdateValidatorKey struct {
-	fieldsSet []bool
-	OldKey    []byte `json:"oldKey,omitempty" form:"oldKey" query:"oldKey" validate:"required"`
-	NewKey    []byte `json:"newKey,omitempty" form:"newKey" query:"newKey" validate:"required"`
+	fieldsSet  []bool
+	KeyHash    []byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
+	NewKeyHash []byte `json:"newKeyHash,omitempty" form:"newKeyHash" query:"newKeyHash" validate:"required"`
 }
 
 type WriteData struct {
@@ -669,6 +681,11 @@ func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
 
 // Deprated: use Type
 func (*AddCredits) GetType() TransactionType { return TransactionTypeAddCredits }
+
+func (*AddCreditsResult) Type() TransactionType { return TransactionTypeAddCredits }
+
+// Deprated: use Type
+func (*AddCreditsResult) GetType() TransactionType { return TransactionTypeAddCredits }
 
 func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeAdd }
 
@@ -1031,7 +1048,24 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 	case !((v.Recipient).Equal(u.Recipient)):
 		return false
 	}
-	if !(v.Amount == u.Amount) {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	if !(v.Oracle == u.Oracle) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddCreditsResult) Equal(u *AddCreditsResult) bool {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	if !(v.Credits == u.Credits) {
+		return false
+	}
+	if !(v.Oracle == u.Oracle) {
 		return false
 	}
 
@@ -1180,7 +1214,7 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
 		return false
 	}
 	switch {
@@ -1279,10 +1313,12 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 	case !((v.Properties).Equal(u.Properties)):
 		return false
 	}
-	if !((&v.InitialSupply).Cmp(&u.InitialSupply) == 0) {
+	switch {
+	case v.SupplyLimit == u.SupplyLimit:
+		// equal
+	case v.SupplyLimit == nil || u.SupplyLimit == nil:
 		return false
-	}
-	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
+	case !((v.SupplyLimit).Cmp(u.SupplyLimit) == 0):
 		return false
 	}
 	switch {
@@ -1418,6 +1454,19 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		return false
 	case !((v.Transaction).Equal(u.Transaction)):
 		return false
+	}
+
+	return true
+}
+
+func (v *HashSet) Equal(u *HashSet) bool {
+	if len(v.Hashes) != len(u.Hashes) {
+		return false
+	}
+	for i := range v.Hashes {
+		if !(v.Hashes[i] == u.Hashes[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -1559,7 +1608,7 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
 	}
-	if !((&v.CreditBalance).Cmp(&u.CreditBalance) == 0) {
+	if !(v.CreditBalance == u.CreditBalance) {
 		return false
 	}
 	if !(v.Threshold == u.Threshold) {
@@ -1589,10 +1638,10 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 }
 
 func (v *KeySpec) Equal(u *KeySpec) bool {
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !(bytes.Equal(v.PublicKeyHash, u.PublicKeyHash)) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
 	switch {
@@ -1608,7 +1657,7 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 }
 
 func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
 		return false
 	}
 	switch {
@@ -1682,10 +1731,10 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
 		return false
 	}
-	if !(v.Nonce == u.Nonce) {
+	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
-	if !((&v.CreditBalance).Cmp(&u.CreditBalance) == 0) {
+	if !(v.CreditBalance == u.CreditBalance) {
 		return false
 	}
 
@@ -2109,10 +2158,15 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 	case !((v.Properties).Equal(u.Properties)):
 		return false
 	}
-	if !((&v.Supply).Cmp(&u.Supply) == 0) {
+	if !((&v.Issued).Cmp(&u.Issued) == 0) {
 		return false
 	}
-	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
+	switch {
+	case v.SupplyLimit == u.SupplyLimit:
+		// equal
+	case v.SupplyLimit == nil || u.SupplyLimit == nil:
+		return false
+	case !((v.SupplyLimit).Cmp(u.SupplyLimit) == 0):
 		return false
 	}
 
@@ -2272,10 +2326,10 @@ func (v *UpdateManager) Equal(u *UpdateManager) bool {
 }
 
 func (v *UpdateValidatorKey) Equal(u *UpdateValidatorKey) bool {
-	if !(bytes.Equal(v.OldKey, u.OldKey)) {
+	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
 		return false
 	}
-	if !(bytes.Equal(v.NewKey, u.NewKey)) {
+	if !(bytes.Equal(v.NewKeyHash, u.NewKeyHash)) {
 		return false
 	}
 
@@ -2487,6 +2541,7 @@ var fieldNames_AddCredits = []string{
 	1: "Type",
 	2: "Recipient",
 	3: "Amount",
+	4: "Oracle",
 }
 
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
@@ -2497,8 +2552,11 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
-	if !(v.Amount == 0) {
-		writer.WriteUint(3, v.Amount)
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(3, &v.Amount)
+	}
+	if !(v.Oracle == 0) {
+		writer.WriteUint(4, v.Oracle)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddCredits)
@@ -2515,8 +2573,63 @@ func (v *AddCredits) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Amount is missing")
-	} else if v.Amount == 0 {
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AddCreditsResult = []string{
+	1: "Type",
+	2: "Amount",
+	3: "Credits",
+	4: "Oracle",
+}
+
+func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, TransactionTypeAddCredits)
+	if !((v.Amount).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(2, &v.Amount)
+	}
+	if !(v.Credits == 0) {
+		writer.WriteUint(3, v.Credits)
+	}
+	if !(v.Oracle == 0) {
+		writer.WriteUint(4, v.Oracle)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AddCreditsResult)
+	return buffer.Bytes(), err
+}
+
+func (v *AddCreditsResult) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Amount is missing")
+	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Credits is missing")
+	} else if v.Credits == 0 {
+		errs = append(errs, "field Credits is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Oracle is missing")
+	} else if v.Oracle == 0 {
+		errs = append(errs, "field Oracle is not set")
 	}
 
 	switch len(errs) {
@@ -2937,7 +3050,7 @@ func (v *CreateDataAccount) IsValid() error {
 var fieldNames_CreateIdentity = []string{
 	1: "Type",
 	2: "Url",
-	3: "PublicKey",
+	3: "KeyHash",
 	4: "KeyBookUrl",
 	5: "Manager",
 }
@@ -2950,8 +3063,8 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(3, v.PublicKey)
+	if !(len(v.KeyHash) == 0) {
+		writer.WriteBytes(3, v.KeyHash)
 	}
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(4, v.KeyBookUrl)
@@ -3083,9 +3196,8 @@ var fieldNames_CreateToken = []string{
 	4: "Symbol",
 	5: "Precision",
 	6: "Properties",
-	7: "InitialSupply",
-	8: "HasSupplyLimit",
-	9: "Manager",
+	7: "SupplyLimit",
+	8: "Manager",
 }
 
 func (v *CreateToken) MarshalBinary() ([]byte, error) {
@@ -3108,14 +3220,11 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	if !(v.Properties == nil) {
 		writer.WriteUrl(6, v.Properties)
 	}
-	if !((v.InitialSupply).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(7, &v.InitialSupply)
-	}
-	if !(!v.HasSupplyLimit) {
-		writer.WriteBool(8, v.HasSupplyLimit)
+	if !(v.SupplyLimit == nil) {
+		writer.WriteBigInt(7, v.SupplyLimit)
 	}
 	if !(v.Manager == nil) {
-		writer.WriteUrl(9, v.Manager)
+		writer.WriteUrl(8, v.Manager)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateToken)
@@ -3446,6 +3555,43 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_HashSet = []string{
+	1: "Hashes",
+}
+
+func (v *HashSet) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Hashes) == 0) {
+		for _, v := range v.Hashes {
+			writer.WriteHash(1, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_HashSet)
+	return buffer.Bytes(), err
+}
+
+func (v *HashSet) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hashes is missing")
+	} else if len(v.Hashes) == 0 {
+		errs = append(errs, "field Hashes is not set")
 	}
 
 	switch len(errs) {
@@ -3927,8 +4073,8 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, AccountTypeKeyPage)
 	writer.WriteValue(2, &v.AccountHeader)
-	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(3, &v.CreditBalance)
+	if !(v.CreditBalance == 0) {
+		writer.WriteUint(3, v.CreditBalance)
 	}
 	if !(v.Threshold == 0) {
 		writer.WriteUint(4, v.Threshold)
@@ -3957,7 +4103,7 @@ func (v *KeyPage) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field CreditBalance is missing")
-	} else if (v.CreditBalance).Cmp(new(big.Int)) == 0 {
+	} else if v.CreditBalance == 0 {
 		errs = append(errs, "field CreditBalance is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
@@ -3987,8 +4133,8 @@ func (v *KeyPage) IsValid() error {
 }
 
 var fieldNames_KeySpec = []string{
-	1: "PublicKey",
-	2: "Nonce",
+	1: "PublicKeyHash",
+	2: "LastUsedOn",
 	3: "Owner",
 }
 
@@ -3996,11 +4142,11 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(1, v.PublicKey)
+	if !(len(v.PublicKeyHash) == 0) {
+		writer.WriteBytes(1, v.PublicKeyHash)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(2, v.Nonce)
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(2, v.LastUsedOn)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
@@ -4014,14 +4160,14 @@ func (v *KeySpec) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
+		errs = append(errs, "field PublicKeyHash is missing")
+	} else if len(v.PublicKeyHash) == 0 {
+		errs = append(errs, "field PublicKeyHash is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Owner is missing")
@@ -4040,7 +4186,7 @@ func (v *KeySpec) IsValid() error {
 }
 
 var fieldNames_KeySpecParams = []string{
-	1: "PublicKey",
+	1: "KeyHash",
 	2: "Owner",
 }
 
@@ -4048,8 +4194,8 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(1, v.PublicKey)
+	if !(len(v.KeyHash) == 0) {
+		writer.WriteBytes(1, v.KeyHash)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(2, v.Owner)
@@ -4063,9 +4209,9 @@ func (v *KeySpecParams) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
+		errs = append(errs, "field KeyHash is missing")
+	} else if len(v.KeyHash) == 0 {
+		errs = append(errs, "field KeyHash is not set")
 	}
 
 	switch len(errs) {
@@ -4231,7 +4377,7 @@ var fieldNames_LiteTokenAccount = []string{
 	2: "AccountHeader",
 	3: "TokenUrl",
 	4: "Balance",
-	5: "Nonce",
+	5: "LastUsedOn",
 	6: "CreditBalance",
 }
 
@@ -4247,11 +4393,11 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Balance)
 	}
-	if !(v.Nonce == 0) {
-		writer.WriteUint(5, v.Nonce)
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(5, v.LastUsedOn)
 	}
-	if !((v.CreditBalance).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(6, &v.CreditBalance)
+	if !(v.CreditBalance == 0) {
+		writer.WriteUint(6, v.CreditBalance)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
@@ -4275,13 +4421,13 @@ func (v *LiteTokenAccount) IsValid() error {
 		errs = append(errs, "field Balance is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field CreditBalance is missing")
-	} else if (v.CreditBalance).Cmp(new(big.Int)) == 0 {
+	} else if v.CreditBalance == 0 {
 		errs = append(errs, "field CreditBalance is not set")
 	}
 
@@ -5581,8 +5727,8 @@ var fieldNames_TokenIssuer = []string{
 	3: "Symbol",
 	4: "Precision",
 	5: "Properties",
-	6: "Supply",
-	7: "HasSupplyLimit",
+	6: "Issued",
+	7: "SupplyLimit",
 }
 
 func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
@@ -5600,11 +5746,11 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	if !(v.Properties == nil) {
 		writer.WriteUrl(5, v.Properties)
 	}
-	if !((v.Supply).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(6, &v.Supply)
+	if !((v.Issued).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(6, &v.Issued)
 	}
-	if !(!v.HasSupplyLimit) {
-		writer.WriteBool(7, v.HasSupplyLimit)
+	if !(v.SupplyLimit == nil) {
+		writer.WriteBigInt(7, v.SupplyLimit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenIssuer)
@@ -5631,6 +5777,11 @@ func (v *TokenIssuer) IsValid() error {
 		errs = append(errs, "field Properties is missing")
 	} else if v.Properties == nil {
 		errs = append(errs, "field Properties is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Issued is missing")
+	} else if (v.Issued).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field Issued is not set")
 	}
 
 	switch len(errs) {
@@ -6098,8 +6249,8 @@ func (v *UpdateManager) IsValid() error {
 
 var fieldNames_UpdateValidatorKey = []string{
 	1: "Type",
-	2: "OldKey",
-	3: "NewKey",
+	2: "KeyHash",
+	3: "NewKeyHash",
 }
 
 func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
@@ -6107,11 +6258,11 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, TransactionTypeUpdateValidatorKey)
-	if !(len(v.OldKey) == 0) {
-		writer.WriteBytes(2, v.OldKey)
+	if !(len(v.KeyHash) == 0) {
+		writer.WriteBytes(2, v.KeyHash)
 	}
-	if !(len(v.NewKey) == 0) {
-		writer.WriteBytes(3, v.NewKey)
+	if !(len(v.NewKeyHash) == 0) {
+		writer.WriteBytes(3, v.NewKeyHash)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
@@ -6122,14 +6273,14 @@ func (v *UpdateValidatorKey) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field OldKey is missing")
-	} else if len(v.OldKey) == 0 {
-		errs = append(errs, "field OldKey is not set")
+		errs = append(errs, "field KeyHash is missing")
+	} else if len(v.KeyHash) == 0 {
+		errs = append(errs, "field KeyHash is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field NewKey is missing")
-	} else if len(v.NewKey) == 0 {
-		errs = append(errs, "field NewKey is not set")
+		errs = append(errs, "field NewKeyHash is missing")
+	} else if len(v.NewKeyHash) == 0 {
+		errs = append(errs, "field NewKeyHash is not set")
 	}
 
 	switch len(errs) {
@@ -6379,11 +6530,43 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Amount = x
+	if x, ok := reader.ReadBigInt(3); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Oracle = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AddCredits)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *AddCreditsResult) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeAddCredits {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAddCredits, typ)
+	}
+
+	if x, ok := reader.ReadBigInt(2); ok {
+		v.Amount = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Credits = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Oracle = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AddCreditsResult)
 	v.fieldsSet = seen
 	return err
 }
@@ -6618,7 +6801,7 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	if x, ok := reader.ReadUrl(4); ok {
 		v.KeyBookUrl = x
@@ -6721,12 +6904,9 @@ func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Properties = x
 	}
 	if x, ok := reader.ReadBigInt(7); ok {
-		v.InitialSupply = *x
+		v.SupplyLimit = x
 	}
-	if x, ok := reader.ReadBool(8); ok {
-		v.HasSupplyLimit = x
-	}
-	if x, ok := reader.ReadUrl(9); ok {
+	if x, ok := reader.ReadUrl(8); ok {
 		v.Manager = x
 	}
 
@@ -6912,6 +7092,26 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *HashSet) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadHash(1); ok {
+			v.Hashes = append(v.Hashes, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_HashSet)
 	v.fieldsSet = seen
 	return err
 }
@@ -7197,8 +7397,8 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
 
-	if x, ok := reader.ReadBigInt(3); ok {
-		v.CreditBalance = *x
+	if x, ok := reader.ReadUint(3); ok {
+		v.CreditBalance = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.Threshold = x
@@ -7230,10 +7430,10 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadBytes(1); ok {
-		v.PublicKey = x
+		v.PublicKeyHash = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
-		v.Nonce = x
+		v.LastUsedOn = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
@@ -7252,7 +7452,7 @@ func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadBytes(1); ok {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Owner = x
@@ -7367,10 +7567,10 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Balance = *x
 	}
 	if x, ok := reader.ReadUint(5); ok {
-		v.Nonce = x
+		v.LastUsedOn = x
 	}
-	if x, ok := reader.ReadBigInt(6); ok {
-		v.CreditBalance = *x
+	if x, ok := reader.ReadUint(6); ok {
+		v.CreditBalance = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
@@ -8098,10 +8298,10 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Properties = x
 	}
 	if x, ok := reader.ReadBigInt(6); ok {
-		v.Supply = *x
+		v.Issued = *x
 	}
-	if x, ok := reader.ReadBool(7); ok {
-		v.HasSupplyLimit = x
+	if x, ok := reader.ReadBigInt(7); ok {
+		v.SupplyLimit = x
 	}
 
 	seen, err := reader.Reset(fieldNames_TokenIssuer)
@@ -8382,10 +8582,10 @@ func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	if x, ok := reader.ReadBytes(2); ok {
-		v.OldKey = x
+		v.KeyHash = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
-		v.NewKey = x
+		v.NewKeyHash = x
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateValidatorKey)
@@ -8499,11 +8699,27 @@ func (v *AddCredits) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
 		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    uint64          `json:"amount,omitempty"`
+		Amount    *string         `json:"amount,omitempty"`
+		Oracle    uint64          `json:"oracle,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Oracle = v.Oracle
+	return json.Marshal(&u)
+}
+
+func (v *AddCreditsResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    TransactionType `json:"type"`
+		Amount  *string         `json:"amount,omitempty"`
+		Credits uint64          `json:"credits,omitempty"`
+		Oracle  uint64          `json:"oracle,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Credits = v.Credits
+	u.Oracle = v.Oracle
 	return json.Marshal(&u)
 }
 
@@ -8613,13 +8829,13 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       TransactionType `json:"type"`
 		Url        *url.URL        `json:"url,omitempty"`
-		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyHash    *string         `json:"keyHash,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Manager = v.Manager
 	return json.Marshal(&u)
@@ -8653,15 +8869,14 @@ func (v *CreateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           TransactionType `json:"type"`
-		Url            *url.URL        `json:"url,omitempty"`
-		KeyBookUrl     *url.URL        `json:"keyBookUrl,omitempty"`
-		Symbol         string          `json:"symbol,omitempty"`
-		Precision      uint64          `json:"precision,omitempty"`
-		Properties     *url.URL        `json:"properties,omitempty"`
-		InitialSupply  *string         `json:"initialSupply,omitempty"`
-		HasSupplyLimit bool            `json:"hasSupplyLimit,omitempty"`
-		Manager        *url.URL        `json:"manager,omitempty"`
+		Type        TransactionType `json:"type"`
+		Url         *url.URL        `json:"url,omitempty"`
+		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
+		Symbol      string          `json:"symbol,omitempty"`
+		Precision   uint64          `json:"precision,omitempty"`
+		Properties  *url.URL        `json:"properties,omitempty"`
+		SupplyLimit *string         `json:"supplyLimit,omitempty"`
+		Manager     *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -8669,8 +8884,7 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
-	u.HasSupplyLimit = v.HasSupplyLimit
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	u.Manager = v.Manager
 	return json.Marshal(&u)
 }
@@ -8762,6 +8976,17 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	}
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Transaction = v.Transaction
+	return json.Marshal(&u)
+}
+
+func (v *HashSet) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Hashes []string `json:"hashes,omitempty"`
+	}{}
+	u.Hashes = make([]string, len(v.Hashes))
+	for i, x := range v.Hashes {
+		u.Hashes[i] = encoding.ChainToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -8890,7 +9115,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 		Url                  *url.URL             `json:"url,omitempty"`
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		ManagerKeyBook       *url.URL             `json:"managerKeyBook,omitempty"`
-		CreditBalance        *string              `json:"creditBalance,omitempty"`
+		CreditBalance        uint64               `json:"creditBalance,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
 		Version              uint64               `json:"version,omitempty"`
 		Keys                 []*KeySpec           `json:"keys,omitempty"`
@@ -8900,7 +9125,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.CreditBalance = v.CreditBalance
 	u.Threshold = v.Threshold
 	u.Version = v.Version
 	u.Keys = v.Keys
@@ -8910,22 +9135,26 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
+		PublicKey     *string  `json:"publicKey,omitempty"`
+		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
 
 func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		KeyHash *string  `json:"keyHash,omitempty"`
+		Owner   *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
@@ -8988,8 +9217,9 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
+		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
-		CreditBalance  *string     `json:"creditBalance,omitempty"`
+		CreditBalance  uint64      `json:"creditBalance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -8997,8 +9227,9 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Nonce = v.Nonce
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
+	u.CreditBalance = v.CreditBalance
 	return json.Marshal(&u)
 }
 
@@ -9352,8 +9583,8 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 		Symbol         string      `json:"symbol,omitempty"`
 		Precision      uint64      `json:"precision,omitempty"`
 		Properties     *url.URL    `json:"properties,omitempty"`
-		Supply         *string     `json:"supply,omitempty"`
-		HasSupplyLimit bool        `json:"hasSupplyLimit,omitempty"`
+		Issued         *string     `json:"issued,omitempty"`
+		SupplyLimit    *string     `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -9362,8 +9593,8 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.Supply = encoding.BigintToJSON(&v.Supply)
-	u.HasSupplyLimit = v.HasSupplyLimit
+	u.Issued = encoding.BigintToJSON(&v.Issued)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	return json.Marshal(&u)
 }
 
@@ -9493,13 +9724,13 @@ func (v *UpdateManager) MarshalJSON() ([]byte, error) {
 
 func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   TransactionType `json:"type"`
-		OldKey *string         `json:"oldKey,omitempty"`
-		NewKey *string         `json:"newKey,omitempty"`
+		Type       TransactionType `json:"type"`
+		KeyHash    *string         `json:"keyHash,omitempty"`
+		NewKeyHash *string         `json:"newKeyHash,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.OldKey = encoding.BytesToJSON(v.OldKey)
-	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
+	u.NewKeyHash = encoding.BytesToJSON(v.NewKeyHash)
 	return json.Marshal(&u)
 }
 
@@ -9577,16 +9808,47 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType `json:"type"`
 		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    uint64          `json:"amount,omitempty"`
+		Amount    *string         `json:"amount,omitempty"`
+		Oracle    uint64          `json:"oracle,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Oracle = v.Oracle
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Recipient = u.Recipient
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Oracle = u.Oracle
+	return nil
+}
+
+func (v *AddCreditsResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    TransactionType `json:"type"`
+		Amount  *string         `json:"amount,omitempty"`
+		Credits uint64          `json:"credits,omitempty"`
+		Oracle  uint64          `json:"oracle,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.Credits = v.Credits
+	u.Oracle = v.Oracle
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	v.Credits = u.Credits
+	v.Oracle = u.Oracle
 	return nil
 }
 
@@ -9766,23 +10028,23 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type       TransactionType `json:"type"`
 		Url        *url.URL        `json:"url,omitempty"`
-		PublicKey  *string         `json:"publicKey,omitempty"`
+		KeyHash    *string         `json:"keyHash,omitempty"`
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Url = u.Url
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
 	} else {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	v.KeyBookUrl = u.KeyBookUrl
 	v.Manager = u.Manager
@@ -9832,15 +10094,14 @@ func (v *CreateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           TransactionType `json:"type"`
-		Url            *url.URL        `json:"url,omitempty"`
-		KeyBookUrl     *url.URL        `json:"keyBookUrl,omitempty"`
-		Symbol         string          `json:"symbol,omitempty"`
-		Precision      uint64          `json:"precision,omitempty"`
-		Properties     *url.URL        `json:"properties,omitempty"`
-		InitialSupply  *string         `json:"initialSupply,omitempty"`
-		HasSupplyLimit bool            `json:"hasSupplyLimit,omitempty"`
-		Manager        *url.URL        `json:"manager,omitempty"`
+		Type        TransactionType `json:"type"`
+		Url         *url.URL        `json:"url,omitempty"`
+		KeyBookUrl  *url.URL        `json:"keyBookUrl,omitempty"`
+		Symbol      string          `json:"symbol,omitempty"`
+		Precision   uint64          `json:"precision,omitempty"`
+		Properties  *url.URL        `json:"properties,omitempty"`
+		SupplyLimit *string         `json:"supplyLimit,omitempty"`
+		Manager     *url.URL        `json:"manager,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -9848,8 +10109,7 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
-	u.HasSupplyLimit = v.HasSupplyLimit
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -9859,12 +10119,11 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	v.Symbol = u.Symbol
 	v.Precision = u.Precision
 	v.Properties = u.Properties
-	if x, err := encoding.BigintFromJSON(u.InitialSupply); err != nil {
-		return fmt.Errorf("error decoding InitialSupply: %w", err)
+	if x, err := encoding.BigintFromJSON(u.SupplyLimit); err != nil {
+		return fmt.Errorf("error decoding SupplyLimit: %w", err)
 	} else {
-		v.InitialSupply = *x
+		v.SupplyLimit = x
 	}
-	v.HasSupplyLimit = u.HasSupplyLimit
 	v.Manager = u.Manager
 	return nil
 }
@@ -10018,6 +10277,28 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		v.TxHash = x
 	}
 	v.Transaction = u.Transaction
+	return nil
+}
+
+func (v *HashSet) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Hashes []string `json:"hashes,omitempty"`
+	}{}
+	u.Hashes = make([]string, len(v.Hashes))
+	for i, x := range v.Hashes {
+		u.Hashes[i] = encoding.ChainToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Hashes = make([][32]byte, len(u.Hashes))
+	for i, x := range u.Hashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Hashes: %w", err)
+		} else {
+			v.Hashes[i] = x
+		}
+	}
 	return nil
 }
 
@@ -10206,7 +10487,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 		Url                  *url.URL             `json:"url,omitempty"`
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		ManagerKeyBook       *url.URL             `json:"managerKeyBook,omitempty"`
-		CreditBalance        *string              `json:"creditBalance,omitempty"`
+		CreditBalance        uint64               `json:"creditBalance,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
 		Version              uint64               `json:"version,omitempty"`
 		Keys                 []*KeySpec           `json:"keys,omitempty"`
@@ -10216,7 +10497,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.CreditBalance = v.CreditBalance
 	u.Threshold = v.Threshold
 	u.Version = v.Version
 	u.Keys = v.Keys
@@ -10227,11 +10508,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
-	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
-		return fmt.Errorf("error decoding CreditBalance: %w", err)
-	} else {
-		v.CreditBalance = *x
-	}
+	v.CreditBalance = u.CreditBalance
 	v.Threshold = u.Threshold
 	v.Version = u.Version
 	v.Keys = u.Keys
@@ -10241,40 +10518,56 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
+		PublicKey     *string  `json:"publicKey,omitempty"`
+		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
+	if u.PublicKeyHash != nil {
+		if x, err := encoding.BytesFromJSON(u.PublicKeyHash); err != nil {
+			return fmt.Errorf("error decoding PublicKeyHash: %w", err)
+		} else {
+			v.PublicKeyHash = x
+		}
 	} else {
-		v.PublicKey = x
+		if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+			return fmt.Errorf("error decoding PublicKeyHash: %w", err)
+		} else {
+			v.PublicKeyHash = x
+		}
 	}
-	v.Nonce = u.Nonce
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
+	} else {
+		v.LastUsedOn = u.Nonce
+	}
 	v.Owner = u.Owner
 	return nil
 }
 
 func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Owner     *url.URL `json:"owner,omitempty"`
+		KeyHash *string  `json:"keyHash,omitempty"`
+		Owner   *url.URL `json:"owner,omitempty"`
 	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
 	} else {
-		v.PublicKey = x
+		v.KeyHash = x
 	}
 	v.Owner = u.Owner
 	return nil
@@ -10375,8 +10668,9 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
+		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
 		Nonce          uint64      `json:"nonce,omitempty"`
-		CreditBalance  *string     `json:"creditBalance,omitempty"`
+		CreditBalance  uint64      `json:"creditBalance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -10384,8 +10678,9 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Nonce = v.Nonce
-	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
+	u.CreditBalance = v.CreditBalance
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10398,12 +10693,12 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
-	v.Nonce = u.Nonce
-	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
-		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
 	} else {
-		v.CreditBalance = *x
+		v.LastUsedOn = u.Nonce
 	}
+	v.CreditBalance = u.CreditBalance
 	return nil
 }
 
@@ -11029,8 +11324,8 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 		Symbol         string      `json:"symbol,omitempty"`
 		Precision      uint64      `json:"precision,omitempty"`
 		Properties     *url.URL    `json:"properties,omitempty"`
-		Supply         *string     `json:"supply,omitempty"`
-		HasSupplyLimit bool        `json:"hasSupplyLimit,omitempty"`
+		Issued         *string     `json:"issued,omitempty"`
+		SupplyLimit    *string     `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
@@ -11039,8 +11334,8 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
-	u.Supply = encoding.BigintToJSON(&v.Supply)
-	u.HasSupplyLimit = v.HasSupplyLimit
+	u.Issued = encoding.BigintToJSON(&v.Issued)
+	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -11050,12 +11345,16 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	v.Symbol = u.Symbol
 	v.Precision = u.Precision
 	v.Properties = u.Properties
-	if x, err := encoding.BigintFromJSON(u.Supply); err != nil {
-		return fmt.Errorf("error decoding Supply: %w", err)
+	if x, err := encoding.BigintFromJSON(u.Issued); err != nil {
+		return fmt.Errorf("error decoding Issued: %w", err)
 	} else {
-		v.Supply = *x
+		v.Issued = *x
 	}
-	v.HasSupplyLimit = u.HasSupplyLimit
+	if x, err := encoding.BigintFromJSON(u.SupplyLimit); err != nil {
+		return fmt.Errorf("error decoding SupplyLimit: %w", err)
+	} else {
+		v.SupplyLimit = x
+	}
 	return nil
 }
 
@@ -11274,25 +11573,25 @@ func (v *UpdateManager) UnmarshalJSON(data []byte) error {
 
 func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   TransactionType `json:"type"`
-		OldKey *string         `json:"oldKey,omitempty"`
-		NewKey *string         `json:"newKey,omitempty"`
+		Type       TransactionType `json:"type"`
+		KeyHash    *string         `json:"keyHash,omitempty"`
+		NewKeyHash *string         `json:"newKeyHash,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.OldKey = encoding.BytesToJSON(v.OldKey)
-	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
+	u.NewKeyHash = encoding.BytesToJSON(v.NewKeyHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.OldKey); err != nil {
-		return fmt.Errorf("error decoding OldKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
 	} else {
-		v.OldKey = x
+		v.KeyHash = x
 	}
-	if x, err := encoding.BytesFromJSON(u.NewKey); err != nil {
-		return fmt.Errorf("error decoding NewKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.NewKeyHash); err != nil {
+		return fmt.Errorf("error decoding NewKeyHash: %w", err)
 	} else {
-		v.NewKey = x
+		v.NewKeyHash = x
 	}
 	return nil
 }

@@ -114,13 +114,13 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	env := acctesting.NewTransaction().
 		WithPrincipal(u).
 		WithSigner(signator, qr.MainChain.Height).
-		WithNonceTimestamp().
+		WithCurrentTimestamp().
 		WithBody(params.Payload).
 		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction.Header.Principal
-	req.Signer.Nonce = env.Signatures[0].GetTimestamp()
+	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
@@ -152,13 +152,13 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUr
 	env := acctesting.NewTransaction().
 		WithPrincipal(u).
 		WithSigner(keyPageUrl, keyPageHeight).
-		WithNonceTimestamp().
+		WithCurrentTimestamp().
 		WithBody(params.Payload).
 		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction.Header.Principal
-	req.Signer.Nonce = env.Signatures[0].GetTimestamp()
+	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
@@ -219,7 +219,7 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
 	pl.Origin = tx.Transaction.Header.Principal
-	pl.Signer.Nonce = tx.Signatures[0].GetTimestamp()
+	pl.Signer.Timestamp = tx.Signatures[0].GetTimestamp()
 	pl.Signer.Url = tx.Signatures[0].GetSigner()
 	pl.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
 	pl.Signature = tx.Signatures[0].GetSignature()

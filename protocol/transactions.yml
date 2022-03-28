@@ -145,7 +145,7 @@ CreateIdentity:
     - name: Url
       type: url
       pointer: true
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
       optional: true
     - name: KeyBookUrl
@@ -253,11 +253,9 @@ CreateToken:
       type: url
       pointer: true
       optional: true
-    - name: InitialSupply
+    - name: SupplyLimit
       type: bigint
-      optional: true
-    - name: HasSupplyLimit
-      type: bool
+      pointer: true
       optional: true
     - name: Manager
       type: url
@@ -312,7 +310,10 @@ AddCredits:
       type: url
       pointer: true
     - name: Amount
+      type: bigint
+    - name: Oracle
       type: uvarint
+      optional: true
 
 UpdateKeyPage:
   union: { type: transaction }
@@ -359,9 +360,9 @@ RemoveValidator:
 UpdateValidatorKey:
   union: { type: transaction }
   fields:
-    - name: OldKey
+    - name: KeyHash
       type: bytes
-    - name: NewKey
+    - name: NewKeyHash
       type: bytes
 
 SignPending:
@@ -527,6 +528,16 @@ WriteDataResult:
     - name: AccountID
       type: bytes
 
+AddCreditsResult:
+  union: { type: result }
+  fields:
+    - name: Amount
+      type: bigint
+    - name: Credits
+      type: uvarint
+    - name: Oracle
+      type: uvarint
+
 ##### Data Types #####
 
 UpdateAllowedTransactions:
@@ -559,7 +570,7 @@ ChainParams:
 
 KeySpecParams:
   fields:
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
     - name: Owner
       type: url

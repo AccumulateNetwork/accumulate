@@ -113,9 +113,10 @@ type QueryPagination struct {
 }
 
 type Signer struct {
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	PublicKey     []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
 }
 
 type StatusResponse struct {
@@ -616,13 +617,17 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Url       *url.URL `json:"url,omitempty"`
+		PublicKey     *string                `json:"publicKey,omitempty"`
+		Timestamp     uint64                 `json:"timestamp,omitempty"`
+		Nonce         uint64                 `json:"nonce,omitempty"`
+		Url           *url.URL               `json:"url,omitempty"`
+		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.SignatureType = v.SignatureType
 	return json.Marshal(&u)
 }
 
@@ -1149,13 +1154,17 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Url       *url.URL `json:"url,omitempty"`
+		PublicKey     *string                `json:"publicKey,omitempty"`
+		Timestamp     uint64                 `json:"timestamp,omitempty"`
+		Nonce         uint64                 `json:"nonce,omitempty"`
+		Url           *url.URL               `json:"url,omitempty"`
+		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	u.Nonce = v.Nonce
+	u.Timestamp = v.Timestamp
+	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.SignatureType = v.SignatureType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1164,8 +1173,13 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	v.Nonce = u.Nonce
+	if u.Timestamp != 0 {
+		v.Timestamp = u.Timestamp
+	} else {
+		v.Timestamp = u.Nonce
+	}
 	v.Url = u.Url
+	v.SignatureType = u.SignatureType
 	return nil
 }
 

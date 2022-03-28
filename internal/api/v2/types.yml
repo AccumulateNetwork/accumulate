@@ -111,11 +111,16 @@ Signer:
   fields:
   - name: PublicKey
     type: bytes
-  - name: Nonce
+  - name: Timestamp
     type: uvarint
+    alternative: Nonce
   - name: Url
     type: url
     pointer: true
+  - name: SignatureType
+    type: protocol.SignatureType
+    optional: true
+
 
 TokenSend:
   non-binary: true

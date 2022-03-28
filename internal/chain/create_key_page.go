@@ -48,7 +48,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
-		ss.PublicKey = sig.PublicKey
+		ss.PublicKeyHash = sig.KeyHash
 		page.Keys = append(page.Keys, ss)
 	}
 

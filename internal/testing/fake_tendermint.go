@@ -183,8 +183,8 @@ func (c *FakeTendermint) getSynthHeight() int64 {
 
 	// Load the ledger state
 	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return 0
@@ -206,8 +206,8 @@ func (c *FakeTendermint) addSynthTxns(blockIndex, lastHeight int64) (int64, bool
 
 	// Load the ledger state
 	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		c.onError(err)
 		return 0, false
@@ -462,9 +462,9 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 
 func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
 	for _, env := range env {
-		txt := env.Transaction.Type()
-		if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor {
-			c.logger.Info(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
+		txnType := env.Type()
+		if !txnType.IsInternal() && txnType != protocol.TransactionTypeSyntheticAnchor {
+			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
 		}
 	}
 }

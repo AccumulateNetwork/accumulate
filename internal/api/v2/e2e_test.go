@@ -78,13 +78,13 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: liteUrl,
-				Amount:    1e5,
+				Amount:    *big.NewInt(1e10),
 			},
 		})
 
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
-		assert.Equal(t, int64(1e5), account.CreditBalance.Int64())
+		assert.Equal(t, uint64(1e5), account.CreditBalance)
 
 		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.AccountID()})
 	})
@@ -102,7 +102,7 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &CreateIdentity{
 				Url:        adiName,
-				PublicKey:  adiKey[32:],
+				KeyHash:    adiKey[32:],
 				KeyBookUrl: bookUrl,
 			},
 		})
@@ -131,13 +131,13 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: pageUrl,
-				Amount:    1e5,
+				Amount:    *big.NewInt(1e5),
 			},
 		})
 
 		page := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: pageUrl}, page)
-		assert.Equal(t, int64(1e5), page.CreditBalance.Int64())
+		assert.Equal(t, uint64(1e5), page.CreditBalance)
 	})
 
 	t.Run("Txn History", func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestValidate(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
 		keys = append(keys, &KeySpecParams{
-			PublicKey: adiKey[32:],
+			KeyHash: adiKey[32:],
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
 			Origin: keyBookUrl.String(),
@@ -203,13 +203,13 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: keyPageUrl,
-				Amount:    1e5,
+				Amount:    *big.NewInt(1e5),
 			},
 		})
 
 		page := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, page)
-		assert.Equal(t, int64(1e5), page.CreditBalance.Int64())
+		assert.Equal(t, uint64(1e5), page.CreditBalance)
 	})
 
 	var adiKey2 ed25519.PrivateKey
@@ -222,8 +222,8 @@ func TestValidate(t *testing.T) {
 			Payload: &UpdateKeyPage{
 				Operation: &AddKeyOperation{
 					Entry: KeySpecParams{
-						PublicKey: adiKey2[32:],
-						Owner:     makeUrl(t, "acc://foo/book1"),
+						KeyHash: adiKey2[32:],
+						Owner:   makeUrl(t, "acc://foo/book1"),
 					},
 				},
 			},

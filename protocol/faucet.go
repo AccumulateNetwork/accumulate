@@ -9,7 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
-const AcmeFaucetAmount = 2000
+const AcmeFaucetAmount = 2000000
 
 var FaucetUrl *url.URL
 var Faucet faucet
@@ -45,7 +45,7 @@ func (faucet) Signer() faucetSigner {
 
 type faucetSigner uint64
 
-func (s faucetSigner) Nonce() uint64 {
+func (s faucetSigner) Timestamp() uint64 {
 	return uint64(s)
 }
 
@@ -54,6 +54,6 @@ func (s faucetSigner) PublicKey() []byte {
 }
 
 func (s faucetSigner) Sign(message []byte) []byte {
-	withNonce := append(common.Uint64Bytes(s.Nonce()), message...)
+	withNonce := append(common.Uint64Bytes(s.Timestamp()), message...)
 	return ed25519.Sign(faucetKey, withNonce)
 }

@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -58,7 +59,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {
 			spec := new(protocol.KeySpec)
-			spec.PublicKey = val.PubKey.Bytes()
+			kh := sha256.Sum256(val.PubKey.Bytes())
+			spec.PublicKeyHash = kh[:]
 			page.Keys[i] = spec
 		}
 
@@ -67,7 +69,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
 
 		// Create the ledger
-		ledger := protocol.NewInternalLedger()
+		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
 		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1

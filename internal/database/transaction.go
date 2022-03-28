@@ -21,7 +21,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // Get loads the transaction state, status, and signatures.
 //
 // See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*protocol.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (t *Transaction) Get() (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
 	state, err := t.GetState()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, nil, err
@@ -48,19 +48,19 @@ func (t *Transaction) Get() (*protocol.Transaction, *protocol.TransactionStatus,
 // Put appends signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *protocol.Transaction, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
+func (t *Transaction) Put(state *protocol.Envelope, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
 	// Ensure the object metadata is stored. Transactions don't have chains, so
 	// we don't need to add chain metadata.
-	if _, err := t.batch.store.Get(t.key.Object()); errors.Is(err, storage.ErrNotFound) {
-		meta := new(protocol.ObjectMetadata)
+	meta := new(protocol.ObjectMetadata)
+	err := t.batch.getValuePtr(t.key.Object(), meta, &meta, true)
+	if errors.Is(err, storage.ErrNotFound) {
 		meta.Type = protocol.ObjectTypeTransaction
-		err = t.batch.putAs(t.key.Object(), meta)
-		if err != nil {
-			return err
-		}
+		t.batch.putValue(t.key.Object(), meta)
+	} else if err != nil {
+		return err
 	}
 
-	err := t.PutState(state)
+	err = t.PutState(state)
 	if err != nil {
 		return err
 	}
@@ -80,120 +80,86 @@ func (t *Transaction) Put(state *protocol.Transaction, status *protocol.Transact
 }
 
 // GetState loads the transaction state.
-func (t *Transaction) GetState() (*protocol.Transaction, error) {
-	data, err := t.batch.store.Get(t.key.State())
+func (t *Transaction) GetState() (*protocol.Envelope, error) {
+	v := new(protocol.Envelope)
+	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
 	if err != nil {
 		return nil, err
 	}
-
-	state := new(protocol.Transaction)
-	err = state.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return state, nil
+	return v, nil
 }
 
-// PutState stores the transaction state and adds the transaction to the BPT (as a hash).
-func (t *Transaction) PutState(state *protocol.Transaction) error {
-	data, err := state.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	return t.batch.store.Put(t.key.State(), data)
+// PutState stores the transaction state.
+func (t *Transaction) PutState(v *protocol.Envelope) error {
+	t.batch.putValue(t.key.State(), v)
+	return nil
 }
 
-// GetStatus loads the transaction state.
+// GetStatus loads the transaction status.
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
-	data, err := t.batch.store.Get(t.key.Status())
+	v := new(protocol.TransactionStatus)
+	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
 	if err != nil {
 		return nil, err
 	}
-
-	status := new(protocol.TransactionStatus)
-	err = status.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return status, nil
+	return v, nil
 }
 
-// PutStatus stores the transaction state.
-func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
-	if status.Result == nil {
-		status.Result = new(protocol.EmptyResult)
+// PutStatus stores the transaction status.
+func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
+	if v.Result == nil {
+		v.Result = new(protocol.EmptyResult)
 	}
 
-	data, err := status.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	return t.batch.store.Put(t.key.Status(), data)
+	t.batch.putValue(t.key.Status(), v)
+	return nil
 }
 
 // GetSignatures loads the transaction's signatures.
 func (t *Transaction) GetSignatures() (*SignatureSet, error) {
-	data, err := t.batch.store.Get(t.key.Signatures())
-	if errors.Is(err, storage.ErrNotFound) {
-		return new(SignatureSet), err
-	} else if err != nil {
-		return nil, err
-	}
-
 	v := new(SignatureSet)
-	err = v.UnmarshalBinary(data)
-	if err != nil {
+	err := t.batch.getValuePtr(t.key.Signatures(), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
-
 	return v, nil
 }
 
 // PutSignatures stores the transaction's signatures.
 func (t *Transaction) PutSignatures(v *SignatureSet) error {
-	data, err := v.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	return t.batch.store.Put(t.key.Signatures(), data)
+	t.batch.putValue(t.key.Signatures(), v)
+	return nil
 }
 
-// GetSyntheticTxns returns IDs of synthetic transactions produced by the
+// GetSyntheticTxns loads the IDs of synthetic transactions produced by the
 // transaction.
-func (t *Transaction) GetSyntheticTxns() ([][32]byte, error) {
-	data, err := t.batch.store.Get(t.key.Synthetic())
-	if err != nil {
+func (t *Transaction) GetSyntheticTxns() (*protocol.HashSet, error) {
+	v := new(protocol.HashSet)
+	err := t.batch.getValuePtr(t.key.Synthetic(), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
-
-	v := new(txSyntheticTxns)
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v.Txids, nil
+	return v, nil
 }
 
-// AddSyntheticTxns adds the given IDs to the list of synthetic transactions
-// produced by the transaction.
+// PutSyntheticTxns stores the IDs of synthetic transactions produced by the
+// transaction.
+func (t *Transaction) PutSyntheticTxns(v *protocol.HashSet) error {
+	t.batch.putValue(t.key.Synthetic(), v)
+	return nil
+}
+
+// AddSyntheticTxns is a convenience method that calls GetSyntheticTxns, adds
+// the IDs, and calls PutSyntheticTxns.
 func (t *Transaction) AddSyntheticTxns(txids ...[32]byte) error {
-	current, err := t.GetSyntheticTxns()
+	set, err := t.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
 
-	v := new(txSyntheticTxns)
-	v.Txids = append(current, txids...)
-	data, err := v.MarshalBinary()
-	if err != nil {
-		return err
+	for _, id := range txids {
+		set.Add(id)
 	}
 
-	return t.batch.store.Put(t.key.Synthetic(), data)
+	return t.PutSyntheticTxns(set)
 }

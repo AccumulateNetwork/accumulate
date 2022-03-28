@@ -6,11 +6,13 @@ import (
 
 	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 type Batch struct {
-	db  *DB
-	txn *badger.Txn
+	db       *DB
+	txn      *badger.Txn
+	writable bool
 }
 
 var _ storage.KeyValueTxn = (*Batch)(nil)
@@ -19,10 +21,18 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	b := new(Batch)
 	b.db = db
 	b.txn = db.badgerDB.NewTransaction(writable)
+	b.writable = writable
 	if db.logger == nil {
 		return b
 	}
-	return &storage.DebugBatch{Batch: b, Logger: db.logger}
+	return &storage.DebugBatch{Batch: b, Logger: db.logger, Writable: writable}
+}
+
+func (b *Batch) Begin() storage.KeyValueTxn {
+	if !b.writable {
+		return memory.NewBatch(b.Get, nil)
+	}
+	return memory.NewBatch(b.Get, b.PutAll)
 }
 
 func (b *Batch) lock() (sync.Locker, error) {

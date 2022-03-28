@@ -71,7 +71,6 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Header.Principal = protocol.FaucetUrl
 	env.Transaction.Body = req
-
 	sig, err := signing.Faucet(env.Transaction)
 	if err != nil {
 		return accumulateError(err)
@@ -80,7 +79,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	txrq := new(TxRequest)
 	txrq.Origin = env.Transaction.Header.Principal
-	txrq.Signer.Nonce = env.Signatures[0].GetTimestamp()
+	txrq.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	txrq.Signer.PublicKey = env.Signatures[0].GetPublicKey()
 	txrq.Signer.Url = protocol.FaucetUrl
 	txrq.KeyPage.Version = env.Signatures[0].GetSignerVersion()
@@ -108,21 +107,52 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		if err != nil {
 			return accumulateError(err)
 		}
-
+		env := new(protocol.Envelope)
+		var initHash []byte
 		// Build the initiator
-		initSig := new(protocol.LegacyED25519Signature)
-		initSig.Timestamp = req.Signer.Nonce
-		initSig.PublicKey = req.Signer.PublicKey
-		initSig.Signer = req.Signer.Url
-		initSig.SignerVersion = req.KeyPage.Version
-		initSig.Signature = req.Signature
-		initHash, err := initSig.InitiatorHash()
-		if err != nil {
-			return validatorError(err)
+		switch req.Signer.SignatureType {
+		case protocol.SignatureTypeED25519:
+			initSig := new(protocol.ED25519Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerVersion = req.KeyPage.Version
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		case protocol.SignatureTypeRCD1:
+			initSig := new(protocol.RCD1Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerVersion = req.KeyPage.Version
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		default:
+			initSig := new(protocol.LegacyED25519Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerVersion = req.KeyPage.Version
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
 		}
 
 		// Build the envelope
-		env := new(protocol.Envelope)
 		env.TxHash = req.TxHash
 		env.Transaction = new(protocol.Transaction)
 		env.Transaction.Body = body
@@ -130,7 +160,6 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		env.Transaction.Header.Initiator = *(*[32]byte)(initHash)
 		env.Transaction.Header.Memo = req.Memo
 		env.Transaction.Header.Metadata = req.Metadata
-		env.Signatures = append(env.Signatures, initSig)
 		envs = append(envs, env)
 	}
 
