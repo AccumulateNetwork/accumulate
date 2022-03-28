@@ -65,7 +65,7 @@ LegacyED25519Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
 
 RCD1Signature:
@@ -81,7 +81,7 @@ RCD1Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
     - name: Timestamp
       type: uint
@@ -100,7 +100,7 @@ ED25519Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
     - name: Timestamp
       type: uint
