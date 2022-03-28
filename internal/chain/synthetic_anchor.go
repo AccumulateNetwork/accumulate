@@ -66,7 +66,6 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
 		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
-		fmt.Println("issuer state is ", issuerState.Issued, ledgerState.AcmeBurnt)
 		st.Update(issuerState)
 	}
 

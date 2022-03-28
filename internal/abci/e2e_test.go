@@ -638,6 +638,27 @@ func TestAdiAccountTx(t *testing.T) {
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 }
 
+func TestBigIntEncoding(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	n := nodes[subnets[1]][0]
+	fooKey := generateKey()
+	batch := n.db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	acmeIssuer := n.GetTokenIssuer(protocol.AcmeUrl().String())
+	acmeIssuer.Issued = *big.NewInt(int64(-100000000000))
+	byte, err := acmeIssuer.MarshalBinary()
+	fmt.Println(acmeIssuer)
+	if err != nil {
+		fmt.Errorf(err.Error())
+	}
+	orig := new(protocol.TokenIssuer)
+	err = orig.UnmarshalBinary(byte)
+	fmt.Println(orig.Issued, acmeIssuer.Issued)
+
+}
+
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
