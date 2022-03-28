@@ -15,17 +15,17 @@ describe:
 query:
   input:
     url: account url {url-as-string}
-    subquery?: subquery path, e.g. chain/main {string}
-    prove?: asks for a proof of the response {boolean}
-    start?: the start index, when querying a set {number}
-    count?: the max number of entries, when querying a set {number}
+    subquery: subquery path, e.g. chain/main {string}
+    prove: asks for a proof of the response {boolean}
+    start: the start index, when querying a set {number}
+    count: the max number of entries, when querying a set {number}
   output: general-response|account-response|transaction-response|multi-response
 
 query-directory:
   input:
     url: account url {url-as-string}
-    start?: the start index, when querying a set {number}
-    count?: the max number of entries, when querying a set {number}
+    start: the start index, when querying a set {number}
+    count: the max number of entries, when querying a set {number}
   output: multi-response
 
 query-transaction:
@@ -33,6 +33,15 @@ query-transaction:
     transaction-hash: hash of the transaction {hash}
     wait: wait for the transaction to complete {duration}
   output: transaction-response
+
+lookup-key:
+  input:
+    scope: search scope (account url) {url-as-string}
+    key: the key or key hash to search for {bytes}
+  output:
+    type: TBD
+    record: protocol.KeyPage|protocol.LiteTokenAccount
+    entry-index: position of the key in the key page {number}
 
 execute:
   input: protocol.Envelope
