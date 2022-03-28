@@ -154,7 +154,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			acme.Precision = 8
 			acme.Symbol = "ACME"
 			records = append(records, acme)
-			acme.Issued = *big.NewInt(int64(600000000000)) //can remove once the facet issues are resolved
 			acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
 
 			// TODO Move ACME to DN

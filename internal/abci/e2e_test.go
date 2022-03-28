@@ -642,10 +642,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
-	//	dns := subnets[0]
-	//dn := nodes[dns][0]
-	//fmt.Println(dn)
-	//issuer := dn.GetTokenIssuer("ACME")
+
 	fooKey := generateKey()
 	batch := n.db.Begin(true)
 	defer batch.Discard()
@@ -659,7 +656,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	acmeIssuer := n.GetTokenIssuer("acc://ACME")
 	acmeBeforeBurn := acmeIssuer.Issued
 	fmt.Println("Acme Before Burn :", acmeBeforeBurn.Int64())
-	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
+	acmeToSpendOnCredits := int64(12.0 * protocol.AcmePrecision)
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
@@ -697,7 +694,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	fmt.Println("Acme After Burn :", acmeBeforeBurn, acmeAfterBurn)
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
-	require.Equal(t, acmeBeforeBurn.Int64()-acmeToSpendOnCredits, acmeAfterBurn.Int64())
+	require.Equal(t, *acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), acmeAfterBurn)
 }
 
 func TestCreateKeyPage(t *testing.T) {
