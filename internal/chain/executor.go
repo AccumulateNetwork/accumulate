@@ -140,7 +140,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	env.Transaction.Body = new(protocol.InternalGenesis)
 	env.Signatures = []protocol.Signature{&protocol.InternalSignature{Network: m.Network.NodeUrl()}}
 
-	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)
+	st, err := NewStateManager(m.blockBatch, nil, m.Network.NodeUrl(), env)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	st.logger.L = m.logger
 
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env.Transaction, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(env, status, nil)
 	if err != nil {
 		return nil, err
 	}

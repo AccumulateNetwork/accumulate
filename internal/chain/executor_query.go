@@ -454,6 +454,16 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
+	if txState.Transaction == nil {
+		tx = batch.Transaction(txState.TxHash)
+		txState, err = tx.GetState()
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, fmt.Errorf("transaction %w for envelope %X", storage.ErrNotFound, txid)
+		} else if err != nil {
+			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+		}
+	}
+
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
@@ -470,7 +480,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
-	qr.Envelope.Transaction = txState
+	qr.Envelope.Transaction = txState.Transaction
 	qr.Status = status
 	qr.Envelope.Signatures = signatures.Signatures
 	copy(qr.TxId[:], txid)
@@ -486,7 +496,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, &txState.Header, status, signatures.Signatures, &qr)
+	err = getPendingStatus(batch, &txState.Transaction.Header, status, signatures.Signatures, &qr)
 	if err != nil {
 		return nil, err
 	}
@@ -790,7 +800,8 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
-			if keyPage.FindKey(chr.Key) != nil {
+			_, _, ok := keyPage.EntryByKeyHash(chr.Key)
+			if ok || keyPage.FindKey(chr.Key) != nil {
 				response.KeyPage = keyPage.Url
 				response.Index = index
 				found = true
