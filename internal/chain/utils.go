@@ -265,7 +265,7 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	}
 
 	// If height no longer matches, the transaction is invalidated
-	if signatures[0].GetSignerHeight() != uint64(pageChain.Height()) {
+	if signatures[0].GetSignerVersion() != uint64(pageChain.Height()) {
 		resp.Invalidated = true
 		return nil
 	}

@@ -220,7 +220,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()
-	req.KeyPage.Height = sig.GetSignerHeight()
+	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
 	req.Metadata = env.Transaction.Header.Metadata
