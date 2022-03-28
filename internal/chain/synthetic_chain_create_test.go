@@ -38,8 +38,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 		WithBody(body).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), nil, protocol.SubnetUrl(t.Name()), env)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, env)
 	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
@@ -74,8 +73,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 		WithBody(body).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), nil, protocol.SubnetUrl(t.Name()), env)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, env)
 	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
