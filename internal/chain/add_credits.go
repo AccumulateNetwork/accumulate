@@ -94,12 +94,8 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("%q tokens cannot be converted into credits", account.GetTokenUrl())
 	}
 
-	if !account.CanDebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
-	}
-
 	if !account.DebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Header.Principal)
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
 	}
 
 	st.Update(account)
