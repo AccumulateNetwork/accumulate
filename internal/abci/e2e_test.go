@@ -650,7 +650,11 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 	require.NoError(t, batch.Commit())
+	acmeIssuer := n.GetTokenIssuer("ACME")
+	acmeIssuer.Issued = *big.NewInt(1000)
 
+	acmeBeforeBurn := acmeIssuer.Issued
+	fmt.Println("Acme Before Burn :", acmeBeforeBurn.Int64())
 	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
 	n.Batch(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
@@ -671,7 +675,6 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	// Check each anchor
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
-
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
@@ -684,7 +687,10 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
-
+	acmeAfterBurn := acmeIssuer.Issued
+	fmt.Println("Acme After Burn :", *acmeIssuer)
+	fmt.Println(acmeAfterBurn.Int64())
+	fmt.Println(acct.Balance.Int64())
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
 }

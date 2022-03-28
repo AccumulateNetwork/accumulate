@@ -55,7 +55,6 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 		st.Update(ledgerState)
 	} else {
 		//Add the burnt acme tokens back to the supply
-
 		var issuerState *protocol.TokenIssuer
 		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
 		if err != nil {

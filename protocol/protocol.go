@@ -75,6 +75,9 @@ const (
 	GenesisBlock = 1
 )
 
+//AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
+const AcmeSupplyLimit = 500000000
+
 // AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}

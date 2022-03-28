@@ -152,7 +152,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			acme.Precision = 8
 			acme.Symbol = "ACME"
 			records = append(records, acme)
-			acme.SupplyLimit = big.NewInt(500000000 * protocol.AcmePrecision)
+			acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
 
 			// TODO Move ACME to DN
 
