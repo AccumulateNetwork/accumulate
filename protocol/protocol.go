@@ -95,6 +95,7 @@ const AcmeOraclePrecision = 10000
 
 // CreditPrecision is the precision of credit balances.
 const CreditPrecision = 1e2
+const CreditPrecisionPower = 2
 
 // CreditsPerDollar is the credits per dollar in external units (100.00)
 const CreditsPerDollar = 1e2
