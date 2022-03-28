@@ -18,7 +18,9 @@ func FormatBigAmount(amount *big.Int, precision int) string {
 
 func formatAmount(amount string, precision int) string {
 	// Add leading zeros to ensure the string is at least precision digits long
-	amount = strings.Repeat("0", len(amount)-precision) + amount
+	if len(amount) < precision {
+		amount = strings.Repeat("0", precision-len(amount)) + amount
+	}
 
 	// Separate into an integer and a fractional part
 	ipart, fpart := amount[:len(amount)-precision], amount[len(amount)-precision:]
@@ -28,6 +30,11 @@ func formatAmount(amount string, precision int) string {
 		ipart = "0"
 	}
 
+	// If the fractional part is not empty, add a decimal point
+	if fpart != "" {
+		fpart = "." + fpart
+	}
+
 	// Join the integer and fractional parts with a decimal point
-	return ipart + "." + fpart
+	return ipart + fpart
 }
