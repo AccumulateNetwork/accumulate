@@ -31,6 +31,7 @@ type SignerAccount interface {
 	Account
 	KeyHolder
 	CreditHolder
+	GetSignatureThreshold() uint64
 }
 
 type TokenHolderAccount interface {
