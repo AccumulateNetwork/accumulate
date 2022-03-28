@@ -193,6 +193,43 @@ type VersionResponse struct {
 	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
 }
 
+func (v *DataEntry) Copy() *DataEntry {
+	u := new(DataEntry)
+
+	u.Data = make([][]byte, len(v.Data))
+	for i, v := range v.Data {
+		u.Data[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *DataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataEntryQuery) Copy() *DataEntryQuery {
+	u := new(DataEntryQuery)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.EntryHash = v.EntryHash
+
+	return u
+}
+
+func (v *DataEntryQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
+	u := new(DataEntryQueryResponse)
+
+	u.EntryHash = v.EntryHash
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *DataEntryQueryResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *DataEntry) Equal(u *DataEntry) bool {
 	if len(v.Data) != len(u.Data) {
 		return false
