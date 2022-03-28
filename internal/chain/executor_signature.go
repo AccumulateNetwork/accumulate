@@ -204,8 +204,8 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 			return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "read %v main chain: %v", signerUrl, err)
 		}
 
-		if signature.GetSignerHeight() != uint64(chain.Height()) {
-			return nil, nil, protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", chain.Height(), signature.GetSignerHeight())
+		if signature.GetSignerVersion() != uint64(chain.Height()) {
+			return nil, nil, protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", chain.Height(), signature.GetSignerVersion())
 		}
 	}
 
