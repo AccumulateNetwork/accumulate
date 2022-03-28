@@ -47,6 +47,7 @@ func (b *Batch) Begin() *Batch {
 
 type TypedValue interface {
 	encoding.BinaryMarshaler
+	CopyAsInterface() interface{}
 }
 
 type ValueUnmarshalFunc func([]byte) (TypedValue, error)
@@ -95,6 +96,8 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (TypedVa
 		v, err := b.parent.getValue(key, unmarshal)
 		switch {
 		case err == nil:
+			// Make a copy, otherwise values may leak
+			v := v.CopyAsInterface().(TypedValue)
 			b.cacheValue(key, v, false)
 			return v, nil
 
