@@ -30,7 +30,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Load the transaction
-	transaction, err := LoadTransaction(batch, envelope)
+	transaction, err := x.LoadTransaction(batch, envelope)
 	if err != nil {
 		return nil, err
 	}

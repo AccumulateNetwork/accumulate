@@ -19,6 +19,7 @@ const debugSendAnchor = false
 type governor struct {
 	ExecutorOptions
 	logger     logging.OptionalLogger
+	db         *database.Database
 	dispatcher *dispatcher
 	started    int32
 	messages   chan interface{}
@@ -30,18 +31,17 @@ type govStop struct{}
 
 type govDidCommit struct {
 	mirrorAdi   bool
-	blockMeta   BlockMeta
-	blockState  BlockState
-	anchor      *protocol.SyntheticAnchor
+	block       Block
 	ledger      *protocol.InternalLedger
 	synthLedger *protocol.InternalSyntheticLedger
 	rootAnchor  []byte
 	rootHeight  int64
 }
 
-func newGovernor(opts ExecutorOptions) *governor {
+func newGovernor(opts ExecutorOptions, db *database.Database) *governor {
 	g := new(governor)
 	g.ExecutorOptions = opts
+	g.db = db
 	g.messages = make(chan interface{})
 	g.done = make(chan struct{})
 	g.sent = map[[32]byte]bool{}
@@ -60,19 +60,17 @@ func (g *governor) Start() error {
 	return nil
 }
 
-func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, meta BlockMeta, state BlockState, anchor *protocol.SyntheticAnchor) error {
-	g.logger.Debug("Block event", "type", "didCommit", "height", meta.Index, "time", meta.Time)
+func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, block *Block) error {
+	g.logger.Debug("Block event", "type", "didCommit", "height", block.Index, "time", block.Time)
 
-	if !meta.IsLeader {
+	if !block.IsLeader {
 		// Nothing to do if we're not the leader
 		return nil
 	}
 
 	msg := govDidCommit{
-		mirrorAdi:  mirrorAdi,
-		blockMeta:  meta,
-		blockState: state,
-		anchor:     anchor,
+		mirrorAdi: mirrorAdi,
+		block:     *block,
 	}
 
 	ledger := batch.Account(g.Network.Ledger())
@@ -141,11 +139,11 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	// The governor must be read-only, so we must not commit the
 	// database transaction or the state cache. If the governor makes
 	// ANY changes, the system will no longer be deterministic.
-	batch := g.DB.Begin(false)
+	batch := g.db.Begin(false)
 	defer batch.Discard()
 
 	// TODO This will hit the database with a lot of queries, maybe we shouldn't do this
-	producedCount := countExceptAnchors2(msg.blockState.ProducedTxns)
+	producedCount := countExceptAnchors2(msg.block.State.ProducedTxns)
 	unsignedCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
 	unsentCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
 
@@ -160,10 +158,10 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	}
 
 	g.logger.Info("Did commit",
-		"height", msg.blockMeta.Index,
-		"time", msg.blockMeta.Time,
+		"height", msg.block.Index,
+		"time", msg.block.Time,
 		"mirror", msg.mirrorAdi,
-		"updated", len(msg.blockState.ChainUpdates),
+		"updated", len(msg.block.State.ChainUpdates),
 		"produced", producedCount,
 		"unsigned", unsignedCount,
 		"unsent", unsentCount,
@@ -276,10 +274,10 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 		typ := env.Transaction.Type()
 		txid32 := *(*[32]byte)(env.GetTxHash())
 		if g.sent[txid32] {
-			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.blockMeta.Index)
+			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.block.Index)
 		} else {
 			if debugSendAnchor || typ != protocol.TransactionTypeSyntheticAnchor {
-				g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.blockMeta.Index)
+				g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.block.Index)
 			}
 			g.sent[txid32] = true
 		}
@@ -299,16 +297,16 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced
-	if len(msg.blockState.ChainUpdates) == 0 && synthCountExceptAnchors == 0 {
+	if len(msg.block.State.ChainUpdates) == 0 && synthCountExceptAnchors == 0 {
 		return
 	}
 
-	if msg.anchor == nil {
+	if msg.block.Anchor == nil {
 		panic("TODO When is it OK for the anchor to be nil?")
 	}
 
-	kv := []interface{}{"root", logging.AsHex(msg.anchor.RootAnchor)}
-	for i, c := range msg.blockState.ChainUpdates {
+	kv := []interface{}{"root", logging.AsHex(msg.block.Anchor.RootAnchor)}
+	for i, c := range msg.block.State.ChainUpdates {
 		kv = append(kv, fmt.Sprintf("[%d]", i))
 		switch c.Name {
 		case "bpt":
@@ -330,7 +328,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		for i, bvn := range bvnNames {
 			txns.Transactions[i] = protocol.SendTransaction{
 				Recipient: protocol.SubnetUrl(bvn).JoinPath(protocol.AnchorPool),
-				Payload:   msg.anchor,
+				Payload:   msg.block.Anchor,
 			}
 		}
 
@@ -338,7 +336,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		// Send anchor from BVN to DN
 		txns.Transactions = []protocol.SendTransaction{{
 			Recipient: protocol.DnUrl().JoinPath(protocol.AnchorPool),
-			Payload:   msg.anchor,
+			Payload:   msg.block.Anchor,
 		}}
 	}
 

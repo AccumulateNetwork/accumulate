@@ -45,6 +45,44 @@ func (b *Batch) Begin() *Batch {
 	return c
 }
 
+// View runs the function with a read-only transaction.
+func (d *Database) View(fn func(*Batch) error) error {
+	batch := d.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
+}
+
+// Update runs the function with a writable transaction and commits if the
+// function succeeds.
+func (d *Database) Update(fn func(*Batch) error) error {
+	batch := d.Begin(true)
+	defer batch.Discard()
+	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	return batch.Commit()
+}
+
+// View runs the function with a read-only transaction.
+func (b *Batch) View(fn func(*Batch) error) error {
+	batch := b.Begin()
+	defer batch.Discard()
+	return fn(batch)
+}
+
+// Update runs the function with a writable transaction and commits if the
+// function succeeds.
+func (b *Batch) Update(fn func(*Batch) error) error {
+	batch := b.Begin()
+	defer batch.Discard()
+	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	return batch.Commit()
+}
+
 type TypedValue interface {
 	encoding.BinaryMarshaler
 	CopyAsInterface() interface{}
