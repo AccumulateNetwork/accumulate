@@ -29,7 +29,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 			Timestamp: 1,
 		},
 		KeyPage: KeyPage{
-			Height: 1,
+			Version: 1,
 		},
 		Signature: make([]byte, 64),
 	}

@@ -19,8 +19,8 @@ var ErrCannotInitiate = errors.New("signature cannot initiate a transaction: val
 // GetSigner returns Signer.
 func (s *LegacyED25519Signature) GetSigner() *url.URL { return s.Signer }
 
-// GetSignerHeight returns SignerHeight.
-func (s *LegacyED25519Signature) GetSignerHeight() uint64 { return s.SignerHeight }
+// GetSignerVersion returns SignerVersion.
+func (s *LegacyED25519Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 
 // GetTimestamp returns Timestamp.
 func (s *LegacyED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
@@ -33,14 +33,14 @@ func (s *LegacyED25519Signature) GetSignature() []byte { return s.Signature }
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *LegacyED25519Signature) InitiatorHash() ([]byte, error) {
-	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerHeight == 0 || s.Timestamp == 0 {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
 
 	hasher := make(hash.Hasher, 0, 4)
 	hasher.AddBytes(s.PublicKey)
 	hasher.AddUrl(s.Signer)
-	hasher.AddUint(s.SignerHeight)
+	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
 	return hasher.MerkleHash(), nil
 }
@@ -59,8 +59,8 @@ func (e *LegacyED25519Signature) Verify(hash []byte) bool {
 // GetSigner returns Signer.
 func (s *ED25519Signature) GetSigner() *url.URL { return s.Signer }
 
-// GetSignerHeight returns SignerHeight.
-func (s *ED25519Signature) GetSignerHeight() uint64 { return s.SignerHeight }
+// GetSignerVersion returns SignerVersion.
+func (s *ED25519Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 
 // GetTimestamp returns Timestamp.
 func (s *ED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
@@ -73,14 +73,14 @@ func (s *ED25519Signature) GetSignature() []byte { return s.Signature }
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *ED25519Signature) InitiatorHash() ([]byte, error) {
-	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerHeight == 0 || s.Timestamp == 0 {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
 
 	hasher := make(hash.Hasher, 0, 4)
 	hasher.AddBytes(s.PublicKey)
 	hasher.AddUrl(s.Signer)
-	hasher.AddUint(s.SignerHeight)
+	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
 	return hasher.MerkleHash(), nil
 }
@@ -98,8 +98,8 @@ func (e *ED25519Signature) Verify(hash []byte) bool {
 // GetSigner returns Signer.
 func (s *RCD1Signature) GetSigner() *url.URL { return s.Signer }
 
-// GetSignerHeight returns SignerHeight.
-func (s *RCD1Signature) GetSignerHeight() uint64 { return s.SignerHeight }
+// GetSignerVersion returns SignerVersion.
+func (s *RCD1Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 
 // GetTimestamp returns Timestamp.
 func (s *RCD1Signature) GetTimestamp() uint64 { return s.Timestamp }
@@ -124,14 +124,14 @@ func (s *RCD1Signature) GetSignature() []byte {
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *RCD1Signature) InitiatorHash() ([]byte, error) {
-	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerHeight == 0 || s.Timestamp == 0 {
+	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
 
 	hasher := make(hash.Hasher, 0, 4)
 	hasher.AddBytes(s.PublicKey)
 	hasher.AddUrl(s.Signer)
-	hasher.AddUint(s.SignerHeight)
+	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
 	return hasher.MerkleHash(), nil
 }
@@ -145,8 +145,8 @@ func (s *ReceiptSignature) GetSigner() *url.URL {
 	panic("a receipt does not have a signer")
 }
 
-// GetSignerHeight panics.
-func (s *ReceiptSignature) GetSignerHeight() uint64 {
+// GetSignerVersion panics.
+func (s *ReceiptSignature) GetSignerVersion() uint64 {
 	panic("a receipt does not have a signer")
 }
 
@@ -184,8 +184,8 @@ func (s *SyntheticSignature) GetSigner() *url.URL {
 	return FormatKeyPageUrl(s.DestinationNetwork.JoinPath(ValidatorBook), 0)
 }
 
-// GetSignerHeight panics.
-func (s *SyntheticSignature) GetSignerHeight() uint64 {
+// GetSignerVersion panics.
+func (s *SyntheticSignature) GetSignerVersion() uint64 {
 	panic("a synthetic signature does not have a signer height")
 }
 
@@ -225,8 +225,8 @@ func (s *SyntheticSignature) Verify(hash []byte) bool {
 // GetSigner returns SourceNetwork.
 func (s *InternalSignature) GetSigner() *url.URL { return s.Network }
 
-// GetSignerHeight panics.
-func (s *InternalSignature) GetSignerHeight() uint64 {
+// GetSignerVersion panics.
+func (s *InternalSignature) GetSignerVersion() uint64 {
 	panic("an internal signature does not have a signer height")
 }
 
