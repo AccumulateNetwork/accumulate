@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -58,7 +59,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {
 			spec := new(protocol.KeySpec)
-			spec.PublicKeyHash = val.PubKey.Bytes()
+			kh := sha256.Sum256(val.PubKey.Bytes())
+			spec.PublicKeyHash = kh[:]
 			page.Keys[i] = spec
 		}
 
