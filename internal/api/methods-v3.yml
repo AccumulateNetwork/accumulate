@@ -1,0 +1,79 @@
+# Methods
+
+status:
+  input: ~
+  output: { ok: true }
+
+version:
+  input: ~
+  output: node version info
+
+describe:
+  input: ~
+  output: node metadata
+
+query:
+  input:
+    url: account url {url-as-string}
+    subquery?: subquery path, e.g. chain/main {string}
+    prove?: asks for a proof of the response {boolean}
+    start?: the start index, when querying a set {number}
+    count?: the max number of entries, when querying a set {number}
+  output: general-response|account-response|transaction-response|multi-response
+
+query-directory:
+  input:
+    url: account url {url-as-string}
+    start?: the start index, when querying a set {number}
+    count?: the max number of entries, when querying a set {number}
+  output: multi-response
+
+query-transaction:
+  input:
+    transaction-hash: hash of the transaction {hash}
+    wait: wait for the transaction to complete {duration}
+  output: transaction-response
+
+execute:
+  input: protocol.Envelope
+  output: transaction-response
+
+check: same as execute, but validates without executing
+
+# Types
+
+general-response:
+  type: record type {string|enum-as-string}
+  record: any
+
+account-response:
+  type: account type {enum-as-string}
+  record: protocol.Account
+  chains: chain-state[]
+
+transaction-response:
+  type: transaction type {enum-as-string}
+  record: protocol.Transaction
+  chains: chain-state[]
+  status: protocol.TransactionStatus
+  signers: transaction-signer[]
+
+chain-state:
+  name: chain name {string}
+  type: chain type {enum-as-string}
+  height: chain height {number}
+  leading-edge: leading edge of the Merkle tree {hash[]}
+  # Only when part of a transaction response:
+  account: account URL {url-as-string}
+  receipt: Merkle receipt of the transaction
+
+transaction-signer:
+  account: signer account {protocol.Account}
+  responses: protocol.Signature[]
+
+multi-response:
+  type: accounts|transactions
+  records: general-response|account-response|transaction-response
+  start: from request
+  count: from request
+  total: total size of the queried set
