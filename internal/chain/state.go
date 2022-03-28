@@ -151,8 +151,8 @@ func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
 		return nil
 	}
 
-	book := new(protocol.KeyBook)
-	err := m.LoadUrlAs(u, book)
+	var book *protocol.KeyBook
+	err := m.LoadUrlAs(u, &book)
 	if err != nil {
 		return fmt.Errorf("invalid key book %q: %v", u, err)
 	}

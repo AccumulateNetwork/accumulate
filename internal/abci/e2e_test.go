@@ -200,8 +200,8 @@ func TestAnchorChain(t *testing.T) {
 
 	// // Check each anchor
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
-	// ledgerState := protocol.NewInternalLedger()
-	// require.NoError(t, ledger.GetStateAs(ledgerState))
+	// var ledgerState *protocol.InternalLedger
+	// require.NoError(t, ledger.GetStateAs(&ledgerState))
 	// rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	// require.NoError(t, err)
 	// first := rootChain.Height() - int64(len(ledgerState.Updates))
@@ -246,8 +246,8 @@ func TestAnchorChain(t *testing.T) {
 	defer batch.Discard()
 	ledger := batch.Account(dn.network.NodeUrl(protocol.Ledger))
 	// Check each anchor
-	ledgerState := protocol.NewInternalLedger()
-	require.NoError(t, ledger.GetStateAs(ledgerState))
+	var ledgerState *protocol.InternalLedger
+	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
 	require.Equal(t, expected, ledgerState.ActiveOracle)
 
@@ -259,7 +259,7 @@ func TestAnchorChain(t *testing.T) {
 
 	// Check each anchor
 	ledgerState = protocol.NewInternalLedger()
-	require.NoError(t, ledger.GetStateAs(ledgerState))
+	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	require.Equal(t, ledgerState.ActiveOracle, expected)
 
 	// // TODO Once block indexing has been implemented, verify that the following chains got modified
@@ -362,7 +362,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the entry hash in the transaction result
-	txStatus, err := batch.Transaction(synthIds[0][:]).GetStatus()
+	txStatus, err := batch.Transaction(synthIds.Hashes[0][:]).GetStatus()
 	require.NoError(t, err)
 	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
 	txResult := txStatus.Result.(*protocol.WriteDataResult)
@@ -666,8 +666,8 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
-	ledgerState := protocol.NewInternalLedger()
-	require.NoError(t, ledger.GetStateAs(ledgerState))
+	var ledgerState *protocol.InternalLedger
+	require.NoError(t, ledger.GetStateAs(&ledgerState))
 
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits

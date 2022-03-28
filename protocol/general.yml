@@ -113,3 +113,9 @@ ReceiptEntry:
       type: bool
     - name: Hash
       type: bytes
+
+HashSet:
+  fields:
+    - name: Hashes
+      type: hash
+      repeatable: true

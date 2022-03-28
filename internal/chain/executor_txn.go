@@ -169,9 +169,9 @@ func (m *Executor) processInternalDataTransaction(internalAccountPath string, wd
 	}
 	st.logger.L = m.logger
 
-	da := new(protocol.DataAccount)
+	var da *protocol.DataAccount
 	va := m.blockBatch.Account(dataAccountUrl)
-	err = va.GetStateAs(da)
+	err = va.GetStateAs(&da)
 	if err != nil {
 		return err
 	}
@@ -701,7 +701,7 @@ func (m *Executor) putTransaction(st *StateManager, env *protocol.Envelope, stat
 	// signator to ensure we don't push any invalid changes. Use the database
 	// directly, since the state manager won't be committed.
 	sigRecord := m.blockBatch.Account(st.SignatorUrl)
-	err = sigRecord.GetStateAs(st.Signator)
+	err = sigRecord.GetStateAs(&st.Signator)
 	if err != nil {
 		return err
 	}
