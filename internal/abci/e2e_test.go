@@ -655,8 +655,7 @@ func TestBigIntEncoding(t *testing.T) {
 	}
 	orig := new(protocol.TokenIssuer)
 	err = orig.UnmarshalBinary(byte)
-	fmt.Println(orig.Issued, acmeIssuer.Issued)
-
+	require.Equal(t, orig.Issued, acmeIssuer.Issued)
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
