@@ -34,17 +34,11 @@ func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]b
 	c.batch = batch
 	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
-
-	_ = c.logger // Get static analsis to shut up
-
-	c.Reset()
-	return c
-}
-
-func (c *stateCache) Reset() {
 	c.operations = c.operations[:0]
 	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
+	_ = c.logger // Get static analsis to shut up
+	return c
 }
 
 func (c *stateCache) Commit() ([]protocol.Account, error) {
