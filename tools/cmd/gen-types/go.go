@@ -46,6 +46,7 @@ var goFuncs = template.FuncMap{
 	},
 
 	"areEqual":             GoAreEqual,
+	"copy":                 GoCopy,
 	"binaryMarshalValue":   GoBinaryMarshalValue,
 	"binaryUnmarshalValue": GoBinaryUnmarshalValue,
 	"valueToJson":          GoValueToJson,
@@ -319,6 +320,67 @@ func GoAreEqual(field *Field, varName, otherName string) (string, error) {
 			"		return false\n"+
 			"	}",
 		ptrPrefix, varName, otherName), nil
+}
+
+func GoCopy(field *Field, dstName, srcName string) (string, error) {
+	if !field.Repeatable {
+		return goCopy(field, dstName, srcName)
+	}
+
+	expr, err := goCopy(field, dstName+"[i]", "v")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"\t%[1]s = make(%[2]s, len(%[3]s))\n"+
+			"\tfor i, v := range %[3]s { %s }",
+		dstName, GoResolveType(field, false, false), srcName, expr), nil
+}
+
+func goCopy(field *Field, dstName, srcName string) (string, error) {
+	switch field.Type {
+	case "bool", "string", "duration", "time",
+		"uint", "int", "uvarint", "varint",
+		"chain", "hash":
+		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
+
+	case "bytes", "rawJson":
+		return goCopyNonPointer(field, "%s = encoding.BytesCopy(%s)", dstName, srcName), nil
+
+	case "url":
+		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
+
+	case "bigint":
+		return goCopyPointer(field, "encoding.BigintCopy(%s)", dstName, srcName), nil
+	}
+
+	switch field.MarshalAs {
+	case "reference":
+		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
+	case "value", "enum":
+		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
+	default:
+		return "", fmt.Errorf("field %q: cannot determine how to copy %s", field.Name, GoResolveType(field, false, false))
+	}
+}
+
+func goCopyNonPointer(field *Field, expr, dstName, srcName string) string {
+	if !field.Pointer {
+		return fmt.Sprintf(expr, dstName, srcName)
+	}
+
+	expr = fmt.Sprintf(expr, "*"+dstName, "*"+srcName)
+	return fmt.Sprintf("if %s != nil { %s = new(%s); %s }", srcName, dstName, GoResolveType(field, true, true), expr)
+}
+
+func goCopyPointer(field *Field, expr, dstName, srcName string) string {
+	if field.Pointer {
+		expr = fmt.Sprintf(expr, srcName)
+		return fmt.Sprintf("if %s != nil { %s = %s }", srcName, dstName, expr)
+	}
+
+	expr = fmt.Sprintf(expr, "&"+srcName)
+	return fmt.Sprintf("%s = *%s", dstName, expr)
 }
 
 func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, error) {

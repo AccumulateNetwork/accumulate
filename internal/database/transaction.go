@@ -99,7 +99,7 @@ func (t *Transaction) PutState(v *protocol.Envelope) error {
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
 	v := new(protocol.TransactionStatus)
 	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
-	if err != nil {
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
 	return v, nil
