@@ -141,6 +141,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	default:
 		return nil, fmt.Errorf("invalid operation: %v", body.Operation.Type())
 	}
+	page.Version += 1
 
 	didUpdateKeyPage(page)
 	st.Update(page)

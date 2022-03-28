@@ -30,6 +30,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	st.Submit(st.OriginUrl, scc)
 
 	page := new(protocol.KeyPage)
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(body.Url, 0)
 	page.KeyBook = body.Url
 
