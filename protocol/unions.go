@@ -24,6 +24,7 @@ type Account interface {
 	GetType() AccountType
 	Type() AccountType
 	Header() *AccountHeader
+	CopyAsInterface() interface{}
 }
 
 type SignerAccount interface {
