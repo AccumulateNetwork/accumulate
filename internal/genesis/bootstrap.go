@@ -1,7 +1,6 @@
 package genesis
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -59,8 +58,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {
 			spec := new(protocol.KeySpec)
-			kh := sha256.Sum256(val.PubKey.Bytes())
-			spec.PublicKeyHash = kh[:]
+			spec.PublicKeyHash = val.PubKey.Bytes()
 			page.Keys[i] = spec
 		}
 
@@ -154,6 +152,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			acme.Precision = 8
 			acme.Symbol = "ACME"
 			records = append(records, acme)
+			acme.Issued = *big.NewInt(int64(600000000000)) //can remove once the facet issues are resolved
 			acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
 
 			// TODO Move ACME to DN

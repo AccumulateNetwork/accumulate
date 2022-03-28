@@ -642,17 +642,21 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
-
+	//	dns := subnets[0]
+	//dn := nodes[dns][0]
+	//fmt.Println(dn)
+	//issuer := dn.GetTokenIssuer("ACME")
 	fooKey := generateKey()
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	acmeAmount := 100.00
+
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
-	require.NoError(t, batch.Commit())
-	acmeIssuer := n.GetTokenIssuer("ACME")
-	acmeIssuer.Issued = *big.NewInt(1000)
 
+	require.NoError(t, batch.Commit())
+
+	acmeIssuer := n.GetTokenIssuer("acc://ACME")
 	acmeBeforeBurn := acmeIssuer.Issued
 	fmt.Println("Acme Before Burn :", acmeBeforeBurn.Int64())
 	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
@@ -687,12 +691,13 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
+
+	acmeIssuer = n.GetTokenIssuer(protocol.AcmeUrl().String())
 	acmeAfterBurn := acmeIssuer.Issued
-	fmt.Println("Acme After Burn :", *acmeIssuer)
-	fmt.Println(acmeAfterBurn.Int64())
-	fmt.Println(acct.Balance.Int64())
+	fmt.Println("Acme After Burn :", acmeBeforeBurn, acmeAfterBurn)
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
+	require.Equal(t, acmeBeforeBurn.Int64()-acmeToSpendOnCredits, acmeAfterBurn.Int64())
 }
 
 func TestCreateKeyPage(t *testing.T) {

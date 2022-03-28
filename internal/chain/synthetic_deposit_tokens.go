@@ -73,12 +73,5 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
 	st.Update(account)
-	var issuerState *protocol.TokenIssuer
-	err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load acme ledger")
-	}
-	issuerState.Issued = body.Amount
-	st.Update(issuerState)
 	return nil, nil
 }
