@@ -68,7 +68,6 @@ func (m *Executor) DeliverTx(envelope *protocol.Envelope) (result protocol.Trans
 			panic(fmt.Errorf("commit batch: %w", err))
 		}
 	}()
-	defer batch.Discard()
 
 	//   Load the signature (from the new batch)
 	transaction, err = LoadTransaction(batch, envelope)
