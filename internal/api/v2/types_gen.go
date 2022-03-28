@@ -70,7 +70,7 @@ type GeneralQuery struct {
 }
 
 type KeyPage struct {
-	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 }
 
 type KeyPageIndexQuery struct {
@@ -524,6 +524,16 @@ func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *KeyPage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Version uint64 `json:"version,omitempty"`
+		Height  uint64 `json:"height,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Version
+	return json.Marshal(&u)
+}
+
 func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url *url.URL `json:"url,omitempty"`
@@ -965,6 +975,24 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 	}
 	v.QueryOptions.Height = u.Height
 	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *KeyPage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Version uint64 `json:"version,omitempty"`
+		Height  uint64 `json:"height,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Version
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Version != 0 {
+		v.Version = u.Version
+	} else {
+		v.Version = u.Height
+	}
 	return nil
 }
 
