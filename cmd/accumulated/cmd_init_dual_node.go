@@ -133,7 +133,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	if c.PrivValidator != nil {
 		c.PrivValidator.Key = "../../dn/Node0/config/priv_validator_key.json"
 	}
-	os.Remove(path.Join(bvnNodePath, "priv_validator_key.json"))
+	os.Remove(path.Join(bvnNodePath, "/config/priv_validator_key.json"))
 	if len(c.P2P.PersistentPeers) > 0 {
 		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""
