@@ -33,7 +33,7 @@ tools/cmd/gen-enum/go_build*
 .terraform.lock.hcl
 /.vscode/settings.json
 
-#localdevnet
+#localdevnet-jathin
 devnetscripts/
 
 

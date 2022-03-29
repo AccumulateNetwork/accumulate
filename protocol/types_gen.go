@@ -1394,6 +1394,7 @@ func (v *InternalLedger) Copy() *InternalLedger {
 	u.Synthetic = *(&v.Synthetic).Copy()
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
+	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 
 	return u
 }
@@ -1762,6 +1763,7 @@ func (v *SyntheticAnchor) Copy() *SyntheticAnchor {
 	u.Major = v.Major
 	u.RootAnchor = v.RootAnchor
 	u.RootIndex = v.RootIndex
+	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 	u.Block = v.Block
 	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.Receipts = make([]Receipt, len(v.Receipts))
