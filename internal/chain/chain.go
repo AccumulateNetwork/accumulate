@@ -21,6 +21,11 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			InternalTransactionsSigned{},
 			InternalTransactionsSent{},
 
+			// DN validator set management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
+
 			// for data accounts
 			WriteData{},
 
@@ -46,10 +51,13 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			WriteDataTo{},
 			UpdateManager{},
 			RemoveManager{},
+
+			// BVN validator management
 			AddValidator{},
 			RemoveValidator{},
 			UpdateValidatorKey{},
 
+			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
 			SyntheticCreateChain{},
