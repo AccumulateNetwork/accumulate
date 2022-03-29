@@ -24,12 +24,14 @@ type Account interface {
 	GetType() AccountType
 	Type() AccountType
 	Header() *AccountHeader
+	CopyAsInterface() interface{}
 }
 
 type SignerAccount interface {
 	Account
 	KeyHolder
 	CreditHolder
+	GetSignatureThreshold() uint64
 }
 
 type TokenHolderAccount interface {

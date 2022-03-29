@@ -24,6 +24,32 @@ type txSyntheticTxns struct {
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 }
 
+func (v *SignatureSet) Copy() *SignatureSet {
+	u := new(SignatureSet)
+
+	u.Signatures = make([]protocol.Signature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		u.Signatures[i] = v
+	}
+
+	return u
+}
+
+func (v *SignatureSet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
+	u := new(txSyntheticTxns)
+
+	u.Txids = make([][32]byte, len(v.Txids))
+	for i, v := range v.Txids {
+		u.Txids[i] = v
+	}
+
+	return u
+}
+
+func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SignatureSet) Equal(u *SignatureSet) bool {
 	if len(v.Signatures) != len(u.Signatures) {
 		return false

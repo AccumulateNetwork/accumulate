@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -9,14 +8,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type StateManager struct {
 	stateCache
-	parentBatch       *database.Batch
-	didCreateSubBatch bool
 
 	Origin    protocol.Account
 	OriginUrl *url.URL
@@ -28,82 +24,15 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(parentBatch, batch *database.Batch, nodeUrl *url.URL, env *protocol.Envelope) (m *StateManager, err error) {
-	m = new(StateManager)
-	m.parentBatch = parentBatch
-
-	// Use a nested batch to ensure isolation
-	if batch == nil {
-		m.didCreateSubBatch = true
-		batch = parentBatch.Begin()
-		defer func() {
-			if err != nil {
-				batch.Discard()
-			}
-		}()
-	}
-
-	txid := types.Bytes(env.GetTxHash()).AsBytes32()
-	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
-
-	var firstSig protocol.Signature
-	sigs, err := m.LoadSignatures(*(*[32]byte)(env.GetTxHash()))
-	if err != nil {
-		return nil, err
-	}
-	if sigs.Count() == 0 {
-		firstSig = env.Signatures[0]
-	} else {
-		firstSig = sigs.Signatures[0]
-	}
-
-	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
-		return nil, fmt.Errorf("invalid transaction: initiated by receipt signature")
-	}
-
-	// TODO Process each signature separately
-
-	// Find the signator
-	m.SignatorUrl = firstSig.GetSigner()
-	err = m.LoadUrlAs(m.SignatorUrl, &m.Signator)
-	switch {
-	case err == nil:
-		// OK
-	case !errors.Is(err, storage.ErrNotFound):
-		return nil, err
-	case env.Transaction.Type() != protocol.TransactionTypeInternalGenesis:
-		// The signer must not be missing
-		return nil, fmt.Errorf("%v not found", m.SignatorUrl)
-	}
-
-	// Find the origin
-	m.OriginUrl = env.Transaction.Header.Principal
-	m.Origin, err = m.LoadUrl(m.OriginUrl)
-	switch {
-	case err == nil:
-		// Found the origin
-		return m, nil
-
-	case errors.Is(err, storage.ErrNotFound):
-		// Origin is missing
-		m.Origin = nil
-		return m, nil
-		// return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
-
-	default:
-		// Unknown error
-		return nil, err
-	}
-}
-
-func (m *StateManager) Reset() {
-	if m.didCreateSubBatch {
-		m.batch.Discard()
-	}
-	m.didCreateSubBatch = true
-	m.batch = m.parentBatch.Begin()
-	m.stateCache.Reset()
-	m.blockState = BlockState{}
+func NewStateManager(makeBatch func() *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction) *StateManager {
+	txid := types.Bytes(transaction.GetHash()).AsBytes32()
+	m := new(StateManager)
+	m.SignatorUrl = signerUrl
+	m.Signator = signer
+	m.OriginUrl = transaction.Header.Principal
+	m.Origin = principal
+	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, makeBatch())
+	return m
 }
 
 // commit writes pending records to the database.

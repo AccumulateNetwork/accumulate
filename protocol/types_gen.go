@@ -984,6 +984,1130 @@ func (*WriteDataTo) Type() TransactionType { return TransactionTypeWriteDataTo }
 // Deprated: use Type
 func (*WriteDataTo) GetType() TransactionType { return TransactionTypeWriteDataTo }
 
+func (v *ADI) Copy() *ADI {
+	u := new(ADI)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+
+	return u
+}
+
+func (v *ADI) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AccountHeader) Copy() *AccountHeader {
+	u := new(AccountHeader)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	if v.KeyBook != nil {
+		u.KeyBook = (v.KeyBook).Copy()
+	}
+	if v.ManagerKeyBook != nil {
+		u.ManagerKeyBook = (v.ManagerKeyBook).Copy()
+	}
+
+	return u
+}
+
+func (v *AccountHeader) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AcmeFaucet) Copy() *AcmeFaucet {
+	u := new(AcmeFaucet)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+
+	return u
+}
+
+func (v *AcmeFaucet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AcmeOracle) Copy() *AcmeOracle {
+	u := new(AcmeOracle)
+
+	u.Price = v.Price
+
+	return u
+}
+
+func (v *AcmeOracle) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddCredits) Copy() *AddCredits {
+	u := new(AddCredits)
+
+	if v.Recipient != nil {
+		u.Recipient = (v.Recipient).Copy()
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.Oracle = v.Oracle
+
+	return u
+}
+
+func (v *AddCredits) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddCreditsResult) Copy() *AddCreditsResult {
+	u := new(AddCreditsResult)
+
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.Credits = v.Credits
+	u.Oracle = v.Oracle
+
+	return u
+}
+
+func (v *AddCreditsResult) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddKeyOperation) Copy() *AddKeyOperation {
+	u := new(AddKeyOperation)
+
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *AddKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddValidator) Copy() *AddValidator {
+	u := new(AddValidator)
+
+	u.Key = encoding.BytesCopy(v.Key)
+	if v.Owner != nil {
+		u.Owner = (v.Owner).Copy()
+	}
+
+	return u
+}
+
+func (v *AddValidator) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Anchor) Copy() *Anchor {
+	u := new(Anchor)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+
+	return u
+}
+
+func (v *Anchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchorMetadata) Copy() *AnchorMetadata {
+	u := new(AnchorMetadata)
+
+	u.ChainMetadata = *v.ChainMetadata.Copy()
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesCopy(v.Entry)
+
+	return u
+}
+
+func (v *AnchorMetadata) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AnchoredRecord) Copy() *AnchoredRecord {
+	u := new(AnchoredRecord)
+
+	u.Record = encoding.BytesCopy(v.Record)
+	u.Anchor = v.Anchor
+
+	return u
+}
+
+func (v *AnchoredRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BurnTokens) Copy() *BurnTokens {
+	u := new(BurnTokens)
+
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+
+	return u
+}
+
+func (v *BurnTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ChainMetadata) Copy() *ChainMetadata {
+	u := new(ChainMetadata)
+
+	u.Name = v.Name
+	u.Type = v.Type
+
+	return u
+}
+
+func (v *ChainMetadata) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ChainParams) Copy() *ChainParams {
+	u := new(ChainParams)
+
+	u.Data = encoding.BytesCopy(v.Data)
+	u.IsUpdate = v.IsUpdate
+
+	return u
+}
+
+func (v *ChainParams) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateDataAccount) Copy() *CreateDataAccount {
+	u := new(CreateDataAccount)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	if v.KeyBookUrl != nil {
+		u.KeyBookUrl = (v.KeyBookUrl).Copy()
+	}
+	if v.ManagerKeyBookUrl != nil {
+		u.ManagerKeyBookUrl = (v.ManagerKeyBookUrl).Copy()
+	}
+	u.Scratch = v.Scratch
+
+	return u
+}
+
+func (v *CreateDataAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateIdentity) Copy() *CreateIdentity {
+	u := new(CreateIdentity)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.KeyHash = encoding.BytesCopy(v.KeyHash)
+	if v.KeyBookUrl != nil {
+		u.KeyBookUrl = (v.KeyBookUrl).Copy()
+	}
+	if v.Manager != nil {
+		u.Manager = (v.Manager).Copy()
+	}
+
+	return u
+}
+
+func (v *CreateIdentity) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateKeyBook) Copy() *CreateKeyBook {
+	u := new(CreateKeyBook)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
+	if v.Manager != nil {
+		u.Manager = (v.Manager).Copy()
+	}
+
+	return u
+}
+
+func (v *CreateKeyBook) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateKeyPage) Copy() *CreateKeyPage {
+	u := new(CreateKeyPage)
+
+	u.Keys = make([]*KeySpecParams, len(v.Keys))
+	for i, v := range v.Keys {
+		if v != nil {
+			u.Keys[i] = (v).Copy()
+		}
+	}
+	if v.Manager != nil {
+		u.Manager = (v.Manager).Copy()
+	}
+
+	return u
+}
+
+func (v *CreateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateToken) Copy() *CreateToken {
+	u := new(CreateToken)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	if v.KeyBookUrl != nil {
+		u.KeyBookUrl = (v.KeyBookUrl).Copy()
+	}
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	if v.Properties != nil {
+		u.Properties = (v.Properties).Copy()
+	}
+	if v.SupplyLimit != nil {
+		u.SupplyLimit = encoding.BigintCopy(v.SupplyLimit)
+	}
+	if v.Manager != nil {
+		u.Manager = (v.Manager).Copy()
+	}
+
+	return u
+}
+
+func (v *CreateToken) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
+	u := new(CreateTokenAccount)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	if v.TokenUrl != nil {
+		u.TokenUrl = (v.TokenUrl).Copy()
+	}
+	if v.KeyBookUrl != nil {
+		u.KeyBookUrl = (v.KeyBookUrl).Copy()
+	}
+	u.Scratch = v.Scratch
+	if v.Manager != nil {
+		u.Manager = (v.Manager).Copy()
+	}
+
+	return u
+}
+
+func (v *CreateTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataAccount) Copy() *DataAccount {
+	u := new(DataAccount)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.Scratch = v.Scratch
+
+	return u
+}
+
+func (v *DataAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataEntry) Copy() *DataEntry {
+	u := new(DataEntry)
+
+	u.Data = make([][]byte, len(v.Data))
+	for i, v := range v.Data {
+		u.Data[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *DataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DirectoryIndexMetadata) Copy() *DirectoryIndexMetadata {
+	u := new(DirectoryIndexMetadata)
+
+	u.Count = v.Count
+
+	return u
+}
+
+func (v *DirectoryIndexMetadata) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ED25519Signature) Copy() *ED25519Signature {
+	u := new(ED25519Signature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+
+	return u
+}
+
+func (v *ED25519Signature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EmptyResult) Copy() *EmptyResult {
+	u := new(EmptyResult)
+
+	return u
+}
+
+func (v *EmptyResult) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Envelope) Copy() *Envelope {
+	u := new(Envelope)
+
+	u.Signatures = make([]Signature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		u.Signatures[i] = v
+	}
+	u.TxHash = encoding.BytesCopy(v.TxHash)
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+
+	return u
+}
+
+func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *HashSet) Copy() *HashSet {
+	u := new(HashSet)
+
+	u.Hashes = make([][32]byte, len(v.Hashes))
+	for i, v := range v.Hashes {
+		u.Hashes[i] = v
+	}
+
+	return u
+}
+
+func (v *HashSet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *IndexEntry) Copy() *IndexEntry {
+	u := new(IndexEntry)
+
+	u.Source = v.Source
+	u.Anchor = v.Anchor
+	u.BlockIndex = v.BlockIndex
+	if v.BlockTime != nil {
+		u.BlockTime = new(time.Time)
+		*u.BlockTime = *v.BlockTime
+	}
+
+	return u
+}
+
+func (v *IndexEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalGenesis) Copy() *InternalGenesis {
+	u := new(InternalGenesis)
+
+	return u
+}
+
+func (v *InternalGenesis) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalLedger) Copy() *InternalLedger {
+	u := new(InternalLedger)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.Index = v.Index
+	u.Timestamp = v.Timestamp
+	u.Synthetic = *(&v.Synthetic).Copy()
+	u.PendingOracle = v.PendingOracle
+	u.ActiveOracle = v.ActiveOracle
+
+	return u
+}
+
+func (v *InternalLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalSignature) Copy() *InternalSignature {
+	u := new(InternalSignature)
+
+	if v.Network != nil {
+		u.Network = (v.Network).Copy()
+	}
+
+	return u
+}
+
+func (v *InternalSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalSyntheticLedger) Copy() *InternalSyntheticLedger {
+	u := new(InternalSyntheticLedger)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.Pending = make([]*SyntheticLedgerEntry, len(v.Pending))
+	for i, v := range v.Pending {
+		if v != nil {
+			u.Pending[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *InternalSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalTransactionsSent) Copy() *InternalTransactionsSent {
+	u := new(InternalTransactionsSent)
+
+	u.Transactions = make([][32]byte, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = v
+	}
+
+	return u
+}
+
+func (v *InternalTransactionsSent) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalTransactionsSigned) Copy() *InternalTransactionsSigned {
+	u := new(InternalTransactionsSigned)
+
+	u.Transactions = make([]TransactionSignature, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *InternalTransactionsSigned) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *IssueTokens) Copy() *IssueTokens {
+	u := new(IssueTokens)
+
+	if v.Recipient != nil {
+		u.Recipient = (v.Recipient).Copy()
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+
+	return u
+}
+
+func (v *IssueTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeyBook) Copy() *KeyBook {
+	u := new(KeyBook)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.PageCount = v.PageCount
+
+	return u
+}
+
+func (v *KeyBook) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeyPage) Copy() *KeyPage {
+	u := new(KeyPage)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.CreditBalance = v.CreditBalance
+	u.Threshold = v.Threshold
+	u.Version = v.Version
+	u.Keys = make([]*KeySpec, len(v.Keys))
+	for i, v := range v.Keys {
+		if v != nil {
+			u.Keys[i] = (v).Copy()
+		}
+	}
+	if v.TransactionBlacklist != nil {
+		u.TransactionBlacklist = new(AllowedTransactions)
+		*u.TransactionBlacklist = *v.TransactionBlacklist
+	}
+
+	return u
+}
+
+func (v *KeyPage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeySpec) Copy() *KeySpec {
+	u := new(KeySpec)
+
+	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
+	u.LastUsedOn = v.LastUsedOn
+	if v.Owner != nil {
+		u.Owner = (v.Owner).Copy()
+	}
+
+	return u
+}
+
+func (v *KeySpec) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *KeySpecParams) Copy() *KeySpecParams {
+	u := new(KeySpecParams)
+
+	u.KeyHash = encoding.BytesCopy(v.KeyHash)
+	if v.Owner != nil {
+		u.Owner = (v.Owner).Copy()
+	}
+
+	return u
+}
+
+func (v *KeySpecParams) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LegacyED25519Signature) Copy() *LegacyED25519Signature {
+	u := new(LegacyED25519Signature)
+
+	u.Timestamp = v.Timestamp
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
+	}
+	u.SignerVersion = v.SignerVersion
+
+	return u
+}
+
+func (v *LegacyED25519Signature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LiteDataAccount) Copy() *LiteDataAccount {
+	u := new(LiteDataAccount)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.Tail = encoding.BytesCopy(v.Tail)
+
+	return u
+}
+
+func (v *LiteDataAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LiteIdentity) Copy() *LiteIdentity {
+	u := new(LiteIdentity)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+
+	return u
+}
+
+func (v *LiteIdentity) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
+	u := new(LiteTokenAccount)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	if v.TokenUrl != nil {
+		u.TokenUrl = (v.TokenUrl).Copy()
+	}
+	u.Balance = *encoding.BigintCopy(&v.Balance)
+	u.LastUsedOn = v.LastUsedOn
+	u.CreditBalance = v.CreditBalance
+
+	return u
+}
+
+func (v *LiteTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *MetricsRequest) Copy() *MetricsRequest {
+	u := new(MetricsRequest)
+
+	u.Metric = v.Metric
+	u.Duration = v.Duration
+
+	return u
+}
+
+func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Object) Copy() *Object {
+	u := new(Object)
+
+	u.Entry = encoding.BytesCopy(v.Entry)
+	u.Height = v.Height
+	u.Roots = make([][]byte, len(v.Roots))
+	for i, v := range v.Roots {
+		u.Roots[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *Object) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ObjectMetadata) Copy() *ObjectMetadata {
+	u := new(ObjectMetadata)
+
+	u.Type = v.Type
+	u.Chains = make([]ChainMetadata, len(v.Chains))
+	for i, v := range v.Chains {
+		u.Chains[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *ObjectMetadata) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RCD1Signature) Copy() *RCD1Signature {
+	u := new(RCD1Signature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+
+	return u
+}
+
+func (v *RCD1Signature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Receipt) Copy() *Receipt {
+	u := new(Receipt)
+
+	u.Start = encoding.BytesCopy(v.Start)
+	u.Result = encoding.BytesCopy(v.Result)
+	u.Entries = make([]ReceiptEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		u.Entries[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *Receipt) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ReceiptEntry) Copy() *ReceiptEntry {
+	u := new(ReceiptEntry)
+
+	u.Right = v.Right
+	u.Hash = encoding.BytesCopy(v.Hash)
+
+	return u
+}
+
+func (v *ReceiptEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ReceiptSignature) Copy() *ReceiptSignature {
+	u := new(ReceiptSignature)
+
+	u.Receipt = *v.Receipt.Copy()
+
+	return u
+}
+
+func (v *ReceiptSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RemoveKeyOperation) Copy() *RemoveKeyOperation {
+	u := new(RemoveKeyOperation)
+
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *RemoveKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RemoveManager) Copy() *RemoveManager {
+	u := new(RemoveManager)
+
+	return u
+}
+
+func (v *RemoveManager) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RemoveValidator) Copy() *RemoveValidator {
+	u := new(RemoveValidator)
+
+	u.Key = encoding.BytesCopy(v.Key)
+	if v.Owner != nil {
+		u.Owner = (v.Owner).Copy()
+	}
+
+	return u
+}
+
+func (v *RemoveValidator) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SegWitDataEntry) Copy() *SegWitDataEntry {
+	u := new(SegWitDataEntry)
+
+	u.Cause = v.Cause
+	if v.EntryUrl != nil {
+		u.EntryUrl = (v.EntryUrl).Copy()
+	}
+	u.EntryHash = v.EntryHash
+
+	return u
+}
+
+func (v *SegWitDataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SendTokens) Copy() *SendTokens {
+	u := new(SendTokens)
+
+	u.Hash = v.Hash
+	u.Meta = encoding.BytesCopy(v.Meta)
+	u.To = make([]*TokenRecipient, len(v.To))
+	for i, v := range v.To {
+		if v != nil {
+			u.To[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
+	u := new(SetThresholdKeyPageOperation)
+
+	u.Threshold = v.Threshold
+
+	return u
+}
+
+func (v *SetThresholdKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignPending) Copy() *SignPending {
+	u := new(SignPending)
+
+	return u
+}
+
+func (v *SignPending) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticAnchor) Copy() *SyntheticAnchor {
+	u := new(SyntheticAnchor)
+
+	if v.Source != nil {
+		u.Source = (v.Source).Copy()
+	}
+	u.Major = v.Major
+	u.RootAnchor = v.RootAnchor
+	u.RootIndex = v.RootIndex
+	u.Block = v.Block
+	u.AcmeOraclePrice = v.AcmeOraclePrice
+	u.Receipts = make([]Receipt, len(v.Receipts))
+	for i, v := range v.Receipts {
+		u.Receipts[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *SyntheticAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
+	u := new(SyntheticBurnTokens)
+
+	u.Cause = v.Cause
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+
+	return u
+}
+
+func (v *SyntheticBurnTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticCreateChain) Copy() *SyntheticCreateChain {
+	u := new(SyntheticCreateChain)
+
+	u.Cause = v.Cause
+	u.Chains = make([]ChainParams, len(v.Chains))
+	for i, v := range v.Chains {
+		u.Chains[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *SyntheticCreateChain) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticDepositCredits) Copy() *SyntheticDepositCredits {
+	u := new(SyntheticDepositCredits)
+
+	u.Cause = v.Cause
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *SyntheticDepositCredits) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
+	u := new(SyntheticDepositTokens)
+
+	u.Cause = v.Cause
+	if v.Token != nil {
+		u.Token = (v.Token).Copy()
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+
+	return u
+}
+
+func (v *SyntheticDepositTokens) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticLedger) Copy() *SyntheticLedger {
+	u := new(SyntheticLedger)
+
+	u.Nonce = v.Nonce
+	u.Unsigned = make([][32]byte, len(v.Unsigned))
+	for i, v := range v.Unsigned {
+		u.Unsigned[i] = v
+	}
+	u.Unsent = make([][32]byte, len(v.Unsent))
+	for i, v := range v.Unsent {
+		u.Unsent[i] = v
+	}
+
+	return u
+}
+
+func (v *SyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticLedgerEntry) Copy() *SyntheticLedgerEntry {
+	u := new(SyntheticLedgerEntry)
+
+	u.TransactionHash = v.TransactionHash
+	u.RootAnchor = v.RootAnchor
+	u.SynthIndex = v.SynthIndex
+	u.SynthIndexIndex = v.SynthIndexIndex
+	u.RootIndexIndex = v.RootIndexIndex
+	u.NeedsReceipt = v.NeedsReceipt
+
+	return u
+}
+
+func (v *SyntheticLedgerEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticMirror) Copy() *SyntheticMirror {
+	u := new(SyntheticMirror)
+
+	u.Objects = make([]AnchoredRecord, len(v.Objects))
+	for i, v := range v.Objects {
+		u.Objects[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *SyntheticMirror) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticSignature) Copy() *SyntheticSignature {
+	u := new(SyntheticSignature)
+
+	if v.SourceNetwork != nil {
+		u.SourceNetwork = (v.SourceNetwork).Copy()
+	}
+	if v.DestinationNetwork != nil {
+		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+	}
+	u.SequenceNumber = v.SequenceNumber
+
+	return u
+}
+
+func (v *SyntheticSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyntheticWriteData) Copy() *SyntheticWriteData {
+	u := new(SyntheticWriteData)
+
+	u.Cause = v.Cause
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *SyntheticWriteData) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TokenAccount) Copy() *TokenAccount {
+	u := new(TokenAccount)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	if v.TokenUrl != nil {
+		u.TokenUrl = (v.TokenUrl).Copy()
+	}
+	u.Balance = *encoding.BigintCopy(&v.Balance)
+	u.Scratch = v.Scratch
+
+	return u
+}
+
+func (v *TokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TokenIssuer) Copy() *TokenIssuer {
+	u := new(TokenIssuer)
+
+	u.AccountHeader = *v.AccountHeader.Copy()
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	if v.Properties != nil {
+		u.Properties = (v.Properties).Copy()
+	}
+	u.Issued = *encoding.BigintCopy(&v.Issued)
+	if v.SupplyLimit != nil {
+		u.SupplyLimit = encoding.BigintCopy(v.SupplyLimit)
+	}
+
+	return u
+}
+
+func (v *TokenIssuer) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TokenRecipient) Copy() *TokenRecipient {
+	u := new(TokenRecipient)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Amount = *encoding.BigintCopy(&v.Amount)
+
+	return u
+}
+
+func (v *TokenRecipient) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Transaction) Copy() *Transaction {
+	u := new(Transaction)
+
+	u.Header = *(&v.Header).Copy()
+	u.Body = v.Body
+
+	return u
+}
+
+func (v *Transaction) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionHeader) Copy() *TransactionHeader {
+	u := new(TransactionHeader)
+
+	if v.Principal != nil {
+		u.Principal = (v.Principal).Copy()
+	}
+	u.Initiator = v.Initiator
+	u.Memo = v.Memo
+	u.Metadata = encoding.BytesCopy(v.Metadata)
+
+	return u
+}
+
+func (v *TransactionHeader) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionSignature) Copy() *TransactionSignature {
+	u := new(TransactionSignature)
+
+	u.Transaction = v.Transaction
+	u.Signature = v.Signature
+
+	return u
+}
+
+func (v *TransactionSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionStatus) Copy() *TransactionStatus {
+	u := new(TransactionStatus)
+
+	u.Remote = v.Remote
+	u.Delivered = v.Delivered
+	u.Pending = v.Pending
+	u.Code = v.Code
+	u.Message = v.Message
+	u.Result = v.Result
+
+	return u
+}
+
+func (v *TransactionStatus) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
+	u := new(UpdateAllowedKeyPageOperation)
+
+	u.Allow = make([]TransactionType, len(v.Allow))
+	for i, v := range v.Allow {
+		u.Allow[i] = v
+	}
+	u.Deny = make([]TransactionType, len(v.Deny))
+	for i, v := range v.Deny {
+		u.Deny[i] = v
+	}
+
+	return u
+}
+
+func (v *UpdateAllowedKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateAllowedTransactions) Copy() *UpdateAllowedTransactions {
+	u := new(UpdateAllowedTransactions)
+
+	u.Whitelist = v.Whitelist
+	u.Transactions = make([]TransactionType, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = v
+	}
+
+	return u
+}
+
+func (v *UpdateAllowedTransactions) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateKeyOperation) Copy() *UpdateKeyOperation {
+	u := new(UpdateKeyOperation)
+
+	u.OldEntry = *(&v.OldEntry).Copy()
+	u.NewEntry = *(&v.NewEntry).Copy()
+
+	return u
+}
+
+func (v *UpdateKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
+	u := new(UpdateKeyPage)
+
+	u.Operation = v.Operation
+
+	return u
+}
+
+func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateManager) Copy() *UpdateManager {
+	u := new(UpdateManager)
+
+	if v.ManagerKeyBook != nil {
+		u.ManagerKeyBook = (v.ManagerKeyBook).Copy()
+	}
+
+	return u
+}
+
+func (v *UpdateManager) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateValidatorKey) Copy() *UpdateValidatorKey {
+	u := new(UpdateValidatorKey)
+
+	u.KeyHash = encoding.BytesCopy(v.KeyHash)
+	u.NewKeyHash = encoding.BytesCopy(v.NewKeyHash)
+
+	return u
+}
+
+func (v *UpdateValidatorKey) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *WriteData) Copy() *WriteData {
+	u := new(WriteData)
+
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *WriteData) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *WriteDataResult) Copy() *WriteDataResult {
+	u := new(WriteDataResult)
+
+	u.EntryHash = v.EntryHash
+	if v.AccountUrl != nil {
+		u.AccountUrl = (v.AccountUrl).Copy()
+	}
+	u.AccountID = encoding.BytesCopy(v.AccountID)
+
+	return u
+}
+
+func (v *WriteDataResult) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *WriteDataTo) Copy() *WriteDataTo {
+	u := new(WriteDataTo)
+
+	if v.Recipient != nil {
+		u.Recipient = (v.Recipient).Copy()
+	}
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *WriteDataTo) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ADI) Equal(u *ADI) bool {
 	if !v.AccountHeader.Equal(&u.AccountHeader) {
 		return false
