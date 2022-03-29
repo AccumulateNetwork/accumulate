@@ -3,7 +3,9 @@ package chain_test
 import (
 	"fmt"
 	"math/big"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -99,7 +101,7 @@ func BenchmarkHighTps(b *testing.B) {
 				env := acctesting.NewTransaction().
 					WithPrincipal(liteAddr).
 					WithSigner(network.NodeUrl(), 1).
-					WithNonceTimestamp().
+					WithCurrentTimestamp().
 					WithBody(deposit).
 					Initiate(protocol.SignatureTypeED25519, nodeKey)
 
@@ -114,7 +116,7 @@ func BenchmarkHighTps(b *testing.B) {
 				env := acctesting.NewTransaction().
 					WithPrincipal(liteAddr).
 					WithSigner(network.NodeUrl(), 1).
-					WithNonceTimestamp().
+					WithCurrentTimestamp().
 					WithBody(deposit).
 					Initiate(protocol.SignatureTypeED25519, nodeKey)
 
@@ -134,15 +136,62 @@ func BenchmarkHighTps(b *testing.B) {
 func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	t.Skip("TODO Needs a receipt signature")
 
+	exec := setupWithGenesis(t)
+
+	// Start a block
+	_, err := exec.BeginBlock(abci.BeginBlockRequest{
+		IsLeader: true,
+		Height:   2,
+		Time:     time.Now(),
+	})
+	require.NoError(t, err)
+
+	// Create a synthetic transaction where the origin does not exist
+	env := acctesting.NewTransaction().
+		WithPrincipal(url.MustParse("acc://account-that-does-not-exist")).
+		WithSigner(exec.Network.ValidatorPage(0), 1).
+		WithCurrentTimestamp().
+		WithBody(&protocol.SyntheticDepositCredits{
+			Cause:  [32]byte{1},
+			Amount: 1,
+		}).
+		InitiateSynthetic(protocol.SubnetUrl(exec.Network.LocalSubnetID)).
+		Sign(protocol.SignatureTypeED25519, exec.Key)
+
+	// Check passes
+	_, perr := exec.CheckTx(env)
+	if perr != nil {
+		require.NoError(t, perr)
+	}
+
+	// Deliver fails
+	_, perr = exec.DeliverTx(env)
+	require.NotNil(t, perr)
+
+	// Commit the block
+	_, err = exec.ForceCommit()
+	require.NoError(t, err)
+
+	// Verify that the synthetic transaction was recorded
+	batch := exec.DB.Begin(false)
+	defer batch.Discard()
+	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
+	require.NoError(t, err, "Failed to get the synthetic transaction status")
+	require.NotZero(t, status.Code)
+}
+
+func setupWithGenesis(t *testing.T) *chain.Executor {
 	// Setup
 	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	db := database.OpenInMemory(logger)
+	// db := database.OpenInMemory(logger)
+	db, err := database.OpenBadger(filepath.Join(t.TempDir(), "accumulate.db"), logger)
+	require.NoError(t, err)
 	key := acctesting.GenerateKey(t.Name())
 	network := config.Network{
 		Type:          config.BlockValidator,
-		LocalSubnetID: t.Name(),
+		LocalSubnetID: strings.ReplaceAll(t.Name(), "_", "-"),
 	}
-	chain, err := chain.NewNodeExecutor(chain.ExecutorOptions{
+	exec, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		DB:      db,
 		Logger:  logger,
 		Key:     key,
@@ -150,7 +199,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 		Router:  acctesting.NullRouter{},
 	})
 	require.NoError(t, err)
-	require.NoError(t, chain.Start())
+	require.NoError(t, exec.Start())
 
 	// Genesis
 	temp := memory.New(logger)
@@ -167,47 +216,117 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	state, err := temp.MarshalJSON()
 	require.NoError(t, err)
 
-	_, err = chain.InitChain(state, time.Now())
+	_, err = exec.InitChain(state, time.Now())
 	require.NoError(t, err)
 
+	return exec
+}
+
+func TestExecutor_ProcessTransaction(t *testing.T) {
+	exec := setupWithGenesis(t)
+
+	// Create the keys and URLs
+	alice, bob, charlie := generateKey(), generateKey(), generateKey()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
+	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie)
+
+	// Create the transaction
+	envelope := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithSigner(aliceUrl, 1).
+		WithCurrentTimestamp().
+		WithBody(&protocol.SendTokens{
+			To: []*protocol.TokenRecipient{
+				{Url: bobUrl, Amount: *big.NewInt(1000)},
+				{Url: charlieUrl, Amount: *big.NewInt(2000)},
+			},
+		}).
+		Initiate(protocol.SignatureTypeED25519, alice)
+
+	// Initialize the database
+	batch := exec.DB.Begin(true)
+	defer batch.Discard()
+	txnDb := batch.Transaction(envelope.GetTxHash())
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, txnDb.PutSignatures(&database.SignatureSet{Signatures: envelope.Signatures}))
+	require.NoError(t, batch.Commit())
+
+	// Execute the transaction
+	batch = exec.DB.Begin(true)
+	defer batch.Discard()
+	_, _, err := exec.ProcessTransaction(batch, envelope.Transaction)
+	require.NoError(t, err)
+	require.NoError(t, batch.Commit())
+
+	// Verify the transaction was recorded
+	batch = exec.DB.Begin(false)
+	defer batch.Discard()
+	txnDb = batch.Transaction(envelope.GetTxHash())
+	_, err = txnDb.GetState()
+	require.NoError(t, err)
+	status, err := txnDb.GetStatus()
+	require.NoError(t, err)
+	require.True(t, status.Delivered)
+	require.Zero(t, status.Code)
+}
+
+func TestExecutor_DeliverTx(t *testing.T) {
+	exec := setupWithGenesis(t)
+
+	// Create the keys and URLs
+	alice, bob, charlie := generateKey(), generateKey(), generateKey()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
+	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie)
+
+	// Create the transaction
+	envelope := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithSigner(aliceUrl, 1).
+		WithCurrentTimestamp().
+		WithBody(&protocol.SendTokens{
+			To: []*protocol.TokenRecipient{
+				{Url: bobUrl, Amount: *big.NewInt(1000)},
+				{Url: charlieUrl, Amount: *big.NewInt(2000)},
+			},
+		}).
+		Initiate(protocol.SignatureTypeED25519, alice)
+
+	// Initialize the database
+	batch := exec.DB.Begin(true)
+	defer batch.Discard()
+	txnDb := batch.Transaction(envelope.GetTxHash())
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, txnDb.PutSignatures(&database.SignatureSet{Signatures: envelope.Signatures}))
+	require.NoError(t, batch.Commit())
+
 	// Start a block
-	_, err = chain.BeginBlock(abci.BeginBlockRequest{
+	_, err := exec.BeginBlock(abci.BeginBlockRequest{
 		IsLeader: true,
 		Height:   2,
 		Time:     time.Now(),
 	})
 	require.NoError(t, err)
 
-	// Create a synthetic transaction where the origin does not exist
-	env := acctesting.NewTransaction().
-		WithPrincipal(url.MustParse("acc://account-that-does-not-exist")).
-		WithSigner(network.ValidatorPage(0), 1).
-		WithNonceTimestamp().
-		WithBody(&protocol.SyntheticDepositCredits{
-			SyntheticOrigin: protocol.SyntheticOrigin{Cause: [32]byte{1}, Source: acctesting.FakeBvn},
-			Amount:          1,
-		}).
-		InitiateSynthetic(protocol.SubnetUrl(network.LocalSubnetID)).
-		Sign(protocol.SignatureTypeED25519, key)
-
-	// Check passes
-	_, perr := chain.CheckTx(env)
+	// Execute the transaction
+	_, perr := exec.DeliverTx(envelope)
 	if perr != nil {
-		require.NoError(t, perr)
+		require.NoError(t, perr.Message)
 	}
 
-	// Deliver fails
-	_, perr = chain.DeliverTx(env)
-	require.NotNil(t, perr)
-
 	// Commit the block
-	_, err = chain.ForceCommit()
+	_, err = exec.ForceCommit()
 	require.NoError(t, err)
 
-	// Verify that the synthetic transaction was recorded
-	batch := db.Begin(false)
+	// Verify the transaction was recorded
+	batch = exec.DB.Begin(false)
 	defer batch.Discard()
-	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
-	require.NoError(t, err, "Failed to get the synthetic transaction status")
-	require.NotZero(t, status.Code)
+	txnDb = batch.Transaction(envelope.GetTxHash())
+	_, err = txnDb.GetState()
+	require.NoError(t, err)
+	status, err := txnDb.GetStatus()
+	require.NoError(t, err)
+	require.True(t, status.Delivered)
+	require.Zero(t, status.Code)
 }

@@ -34,17 +34,11 @@ func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]b
 	c.batch = batch
 	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
-
-	_ = c.logger // Get static analsis to shut up
-
-	c.Reset()
-	return c
-}
-
-func (c *stateCache) Reset() {
 	c.operations = c.operations[:0]
 	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
+	_ = c.logger // Get static analsis to shut up
+	return c
 }
 
 func (c *stateCache) Commit() ([]protocol.Account, error) {
@@ -103,7 +97,15 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 
 // LoadTxn loads and unmarshals a saved transaction
 func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
-	return c.batch.Transaction(txid[:]).GetState()
+	env, err := c.batch.Transaction(txid[:]).GetState()
+	if err != nil {
+		return nil, err
+	}
+	if env.Transaction == nil {
+		// This is a signature, not an envelope
+		return nil, fmt.Errorf("transaction %X %w", txid, storage.ErrNotFound)
+	}
+	return env.Transaction, nil
 }
 
 // LoadSignatures loads and unmarshals a transaction's signatures

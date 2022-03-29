@@ -34,8 +34,8 @@ func TestLiteTokenTransactions(t *testing.T) {
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 	require.NoError(t, err)
 
-	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), gtx)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, gtx)
+	defer st.Discard()
 
 	_, err = SendTokens{}.Validate(st, gtx)
 	require.NoError(t, err)

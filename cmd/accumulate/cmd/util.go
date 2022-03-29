@@ -217,10 +217,10 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
 	req.Origin = env.Transaction.Header.Principal
-	req.Signer.Nonce = sig.GetTimestamp()
+	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()
-	req.KeyPage.Height = sig.GetSignerHeight()
+	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
 	req.Metadata = env.Transaction.Header.Metadata
@@ -288,15 +288,15 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 }
 
 type ActionResponse struct {
-	TransactionHash types.Bytes  `json:"transactionHash"`
-	EnvelopeHash    types.Bytes  `json:"envelopeHash"`
-	SimpleHash      types.Bytes  `json:"simpleHash"`
-	Log             types.String `json:"log"`
-	Code            types.String `json:"code"`
-	Codespace       types.String `json:"codespace"`
-	Error           types.String `json:"error"`
-	Mempool         types.String `json:"mempool"`
-	Result          interface{}  `json:"result"`
+	TransactionHash types.Bytes                 `json:"transactionHash"`
+	EnvelopeHash    types.Bytes                 `json:"envelopeHash"`
+	SimpleHash      types.Bytes                 `json:"simpleHash"`
+	Log             types.String                `json:"log"`
+	Code            types.String                `json:"code"`
+	Codespace       types.String                `json:"codespace"`
+	Error           types.String                `json:"error"`
+	Mempool         types.String                `json:"mempool"`
+	Result          *protocol.TransactionStatus `json:"result"`
 }
 
 type ActionDataResponse struct {
@@ -378,10 +378,6 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
-		Result:          r.Result,
-	}
-	if r.Code != 0 {
-		return ar
 	}
 
 	result := new(protocol.TransactionStatus)
@@ -427,19 +423,16 @@ func (a *ActionResponse) Print() (string, error) {
 			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
 		}
 		if a.Result != nil {
-			r := a.Result.(map[string]interface{})
 			out += "\tResult\t\t\t: "
-			if t, ok := r["result"]; ok {
-				d, err := json.Marshal(t)
+			d, err := json.Marshal(a.Result.Result)
+			if err != nil {
+				out += fmt.Sprintf("error remarshaling result %v\n", a.Result.Result)
+			} else {
+				v, err := protocol.UnmarshalTransactionResultJSON(d)
 				if err != nil {
-					out += fmt.Sprintf("error remarshaling result %v\n", t)
+					out += fmt.Sprintf("error unmarshaling transaction result %v", err)
 				} else {
-					v, err := protocol.UnmarshalTransactionResultJSON(d)
-					if err != nil {
-						out += fmt.Sprintf("error unmarshaling transaction result %v", err)
-					} else {
-						out += outputTransactionResultForHumans(v)
-					}
+					out += outputTransactionResultForHumans(v)
 				}
 			}
 		}
@@ -749,9 +742,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
-		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
+		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
+		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
@@ -806,11 +799,11 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
-			name, err := FindLabelFromPubKey(k.PublicKey)
+			name, err := FindLabelFromPubKey(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -909,11 +902,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyName, err := FindLabelFromPubKey(id.PublicKey)
+		keyName, err := FindLabelFromPubKey(id.KeyHash)
 		if err != nil {
-			out += fmt.Sprintf("Public Key \t:\t%x\n", id.PublicKey)
+			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {
-			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.PublicKey, keyName)
+			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.KeyHash, keyName)
 		}
 
 		out += printGeneralTransactionParameters(res)

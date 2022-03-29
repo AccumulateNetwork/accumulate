@@ -139,7 +139,7 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 	switch record.GetType() {
 	case protocol.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
-		old.Nonce = new.Nonce
+		old.LastUsedOn = new.LastUsedOn
 		old.CreditBalance = new.CreditBalance
 		if !old.Equal(new) {
 			return fmt.Errorf("attempted to change more than the nonce and the credit balance")
@@ -149,7 +149,7 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
 		old.CreditBalance = new.CreditBalance
 		for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
-			old.Keys[i].Nonce = new.Keys[i].Nonce
+			old.Keys[i].LastUsedOn = new.Keys[i].LastUsedOn
 		}
 		if !old.Equal(new) {
 			return fmt.Errorf("attempted to change more than a nonce and the credit balance")

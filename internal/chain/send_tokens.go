@@ -41,9 +41,10 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		total.Add(total.AsBigInt(), &to.Amount)
 	}
 
-	if !account.CanDebitTokens(&total.Int) {
+	if !account.DebitTokens(&total.Int) {
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
 	}
+	st.Update(account)
 
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
@@ -51,11 +52,6 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		deposit.Amount = body.To[i].Amount
 		st.Submit(u, deposit)
 	}
-
-	if !account.DebitTokens(&total.Int) {
-		return nil, fmt.Errorf("%q balance is insufficient", st.OriginUrl)
-	}
-	st.Update(account)
 
 	return nil, nil
 }

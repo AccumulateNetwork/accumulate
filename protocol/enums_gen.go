@@ -68,7 +68,7 @@ const ChainTypeIndex ChainType = 4
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
-// ErrorCodeEncodingError indicates the request could not be decoded.
+// ErrorCodeEncodingError indicates something could not be decoded or encoded.
 const ErrorCodeEncodingError ErrorCode = 1
 
 // ErrorCodeBadNonce indicates the transaction nonce was rejected.
@@ -146,6 +146,27 @@ const ErrorCodeDataEntryHashError ErrorCode = 25
 // ErrorCodeTxnQueryError is returned when txn is not found.
 const ErrorCodeTxnQueryError ErrorCode = 26
 
+// ErrorCodeInvalidRequest indicates the request was invalid.
+const ErrorCodeInvalidRequest ErrorCode = 27
+
+// ErrorCodeInvalidSignature indicates an envelope signature was invalid.
+const ErrorCodeInvalidSignature ErrorCode = 28
+
+// ErrorCodeInsufficientCredits indicates the signer does not have sufficient credits to execute the transaction.
+const ErrorCodeInsufficientCredits ErrorCode = 29
+
+// ErrorCodeBadVersion indicates the signature refers to an out of date version of the signer.
+const ErrorCodeBadVersion ErrorCode = 30
+
+// ErrorCodeInternal indicates an internal error.
+const ErrorCodeInternal ErrorCode = 31
+
+// ErrorCodeAlreadyDelivered indicates the transaction has already been delivered.
+const ErrorCodeAlreadyDelivered ErrorCode = 32
+
+// ErrorCodeUnauthorized indicates the signer is not authorized to sign a transaction.
+const ErrorCodeUnauthorized ErrorCode = 33
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -195,7 +216,7 @@ const SignatureTypeSynthetic SignatureType = 5
 const SignatureTypeInternal SignatureType = 6
 
 // TransactionMaxUser is the highest number reserved for user transactions.
-const TransactionMaxUser TransactionMax = 47
+const TransactionMaxUser TransactionMax = 48
 
 // TransactionMaxSynthetic is the highest number reserved for synthetic transactions.
 const TransactionMaxSynthetic TransactionMax = 95
@@ -546,7 +567,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized:
 		*v = u
 		return true
 	default:
@@ -611,6 +632,20 @@ func (v ErrorCode) String() string {
 		return "dataEntryHashError"
 	case ErrorCodeTxnQueryError:
 		return "txnQueryError"
+	case ErrorCodeInvalidRequest:
+		return "invalidRequest"
+	case ErrorCodeInvalidSignature:
+		return "invalidSignature"
+	case ErrorCodeInsufficientCredits:
+		return "insufficientCredits"
+	case ErrorCodeBadVersion:
+		return "badVersion"
+	case ErrorCodeInternal:
+		return "internal"
+	case ErrorCodeAlreadyDelivered:
+		return "alreadyDelivered"
+	case ErrorCodeUnauthorized:
+		return "unauthorized"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -673,6 +708,20 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeDataEntryHashError, true
 	case "txnQueryError":
 		return ErrorCodeTxnQueryError, true
+	case "invalidRequest":
+		return ErrorCodeInvalidRequest, true
+	case "invalidSignature":
+		return ErrorCodeInvalidSignature, true
+	case "insufficientCredits":
+		return ErrorCodeInsufficientCredits, true
+	case "badVersion":
+		return ErrorCodeBadVersion, true
+	case "internal":
+		return ErrorCodeInternal, true
+	case "alreadyDelivered":
+		return ErrorCodeAlreadyDelivered, true
+	case "unauthorized":
+		return ErrorCodeUnauthorized, true
 	default:
 		return 0, false
 	}
