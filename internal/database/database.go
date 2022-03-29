@@ -18,8 +18,8 @@ const markPower = 8
 
 // Database is an Accumulate database.
 type Database struct {
-	store  storage.KeyValueStore
-	logger log.Logger
+	store       storage.KeyValueStore
+	logger      log.Logger
 	nextBatchId int
 }
 
