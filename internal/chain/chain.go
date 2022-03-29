@@ -99,13 +99,12 @@ type TxExecutor interface {
 	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
 }
 
-type creditChain interface {
-	protocol.Account
-	SetLastUsedOn(key []byte, timestamp uint64) error
-	protocol.CreditHolder
-}
+// creditChain = protocol.SignerAccount
+//
+// Deprecated: use protocol.SignerAccount
+type creditChain = protocol.SignerAccount
 
-type tokenChain interface {
-	protocol.Account
-	protocol.TokenHolder
-}
+// tokenChain = protocol.TokenHolderAccount
+//
+// Deprecated: use protocol.TokenHolderAccount
+type tokenChain = protocol.TokenHolderAccount

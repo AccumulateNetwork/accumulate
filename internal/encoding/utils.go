@@ -16,6 +16,18 @@ import (
 // Some of these methods have no parameters because they are used by generated
 // code
 
+func BytesCopy(v []byte) []byte {
+	u := make([]byte, len(v))
+	copy(u, v)
+	return v
+}
+
+func BigintCopy(v *big.Int) *big.Int {
+	u := new(big.Int)
+	u.Set(v)
+	return u
+}
+
 func BoolBinarySize(_ bool) int {
 	return 1
 }

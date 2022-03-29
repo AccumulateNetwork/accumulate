@@ -141,6 +141,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	default:
 		return nil, fmt.Errorf("invalid operation: %v", body.Operation.Type())
 	}
+	page.Version += 1
 
 	didUpdateKeyPage(page)
 	st.Update(page)
@@ -161,7 +162,13 @@ func didUpdateKeyPage(page *protocol.KeyPage) {
 
 func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (int, *protocol.KeySpec, bool) {
 	if len(search.KeyHash) > 0 {
-		return page.EntryByKeyHash(search.KeyHash)
+		i, entry, ok := page.EntryByKeyHash(search.KeyHash)
+		var keySpec *protocol.KeySpec
+		if ok {
+			// If this is not true, something is seriously wrong
+			keySpec = entry.(*protocol.KeySpec)
+		}
+		return i, keySpec, ok
 	}
 
 	if search.Owner != nil {

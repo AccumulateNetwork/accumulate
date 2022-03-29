@@ -70,7 +70,7 @@ type GeneralQuery struct {
 }
 
 type KeyPage struct {
-	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 }
 
 type KeyPageIndexQuery struct {
@@ -113,9 +113,10 @@ type QueryPagination struct {
 }
 
 type Signer struct {
-	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Timestamp uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	PublicKey     []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
 }
 
 type StatusResponse struct {
@@ -191,6 +192,43 @@ type VersionResponse struct {
 	Commit         string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
 }
+
+func (v *DataEntry) Copy() *DataEntry {
+	u := new(DataEntry)
+
+	u.Data = make([][]byte, len(v.Data))
+	for i, v := range v.Data {
+		u.Data[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *DataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataEntryQuery) Copy() *DataEntryQuery {
+	u := new(DataEntryQuery)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.EntryHash = v.EntryHash
+
+	return u
+}
+
+func (v *DataEntryQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
+	u := new(DataEntryQueryResponse)
+
+	u.EntryHash = v.EntryHash
+	u.Entry = *(&v.Entry).Copy()
+
+	return u
+}
+
+func (v *DataEntryQueryResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DataEntry) Equal(u *DataEntry) bool {
 	if len(v.Data) != len(u.Data) {
@@ -523,6 +561,16 @@ func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *KeyPage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Version uint64 `json:"version,omitempty"`
+		Height  uint64 `json:"height,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Version
+	return json.Marshal(&u)
+}
+
 func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url *url.URL `json:"url,omitempty"`
@@ -606,15 +654,17 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Timestamp uint64   `json:"timestamp,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Url       *url.URL `json:"url,omitempty"`
+		PublicKey     *string                `json:"publicKey,omitempty"`
+		Timestamp     uint64                 `json:"timestamp,omitempty"`
+		Nonce         uint64                 `json:"nonce,omitempty"`
+		Url           *url.URL               `json:"url,omitempty"`
+		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.SignatureType = v.SignatureType
 	return json.Marshal(&u)
 }
 
@@ -965,6 +1015,24 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *KeyPage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Version uint64 `json:"version,omitempty"`
+		Height  uint64 `json:"height,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Version
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Version != 0 {
+		v.Version = u.Version
+	} else {
+		v.Version = u.Height
+	}
+	return nil
+}
+
 func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url *url.URL `json:"url,omitempty"`
@@ -1123,15 +1191,17 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKey *string  `json:"publicKey,omitempty"`
-		Timestamp uint64   `json:"timestamp,omitempty"`
-		Nonce     uint64   `json:"nonce,omitempty"`
-		Url       *url.URL `json:"url,omitempty"`
+		PublicKey     *string                `json:"publicKey,omitempty"`
+		Timestamp     uint64                 `json:"timestamp,omitempty"`
+		Nonce         uint64                 `json:"nonce,omitempty"`
+		Url           *url.URL               `json:"url,omitempty"`
+		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.SignatureType = v.SignatureType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1146,6 +1216,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		v.Timestamp = u.Nonce
 	}
 	v.Url = u.Url
+	v.SignatureType = u.SignatureType
 	return nil
 }
 

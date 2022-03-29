@@ -207,7 +207,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			continue
 		}
 
-		typ := tx.Body.GetType()
+		typ := tx.Transaction.Body.GetType()
 		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 		}
@@ -259,8 +259,12 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 
 		// Convert it back to a transaction
 		env := new(protocol.Envelope)
-		env.Transaction = pending
+		env.Transaction = pending.Transaction
 		env.Signatures = signatures
+
+		if len(signatures) < 2 {
+			print("")
+		}
 
 		// Marshal it
 		raw, err := env.MarshalBinary()

@@ -220,7 +220,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()
-	req.KeyPage.Height = sig.GetSignerHeight()
+	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
 	req.Metadata = env.Transaction.Header.Metadata
@@ -288,15 +288,15 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 }
 
 type ActionResponse struct {
-	TransactionHash types.Bytes  `json:"transactionHash"`
-	EnvelopeHash    types.Bytes  `json:"envelopeHash"`
-	SimpleHash      types.Bytes  `json:"simpleHash"`
-	Log             types.String `json:"log"`
-	Code            types.String `json:"code"`
-	Codespace       types.String `json:"codespace"`
-	Error           types.String `json:"error"`
-	Mempool         types.String `json:"mempool"`
-	Result          interface{}  `json:"result"`
+	TransactionHash types.Bytes                 `json:"transactionHash"`
+	EnvelopeHash    types.Bytes                 `json:"envelopeHash"`
+	SimpleHash      types.Bytes                 `json:"simpleHash"`
+	Log             types.String                `json:"log"`
+	Code            types.String                `json:"code"`
+	Codespace       types.String                `json:"codespace"`
+	Error           types.String                `json:"error"`
+	Mempool         types.String                `json:"mempool"`
+	Result          *protocol.TransactionStatus `json:"result"`
 }
 
 type ActionDataResponse struct {
@@ -378,10 +378,6 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
-		Result:          r.Result,
-	}
-	if r.Code != 0 {
-		return ar
 	}
 
 	result := new(protocol.TransactionStatus)
@@ -427,19 +423,16 @@ func (a *ActionResponse) Print() (string, error) {
 			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
 		}
 		if a.Result != nil {
-			r := a.Result.(map[string]interface{})
 			out += "\tResult\t\t\t: "
-			if t, ok := r["result"]; ok {
-				d, err := json.Marshal(t)
+			d, err := json.Marshal(a.Result.Result)
+			if err != nil {
+				out += fmt.Sprintf("error remarshaling result %v\n", a.Result.Result)
+			} else {
+				v, err := protocol.UnmarshalTransactionResultJSON(d)
 				if err != nil {
-					out += fmt.Sprintf("error remarshaling result %v\n", t)
+					out += fmt.Sprintf("error unmarshaling transaction result %v", err)
 				} else {
-					v, err := protocol.UnmarshalTransactionResultJSON(d)
-					if err != nil {
-						out += fmt.Sprintf("error unmarshaling transaction result %v", err)
-					} else {
-						out += outputTransactionResultForHumans(v)
-					}
+					out += outputTransactionResultForHumans(v)
 				}
 			}
 		}
