@@ -34,5 +34,6 @@ tools/cmd/gen-enum/go_build*
 /.vscode/settings.json
 
 #localdevnet
+devnetscripts/
 
 
