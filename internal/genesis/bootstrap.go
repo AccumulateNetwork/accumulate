@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -155,9 +156,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			acme.Precision = 8
 			acme.Symbol = "ACME"
 			records = append(records, acme)
-			acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
 
-			// TODO Move ACME to DN
+			if protocol.IsTestNet {
+				// On the TestNet, set the issued amount to the faucet balance
+				acme.Issued.SetString(protocol.AcmeFaucetBalance, 10)
+			} else {
+				// On the MainNet, set the supply limit
+				acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+			}
 
 		case config.BlockValidator:
 			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
@@ -166,11 +172,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
-			lite := protocol.NewLiteTokenAccount()
-			lite.Url = protocol.FaucetUrl
-			lite.TokenUrl = protocol.AcmeUrl()
-			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
-			records = append(records, lite)
+			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
+			if err == nil && subnet == opts.Network.LocalSubnetID {
+				lite := protocol.NewLiteTokenAccount()
+				lite.Url = protocol.FaucetUrl
+				lite.TokenUrl = protocol.AcmeUrl()
+				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+				records = append(records, lite)
+			}
 		}
 
 		st.Update(records...)
