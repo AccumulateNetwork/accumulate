@@ -43,15 +43,18 @@ func NeedsReceipt(txt protocol.TransactionType) bool {
 	return true
 }
 
-// CreateReceipt creates a receipt used to return the status of synthetic transactions to its sender
-func CreateReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, nodeUrl *url.URL) (*protocol.SyntheticReceipt, *url.URL) {
+// CreateSynthReceipt creates a receipt used to return the status of synthetic transactions to its sender
+func CreateSynthReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, nodeUrl *url.URL) *SynthReceiptEnvelope {
 	synthOrigin := getSyntheticOrigin(env.Transaction)
 	sr := new(protocol.SyntheticReceipt)
 	sr.SetSyntheticOrigin(synthOrigin.Cause[:], nodeUrl)
 	sr.SynthTxHash = *(*[32]byte)(env.GetTxHash())
 	sr.Status = status
 
-	return sr, synthOrigin.Source
+	return &SynthReceiptEnvelope{
+		DestUrl:          synthOrigin.Source,
+		SyntheticReceipt: sr,
+	}
 }
 
 // getSyntheticOrigin goes into the body of the synthetic transaction to extract the SyntheticOrigin we need for the receipt

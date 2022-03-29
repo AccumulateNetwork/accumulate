@@ -13,13 +13,31 @@ import (
 )
 
 func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) (err error) {
-	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
-	err = x.addSynthTxns(st, produced)
+
+	var signer protocol.SignerAccount
+	signerUrl := x.Network.ValidatorPage(0)
+	err = x.blockBatch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return err
 	}
 
-	_, err = st.Commit()
+	st := NewStateManager(x.blockBatch.Begin, x.Network.NodeUrl(), signerUrl, signer, nil, from)
+	st.logger.L = x.logger
+
+	srEnv := x.blockState.SynthReceiptEnvelope
+	if srEnv != nil {
+		st.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
+		x.blockState.SynthReceiptEnvelope = nil
+	}
+
+	if produced != nil {
+		err = x.addSynthTxns(&st.stateCache, produced)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = st.Commit()
 	if err != nil {
 		return err
 	}

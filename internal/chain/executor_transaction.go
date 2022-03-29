@@ -222,31 +222,12 @@ func (x *Executor) recordTransaction(batch *database.Batch, transaction *protoco
 	// When the transaction is synthetic, send a receipt back to its origin
 	txt := stateEnv.Transaction.Type()
 	if txt.IsSynthetic() && NeedsReceipt(txt) { // recordTransactionError can pass in a nil state manager
-		st, err := x.buildStateManager(transaction)
-		if err != nil {
-			return err
+		if x.blockState.SynthReceiptEnvelope != nil {
+			panic("BlockState can hold only one SynthReceiptEnvelope")
 		}
-		defer st.Discard()
-
-		receipt, sourceUrl := CreateReceipt(stateEnv, status, x.Network.NodeUrl())
-		x.logger.Debug("Submitting synth receipt", "for", st.OriginUrl, " to ", sourceUrl)
-		st.Submit(sourceUrl, receipt)
-		x.blockState.Merge(&st.blockState)
+		x.blockState.SynthReceiptEnvelope = CreateSynthReceipt(stateEnv, status, x.Network.NodeUrl())
 	}
 	return nil
-}
-
-func (x *Executor) buildStateManager(transaction *protocol.Transaction) (*StateManager, error) {
-	var signer protocol.SignerAccount
-	signerUrl := x.Network.ValidatorPage(0)
-	err := x.blockBatch.Account(signerUrl).GetStateAs(&signer)
-	if err != nil {
-		return nil, err
-	}
-
-	st := NewStateManager(x.blockBatch.Begin, x.Network.NodeUrl(), signerUrl, signer, nil, transaction)
-	st.logger.L = x.logger
-	return st, nil
 }
 
 func (x *Executor) recordPendingTransaction(batch *database.Batch, transaction *protocol.Transaction) error {

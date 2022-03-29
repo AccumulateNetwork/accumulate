@@ -33,12 +33,18 @@ type ChainUpdate struct {
 type BlockState struct {
 	chains map[string]*ChainUpdate
 
-	Delivered         uint64
-	SynthSigned       uint64
-	SynthSent         uint64
-	ValidatorsUpdates []abci.ValidatorUpdate
-	ProducedTxns      []*protocol.Transaction
-	ChainUpdates      []ChainUpdate
+	Delivered            uint64
+	SynthSigned          uint64
+	SynthSent            uint64
+	ValidatorsUpdates    []abci.ValidatorUpdate
+	ProducedTxns         []*protocol.Transaction
+	ChainUpdates         []ChainUpdate
+	SynthReceiptEnvelope *SynthReceiptEnvelope
+}
+
+type SynthReceiptEnvelope struct {
+	DestUrl          *url.URL
+	SyntheticReceipt *protocol.SyntheticReceipt
 }
 
 // Empty returns true if nothing happened during the block.
