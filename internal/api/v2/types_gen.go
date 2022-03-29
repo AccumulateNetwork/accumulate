@@ -191,6 +191,7 @@ type VersionResponse struct {
 	Version        string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Commit         string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
+	IsTestNet      bool   `json:"isTestNet,omitempty" form:"isTestNet" query:"isTestNet" validate:"required"`
 }
 
 func (v *DataEntry) Equal(u *DataEntry) bool {

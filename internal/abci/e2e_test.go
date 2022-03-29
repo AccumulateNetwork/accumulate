@@ -638,25 +638,7 @@ func TestAdiAccountTx(t *testing.T) {
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 }
 
-func TestBigIntEncoding(t *testing.T) {
-	t.Skip("To Do Update Faucet")
-
-	acmeIssuer := new(protocol.TokenIssuer)
-	acmeIssuer.Issued = *big.NewInt(int64(-100000000000))
-	byte, err := acmeIssuer.MarshalBinary()
-	fmt.Println(acmeIssuer)
-	if err != nil {
-		fmt.Errorf(err.Error())
-	}
-	orig := new(protocol.TokenIssuer)
-	err = orig.UnmarshalBinary(byte)
-	fmt.Println(orig.Issued, acmeIssuer.Issued)
-	require.Equal(t, orig, acmeIssuer)
-
-}
-
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
-	t.Skip("To Do Update Faucet")
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
@@ -673,8 +655,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	acmeIssuer := n.GetTokenIssuer("acc://ACME")
 	acmeBeforeBurn := acmeIssuer.Issued
-	fmt.Println("Acme Before Burn :", acmeBeforeBurn.Int64())
-	acmeToSpendOnCredits := int64(12.0 * protocol.AcmePrecision)
+	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
@@ -706,10 +687,8 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
-
 	acmeIssuer = n.GetTokenIssuer(protocol.AcmeUrl().String())
 	acmeAfterBurn := acmeIssuer.Issued
-	fmt.Println("Acme After Burn :", acmeBeforeBurn, acmeAfterBurn)
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
 	require.Equal(t, *acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), acmeAfterBurn)
@@ -1063,7 +1042,6 @@ func (c *CheckError) ErrorHandler() func(err error) {
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
-	t.Skip("To Do Update Faucet")
 
 	check := CheckError{NewDefaultErrorHandler(t)}
 
