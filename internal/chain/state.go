@@ -23,14 +23,14 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(makeBatch func() *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction) *StateManager {
+func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.SignatorUrl = signerUrl
 	m.Signator = signer
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
-	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, makeBatch())
+	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
 	return m
 }
 

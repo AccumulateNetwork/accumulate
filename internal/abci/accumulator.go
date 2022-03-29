@@ -230,14 +230,24 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	block.Batch = app.DB.Begin(true)
 	defer block.Batch.Discard()
 
+	// Initialize the chain
 	root, err := app.Chain.InitChain(block, req.AppStateBytes)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
+	// Commit the batch
 	err = block.Batch.Commit()
 	if err != nil {
 		panic(fmt.Errorf("failed to commit block: %v", err))
+	}
+
+	// Notify the executor that we comitted
+	batch := app.DB.Begin(false)
+	defer batch.Discard()
+	err = app.Chain.DidCommit(block, batch)
+	if err != nil {
+		panic(fmt.Errorf("failed to notify governor: %v", err))
 	}
 
 	return abci.ResponseInitChain{AppHash: root}

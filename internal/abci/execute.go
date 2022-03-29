@@ -91,13 +91,14 @@ func checkTx(chain *chain.Executor, db *database.Database) executeFunc {
 func deliverTx(chain *chain.Executor, block *chain.Block) executeFunc {
 	return func(envelope *protocol.Envelope) (protocol.TransactionResult, error) {
 		// Process signatures
-		batch := block.Batch.Begin()
+		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
-		err := processSignatures(chain, batch, envelope)
+		blockState, err := processSignatures(chain, batch, envelope)
 		if err != nil {
 			return nil, err
 		}
+		block.State.Merge(blockState)
 
 		err = batch.Commit()
 		if err != nil {
@@ -105,7 +106,7 @@ func deliverTx(chain *chain.Executor, block *chain.Block) executeFunc {
 		}
 
 		// Process the transaction
-		batch = block.Batch.Begin()
+		batch = block.Batch.Begin(true)
 		defer batch.Discard()
 
 		result, blockState, txnErr := processTransaction(chain, batch, envelope)
@@ -123,22 +124,24 @@ func deliverTx(chain *chain.Executor, block *chain.Block) executeFunc {
 	}
 }
 
-func processSignatures(chain *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) error {
+func processSignatures(exec *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) (*chain.BlockState, error) {
 	// Load the transaction
-	transaction, err := chain.LoadTransaction(batch, envelope)
+	transaction, err := exec.LoadTransaction(batch, envelope)
 	if err != nil {
-		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
 
 	// Process each signature
+	blockState := new(chain.BlockState)
 	for _, signature := range envelope.Signatures {
-		err = chain.ProcessSignature(batch, transaction, signature)
+		bs, err := exec.ProcessSignature(batch, transaction, signature)
 		if err != nil {
-			return protocol.NewError(protocol.ErrorCodeUnknownError, err)
+			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 		}
+		blockState.Merge(bs)
 	}
 
-	return nil
+	return blockState, nil
 }
 
 func processTransaction(chain *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) (protocol.TransactionResult, *chain.BlockState, error) {

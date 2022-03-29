@@ -135,7 +135,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Set up the state manager
-	st := NewStateManager(batch.Begin, x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
+	st := NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
 	defer st.Discard()
 	st.logger.L = x.logger.With("operation", "ProcessTransaction")
 
@@ -169,6 +169,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	st.blockState.Merge(blockState)
+	st.blockState.Delivered = 1
 	return result, &st.blockState, nil
 }
 

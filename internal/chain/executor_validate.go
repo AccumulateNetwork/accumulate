@@ -129,7 +129,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Set up the state manager
-	st := NewStateManager(batch.Begin, x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
+	st := NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
 	defer st.Discard()
 	st.logger.L = x.logger.With("operation", "ValidateEnvelope")
 

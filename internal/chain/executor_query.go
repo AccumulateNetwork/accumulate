@@ -446,6 +446,10 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (*query.ResponseByTxId, error) {
 	var err error
 
+	if fmt.Sprintf("%X", txid) == "0B2DB8A81535A487C6E9824A372770765982D08DA11597C20804003028197B78" {
+		println("")
+	}
+
 	tx := batch.Transaction(txid)
 	txState, err := tx.GetState()
 	if errors.Is(err, storage.ErrNotFound) {

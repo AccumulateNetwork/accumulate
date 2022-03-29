@@ -115,7 +115,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.InternalGenesis)
 
-	st := NewStateManager(block.Batch.Begin, m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn)
+	st := NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn)
 	st.logger = m.logger
 	defer st.Discard()
 
@@ -192,7 +192,7 @@ func (m *Executor) InitChain(block *Block, data []byte) ([]byte, error) {
 	}
 
 	// Dump the genesis state into the key-value store
-	batch := block.Batch.Begin()
+	batch := block.Batch.Begin(true)
 	defer batch.Discard()
 	err = batch.Import(src)
 	if err != nil {
@@ -206,7 +206,7 @@ func (m *Executor) InitChain(block *Block, data []byte) ([]byte, error) {
 	}
 
 	// Recreate the batch to reload the BPT
-	batch = block.Batch.Begin()
+	batch = block.Batch.Begin(false)
 	defer batch.Discard()
 
 	anchor, err = batch.GetMinorRootChainAnchor(&m.Network)
@@ -217,11 +217,6 @@ func (m *Executor) InitChain(block *Block, data []byte) ([]byte, error) {
 	// Make sure the database BPT root hash matches what we found in the genesis state
 	if !bytes.Equal(srcAnchor, anchor) {
 		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcAnchor, anchor))
-	}
-
-	err = m.governor.DidCommit(batch, true, block)
-	if err != nil {
-		return nil, err
 	}
 
 	return anchor, nil
@@ -322,7 +317,7 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := NewStateManager(block.Batch.Begin, m.Network.NodeUrl(), signerUrl, signer, nil, txn)
+	st := NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), signerUrl, signer, nil, txn)
 	defer st.Discard()
 	st.logger.L = m.logger
 

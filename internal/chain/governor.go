@@ -260,10 +260,6 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 		env.Transaction = pending.Transaction
 		env.Signatures = signatures
 
-		if len(signatures) < 2 {
-			print("")
-		}
-
 		// Marshal it
 		raw, err := env.MarshalBinary()
 		if err != nil {

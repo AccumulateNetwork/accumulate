@@ -20,6 +20,7 @@ const markPower = 8
 type Database struct {
 	store  storage.KeyValueStore
 	logger log.Logger
+	nextBatchId int
 }
 
 // New creates a new database using the given key-value store.

@@ -77,6 +77,7 @@ type BlockState struct {
 	chains map[string]*ChainUpdate
 
 	Delivered         uint64
+	Signed            uint64
 	SynthSigned       uint64
 	SynthSent         uint64
 	ValidatorsUpdates []ValidatorUpdate
@@ -87,6 +88,7 @@ type BlockState struct {
 // Empty returns true if nothing happened during the block.
 func (s *BlockState) Empty() bool {
 	return s.Delivered == 0 &&
+		s.Signed == 0 &&
 		s.SynthSigned == 0 &&
 		s.SynthSent == 0 &&
 		len(s.ValidatorsUpdates) == 0 &&
@@ -97,6 +99,7 @@ func (s *BlockState) Empty() bool {
 // Merge merges pending block changes into the block state.
 func (s *BlockState) Merge(r *BlockState) {
 	s.Delivered += r.Delivered
+	s.Signed += r.Signed
 	s.SynthSigned += r.SynthSigned
 	s.SynthSent += r.SynthSent
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
