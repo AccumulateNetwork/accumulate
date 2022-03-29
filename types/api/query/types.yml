@@ -244,6 +244,18 @@ ResponseMinorBlocks:
       keep-empty: true
     - name: Entries
       repeatable: true
-      type: protocol.IndexEntry
+      type: ResponseMinorEntry
       pointer: true
       marshal-as: reference
+
+ResponseMinorEntry:
+  embeddings:
+    - ResponseByTxId
+  fields:
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true

@@ -535,22 +535,20 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (
 	}
 
 	mres := new(MultiResponse)
-	mres.Type = "txHistory"
+	mres.Type = "minorBlock"
 	mres.Items = make([]interface{}, len(res.Entries))
 	mres.Start = pagination.Start
 	mres.Count = pagination.Count
 	mres.Total = res.Total
-	for _, entry := range res.Entries {
-		/*		queryRes, err := packTxResponse(entry.TxId, entry.TxSynthTxIds, nil, entry.Envelope, entry.Status)
-				if err != nil {
-					return nil, err
-				}
-				queryRes.Invalidated = entry.Invalidated
-				queryRes.SignatureThreshold = entry.SignatureThreshold
+	for i, entry := range res.Entries {
+		queryRes, err := packMinorQueryResponse(entry.BlockIndex, entry.BlockTime, entry.TxId, entry.TxSynthTxIds, nil, entry.Envelope, entry.Status)
+		if err != nil {
+			return nil, err
+		}
+		queryRes.Invalidated = entry.Invalidated
+		queryRes.SignatureThreshold = entry.SignatureThreshold
 
-				mres.Items[i] = queryRes
-		*/
-		fmt.Println(entry)
+		mres.Items[i] = queryRes
 	}
 
 	return mres, nil

@@ -605,7 +605,14 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKey())
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					out += fmt.Sprintf("  -                       : no signatures\n")
+				}
+			}()
+			out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKey())
+		}()
 	}
 	out += fmt.Sprintf("===\n")
 	return out
@@ -665,6 +672,21 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	return out, nil
 }
 
+func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error) {
+	if WantJsonOutput {
+		return PrintJson(res)
+	}
+
+	out := fmt.Sprintf("--- block #%d, blocktime %v:\n", res.BlockIndex, res.BlockTime)
+	out += fmt.Sprintf("    txid: %s\n", hex.EncodeToString(res.TransactionHash))
+	tr, err := PrintTransactionQueryResponseV2(&res.TransactionQueryResponse)
+	if err != nil {
+		return "", err
+	}
+	out += tr
+	return out, nil
+}
+
 func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 	if WantJsonOutput || res.Type == "dataSet" {
 		return PrintJson(res)
@@ -710,7 +732,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t%s", i, item)
 		}
 	case "txHistory":
-		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		out += fmt.Sprintf("\n\tTransaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
 			// Convert the item to a transaction query response
 			txr := new(api2.TransactionQueryResponse)
@@ -720,6 +742,22 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			}
 
 			s, err := PrintTransactionQueryResponseV2(txr)
+			if err != nil {
+				return "", err
+			}
+			out += s
+		}
+	case "minorBlock":
+		out += fmt.Sprintf("\n\tMinor block result Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		for i := range res.Items {
+			// Convert the item to a transaction query response
+			mtr := new(api2.MinorQueryResponse)
+			err := Remarshal(res.Items[i], mtr)
+			if err != nil {
+				return "", err
+			}
+
+			s, err := PrintMinorBlockQueryResponseV2(mtr)
 			if err != nil {
 				return "", err
 			}

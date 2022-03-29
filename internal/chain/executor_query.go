@@ -813,24 +813,59 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 
 		ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
 
-		chain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+		idxChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
 		}
-		idxEntries, err := chain.Entries(int64(req.Start), int64(req.Start+req.Limit))
+		idxEntries, err := idxChain.Entries(int64(req.Start), int64(req.Start+req.Limit))
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
 		}
-
+		chain, err := ledger.ReadChain(protocol.MinorRootChain)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+		}
+		anchorChain, err := ledger.ReadChain(protocol.AnchorChain(m.Network.LocalSubnetID))
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+		}
+		fmt.Println(anchorChain.Pending())
 		resp := query.ResponseMinorBlocks{}
 		for _, idxData := range idxEntries {
-			entry := new(protocol.IndexEntry)
-			err := entry.UnmarshalBinary(idxData)
+			minorEntry := new(query.ResponseMinorEntry)
+
+			idxEntry := new(protocol.IndexEntry)
+			err := idxEntry.UnmarshalBinary(idxData)
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+
+			}
+			minorEntry.BlockIndex = idxEntry.BlockIndex
+			minorEntry.BlockTime = idxEntry.BlockTime
+
+			if idxEntry.BlockIndex > 0 {
+				txids, err := chain.Entries(int64(idxEntry.BlockIndex), int64(idxEntry.BlockIndex+1))
+				if err == nil && len(txids) > 0 {
+					qr, err := m.queryByTxId(batch, txids[0], false)
+					if err == nil {
+						minorEntry.ResponseByTxId = *qr
+					} else {
+						minorEntry.TxId = *(*[32]byte)(txids[0])
+					}
+				}
 			}
 
-			resp.Entries = append(resp.Entries, entry)
+			if idxEntry.Anchor > 0 {
+				atxids, err := anchorChain.Entries(int64(idxEntry.Anchor), int64(idxEntry.Anchor+1))
+				if err == nil {
+					aqr, err := m.queryByTxId(batch, atxids[0], false)
+					if err == nil {
+						fmt.Println(*aqr)
+						//					minorEntry.ResponseByTxId = *qr
+					}
+				}
+			}
+			resp.Entries = append(resp.Entries, minorEntry)
 		}
 
 		k = []byte("minor-block")

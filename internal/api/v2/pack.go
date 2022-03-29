@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -79,4 +80,18 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, envelope *prot
 	res.Status = status
 
 	return res, nil
+}
+
+func packMinorQueryResponse(blockIndex uint64, blockTime *time.Time, txid [32]byte, synth []byte, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*MinorQueryResponse, error) {
+	var err error
+	resp := new(MinorQueryResponse)
+	resp.BlockIndex = blockIndex
+	resp.BlockTime = blockTime
+	if envelope != nil {
+		var txQryResp *TransactionQueryResponse
+		txQryResp, err = packTxResponse(txid, synth, ms, envelope, status)
+		resp.TransactionQueryResponse = *txQryResp
+	}
+	resp.TransactionHash = txid[:]
+	return resp, err
 }

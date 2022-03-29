@@ -64,6 +64,20 @@ TransactionQueryResponse:
     - name: Invalidated
       type: bool
 
+MinorQueryResponse:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - TransactionQueryResponse
+  fields:
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+
 MerkleState:
   non-binary: true
   incomparable: true
