@@ -21,17 +21,17 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			InternalTransactionsSigned{},
 			InternalTransactionsSent{},
 
-			// DN validator set management
-			AddValidator{},
-			RemoveValidator{},
-			UpdateValidatorKey{},
-
 			// for data accounts
 			WriteData{},
 
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
+
+			// DN validator set management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
 		)
 
 	case config.BlockValidator:
