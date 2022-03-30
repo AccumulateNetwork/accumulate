@@ -260,15 +260,13 @@ func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
 	n.Require().NoError(json.Unmarshal(data, result))
 }
 
-func (n *FakeNode) BatchWithError(inBlock func(func(*protocol.Envelope))) ([][32]byte, error) {
+func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (envHashes, txnHashes [][32]byte, err error) {
 	n.t.Helper()
 
-	var ids [][32]byte
 	var blob []byte
 	inBlock(func(tx *protocol.Envelope) {
-		var id [32]byte
-		copy(id[:], tx.GetTxHash())
-		ids = append(ids, id)
+		envHashes = append(envHashes, *(*[32]byte)(tx.EnvHash()))
+		txnHashes = append(txnHashes, *(*[32]byte)(tx.GetTxHash()))
 		b, err := tx.MarshalBinary()
 		require.NoError(n.t, err)
 		blob = append(blob, b...)
@@ -280,28 +278,43 @@ func (n *FakeNode) BatchWithError(inBlock func(func(*protocol.Envelope))) ([][32
 	if st.CheckResult != nil && st.CheckResult.Code != 0 {
 		d, err := st.CheckResult.MarshalJSON()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return nil, fmt.Errorf("%s", d)
+		return nil, nil, fmt.Errorf("%s", d)
 	}
 
-	err := n.waitForTxnsWithErrors(nil, convertIds32(ids...)...)
-	return ids, err
+	return envHashes, txnHashes, nil
 }
 
-func (n *FakeNode) Batch(inBlock func(func(*protocol.Envelope))) [][32]byte {
+func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (envHashes, txnHashes [][32]byte) {
 	n.t.Helper()
 
-	res, err := n.BatchWithError(inBlock)
+	envHashes, txnHashes, err := n.Execute(inBlock)
 	require.NoError(n.t, err)
-	return res
+	return envHashes, txnHashes
 }
 
-func (n *FakeNode) WaitForTxns(ids ...[]byte) {
-	n.waitForTxns(nil, ids...)
+func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*protocol.Envelope))) [][32]byte {
+	n.t.Helper()
+
+	_, txnHashes := n.MustExecute(inBlock)
+	n.MustWaitForTxns(convertIds32(txnHashes...)...)
+	return txnHashes
 }
 
-func (n *FakeNode) waitForTxnsWithErrors(cause []byte, ids ...[]byte) error {
+func (n *FakeNode) MustWaitForTxns(ids ...[]byte) {
+	n.t.Helper()
+
+	n.Require().NoError(n.WaitForTxns(ids...))
+}
+
+func (n *FakeNode) WaitForTxns(ids ...[]byte) error {
+	return n.waitForTxns(nil, ids...)
+}
+
+func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) error {
+	n.t.Helper()
+
 	for _, id := range ids {
 		if cause == nil {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id))
@@ -312,13 +325,12 @@ func (n *FakeNode) waitForTxnsWithErrors(cause []byte, ids ...[]byte) error {
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
-		n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
+		err = n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
-}
-
-func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) {
-	n.Require().NoError(n.waitForTxnsWithErrors(cause, ids...))
 }
 
 func convertIds32(ids ...[32]byte) [][]byte {
@@ -456,4 +468,8 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	d.client.SubmitTx(context.Background(), b, false)
+}
+
+func (d *e2eDUT) WaitForTxns(ids ...[]byte) {
+	d.MustWaitForTxns(ids...)
 }

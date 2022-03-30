@@ -115,6 +115,10 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 		return fmt.Errorf("chain opened as read-only")
 	}
 
+	if entry == nil {
+		panic("attempted to add a nil entry to a chain")
+	}
+
 	return c.merkle.AddHash(entry, unique)
 }
 

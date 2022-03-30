@@ -14,6 +14,8 @@ import (
 
 // Batch batches database writes.
 type Batch struct {
+	done       bool
+	writable   bool
 	parent     *Batch
 	logger     logging.OptionalLogger
 	store      storage.KeyValueTxn
@@ -24,6 +26,7 @@ type Batch struct {
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
 	b := new(Batch)
+	b.writable = writable
 	b.logger.L = d.logger
 	b.store = d.store.Begin(writable)
 	b.values = map[storage.Key]cachedValue{}
@@ -33,6 +36,7 @@ func (d *Database) Begin(writable bool) *Batch {
 
 func (b *Batch) Begin() *Batch {
 	c := new(Batch)
+	c.writable = b.writable
 	c.parent = b
 	c.logger = b.logger
 	c.store = b.store.Begin()
@@ -43,6 +47,7 @@ func (b *Batch) Begin() *Batch {
 
 type TypedValue interface {
 	encoding.BinaryMarshaler
+	CopyAsInterface() interface{}
 }
 
 type ValueUnmarshalFunc func([]byte) (TypedValue, error)
@@ -52,38 +57,98 @@ type cachedValue struct {
 	dirty bool
 }
 
-func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
-	b.bptEntries[key] = hash
-}
-
-func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc, newValue TypedValue, target interface{}) (err error) {
-	// Load the value
-	cv, ok := b.values[key]
-	var notFound error
-	if !ok {
-		data, err := b.store.Get(key)
-		switch {
-		case err == nil:
-			// Value is found, unmarshal it
-			v, err := unmarshal(data)
-			if err != nil {
-				return err
-			}
-			cv = cachedValue{value: v}
-			b.values[key] = cv
-
-		case errors.Is(err, storage.ErrNotFound) && newValue != nil:
-			// Value is not found, cache the new value
-			cv = cachedValue{value: newValue}
-			b.values[key] = cv
-			notFound = err
-
-		default:
-			return err
+func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
+	if txn, ok := value.(*protocol.Transaction); ok {
+		if txn.Body == nil {
+			print("")
 		}
 	}
 
-	err = encoding2.SetPtr(cv.value, target)
+	// Cache the value, preserve dirtiness
+	cv := b.values[key]
+	cv.value = value
+	if dirty {
+		cv.dirty = true
+	}
+	b.values[key] = cv
+}
+
+func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
+	b.bptEntries[key] = hash
+}
+
+func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (TypedValue, error) {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
+	// Check for an existing value
+	if cv, ok := b.values[key]; ok {
+		return cv.value, nil
+	}
+
+	// See if the parent has the value
+	if b.parent != nil {
+		v, err := b.parent.getValue(key, unmarshal)
+		switch {
+		case err == nil:
+			// Make a copy, otherwise values may leak
+			v := v.CopyAsInterface().(TypedValue)
+			b.cacheValue(key, v, false)
+			return v, nil
+
+		case errors.Is(err, storage.ErrNotFound):
+			break
+
+		default:
+			return nil, err
+		}
+	}
+
+	data, err := b.store.Get(key)
+	switch {
+	case err == nil:
+		// Value is found, unmarshal it
+		v, err := unmarshal(data)
+		if err != nil {
+			return nil, err
+		}
+
+		b.cacheValue(key, v, false)
+		return v, nil
+
+	default:
+		return nil, err
+	}
+}
+
+func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newValue TypedValue, target interface{}) (err error) {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
+	// Load the value
+	v, err := b.getValue(key, unmarshal)
+	var notFound error
+	switch {
+	case err == nil:
+		// Ok
+
+	case errors.Is(err, storage.ErrNotFound) && newValue != nil:
+		// Value is not found, cache the new value
+		v = newValue
+		b.cacheValue(key, v, false)
+		notFound = err
+
+	default:
+		return err
+	}
+
+	err = encoding2.SetPtr(v, target)
 	if err != nil {
 		return err
 	}
@@ -93,14 +158,22 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc, newValue
 func (b *Batch) getValuePtr(key storage.Key, value interface {
 	TypedValue
 	encoding.BinaryUnmarshaler
-}, valuePtr interface{}) error {
-	return b.getValue(key, func(b []byte) (TypedValue, error) {
+}, valuePtr interface{}, addNew bool) error {
+	var newValue TypedValue
+	if addNew {
+		newValue = value
+	}
+	return b.getValueAs(key, func(b []byte) (TypedValue, error) {
 		err := value.UnmarshalBinary(b)
 		return value, err
-	}, value, valuePtr)
+	}, newValue, valuePtr)
 }
 
 func (b *Batch) putValue(key storage.Key, value TypedValue) {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
 	cv, ok := b.values[key]
 	if !ok {
 		_, err := b.store.Get(key)
@@ -110,11 +183,11 @@ func (b *Batch) putValue(key storage.Key, value TypedValue) {
 	} else if cv.value != value {
 		b.logger.Debug("Overwriting a cached value", "key", key)
 	}
-	b.values[key] = cachedValue{value: value, dirty: true}
+	b.cacheValue(key, value, true)
 }
 
 func (b *Batch) getAccountStateAs(key storage.Key, newValue protocol.Account, target interface{}) error {
-	return b.getValue(key, func(b []byte) (TypedValue, error) {
+	return b.getValueAs(key, func(b []byte) (TypedValue, error) {
 		return protocol.UnmarshalAccount(b)
 	}, newValue, target)
 }
@@ -150,17 +223,25 @@ func (b *Batch) CommitBpt() ([]byte, error) {
 // Attempting to use the Batch after calling Commit or Discard will result in a
 // panic.
 func (b *Batch) Commit() error {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
+	b.done = true
 	if b.parent != nil {
 		for k, v := range b.values {
 			if !v.dirty {
 				continue
 			}
-			b.parent.values[k] = v
+			b.parent.cacheValue(k, v.value, v.dirty)
 		}
 		for k, v := range b.bptEntries {
 			b.parent.bptEntries[k] = v
 		}
-		return nil
+		if db, ok := b.store.(*storage.DebugBatch); ok {
+			db.PretendWrite()
+		}
+		return b.store.Commit()
 	}
 
 	for k, v := range b.values {
@@ -184,5 +265,9 @@ func (b *Batch) Commit() error {
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (b *Batch) Discard() {
+	if !b.done && b.writable {
+		b.logger.Debug("Discarding a writable batch")
+	}
+	b.done = true
 	b.store.Discard()
 }

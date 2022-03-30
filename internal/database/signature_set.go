@@ -7,6 +7,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func (s *SignatureSet) Count() int {
+	return len(s.Signatures)
+}
+
 func (s *SignatureSet) Add(newSignatures ...protocol.Signature) int {
 	if len(newSignatures) == 0 {
 		return len(s.Signatures)

@@ -27,27 +27,27 @@ func TestProofADI(t *testing.T) {
 	liteAddr := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
 
 	// Create ADI
-	n.Batch(func(send func(*Tx)) {
+	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = n.ParseUrl("RoadRunner")
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
 		require.NoError(t, err)
-		adi.PublicKey = keyHash[:]
+		adi.KeyHash = keyHash[:]
 		send(newTxn(liteAddr).
 			WithBody(adi).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey))
 	})
 
 	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
-	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKey)
+	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKeyHash)
 
 	batch = n.db.Begin(true)
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/book0/1"), initialCredits))
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
-	n.Batch(func(send func(*protocol.Envelope)) {
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = n.ParseUrl("RoadRunner/Baz")
 		tac.TokenUrl = protocol.AcmeUrl()

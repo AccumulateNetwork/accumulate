@@ -39,7 +39,7 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 	}
 
 	// Add the key hash to the key page
-	key := &protocol.KeySpec{PublicKey: keyHash[:]}
+	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
 	page.Keys = append(page.Keys, key)
 
 	// Record the update
@@ -97,29 +97,29 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 	}
 
 	// Find the old key
-	oldKeyHash := sha256.Sum256(body.OldKey)
+	oldKeyHash := sha256.Sum256(body.KeyHash)
 	_, entry, found := page.EntryByKeyHash(oldKeyHash[:])
 	if !found {
 		return nil, fmt.Errorf("old key is not a validator")
 	}
 
 	// Ensure the new key does not already exist
-	newKeyHash := sha256.Sum256(body.NewKey)
+	newKeyHash := sha256.Sum256(body.NewKeyHash)
 	_, _, found = page.EntryByKeyHash(newKeyHash[:])
 	if found {
 		return nil, fmt.Errorf("new key is already a validator")
 	}
 
 	// Update the key hash
-	entry.PublicKey = newKeyHash[:]
+	entry.(*protocol.KeySpec).PublicKeyHash = newKeyHash[:]
 
 	// Record the update
 	didUpdateKeyPage(page)
 	st.Update(page)
 
 	// Update the validator
-	st.DisableValidator(body.OldKey)
-	st.AddValidator(body.NewKey)
+	st.DisableValidator(body.KeyHash)
+	st.AddValidator(body.NewKeyHash)
 	return nil, nil
 }
 

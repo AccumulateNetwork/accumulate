@@ -59,8 +59,8 @@ type TC = testdata.TestCase
 
 var txnTests = []*TCG{
 	{Name: "CreateIdentity", Cases: []*TC{
-		txnTest("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:]}),
-		txnTest("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), PublicKey: key[32:], KeyBookUrl: parseUrl("adi/book")}),
+		txnTest("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), KeyHash: key[32:]}),
+		txnTest("lite-token-account/ACME", &CreateIdentity{Url: parseUrl("adi"), KeyHash: key[32:], KeyBookUrl: parseUrl("adi/book")}),
 	}},
 	{Name: "CreateTokenAccount", Cases: []*TC{
 		txnTest("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME")}),
@@ -94,7 +94,7 @@ var txnTests = []*TCG{
 		txnTest("adi/foo", &BurnTokens{Amount: *new(big.Int).SetInt64(100)}),
 	}},
 	{Name: "CreateKeyPage", Cases: []*TC{
-		txnTest("adi", &CreateKeyPage{Keys: []*KeySpecParams{{PublicKey: key[32:]}}}),
+		txnTest("adi", &CreateKeyPage{Keys: []*KeySpecParams{{KeyHash: key[32:]}}}),
 	}},
 	{Name: "CreateKeyBook", Cases: []*TC{
 		txnTest("adi", &CreateKeyBook{Url: parseUrl("adi/book"), PublicKeyHash: key[32:]}),
@@ -103,7 +103,7 @@ var txnTests = []*TCG{
 		txnTest("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: *big.NewInt(100)}),
 	}},
 	{Name: "UpdateKeyPage", Cases: []*TC{
-		txnTest("adi", &UpdateKeyPage{Operation: &AddKeyOperation{Entry: KeySpecParams{PublicKey: key[32:]}}}),
+		txnTest("adi", &UpdateKeyPage{Operation: &AddKeyOperation{Entry: KeySpecParams{KeyHash: key[32:]}}}),
 	}},
 	{Name: "SignPending", Cases: []*TC{
 		txnTest("adi", &SignPending{}),
@@ -137,10 +137,10 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&TokenAccount{AccountHeader: AccountHeader{Url: parseUrl("adi/foo"), KeyBook: parseUrl("adi/book")}, TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), Nonce: 654, CreditBalance: 9835}),
+		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")}, TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKey: key[32:], Nonce: 651896, Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, Threshold: 3}),
+		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")}, Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, Threshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
 		testdata.NewAcntTest(&KeyBook{AccountHeader: AccountHeader{Url: parseUrl("adi/book")}}),
@@ -170,7 +170,6 @@ func txnTest(origin string, body TransactionBody) *TC {
 	signer.PrivateKey = key
 	signer.Height = 1
 	signer.Timestamp = uint64(rand.Uint32())
-
 	env := new(Envelope)
 	txn := new(Transaction)
 	env.Transaction = txn

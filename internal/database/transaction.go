@@ -21,7 +21,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // Get loads the transaction state, status, and signatures.
 //
 // See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*protocol.Transaction, *protocol.TransactionStatus, []protocol.Signature, error) {
+func (t *Transaction) Get() (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
 	state, err := t.GetState()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, nil, err
@@ -48,11 +48,11 @@ func (t *Transaction) Get() (*protocol.Transaction, *protocol.TransactionStatus,
 // Put appends signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *protocol.Transaction, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
+func (t *Transaction) Put(state *protocol.Envelope, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
 	// Ensure the object metadata is stored. Transactions don't have chains, so
 	// we don't need to add chain metadata.
 	meta := new(protocol.ObjectMetadata)
-	err := t.batch.getValuePtr(t.key.Object(), meta, &meta)
+	err := t.batch.getValuePtr(t.key.Object(), meta, &meta, true)
 	if errors.Is(err, storage.ErrNotFound) {
 		meta.Type = protocol.ObjectTypeTransaction
 		t.batch.putValue(t.key.Object(), meta)
@@ -80,9 +80,9 @@ func (t *Transaction) Put(state *protocol.Transaction, status *protocol.Transact
 }
 
 // GetState loads the transaction state.
-func (t *Transaction) GetState() (*protocol.Transaction, error) {
-	v := new(protocol.Transaction)
-	err := t.batch.getValuePtr(t.key.State(), v, &v)
+func (t *Transaction) GetState() (*protocol.Envelope, error) {
+	v := new(protocol.Envelope)
+	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (t *Transaction) GetState() (*protocol.Transaction, error) {
 }
 
 // PutState stores the transaction state.
-func (t *Transaction) PutState(v *protocol.Transaction) error {
+func (t *Transaction) PutState(v *protocol.Envelope) error {
 	t.batch.putValue(t.key.State(), v)
 	return nil
 }
@@ -98,8 +98,8 @@ func (t *Transaction) PutState(v *protocol.Transaction) error {
 // GetStatus loads the transaction status.
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
 	v := new(protocol.TransactionStatus)
-	err := t.batch.getValuePtr(t.key.Status(), v, &v)
-	if err != nil {
+	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
 	return v, nil
@@ -118,7 +118,7 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 // GetSignatures loads the transaction's signatures.
 func (t *Transaction) GetSignatures() (*SignatureSet, error) {
 	v := new(SignatureSet)
-	err := t.batch.getValuePtr(t.key.Signatures(), v, &v)
+	err := t.batch.getValuePtr(t.key.Signatures(), v, &v, true)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (t *Transaction) PutSignatures(v *SignatureSet) error {
 // transaction.
 func (t *Transaction) GetSyntheticTxns() (*protocol.HashSet, error) {
 	v := new(protocol.HashSet)
-	err := t.batch.getValuePtr(t.key.Synthetic(), v, &v)
+	err := t.batch.getValuePtr(t.key.Synthetic(), v, &v, true)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}

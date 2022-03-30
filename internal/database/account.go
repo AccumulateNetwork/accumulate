@@ -69,7 +69,7 @@ func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.O
 // GetObject loads the object metadata.
 func (r *Account) GetObject() (*protocol.ObjectMetadata, error) {
 	meta := new(protocol.ObjectMetadata)
-	err := r.batch.getValuePtr(r.key.Object(), meta, &meta)
+	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
 	return meta, err
 }
 

@@ -1,12 +1,31 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
+
+func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) (err error) {
+	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
+	err = x.addSynthTxns(st, produced)
+	if err != nil {
+		return err
+	}
+
+	_, err = st.Commit()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction) error {
@@ -58,8 +77,10 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	st.Update(ledgerState)
 
 	// Store the transaction, its status, and the initiator
+	env := new(protocol.Envelope)
+	env.Transaction = txn
 	status := &protocol.TransactionStatus{Remote: true}
-	err = m.blockBatch.Transaction(txn.GetHash()).Put(txn, status, []protocol.Signature{initSig})
+	err = m.blockBatch.Transaction(txn.GetHash()).Put(env, status, []protocol.Signature{initSig})
 	if err != nil {
 		return nil, err
 	}
@@ -71,4 +92,41 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	}
 
 	return txn, nil
+}
+
+func validateSyntheticEnvelope(net *config.Network, batch *database.Batch, envelope *protocol.Envelope) error {
+	// TODO Get rid of this hack and actually check the nonce. But first we have
+	// to implement transaction batching.
+	v := batch.Account(net.NodeUrl()).Index("SeenSynth", envelope.GetTxHash())
+	_, err := v.Get()
+	switch {
+	case err == nil:
+		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", envelope.GetTxHash())
+	case errors.Is(err, storage.ErrNotFound):
+		// Ok
+	default:
+		return err
+	}
+
+	return validateSyntheticTransactionSignatures(envelope.Transaction, envelope.Signatures)
+}
+
+func processSyntheticTransaction(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, signatures []protocol.Signature) error {
+	// TODO Get rid of this hack and actually check the nonce. But first we have
+	// to implement transaction batching.
+	v := batch.Account(net.NodeUrl()).Index("SeenSynth", transaction.GetHash())
+	_, err := v.Get()
+	switch {
+	case err == nil:
+		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", transaction.GetHash())
+	case errors.Is(err, storage.ErrNotFound):
+		err = v.Put([]byte{1})
+		if err != nil {
+			return err
+		}
+	default:
+		return err
+	}
+
+	return validateSyntheticTransactionSignatures(transaction, signatures)
 }
