@@ -168,6 +168,13 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, err
 	}
 
+	// Submit SyntheticReceipt to the current state manager so ProduceSynthetic doesn't have to create a new one
+	srEnv := x.blockState.SynthReceiptEnvelope
+	if srEnv != nil {
+		x.blockState.SynthReceiptEnvelope = nil
+		st.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
+	}
+
 	st.blockState.Merge(block)
 	x.blockState.Merge(&st.blockState)
 	x.blockState.Delivered++

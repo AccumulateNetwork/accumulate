@@ -689,10 +689,6 @@ func (m *Executor) buildSynthReceipts(rootChain *database.Chain, synthIndexIndex
 			continue
 		}
 
-		if txn.Type() == protocol.TransactionTypeSyntheticReceipt {
-			fmt.Println()
-		}
-
 		entry := new(protocol.SyntheticLedgerEntry)
 		entry.TransactionHash = *(*[32]byte)(txn.GetHash())
 		entry.RootAnchor = *(*[32]byte)(rootAnchor)

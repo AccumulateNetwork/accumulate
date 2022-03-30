@@ -18,23 +18,26 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 
 	srEnv := x.blockState.SynthReceiptEnvelope
 	if srEnv != nil {
+		// If SynthReceiptEnvelope is still there ProcessTransaction could not produce it because to an error.
+		x.blockState.SynthReceiptEnvelope = nil
+
 		stateMgr, err := x.buildStateManager(err, from)
 		if err != nil {
 			return err
 		}
+		defer stateMgr.Discard()
+
 		stateMgr.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
 		if stateMgr.blockState.ProducedTxns != nil {
-			err = x.addSynthTxns(&stateMgr.stateCache, stateMgr.blockState.ProducedTxns)
-			if err != nil {
-				return err
-			}
 			err := stateMgr.Commit()
 			if err != nil {
 				return err
 			}
+			if len(stateMgr.blockState.ProducedTxns) > 0 {
+				x.blockState.Merge(&stateMgr.blockState)
+				produced = append(produced, stateMgr.blockState.ProducedTxns[0])
+			}
 		}
-
-		x.blockState.SynthReceiptEnvelope = nil
 	}
 
 	if produced != nil {
