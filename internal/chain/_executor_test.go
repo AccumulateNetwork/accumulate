@@ -15,7 +15,6 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
@@ -26,6 +25,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
+
+func (e *Executor) ForceCommit() ([]byte, error) {
+	return e.commit(new(Block), true)
+}
 
 func BenchmarkHighTps(b *testing.B) {
 	store := memory.New(nil)
@@ -85,7 +88,7 @@ func BenchmarkHighTps(b *testing.B) {
 	for _, size := range []int{1, 10, 100, 1000} {
 		b.ResetTimer()
 		b.Run(fmt.Sprint(size), func(b *testing.B) {
-			_, err = exec.BeginBlock(abci.BeginBlockRequest{
+			_, err = exec.BeginBlock(BeginBlockRequest{
 				IsLeader: true,
 				Height:   5,
 				Time:     time.Now(),
@@ -139,7 +142,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	exec := setupWithGenesis(t)
 
 	// Start a block
-	_, err := exec.BeginBlock(abci.BeginBlockRequest{
+	_, err := exec.BeginBlock(BeginBlockRequest{
 		IsLeader: true,
 		Height:   2,
 		Time:     time.Now(),
@@ -302,7 +305,7 @@ func TestExecutor_DeliverTx(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Start a block
-	_, err := exec.BeginBlock(abci.BeginBlockRequest{
+	_, err := exec.BeginBlock(BeginBlockRequest{
 		IsLeader: true,
 		Height:   2,
 		Time:     time.Now(),

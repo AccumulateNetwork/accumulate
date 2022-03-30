@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -28,14 +27,14 @@ type SynthTxnWithOrigin interface {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(makeBatch func() *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction) *StateManager {
+func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.SignatorUrl = signerUrl
 	m.Signator = signer
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
-	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, makeBatch())
+	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
 	return m
 }
 
@@ -98,7 +97,7 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, abci.ValidatorUpdate{
+	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: true,
 	})
@@ -106,7 +105,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, abci.ValidatorUpdate{
+	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: false,
 	})

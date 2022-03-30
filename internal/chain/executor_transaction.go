@@ -12,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func LoadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
+func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
 	// An envelope with no signatures is invalid
 	if len(envelope.Signatures) == 0 {
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has no signatures")
@@ -77,7 +77,7 @@ func LoadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*proto
 	}
 }
 
-func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (result protocol.TransactionResult, produced []*protocol.Transaction, err error) {
+func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (protocol.TransactionResult, *BlockState, error) {
 	// Load the signatures
 	signatures, err := batch.Transaction(transaction.GetHash()).GetSignatures()
 	if err != nil {
@@ -122,7 +122,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 			x.logger.Error("Unable to record successful transaction", "txid", logging.AsHex(transaction.GetHash()), "origin", transaction.Header.Principal, "error", err)
 			return nil, nil, err
 		}
-		return new(protocol.EmptyResult), nil, nil
+		return new(protocol.EmptyResult), new(BlockState), nil
 	}
 
 	if transaction.Body.Type().IsSynthetic() {
@@ -135,7 +135,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Set up the state manager
-	st := NewStateManager(batch.Begin, x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
+	st := NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
 	defer st.Discard()
 	st.logger.L = x.logger.With("operation", "ProcessTransaction")
 
@@ -148,7 +148,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, err
 	}
 
-	result, err = executor.Validate(st, &protocol.Envelope{Transaction: transaction})
+	result, err := executor.Validate(st, &protocol.Envelope{Transaction: transaction})
 	if err != nil {
 		st.stateCache.blockState.ProducedTxns = make([]*protocol.Transaction, 0) // Clear synth txs if any were produced, we only want to keep SyntheticReceipt
 		x.recordFailedTransaction(batch, transaction, signer, err)
@@ -163,23 +163,22 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, err
 	}
 
-	block, err := x.recordSuccessfulTransaction(batch, transaction, result)
+	blockState, err := recordSuccessfulTransaction(batch, transaction, result)
 	if err != nil {
 		x.logger.Error("Unable to record successful transaction", "txid", logging.AsHex(transaction.GetHash()), "origin", transaction.Header.Principal, "error", err)
 		return nil, nil, err
 	}
 
 	// Submit SyntheticReceipt to the current state manager/batch so ProduceSynthetic doesn't have to create a new separate one
-	srEnv := x.blockState.SynthReceiptEnvelope
+	srEnv := blockState.SynthReceiptEnvelope
 	if srEnv != nil {
-		x.blockState.SynthReceiptEnvelope = nil
+		blockState.SynthReceiptEnvelope = nil
 		st.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
 	}
 
-	st.blockState.Merge(block)
-	x.blockState.Merge(&st.blockState)
-	x.blockState.Delivered++
-	return result, st.blockState.ProducedTxns, nil
+	st.blockState.Merge(blockState)
+	st.blockState.Delivered = 1
+	return result, &st.blockState, nil
 }
 
 func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {

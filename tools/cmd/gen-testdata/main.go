@@ -13,6 +13,7 @@ import (
 	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/testdata"
 	randPkg "golang.org/x/exp/rand"
@@ -104,7 +105,7 @@ var txnTests = []*TCG{
 		txnTest("lite-token-account", &AddCredits{Recipient: parseUrl("adi/page"), Amount: *big.NewInt(100)}),
 	}},
 	{Name: "UpdateKeyPage", Cases: []*TC{
-		txnTest("adi", &UpdateKeyPage{Operation: &AddKeyOperation{Entry: KeySpecParams{KeyHash: key[32:]}}}),
+		txnTest("adi", &UpdateKeyPage{Operation: []protocol.KeyPageOperation{&AddKeyOperation{Entry: KeySpecParams{KeyHash: key[32:]}}}}),
 	}},
 	{Name: "SignPending", Cases: []*TC{
 		txnTest("adi", &SignPending{}),
