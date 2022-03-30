@@ -170,6 +170,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 		}
 
 		sig := new(protocol.ReceiptSignature)
+		sig.SourceNetwork = st.nodeUrl
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
 		st.SignTransaction(synth.TransactionHash[:], sig)
 		synth.NeedsReceipt = false

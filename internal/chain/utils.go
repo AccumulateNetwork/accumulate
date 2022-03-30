@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // addChainEntry adds an entry to a chain and records the chain update in the
@@ -227,59 +226,6 @@ func countExceptAnchors2(txns []*protocol.Transaction) int {
 		}
 	}
 	return count
-}
-
-func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, signatures []protocol.Signature, resp *query.ResponseByTxId) error {
-	// If it's not pending, don't bother
-	if !status.Pending {
-		return nil
-	}
-
-	origin, err := batch.Account(header.Principal).GetState()
-	if err != nil {
-		return err
-	}
-
-	// Find the origin's key book
-	_, ok := origin.(*protocol.KeyBook)
-	switch {
-	case ok:
-		// Key books are their own key books
-	case origin.Header().KeyBook == nil:
-		// Lite token accounts don't have key books (and thus can't do multisig)
-		return nil
-	default:
-		// Load the origin's key book
-		var keyBook *protocol.KeyBook
-		err := batch.Account(origin.Header().KeyBook).GetStateAs(&keyBook)
-		if err != nil {
-			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
-		}
-	}
-
-	// Read the page's main chain
-	pageAcnt := batch.Account(signatures[0].GetSigner())
-	pageChain, err := pageAcnt.ReadChain(protocol.MainChain)
-	if err != nil {
-		return fmt.Errorf("failed to load main chain of %v: %v", signatures[0].GetSigner(), err)
-	}
-
-	// If height no longer matches, the transaction is invalidated
-	if signatures[0].GetSignerVersion() != uint64(pageChain.Height()) {
-		resp.Invalidated = true
-		return nil
-	}
-
-	// Load the page's state
-	var keyPage *protocol.KeyPage
-	err = pageAcnt.GetStateAs(&keyPage)
-	if err != nil {
-		return fmt.Errorf("failed to load %v: %v", signatures[0].GetSigner(), err)
-	}
-
-	// Set the threshold
-	resp.SignatureThreshold = keyPage.Threshold
-	return nil
 }
 
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {

@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -291,13 +292,26 @@ func (m *stateCache) SignTransaction(txid []byte, signatures ...protocol.Signatu
 
 func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
 	t := st.batch.Transaction(op.txid)
-	ss, err := st.batch.Transaction(op.txid).GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
+	for _, sig := range op.signatures {
+		// Add the signature
+		_, err := t.AddSignature(sig)
+		if err != nil {
+			return nil, err
+		}
 
-	ss.Add(op.signatures...)
-	return nil, t.PutSignatures(ss)
+		// Ensure it's stored locally. This shouldn't be necessary, but *shrug*
+		// it works.
+		data, err := sig.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		hash := sha256.Sum256(data)
+		err = st.batch.Transaction(hash[:]).PutState(&protocol.Envelope{Signatures: []protocol.Signature{sig}, TxHash: op.txid})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
 }
 
 type addSyntheticTxns struct {

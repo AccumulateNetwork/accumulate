@@ -78,24 +78,21 @@ func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envel
 }
 
 func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (protocol.TransactionResult, *BlockState, error) {
-	// Load the signatures
-	signatures, err := batch.Transaction(transaction.GetHash()).GetSignatures()
+	// Load the status
+	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Load the first signer
-	firstSig := signatures.Signatures[0]
-	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
-		err = protocol.Errorf(protocol.ErrorCodeInvalidRequest, "invalid transaction: initiated by receipt signature")
-		recordFailedTransaction(x.logger, batch, transaction, nil, err)
-		return nil, nil, err
+	if status.Initiator == nil {
+		// This should never happen
+		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
+	// Load the initiator
 	var signer protocol.SignerAccount
-	err = batch.Account(firstSig.GetSigner()).GetStateAs(&signer)
+	err = batch.Account(status.Initiator).GetStateAs(&signer)
 	if err != nil {
-		err = fmt.Errorf("load signer: %w", err)
+		err = fmt.Errorf("load initiator: %w", err)
 		recordFailedTransaction(x.logger, batch, transaction, nil, err)
 		return nil, nil, err
 	}
@@ -116,7 +113,12 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Check if the transaction is ready to be executed
-	if !transactionIsReady(transaction, signer, signatures) {
+	ready, err := transactionIsReady(batch, transaction, status)
+	if err != nil {
+		recordFailedTransaction(x.logger, batch, transaction, signer, err)
+		return nil, nil, err
+	}
+	if !ready {
 		err = recordPendingTransaction(batch, transaction)
 		if err != nil {
 			x.logger.Error("Unable to record successful transaction", "txid", logging.AsHex(transaction.GetHash()), "origin", transaction.Header.Principal, "error", err)
@@ -127,7 +129,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	if transaction.Body.Type().IsSynthetic() {
 		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(&x.Network, batch, transaction, signatures.Signatures)
+		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
 		if err != nil {
 			recordFailedTransaction(x.logger, batch, transaction, signer, err)
 			return nil, nil, err
@@ -185,15 +187,37 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 	}
 }
 
-func transactionIsReady(transaction *protocol.Transaction, signer protocol.SignerAccount, signatures *database.SignatureSet) bool {
+func transactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// TODO When we implement 'pending' synthetic transactions, this is where
 	// the logic will go
 
 	if !transaction.Body.Type().IsUser() {
-		return true
+		return true, nil
 	}
 
-	return uint64(signatures.Count()) >= signer.GetSignatureThreshold()
+	// Check if any signer has reached its threshold
+	txnObj := batch.Transaction(transaction.GetHash())
+	for _, signerUrl := range status.Signers {
+		// Load the signer
+		var signer protocol.SignerAccount
+		err := batch.Account(signerUrl).GetStateAs(&signer)
+		if err != nil {
+			return false, fmt.Errorf("load signer %v: %w", signerUrl, err)
+		}
+
+		// Load the signature set
+		signatures, err := txnObj.ReadSignatures(signerUrl)
+		if err != nil {
+			return false, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
+		}
+
+		// Check if the threshold has been reached
+		if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func recordTransaction(batch *database.Batch, transaction *protocol.Transaction, updateStatus func(*protocol.TransactionStatus)) error {

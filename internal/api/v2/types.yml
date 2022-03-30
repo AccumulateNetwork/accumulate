@@ -59,10 +59,10 @@ TransactionQueryResponse:
       type: query.TxReceipt
       marshal-as: reference
       pointer: true
-    - name: SignatureThreshold
-      type: uvarint
-    - name: Invalidated
-      type: bool
+    - name: Signers
+      type: query.SignatureSet
+      marshal-as: reference
+      repeatable: true
 
 MerkleState:
   non-binary: true
@@ -287,8 +287,9 @@ TxResponse:
   - name: TransactionHash
     type: bytes
     alternative: Txid
-  - name: EnvelopeHash
+  - name: SignatureHashes
     type: bytes
+    repeatable: true
   - name: SimpleHash
     type: bytes
     alternative: Hash

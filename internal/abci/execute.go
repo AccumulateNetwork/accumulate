@@ -27,7 +27,6 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	results := make([]*protocol.TransactionStatus, len(envelopes))
 	for i, env := range envelopes {
 		typ := env.Type()
-		txid := env.GetTxHash()
 		status := new(protocol.TransactionStatus)
 
 		result, err := execute(env)
@@ -35,8 +34,9 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 			sentry.CaptureException(err)
 			logger.Info("Transaction failed",
 				"type", env.Type(),
-				"txid", logging.AsHex(txid),
-				"hash", logging.AsHex(hash),
+				"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
+				"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),
+				"req-hash", logging.AsHex(hash).Slice(0, 4),
 				"error", err,
 				"principal", env.Transaction.Header.Principal)
 			if err, ok := err.(*protocol.Error); ok {
@@ -48,8 +48,9 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		} else if !typ.IsInternal() && typ != protocol.TransactionTypeSyntheticAnchor {
 			logger.Debug("Transaction succeeded",
 				"type", typ,
-				"txid", logging.AsHex(txid),
-				"hash", logging.AsHex(hash))
+				"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
+				"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),
+				"req-hash", logging.AsHex(hash).Slice(0, 4))
 		}
 
 		status.Result = result
@@ -58,18 +59,14 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 
 	// If the results can't be marshaled, provide no results but do not fail the
 	// batch
-	var data []byte
-	for _, r := range results {
-		d, err := r.MarshalBinary()
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Error("Unable to encode result", "error", err)
-			return envelopes, results, nil, nil
-		}
-		data = append(data, d...)
+	rset, err := (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
+	if err != nil {
+		sentry.CaptureException(err)
+		logger.Error("Unable to encode result", "error", err)
+		return envelopes, results, nil, nil
 	}
 
-	return envelopes, results, data, nil
+	return envelopes, results, rset, nil
 }
 
 func checkTx(chain *chain.Executor, db *database.Database) executeFunc {

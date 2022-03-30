@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -61,7 +62,7 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	txn.Body = body
 	initSig, err := new(signing.Signer).
 		SetUrl(m.Network.NodeUrl()).
-		SetHeight(ledgerState.Synthetic.Nonce).
+		SetVersion(ledgerState.Synthetic.Nonce).
 		InitiateSynthetic(txn, m.Router)
 	if err != nil {
 		return nil, err
@@ -77,10 +78,10 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	st.Update(ledgerState)
 
 	// Store the transaction, its status, and the initiator
-	env := new(protocol.Envelope)
-	env.Transaction = txn
-	status := &protocol.TransactionStatus{Remote: true}
-	err = st.batch.Transaction(txn.GetHash()).Put(env, status, []protocol.Signature{initSig})
+	err = putSyntheticTransaction(
+		st.batch, txn,
+		&protocol.TransactionStatus{Remote: true},
+		initSig)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +112,7 @@ func validateSyntheticEnvelope(net *config.Network, batch *database.Batch, envel
 	return validateSyntheticTransactionSignatures(envelope.Transaction, envelope.Signatures)
 }
 
-func processSyntheticTransaction(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, signatures []protocol.Signature) error {
+func processSyntheticTransaction(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// TODO Get rid of this hack and actually check the nonce. But first we have
 	// to implement transaction batching.
 	v := batch.Account(net.NodeUrl()).Index("SeenSynth", transaction.GetHash())
@@ -128,5 +129,61 @@ func processSyntheticTransaction(net *config.Network, batch *database.Batch, tra
 		return err
 	}
 
+	// Load all of the signatures
+	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	if err != nil {
+		return err
+	}
+
 	return validateSyntheticTransactionSignatures(transaction, signatures)
+}
+
+func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature protocol.Signature) error {
+	// Store the transaction
+	obj := batch.Transaction(transaction.GetHash())
+	err := obj.PutState(&protocol.Envelope{Transaction: transaction})
+	if err != nil {
+		return fmt.Errorf("store transaction: %w", err)
+	}
+
+	// Update the status
+	status.AddSigner(signature.GetSigner())
+	err = obj.PutStatus(status)
+	if err != nil {
+		return fmt.Errorf("store status: %w", err)
+	}
+
+	// Record the signature against the transaction
+	_, err = obj.AddSignature(signature)
+	if err != nil {
+		return fmt.Errorf("add signature: %w", err)
+	}
+
+	// Hash the signature
+	sigData, err := signature.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("marshal signature: %w", err)
+	}
+	sigHash := sha256.Sum256(sigData)
+
+	// Store the signature
+	err = batch.Transaction(sigHash[:]).PutState(&protocol.Envelope{
+		TxHash:     transaction.GetHash(),
+		Signatures: []protocol.Signature{signature},
+	})
+	if err != nil {
+		return fmt.Errorf("store signature: %w", err)
+	}
+
+	// Add the signature to the principal's chain
+	chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+	if err != nil {
+		return fmt.Errorf("load chain: %w", err)
+	}
+	err = chain.AddEntry(sigHash[:], true)
+	if err != nil {
+		return fmt.Errorf("store chain: %w", err)
+	}
+
+	return nil
 }
