@@ -86,8 +86,7 @@ function success {
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
 section "Add a new DN validator"
-
-if [ -f "$NODE_PRIV_VAL" ]; then
+if [ -f "$NODE_PRIV_VAL" -a -f "/bin/accumulated"]; then
   #spin up a DN validator
   cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
   /bin/accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
