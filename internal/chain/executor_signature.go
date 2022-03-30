@@ -11,11 +11,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) error {
+func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*BlockState, error) {
 	// Load the existing signature set
 	sigSet, err := batch.Transaction(transaction.GetHash()).GetSignatures()
 	if err != nil {
-		return fmt.Errorf("load signatures: %w", err)
+		return nil, fmt.Errorf("load signatures: %w", err)
 	}
 
 	// Is this the initial signature?
@@ -24,13 +24,13 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		// Verify that the initiator signature matches the transaction
 		err = validateInitialSignature(transaction, signature)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	// Basic validation
 	if !signature.Verify(transaction.GetHash()) {
-		return errors.New("invalid")
+		return nil, errors.New("invalid")
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
@@ -48,7 +48,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		err = processNormalSignature(batch, transaction, signature, isInitiator)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Store the transaction state (without signatures)
@@ -57,19 +57,19 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 	db := batch.Transaction(transaction.GetHash())
 	err = db.PutState(stateEnv)
 	if err != nil {
-		return fmt.Errorf("store transaction: %w", err)
+		return nil, fmt.Errorf("store transaction: %w", err)
 	}
 
 	// Add the signature to the transaction's signature set
 	sigSet.Add(signature)
 	err = batch.Transaction(transaction.GetHash()).PutSignatures(sigSet)
 	if err != nil {
-		return fmt.Errorf("store signatures: %w", err)
+		return nil, fmt.Errorf("store signatures: %w", err)
 	}
 
 	// For non-user transactions, do not append to the signature chain
 	if !transaction.Body.Type().IsUser() {
-		return nil
+		return &BlockState{Signed: 1}, nil
 	}
 
 	// Store the signature as an envelope
@@ -78,30 +78,30 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 	env.Signatures = []protocol.Signature{signature}
 	err = batch.Transaction(env.EnvHash()).PutState(env)
 	if err != nil {
-		return fmt.Errorf("store envelope: %w", err)
+		return nil, fmt.Errorf("store envelope: %w", err)
 	}
 
 	// Add the signature to the signer's chain
 	chain, err := batch.Account(signature.GetSigner()).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
 	if err != nil {
-		return fmt.Errorf("load chain: %w", err)
+		return nil, fmt.Errorf("load chain: %w", err)
 	}
 	err = chain.AddEntry(env.EnvHash(), true)
 	if err != nil {
-		return fmt.Errorf("store chain: %w", err)
+		return nil, fmt.Errorf("store chain: %w", err)
 	}
 
 	// Add the signature to the principal's chain
 	chain, err = batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
 	if err != nil {
-		return fmt.Errorf("load chain: %w", err)
+		return nil, fmt.Errorf("load chain: %w", err)
 	}
 	err = chain.AddEntry(env.EnvHash(), true)
 	if err != nil {
-		return fmt.Errorf("store chain: %w", err)
+		return nil, fmt.Errorf("store chain: %w", err)
 	}
 
-	return nil
+	return &BlockState{Signed: 1}, nil
 }
 
 // validateInitialSignature verifies that the signature is a valid initial
