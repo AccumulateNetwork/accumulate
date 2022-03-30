@@ -8,7 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-const debugLogWrites = false
+const debugLogWrites = true
 
 type GetFunc func(storage.Key) ([]byte, error)
 type CommitFunc func(map[storage.Key][]byte) error
@@ -52,8 +52,8 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	return &storage.DebugBatch{Batch: b, Logger: db.logger, Writable: writable}
 }
 
-func (b *Batch) Begin() storage.KeyValueTxn {
-	if b.commit == nil {
+func (b *Batch) Begin(writable bool) storage.KeyValueTxn {
+	if b.commit == nil || !writable {
 		return NewBatch(b.Get, nil)
 	}
 	return NewBatch(b.Get, b.PutAll)

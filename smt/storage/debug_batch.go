@@ -29,11 +29,11 @@ type DebugBatch struct {
 
 var _ KeyValueTxn = (*DebugBatch)(nil)
 
-func (b *DebugBatch) Begin() KeyValueTxn {
+func (b *DebugBatch) Begin(writable bool) KeyValueTxn {
 	c := new(DebugBatch)
-	c.Batch = b.Batch.Begin()
+	c.Batch = b.Batch.Begin(writable)
 	c.Logger = b.Logger
-	c.Writable = b.Writable
+	c.Writable = b.Writable && writable
 	return c
 }
 
@@ -94,8 +94,8 @@ func (b *DebugBatch) Commit() error {
 }
 
 func (b *DebugBatch) Discard() {
-	if b.Writable && !b.didCommit {
-		b.Logger.Debug("Discarding a writable batch")
+	if b.didWrite && !b.didCommit {
+		b.Logger.Debug("Discarding a writable batch with writes")
 	}
 	b.Batch.Discard()
 }
