@@ -38,80 +38,95 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
 	}
 
-	originPriority, ok := getKeyPageIndex(st.OriginUrl)
+	pagePri, ok := getKeyPageIndex(page.Url)
 	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", st.OriginUrl)
+		return nil, fmt.Errorf("cannot parse key page URL: %v", page.Url)
 	}
 
-	signerPriority, ok := getKeyPageIndex(st.SignatorUrl)
+	signerPri, ok := getKeyPageIndex(st.SignatorUrl)
 	if !ok {
 		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
 	}
 
 	// 0 is the highest priority, followed by 1, etc
-	if signerPriority > originPriority {
-		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
+	if signerPri > pagePri {
+		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
 	}
 
-	switch op := body.Operation.(type) {
+	for _, op := range body.Operation {
+		err = UpdateKeyPage{}.executeOperation(page, pagePri, signerPri, op)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	page.Version += 1
+
+	didUpdateKeyPage(page)
+	st.Update(page)
+	return nil, nil
+}
+
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri uint64, op protocol.KeyPageOperation) error {
+	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
-			return nil, fmt.Errorf("cannot add an empty entry")
+			return fmt.Errorf("cannot add an empty entry")
 		}
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
 		if found {
-			return nil, fmt.Errorf("cannot have duplicate entries on key page")
+			return fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
 		entry := new(protocol.KeySpec)
 		entry.PublicKeyHash = op.Entry.KeyHash
 		entry.Owner = op.Entry.Owner
 		page.Keys = append(page.Keys, entry)
+		return nil
 
 	case *protocol.RemoveKeyOperation:
 		index, _, found := findKeyPageEntry(page, &op.Entry)
 		if !found {
-			return nil, fmt.Errorf("entry to be removed not found on the key page")
+			return fmt.Errorf("entry to be removed not found on the key page")
 		}
 
 		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
-		if len(page.Keys) == 0 && originPriority == 0 {
-			return nil, fmt.Errorf("cannot delete last key of the highest priority page of a key book")
+		if len(page.Keys) == 0 && pagePri == 0 {
+			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
 		if page.Threshold > uint64(len(page.Keys)) {
 			page.Threshold = uint64(len(page.Keys))
 		}
+		return nil
 
 	case *protocol.UpdateKeyOperation:
 		if op.NewEntry.IsEmpty() {
-			return nil, fmt.Errorf("cannot add an empty entry")
+			return fmt.Errorf("cannot add an empty entry")
 		}
 
 		_, entry, found := findKeyPageEntry(page, &op.OldEntry)
 		if !found {
-			return nil, fmt.Errorf("entry to be updated not found on the key page")
+			return fmt.Errorf("entry to be updated not found on the key page")
 		}
 
 		_, _, found = findKeyPageEntry(page, &op.NewEntry)
 		if found {
-			return nil, fmt.Errorf("cannot have duplicate entries on key page")
+			return fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
 		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Owner = op.NewEntry.Owner
+		return nil
 
 	case *protocol.SetThresholdKeyPageOperation:
-		err = page.SetThreshold(op.Threshold)
-		if err != nil {
-			return nil, err
-		}
+		return page.SetThreshold(op.Threshold)
 
 	case *protocol.UpdateAllowedKeyPageOperation:
-		if signerPriority == originPriority {
-			return nil, fmt.Errorf("%v cannot modify its own allowed operations", st.OriginUrl)
+		if signerPri == pagePri {
+			return fmt.Errorf("%v cannot modify its own allowed operations", page.Url)
 		}
 
 		if page.TransactionBlacklist == nil {
@@ -121,7 +136,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		for _, txn := range op.Allow {
 			bit, ok := txn.AllowedTransactionBit()
 			if !ok {
-				return nil, fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
+				return fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
 			}
 			page.TransactionBlacklist.Clear(bit)
 		}
@@ -129,7 +144,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		for _, txn := range op.Deny {
 			bit, ok := txn.AllowedTransactionBit()
 			if !ok {
-				return nil, fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
+				return fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
 			}
 			page.TransactionBlacklist.Set(bit)
 		}
@@ -137,15 +152,11 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		if *page.TransactionBlacklist == 0 {
 			page.TransactionBlacklist = nil
 		}
+		return nil
 
 	default:
-		return nil, fmt.Errorf("invalid operation: %v", body.Operation.Type())
+		return fmt.Errorf("invalid operation: %v", op.Type())
 	}
-	page.Version += 1
-
-	didUpdateKeyPage(page)
-	st.Update(page)
-	return nil, nil
 }
 
 func getKeyPageIndex(page *url.URL) (uint64, bool) {
