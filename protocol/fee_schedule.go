@@ -59,6 +59,9 @@ const (
 	// FeeUpdateKeyPage $0.03
 	FeeUpdateKeyPage Fee = 300
 
+	// FeeUpdateKeyPage $0.03
+	FeeUpdateKey Fee = 300
+
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
 
@@ -100,6 +103,8 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeAddCredits, nil
 	case TransactionTypeUpdateKeyPage:
 		return FeeUpdateKeyPage, nil
+	case TransactionTypeUpdateKey:
+		return FeeUpdateKey, nil
 	case TransactionTypeUpdateManager, TransactionTypeRemoveManager:
 		// TODO Fee schedule for these transactions
 		return 0, nil

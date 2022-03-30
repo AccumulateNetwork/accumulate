@@ -763,7 +763,7 @@ func TestAddKey(t *testing.T) {
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
 }
 
-func TestUpdateKey(t *testing.T) {
+func TestUpdateKeyPage(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
@@ -782,6 +782,34 @@ func TestUpdateKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationUpdate
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
+
+		send(newTxn("foo/book1/1").
+			WithBody(body).
+			SignLegacyED25519(testKey))
+	})
+
+	spec := n.GetKeyPage("foo/book1/1")
+	require.Len(t, spec.Keys, 1)
+	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
+}
+
+func TestUpdateKey(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
+	fooKey, testKey := generateKey(), generateKey()
+
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
+	require.NoError(t, batch.Commit())
+
+	newKey := generateKey()
+	n.Batch(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKey)
+		body.Key = newKey.PubKey().Bytes()
 
 		send(newTxn("foo/book1/1").
 			WithBody(body).
