@@ -9,10 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
-func (e *Executor) ForceCommit() ([]byte, error) {
-	return e.commit(true)
-}
-
 func NewStateManagerForTest(t *testing.T, db *database.Database, envelope *protocol.Envelope) *StateManager {
 	txid := types.Bytes(envelope.Transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
