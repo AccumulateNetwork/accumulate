@@ -17,10 +17,11 @@ import (
 // state for the database That must be handled by the caller, but see the
 // notes on InitDB for future improvements.
 type DB struct {
-	DBOpen  atomicBool
-	entries map[storage.Key][]byte
-	mutex   sync.Mutex
-	logger  storage.Logger
+	DBOpen        atomicBool
+	entries       map[storage.Key][]byte
+	mutex         sync.Mutex
+	logger        storage.Logger
+	debugWriteLog []writeLogEntry
 }
 
 func New(logger storage.Logger) *DB {
@@ -66,6 +67,13 @@ func (m *DB) commit(txCache map[storage.Key][]byte) error {
 	defer m.mutex.Unlock()
 	for k, v := range txCache {
 		m.entries[k] = v
+		if debugLogWrites {
+			m.debugWriteLog = append(m.debugWriteLog, writeLogEntry{
+				key:    k,
+				keyStr: k.String(),
+				value:  hex.EncodeToString(v),
+			})
+		}
 	}
 	return nil
 }

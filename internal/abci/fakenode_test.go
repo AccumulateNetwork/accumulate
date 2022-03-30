@@ -144,12 +144,11 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		ConnectionManager: connMgr,
 	}
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		DB:      n.db,
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
 		Router:  n.router,
-	})
+	}, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{

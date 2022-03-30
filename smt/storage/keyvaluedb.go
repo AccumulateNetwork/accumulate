@@ -23,7 +23,7 @@ type KeyValueTxn interface {
 	// Discard discards the transaction.
 	Discard()
 	// Begin begins a sub-transaction.
-	Begin() KeyValueTxn
+	Begin(writable bool) KeyValueTxn
 }
 
 type KeyValueStore interface {
