@@ -22,7 +22,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 	if srEnv != nil {
 		x.blockState.SynthReceiptEnvelope = nil
 
-		stateMgr, err := x.buildStateManager(err, from)
+		stateMgr, err := x.buildStateManager(from)
 		if err != nil {
 			return err
 		}
@@ -54,10 +54,10 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 	return nil
 }
 
-func (x *Executor) buildStateManager(err error, from *protocol.Transaction) (*StateManager, error) {
+func (x *Executor) buildStateManager(from *protocol.Transaction) (*StateManager, error) {
 	var signer protocol.SignerAccount
 	signerUrl := x.Network.ValidatorPage(0)
-	err = x.blockBatch.Account(signerUrl).GetStateAs(&signer)
+	err := x.blockBatch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return nil, err
 	}

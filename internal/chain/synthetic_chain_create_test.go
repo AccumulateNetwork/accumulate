@@ -51,7 +51,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	env = acctesting.NewTransaction().
 		WithPrincipal(principalUrl).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithNonce(1).
+		WithCurrentTimestamp().
 		WithBody(receiptEnv.SyntheticReceipt).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 	_, err = SyntheticReceipt{}.Validate(st, env)

@@ -18,6 +18,7 @@ import (
 )
 
 type DB = *database.Batch
+
 var FakeBvn = MustParseUrl("acc://bvn0")
 
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
