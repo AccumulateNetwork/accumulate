@@ -23,7 +23,7 @@ func TestBatchCommit(t *testing.T) {
 	batch = db.Begin(true)
 	defer batch.Discard()
 
-	sub := batch.Begin()
+	sub := batch.Begin(true)
 	defer sub.Discard()
 	ledger = nil
 	require.NoError(t, sub.Account(ledgerUrl).GetStateAs(&ledger))
@@ -32,7 +32,7 @@ func TestBatchCommit(t *testing.T) {
 	require.NoError(t, sub.Account(ledgerUrl).PutState(ledger))
 	require.NoError(t, sub.Commit())
 
-	sub = batch.Begin()
+	sub = batch.Begin(false)
 	defer sub.Discard()
 	ledger = nil
 	require.NoError(t, sub.Account(ledgerUrl).GetStateAs(&ledger))
