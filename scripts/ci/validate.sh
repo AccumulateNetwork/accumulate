@@ -90,8 +90,11 @@ if [ -f "$NODE_PRIV_VAL" ]; then
   #spin up a dual node
   # --no-website dual BVN0 tcp://bvn0va:16651 -w /home/bunfield/stu2/ --skip-version-check
   cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
-  accumulated init dual BVN0 tcp://localhost:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
-  accumulated run-dual ${NODE_ROOT:-~/.testnode/dn/Node0} ${NODE_ROOT:-~/.testnode/bvn0/Node0} &
+  find . -name "accumulated"
+  echo $PWD
+  ls -lhtr
+  go run /cmd/accumulated init node tcp://127.0.1.1:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
+  go run /cmd/accumulated run -n 0 ${NODE_ROOT:-~/.testnode/dn} &
   sleep 5
 fi
 exit
