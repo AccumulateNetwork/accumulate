@@ -323,13 +323,6 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
-type Object struct {
-	fieldsSet []bool
-	Entry     []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	Height    uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
-	Roots     [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
-}
-
 type ObjectMetadata struct {
 	fieldsSet []bool
 	Type      ObjectType      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
@@ -1589,21 +1582,6 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 }
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *Object) Copy() *Object {
-	u := new(Object)
-
-	u.Entry = encoding.BytesCopy(v.Entry)
-	u.Height = v.Height
-	u.Roots = make([][]byte, len(v.Roots))
-	for i, v := range v.Roots {
-		u.Roots[i] = encoding.BytesCopy(v)
-	}
-
-	return u
-}
-
-func (v *Object) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ObjectMetadata) Copy() *ObjectMetadata {
 	u := new(ObjectMetadata)
@@ -2879,25 +2857,6 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	}
 	if !(v.Duration == u.Duration) {
 		return false
-	}
-
-	return true
-}
-
-func (v *Object) Equal(u *Object) bool {
-	if !(bytes.Equal(v.Entry, u.Entry)) {
-		return false
-	}
-	if !(v.Height == u.Height) {
-		return false
-	}
-	if len(v.Roots) != len(u.Roots) {
-		return false
-	}
-	for i := range v.Roots {
-		if !(bytes.Equal(v.Roots[i], u.Roots[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -5622,61 +5581,6 @@ func (v *MetricsRequest) IsValid() error {
 		errs = append(errs, "field Duration is missing")
 	} else if v.Duration == 0 {
 		errs = append(errs, "field Duration is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_Object = []string{
-	1: "Entry",
-	2: "Height",
-	3: "Roots",
-}
-
-func (v *Object) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Entry) == 0) {
-		writer.WriteBytes(1, v.Entry)
-	}
-	if !(v.Height == 0) {
-		writer.WriteUint(2, v.Height)
-	}
-	if !(len(v.Roots) == 0) {
-		for _, v := range v.Roots {
-			writer.WriteBytes(3, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_Object)
-	return buffer.Bytes(), err
-}
-
-func (v *Object) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Entry is missing")
-	} else if len(v.Entry) == 0 {
-		errs = append(errs, "field Entry is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Height is missing")
-	} else if v.Height == 0 {
-		errs = append(errs, "field Height is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Roots is missing")
-	} else if len(v.Roots) == 0 {
-		errs = append(errs, "field Roots is not set")
 	}
 
 	switch len(errs) {
@@ -8760,32 +8664,6 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *Object) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadBytes(1); ok {
-		v.Entry = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Height = x
-	}
-	for {
-		if x, ok := reader.ReadBytes(3); ok {
-			v.Roots = append(v.Roots, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_Object)
-	v.fieldsSet = seen
-	return err
-}
-
 func (v *ObjectMetadata) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10424,21 +10302,6 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *Object) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Entry  *string   `json:"entry,omitempty"`
-		Height uint64    `json:"height,omitempty"`
-		Roots  []*string `json:"roots,omitempty"`
-	}{}
-	u.Entry = encoding.BytesToJSON(v.Entry)
-	u.Height = v.Height
-	u.Roots = make([]*string, len(v.Roots))
-	for i, x := range v.Roots {
-		u.Roots[i] = encoding.BytesToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type          SignatureType `json:"type"`
@@ -11918,38 +11781,6 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Value: %w", err)
 	} else {
 		v.Value = x
-	}
-	return nil
-}
-
-func (v *Object) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Entry  *string   `json:"entry,omitempty"`
-		Height uint64    `json:"height,omitempty"`
-		Roots  []*string `json:"roots,omitempty"`
-	}{}
-	u.Entry = encoding.BytesToJSON(v.Entry)
-	u.Height = v.Height
-	u.Roots = make([]*string, len(v.Roots))
-	for i, x := range v.Roots {
-		u.Roots[i] = encoding.BytesToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.BytesFromJSON(u.Entry); err != nil {
-		return fmt.Errorf("error decoding Entry: %w", err)
-	} else {
-		v.Entry = x
-	}
-	v.Height = u.Height
-	v.Roots = make([][]byte, len(u.Roots))
-	for i, x := range u.Roots {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Roots: %w", err)
-		} else {
-			v.Roots[i] = x
-		}
 	}
 	return nil
 }
