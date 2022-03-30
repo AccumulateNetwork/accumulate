@@ -150,6 +150,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	result, err = executor.Validate(st, &protocol.Envelope{Transaction: transaction})
 	if err != nil {
+		st.stateCache.blockState.ProducedTxns = make([]*protocol.Transaction, 0) // Clear synth txs if any were produced, we only want to keep SyntheticReceipt
 		x.recordFailedTransaction(batch, transaction, signer, err)
 		return nil, nil, err
 	}
@@ -168,7 +169,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, err
 	}
 
-	// Submit SyntheticReceipt to the current state manager so ProduceSynthetic doesn't have to create a new one
+	// Submit SyntheticReceipt to the current state manager/batch so ProduceSynthetic doesn't have to create a new separate one
 	srEnv := x.blockState.SynthReceiptEnvelope
 	if srEnv != nil {
 		x.blockState.SynthReceiptEnvelope = nil

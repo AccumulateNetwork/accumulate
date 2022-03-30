@@ -710,17 +710,6 @@ func (m *Executor) buildSynthReceipts(rootChain *database.Chain, synthIndexIndex
 	return nil
 }
 
-func (m *Executor) putReceiptSignature(txn *protocol.Transaction, err error, rsig *protocol.ReceiptSignature) (error, bool) {
-	t := m.blockBatch.Transaction(txn.GetHash())
-	ss, err := m.blockBatch.Transaction(txn.GetHash()).GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err, true
-	}
-	ss.Add(rsig)
-	t.PutSignatures(ss)
-	return nil, false
-}
-
 // buildAnchorTxn builds the anchor transaction for the block.
 func (m *Executor) buildAnchorTxn(ledger *protocol.InternalLedger, rootChain *database.Chain) (*protocol.SyntheticAnchor, error) {
 	txn := new(protocol.SyntheticAnchor)
