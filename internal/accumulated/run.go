@@ -141,13 +141,12 @@ func (d *Daemon) Start() (err error) {
 		Network:           &d.Config.Accumulate.Network,
 	}
 	execOpts := chain.ExecutorOptions{
-		DB:      d.db,
 		Logger:  d.Logger,
 		Key:     d.Key().Bytes(),
 		Network: d.Config.Accumulate.Network,
 		Router:  &router,
 	}
-	exec, err := chain.NewNodeExecutor(execOpts)
+	exec, err := chain.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
