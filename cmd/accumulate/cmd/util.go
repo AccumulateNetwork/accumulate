@@ -497,7 +497,11 @@ func PrintJsonRpcError(err error) (string, error) {
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
-		cmd.PrintErrf("Error: %v\n", err)
+		if WantJsonOutput {
+			cmd.PrintErrf("{\"error\":%v}", err)
+		} else {
+			cmd.PrintErrf("Error: %v\n", err)
+		}
 		DidError = err
 	} else {
 		cmd.Println(out)
