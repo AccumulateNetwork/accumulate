@@ -14,35 +14,54 @@ import (
 
 func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) (err error) {
 
-	var signer protocol.SignerAccount
-	signerUrl := x.Network.ValidatorPage(0)
-	err = x.blockBatch.Account(signerUrl).GetStateAs(&signer)
-	if err != nil {
-		return err
-	}
-
-	st := NewStateManager(x.blockBatch.Begin, x.Network.NodeUrl(), signerUrl, signer, nil, from)
-	st.logger.L = x.logger
+	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
 
 	srEnv := x.blockState.SynthReceiptEnvelope
 	if srEnv != nil {
-		st.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
+		stateMgr, err := x.buildStateManager(err, from)
+		if err != nil {
+			return err
+		}
+		stateMgr.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
+		if stateMgr.blockState.ProducedTxns != nil {
+			err = x.addSynthTxns(&stateMgr.stateCache, stateMgr.blockState.ProducedTxns)
+			if err != nil {
+				return err
+			}
+			err := stateMgr.Commit()
+			if err != nil {
+				return err
+			}
+		}
+
 		x.blockState.SynthReceiptEnvelope = nil
 	}
 
 	if produced != nil {
-		err = x.addSynthTxns(&st.stateCache, produced)
+		err = x.addSynthTxns(st, produced)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = st.Commit()
+	_, err = st.Commit()
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (x *Executor) buildStateManager(err error, from *protocol.Transaction) (*StateManager, error) {
+	var signer protocol.SignerAccount
+	signerUrl := x.Network.ValidatorPage(0)
+	err = x.blockBatch.Account(signerUrl).GetStateAs(&signer)
+	if err != nil {
+		return nil, err
+	}
+	stateMgr := NewStateManager(x.blockBatch.Begin, x.Network.NodeUrl(), signerUrl, signer, nil, from)
+	stateMgr.logger.L = x.logger
+	return stateMgr, nil
 }
 
 // addSynthTxns prepares synthetic transactions for signing next block.

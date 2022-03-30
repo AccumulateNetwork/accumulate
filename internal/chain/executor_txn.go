@@ -71,7 +71,7 @@ func (m *Executor) DeliverTx(envelope *protocol.Envelope) (result protocol.Trans
 
 	//   Load the signature (from the new batch)
 	transaction, err = LoadTransaction(batch, envelope)
-	if err == nil {
+	if err != nil {
 		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
 
