@@ -42,6 +42,8 @@ var keyCmd = &cobra.Command{
 						out, err = ImportMnemonic(args[2:])
 					case "private":
 						out, err = ImportKey(args[2], args[3])
+					case "factoid":
+						out, err = ImportFactoidKey(args[2], args[3])
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -92,6 +94,11 @@ var keyCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "led25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; led25519 for LegacyED25519")
+
+}
+
 type KeyResponse struct {
 	Label      types.String `json:"name,omitempty"`
 	PrivateKey types.Bytes  `json:"privateKey,omitempty"`
@@ -118,6 +125,8 @@ func PrintKeyGenerate() {
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
 	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
+	fmt.Println("  accumulate key import factoid [factoid key hex] [key name]      Import a factoid key and give it a name in the wallet")
+
 	fmt.Println("  accumulate key import lite [private key hex]       Import a key as a lite address")
 }
 
@@ -266,6 +275,15 @@ func GenerateKey(label string) (string, error) {
 	}
 
 	err = Db.Put(BucketLabel, []byte(label), pubKey)
+	if err != nil {
+		return "", err
+	}
+
+	sigtype, err := ValidateSigType(SigType)
+	if err != nil {
+		return "", err
+	}
+	err = Db.Put(BucketSigType, privKey[32:], []byte(sigtype.String()))
 	if err != nil {
 		return "", err
 	}
@@ -580,4 +598,80 @@ func ExportMnemonic() (string, error) {
 	} else {
 		return fmt.Sprintf("mnemonic phrase: %s\n", string(phrase)), nil
 	}
+}
+
+// ImportFactoidKey will import the private key and assign it to the label
+func ImportFactoidKey(pkhex string, label string) (out string, err error) {
+
+	var pk ed25519.PrivateKey
+
+	token, err := hex.DecodeString(pkhex)
+	if err != nil {
+		return "", err
+	}
+
+	if len(token) == 32 {
+		pk = ed25519.NewKeyFromSeed(token)
+	} else {
+		pk = token
+	}
+	rcdhash := make([]byte, len(pk[32:])+1)
+	rcdhash[0] = 1
+	copy(rcdhash[1:], pk[32:])
+
+	if label == "" {
+
+		lt, err := protocol.LiteTokenAddress(rcdhash, protocol.AcmeUrl().String())
+		if err != nil {
+			return "", fmt.Errorf("no label specified and cannot import as lite token account")
+		}
+		label = lt.String()
+	}
+
+	//here will change the label if it is a lite account specified, otherwise just use the label
+	label, _ = LabelForLiteTokenAccount(label)
+
+	_, err = LookupByLabel(label)
+	if err == nil {
+		return "", fmt.Errorf("key name is already being used")
+	}
+
+	_, err = LookupByPubKey(rcdhash)
+	lab := "not found"
+	if err == nil {
+		b, _ := Db.GetBucket(BucketLabel)
+		if b != nil {
+			for _, v := range b.KeyValueList {
+				if bytes.Equal(v.Value, rcdhash) {
+					lab = string(v.Key)
+					break
+				}
+			}
+			return "", fmt.Errorf("private key already exists in wallet by key name of %s", lab)
+		}
+	}
+
+	err = Db.Put(BucketKeys, rcdhash, pk)
+	if err != nil {
+		return "", err
+	}
+
+	err = Db.Put(BucketLabel, []byte(label), rcdhash)
+	if err != nil {
+		return "", err
+	}
+
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Label = types.String(label)
+		a.PublicKey = types.Bytes(rcdhash)
+		dump, err := json.Marshal(&a)
+		if err != nil {
+			return "", err
+		}
+		out = fmt.Sprintf("%s\n", string(dump))
+	} else {
+		out = fmt.Sprintf("\tname\t\t:%s\n\tpublic key\t:%x\n", label, rcdhash)
+	}
+	return out, nil
 }

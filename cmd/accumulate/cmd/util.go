@@ -63,7 +63,21 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
+		sig, err := Db.Get(BucketSigType, privKey[32:])
+		if err == nil {
+			sigtype, _ := ValidateSigType(string(sig))
+			i := sigtype.GetEnumValue()
+			switch i {
+			case 1:
+				signer.Type = protocol.SignatureTypeLegacyED25519
+			case 2:
+				signer.Type = protocol.SignatureTypeED25519
+			case 3:
+				signer.Type = protocol.SignatureTypeRCD1
 
+			}
+
+		}
 		signer.Url = origin
 		signer.Height = 1
 		signer.PrivateKey = privKey
@@ -96,6 +110,22 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
 	signer.Height = ms.Height
+
+	sig, err := Db.Get(BucketSigType, privKey[32:])
+	if err == nil {
+		sigtype, _ := ValidateSigType(string(sig))
+		i := sigtype.GetEnumValue()
+		switch i {
+		case 1:
+			signer.Type = protocol.SignatureTypeLegacyED25519
+		case 2:
+			signer.Type = protocol.SignatureTypeED25519
+		case 3:
+			signer.Type = protocol.SignatureTypeRCD1
+
+		}
+
+	}
 
 	return args[ct:], signer, nil
 }
@@ -948,4 +978,33 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 		return nil, err
 	}
 	return acmeOracle, err
+}
+
+func ValidateSigType(input string) (protocol.SignatureType, error) {
+	sigtype := protocol.SignatureTypeLegacyED25519
+	var err error
+	switch input {
+	case "rcd1":
+		sigtype = protocol.SignatureTypeRCD1
+		err = nil
+	case "ed25519":
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	case "led25519":
+		sigtype = protocol.SignatureTypeLegacyED25519
+		err = nil
+	case "rCD1":
+		sigtype = protocol.SignatureTypeRCD1
+		err = nil
+	case "eD25519":
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	case "legacyED25519":
+		sigtype = protocol.SignatureTypeLegacyED25519
+		err = nil
+	default:
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	}
+	return sigtype, err
 }
