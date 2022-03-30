@@ -204,7 +204,7 @@ wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
 success
 
 section "Set threshold to 2 of 2"
-wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": { "type": "setThreshold", "threshold": 2 }}'
+wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
 
