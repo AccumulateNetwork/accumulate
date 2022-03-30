@@ -86,16 +86,23 @@ function success {
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
 section "Add a new DN validator"
+
 if [ -f "$NODE_PRIV_VAL" ]; then
   #spin up a dual node
   # --no-website dual BVN0 tcp://bvn0va:16651 -w /home/bunfield/stu2/ --skip-version-check
   cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
   find . -name "accumulated"
   echo $PWD
-  ls -lhtr
+  ls -lhtr ../
+  find ../
   go run /cmd/accumulated init node tcp://127.0.1.1:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
   go run /cmd/accumulated run -n 0 ${NODE_ROOT:-~/.testnode/dn} &
+  declare -g ACCPID=$!
   sleep 5
+  pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json)
+  pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+  hexPubKey=$(echo $pubkey | tr -d ' ')
+  wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
 fi
 exit
 
