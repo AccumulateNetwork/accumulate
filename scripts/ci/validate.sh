@@ -99,7 +99,6 @@ if [ -f "$NODE_PRIV_VAL" ]; then
   hexPubKey=$(echo $pubkey | tr -d ' ')
   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
 fi
-exit
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
