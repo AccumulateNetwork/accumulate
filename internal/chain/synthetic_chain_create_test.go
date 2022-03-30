@@ -46,13 +46,13 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
 
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	receiptEnv := CreateSynthReceipt(env, status, acctesting.FakeBvn)
+	_, receiptBody := CreateSynthReceipt(env.Transaction, status)
 	principalUrl := env.Transaction.Header.Principal
 	env = acctesting.NewTransaction().
 		WithPrincipal(principalUrl).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithCurrentTimestamp().
-		WithBody(receiptEnv.SyntheticReceipt).
+		WithBody(receiptBody).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 	_, err = SyntheticReceipt{}.Validate(st, env)
 	require.NoError(t, err)

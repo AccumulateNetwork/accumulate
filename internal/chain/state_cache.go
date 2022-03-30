@@ -19,7 +19,7 @@ type stateCache struct {
 	txType  protocol.TransactionType
 	txHash  types.Bytes32
 
-	blockState BlockState
+	state      ProcessTransactionState
 	batch      *database.Batch
 	operations []stateOperation
 	chains     map[[32]byte]protocol.Account

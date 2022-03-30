@@ -12,38 +12,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) (err error) {
-
-	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
-
-	// If SynthReceiptEnvelope is still there, ProcessTransaction did not complete because of an error.
-	// We still need SynthReceipts for failed, so create a new state manager and process the SynthReceipts with it
-	srEnv := x.blockState.SynthReceiptEnvelope
-	if srEnv != nil {
-		x.blockState.SynthReceiptEnvelope = nil
-
-		stateMgr, err := x.buildStateManager(from)
-		if err != nil {
-			return err
-		}
-		defer stateMgr.Discard()
-
-		stateMgr.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
-		if stateMgr.blockState.ProducedTxns != nil && len(stateMgr.blockState.ProducedTxns) > 0 {
-			err := stateMgr.Commit()
-			if err != nil {
-				return err
-			}
-			x.blockState.Merge(&stateMgr.blockState)
-			produced = append(produced, stateMgr.blockState.ProducedTxns[0])
-		}
+func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+	if len(produced) == 0 {
+		return nil
 	}
 
-	if produced != nil {
-		err = x.addSynthTxns(st, produced)
-		if err != nil {
-			return err
-		}
+	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
+	err := x.addSynthTxns(st, produced)
+	if err != nil {
+		return err
 	}
 
 	_, err = st.Commit()
@@ -52,18 +29,6 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 	}
 
 	return nil
-}
-
-func (x *Executor) buildStateManager(from *protocol.Transaction) (*StateManager, error) {
-	var signer protocol.SignerAccount
-	signerUrl := x.Network.ValidatorPage(0)
-	err := x.blockBatch.Account(signerUrl).GetStateAs(&signer)
-	if err != nil {
-		return nil, err
-	}
-	stateMgr := NewStateManager(x.blockBatch.Begin, x.Network.NodeUrl(), signerUrl, signer, nil, from)
-	stateMgr.logger.L = x.logger
-	return stateMgr, nil
 }
 
 // addSynthTxns prepares synthetic transactions for signing next block.

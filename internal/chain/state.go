@@ -20,10 +20,6 @@ type StateManager struct {
 	SignatorUrl *url.URL
 }
 
-type SynthTxnWithOrigin interface {
-	SetSyntheticOrigin(txid []byte, source *url.URL)
-}
-
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
@@ -88,16 +84,16 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 		panic("No destination URL specified!")
 	}
 
-	swo, ok := body.(SynthTxnWithOrigin)
+	swo, ok := body.(protocol.SynthTxnWithOrigin)
 	if ok {
 		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
 	}
 
-	m.blockState.DidProduceTxn(url, body)
+	m.state.DidProduceTxn(url, body)
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, ValidatorUpdate{
+	m.state.ValidatorsUpdates = append(m.state.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: true,
 	})
@@ -105,7 +101,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, ValidatorUpdate{
+	m.state.ValidatorsUpdates = append(m.state.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: false,
 	})
