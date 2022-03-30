@@ -1,0 +1,28 @@
+package chain
+
+import (
+	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type UpdateKeyBookAuth struct{}
+
+func (UpdateKeyBookAuth) Type() protocol.TransactionType {
+	return protocol.TransactionTypeUpdateKeyBookAuth
+}
+
+func (UpdateKeyBookAuth) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyBookAuth)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyBookAuth), tx.Transaction.Body)
+	}
+	book, ok := st.Origin.(*protocol.KeyBook)
+	if !ok {
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, st.Origin.GetType())
+	}
+
+	book.AuthEnabled = body.Enable
+	st.Update(book)
+	return nil, nil
+}

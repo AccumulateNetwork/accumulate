@@ -183,6 +183,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticMirror), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeUpdateKeyBookAuth:
+		return new(UpdateKeyBookAuth), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
 	case TransactionTypeUpdateManager:

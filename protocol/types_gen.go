@@ -123,6 +123,7 @@ type CreateKeyBook struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	Manager       *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	AuthEnabled   bool     `json:"authEnabled,omitempty" form:"authEnabled" query:"authEnabled" validate:"required"`
 }
 
 type CreateKeyPage struct {
@@ -258,7 +259,8 @@ type IssueTokens struct {
 type KeyBook struct {
 	fieldsSet []bool
 	AccountHeader
-	PageCount uint64 `json:"pageCount,omitempty" form:"pageCount" query:"pageCount" validate:"required"`
+	PageCount   uint64 `json:"pageCount,omitempty" form:"pageCount" query:"pageCount" validate:"required"`
+	AuthEnabled bool   `json:"authEnabled,omitempty" form:"authEnabled" query:"authEnabled" validate:"required"`
 }
 
 type KeyPage struct {
@@ -564,6 +566,11 @@ type UpdateAllowedTransactions struct {
 	Whitelist bool `json:"whitelist,omitempty" form:"whitelist" query:"whitelist"`
 	// Transactions is a list of allowed transaction types.
 	Transactions []TransactionType `json:"transactions,omitempty" form:"transactions" query:"transactions"`
+}
+
+type UpdateKeyBookAuth struct {
+	fieldsSet []bool
+	Enable    bool `json:"enable,omitempty" form:"enable" query:"enable" validate:"required"`
 }
 
 type UpdateKeyOperation struct {
@@ -945,6 +952,11 @@ func (*UpdateAllowedKeyPageOperation) GetType() KeyPageOperationType {
 	return KeyPageOperationTypeUpdateAllowed
 }
 
+func (*UpdateKeyBookAuth) Type() TransactionType { return TransactionTypeUpdateKeyBookAuth }
+
+// Deprated: use Type
+func (*UpdateKeyBookAuth) GetType() TransactionType { return TransactionTypeUpdateKeyBookAuth }
+
 func (*UpdateKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeUpdate }
 
 // Deprated: use Type
@@ -1254,6 +1266,9 @@ func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
 	case v.Manager == nil || u.Manager == nil:
 		return false
 	case !((v.Manager).Equal(u.Manager)):
+		return false
+	}
+	if !(v.AuthEnabled == u.AuthEnabled) {
 		return false
 	}
 
@@ -1597,6 +1612,9 @@ func (v *KeyBook) Equal(u *KeyBook) bool {
 		return false
 	}
 	if !(v.PageCount == u.PageCount) {
+		return false
+	}
+	if !(v.AuthEnabled == u.AuthEnabled) {
 		return false
 	}
 
@@ -2284,6 +2302,14 @@ func (v *UpdateAllowedTransactions) Equal(u *UpdateAllowedTransactions) bool {
 		if !(v.Transactions[i] == u.Transactions[i]) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *UpdateKeyBookAuth) Equal(u *UpdateKeyBookAuth) bool {
+	if !(v.Enable == u.Enable) {
+		return false
 	}
 
 	return true
@@ -3097,6 +3123,7 @@ var fieldNames_CreateKeyBook = []string{
 	2: "Url",
 	3: "PublicKeyHash",
 	4: "Manager",
+	5: "AuthEnabled",
 }
 
 func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
@@ -3112,6 +3139,9 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Manager == nil) {
 		writer.WriteUrl(4, v.Manager)
+	}
+	if !(!v.AuthEnabled) {
+		writer.WriteBool(5, v.AuthEnabled)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateKeyBook)
@@ -3130,6 +3160,11 @@ func (v *CreateKeyBook) IsValid() error {
 		errs = append(errs, "field PublicKeyHash is missing")
 	} else if len(v.PublicKeyHash) == 0 {
 		errs = append(errs, "field PublicKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field AuthEnabled is missing")
+	} else if !v.AuthEnabled {
+		errs = append(errs, "field AuthEnabled is not set")
 	}
 
 	switch len(errs) {
@@ -4015,6 +4050,7 @@ var fieldNames_KeyBook = []string{
 	1: "Type",
 	2: "AccountHeader",
 	3: "PageCount",
+	4: "AuthEnabled",
 }
 
 func (v *KeyBook) MarshalBinary() ([]byte, error) {
@@ -4025,6 +4061,9 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(v.PageCount == 0) {
 		writer.WriteUint(3, v.PageCount)
+	}
+	if !(!v.AuthEnabled) {
+		writer.WriteBool(4, v.AuthEnabled)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyBook)
@@ -4041,6 +4080,11 @@ func (v *KeyBook) IsValid() error {
 		errs = append(errs, "field PageCount is missing")
 	} else if v.PageCount == 0 {
 		errs = append(errs, "field PageCount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field AuthEnabled is missing")
+	} else if !v.AuthEnabled {
+		errs = append(errs, "field AuthEnabled is not set")
 	}
 
 	switch len(errs) {
@@ -6114,6 +6158,43 @@ func (v *UpdateAllowedTransactions) IsValid() error {
 	}
 }
 
+var fieldNames_UpdateKeyBookAuth = []string{
+	1: "Type",
+	2: "Enable",
+}
+
+func (v *UpdateKeyBookAuth) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, TransactionTypeUpdateKeyBookAuth)
+	if !(!v.Enable) {
+		writer.WriteBool(2, v.Enable)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateKeyBookAuth)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateKeyBookAuth) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Enable is missing")
+	} else if !v.Enable {
+		errs = append(errs, "field Enable is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_UpdateKeyOperation = []string{
 	1: "Type",
 	2: "OldEntry",
@@ -6825,6 +6906,9 @@ func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(4); ok {
 		v.Manager = x
 	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.AuthEnabled = x
+	}
 
 	seen, err := reader.Reset(fieldNames_CreateKeyBook)
 	v.fieldsSet = seen
@@ -7361,6 +7445,9 @@ func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadUint(3); ok {
 		v.PageCount = x
+	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.AuthEnabled = x
 	}
 
 	seen, err := reader.Reset(fieldNames_KeyBook)
@@ -8475,6 +8562,29 @@ func (v *UpdateAllowedTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *UpdateKeyBookAuth) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateKeyBookAuth) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeUpdateKeyBookAuth {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateKeyBookAuth, typ)
+	}
+
+	if x, ok := reader.ReadBool(2); ok {
+		v.Enable = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateKeyBookAuth)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *UpdateKeyOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8831,11 +8941,13 @@ func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
 		Url           *url.URL        `json:"url,omitempty"`
 		PublicKeyHash *string         `json:"publicKeyHash,omitempty"`
 		Manager       *url.URL        `json:"manager,omitempty"`
+		AuthEnabled   bool            `json:"authEnabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.Manager = v.Manager
+	u.AuthEnabled = v.AuthEnabled
 	return json.Marshal(&u)
 }
 
@@ -9084,12 +9196,14 @@ func (v *KeyBook) MarshalJSON() ([]byte, error) {
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		PageCount      uint64      `json:"pageCount,omitempty"`
+		AuthEnabled    bool        `json:"authEnabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.PageCount = v.PageCount
+	u.AuthEnabled = v.AuthEnabled
 	return json.Marshal(&u)
 }
 
@@ -9668,6 +9782,16 @@ func (v *UpdateAllowedKeyPageOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *UpdateKeyBookAuth) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Enable bool            `json:"enable,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Enable = v.Enable
+	return json.Marshal(&u)
+}
+
 func (v *UpdateKeyOperation) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type     KeyPageOperationType `json:"type"`
@@ -10039,11 +10163,13 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		Url           *url.URL        `json:"url,omitempty"`
 		PublicKeyHash *string         `json:"publicKeyHash,omitempty"`
 		Manager       *url.URL        `json:"manager,omitempty"`
+		AuthEnabled   bool            `json:"authEnabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.Manager = v.Manager
+	u.AuthEnabled = v.AuthEnabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10054,6 +10180,7 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		v.PublicKeyHash = x
 	}
 	v.Manager = u.Manager
+	v.AuthEnabled = u.AuthEnabled
 	return nil
 }
 
@@ -10447,12 +10574,14 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
 		PageCount      uint64      `json:"pageCount,omitempty"`
+		AuthEnabled    bool        `json:"authEnabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
 	u.PageCount = v.PageCount
+	u.AuthEnabled = v.AuthEnabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10460,6 +10589,7 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
 	v.PageCount = u.PageCount
+	v.AuthEnabled = u.AuthEnabled
 	return nil
 }
 
@@ -11493,6 +11623,20 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalJSON(data []byte) error {
 	}
 	v.Allow = u.Allow
 	v.Deny = u.Deny
+	return nil
+}
+
+func (v *UpdateKeyBookAuth) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Enable bool            `json:"enable,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Enable = v.Enable
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Enable = u.Enable
 	return nil
 }
 

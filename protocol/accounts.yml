@@ -83,6 +83,8 @@ KeyBook:
   fields:
     - name: PageCount
       type: uvarint
+    - name: AuthEnabled
+      type: bool
 
 DataAccount:
   union: { type: account, value: DataAccount }

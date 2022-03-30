@@ -38,6 +38,13 @@ var bookCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintKeyBook()
 				}
+			case "auth":
+				if len(args) > 3 {
+					UpdateKeyBookAuth(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintUpdateKeyBookAuth()
+				}
 			default:
 				PrintKeyBook()
 			}
@@ -55,6 +62,13 @@ func PrintKeyBookGet() {
 func PrintKeyBookCreate() {
 	fmt.Println("  accumulate book create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1] Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.")
 	fmt.Println("\t\t example usage: accumulate book create acc://RedWagon redKey5 acc://RedWagon/RedBook")
+}
+
+func PrintUpdateKeyBookAuth() {
+	fmt.Println("  accumulate book auth [origin adi url] [signing key name] [key index (optional)] [key height (optional)] enable  Enable keybook authentication.")
+	fmt.Println("  accumulate book auth [origin adi url] [signing key name] [key index (optional)] [key height (optional)] disable  Disable keybook authentication.")
+	fmt.Println("\t\t example usage: accumulate book auth acc://RedWagon redKey5 enable")
+	fmt.Println("\t\t example usage: accumulate book auth acc://RedWagon redKey5 disable")
 }
 
 func PrintKeyBook() {
@@ -131,6 +145,49 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	publicKeyHash := ph[:]
 	keyBook.PublicKeyHash = publicKeyHash
 	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
+	if err != nil {
+		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
+	return ActionResponseFrom(res).Print()
+}
+
+// UpdateKeyBookAuth update keybook for auth
+func UpdateKeyBookAuth(origin string, args []string) (string, error) {
+	originUrl, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(originUrl, args)
+	if err != nil {
+		return "", err
+	}
+	if len(args) > 1 {
+		return "", fmt.Errorf("invalid number of arguments")
+	}
+
+	updateKeyBook := protocol.UpdateKeyBookAuth{}
+	switch args[0] {
+	case "enable":
+		updateKeyBook.Enable = true
+	case "disable":
+		updateKeyBook.Enable = false
+	default:
+		return "", fmt.Errorf("invalid value passed in command")
+	}
+
+	res, err := dispatchTxRequest("update-keybook-auth", &updateKeyBook, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}
