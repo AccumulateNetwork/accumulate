@@ -256,7 +256,12 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 	default:
 		principalBookUrl = principal.Header().KeyBook
 	}
-	if !principalBookUrl.Equal(pageBook) {
+	var book *protocol.KeyBook
+	err = batch.Account(principalBookUrl).GetStateAs(&book)
+	if err != nil {
+		return fmt.Errorf("invalid key book URL: %v, %v", principalBookUrl, err)
+	}
+	if !principalBookUrl.Equal(pageBook) && book.AuthEnabled {
 		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.Header().Url)
 	}
 

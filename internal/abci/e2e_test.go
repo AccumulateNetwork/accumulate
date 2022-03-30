@@ -1426,9 +1426,13 @@ func TestKeyBookAuth(t *testing.T) {
 		send(newTxn("foo/tokens").
 			WithSigner(url.MustParse("baz/book0/1"), 1).
 			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
+			Initiate(protocol.SignatureTypeLegacyED25519, bazKey))
 	})
 
 	require.Equal(t, int64(protocol.AcmePrecision-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
+
+	batch = n.db.Begin(true)
+	require.NoError(t, acctesting.UpdateKeyBookAuth(batch, "foo/book0", true))
+	require.NoError(t, batch.Commit())
 }
