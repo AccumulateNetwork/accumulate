@@ -321,6 +321,7 @@ UpdateKeyPage:
     - name: Operation
       type: KeyPageOperation
       marshal-as: value
+      repeatable: true
       unmarshal-with: UnmarshalKeyPageOperation
       zero-value: nil
 
