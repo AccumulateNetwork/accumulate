@@ -85,12 +85,13 @@ function success {
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
-section "Add a new DN and BVN validator"
+section "Add a new DN validator"
 if [ -f "$NODE_PRIV_VAL" ]; then
   #spin up a dual node
   # --no-website dual BVN0 tcp://bvn0va:16651 -w /home/bunfield/stu2/ --skip-version-check
-  accumulated init dual BVN0 tcp://localhost:26656 -w ~/.testnode --skip-version-check --no-website
-  accumulated run-dual ~/.testnode/dn/Node0 ~/.testnode/bvn0/Node0 &
+  cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
+  accumulated init dual BVN0 tcp://localhost:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
+  accumulated run-dual ${NODE_ROOT:-~/.testnode/dn/Node0} ${NODE_ROOT:-~/.testnode/bvn0/Node0} &
   sleep 5
 fi
 exit
