@@ -87,7 +87,7 @@ function success {
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
 # section "Add a new DN validator"
-if [ -f "$NODE_PRIV_VAL" ] && [ -f /.dockerenv ]; then
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ]; then
    #spin up a DN validator
    rm -rf ${NODE_ROOT:-~/.testnode}
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
@@ -469,7 +469,7 @@ else
 fi
 
 section "Shutdown dynamic validator"
-if [ -f "$NODE_PRIV_VAL" ] && [ -f /.dockerenv ]; then
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ]; then
       wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
       [ ! -z "${ACCPID}" ] || kill -9 $ACCPID
       rm -rf ${NODE_ROOT:-~/.testnode}
