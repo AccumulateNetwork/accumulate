@@ -350,6 +350,8 @@ VersionResponse:
       type: string
     - name: VersionIsKnown
       type: bool
+    - name: IsTestNet
+      type: bool
 
 DescriptionResponse:
   non-binary: true
