@@ -28,7 +28,8 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
-	body.SetSyntheticOrigin([]byte{1}, acctesting.FakeBvn)
+	cause := [32]byte{1}
+	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
@@ -46,13 +47,13 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
 
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	receiptEnv := CreateSynthReceipt(env, status, acctesting.FakeBvn)
+	_, receiptBody := CreateSynthReceipt(env.Transaction, status)
 	principalUrl := env.Transaction.Header.Principal
 	env = acctesting.NewTransaction().
 		WithPrincipal(principalUrl).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithCurrentTimestamp().
-		WithBody(receiptEnv.SyntheticReceipt).
+		WithBody(receiptBody).
 		Initiate(protocol.SignatureTypeED25519, fooKey)
 	_, err = SyntheticReceipt{}.Validate(st, env)
 	require.NoError(t, err)
@@ -77,7 +78,8 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
-	body.SetSyntheticOrigin([]byte{1}, acctesting.FakeBvn)
+	cause := [32]byte{1}
+	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().

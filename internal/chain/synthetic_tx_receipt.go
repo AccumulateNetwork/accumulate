@@ -40,53 +40,20 @@ func NeedsReceipt(txt protocol.TransactionType) bool {
 		protocol.TransactionTypeSignPending:
 		return false
 	}
-	return true
+	return txt.IsSynthetic()
 }
 
 // CreateSynthReceipt creates a receipt used to return the status of synthetic transactions to its sender
-func CreateSynthReceipt(env *protocol.Envelope, status *protocol.TransactionStatus, nodeUrl *url.URL) *SynthReceiptEnvelope {
-	synthOrigin := getSyntheticOrigin(env.Transaction)
+func CreateSynthReceipt(transaction *protocol.Transaction, status *protocol.TransactionStatus) (*url.URL, *protocol.SyntheticReceipt) {
+	swo, ok := transaction.Body.(protocol.SynthTxnWithOrigin)
+	if !ok {
+		panic(fmt.Errorf("transcation type %v does not embed a SyntheticOrigin", transaction.Body.Type()))
+	}
+
+	cause, source := swo.GetSyntheticOrigin()
 	sr := new(protocol.SyntheticReceipt)
-	sr.SetSyntheticOrigin(synthOrigin.Cause[:], nodeUrl)
-	sr.SynthTxHash = *(*[32]byte)(env.GetTxHash())
+	sr.SetSyntheticOrigin(cause, transaction.Header.Principal)
+	sr.SynthTxHash = *(*[32]byte)(transaction.GetHash())
 	sr.Status = status
-
-	return &SynthReceiptEnvelope{
-		DestUrl:          synthOrigin.Source,
-		SyntheticReceipt: sr,
-	}
-}
-
-// getSyntheticOrigin goes into the body of the synthetic transaction to extract the SyntheticOrigin we need for the receipt
-func getSyntheticOrigin(tx *protocol.Transaction) protocol.SyntheticOrigin {
-	switch tx.Type() {
-	case protocol.TransactionTypeSyntheticCreateChain:
-		body, ok := tx.Body.(*protocol.SyntheticCreateChain)
-		if ok {
-			return body.SyntheticOrigin
-		}
-	case protocol.TransactionTypeSyntheticWriteData:
-		body, ok := tx.Body.(*protocol.SyntheticWriteData)
-		if ok {
-			return body.SyntheticOrigin
-		}
-	case protocol.TransactionTypeSyntheticDepositTokens:
-		body, ok := tx.Body.(*protocol.SyntheticDepositTokens)
-		if ok {
-			return body.SyntheticOrigin
-		}
-	case protocol.TransactionTypeSyntheticDepositCredits:
-		body, ok := tx.Body.(*protocol.SyntheticDepositCredits)
-		if ok {
-			return body.SyntheticOrigin
-		}
-	case protocol.TransactionTypeSyntheticBurnTokens:
-		body, ok := tx.Body.(*protocol.SyntheticBurnTokens)
-		if ok {
-			return body.SyntheticOrigin
-		}
-	default:
-		panic(fmt.Errorf("transcation type %v does not embed a SyntheticOrigin", tx.Type()))
-	}
-	return protocol.SyntheticOrigin{} // Unreachable
+	return source, sr
 }
