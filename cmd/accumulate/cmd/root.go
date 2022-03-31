@@ -44,7 +44,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	serverAddr := os.Getenv("ACC_API")
 	if serverAddr == "" {
-		serverAddr = "https://testnet.accumulatenetwork.io/v2"
+		serverAddr = "https://v3.testnet.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
@@ -80,7 +80,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 		case "devnet":
 			serverAddr = "https://devnet.accumulatenetwork.io/v2"
 		case "testnet":
-			serverAddr = "https://testnet.accumulatenetwork.io/v2"
+			serverAddr = "https://v3.testnet.accumulatenetwork.io/v2"
 		}
 
 		var err error
