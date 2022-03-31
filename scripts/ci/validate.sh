@@ -86,19 +86,18 @@ function success {
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
 # section "Add a new DN validator"
-# if [ -f "$NODE_PRIV_VAL" ] && which accumulated > /dev/null; then
-  #spin up a DN validator
-#   cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
-#   rm -rf ${NODE_ROOT:-~/.testnode}
-#   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
-#   accumulated run -n 0 -w ${NODE_ROOT:-~/.testnode/dn} &
-#   declare -g ACCPID=$!
-#   sleep 5
-#   pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.testnode/dn/Node0}/config/priv_validator_key.json)
-#   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-#   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
-#   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
-# fi
+if [ -f "$NODE_PRIV_VAL" ] && which accumulated > /dev/null; then
+   #spin up a DN validator
+   rm -rf ${NODE_ROOT:-~/.testnode}
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
+   accumulated run -n 0 -w ${NODE_ROOT:-~/.testnode/dn} &
+   declare -g ACCPID=$!
+   sleep 5
+   pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.testnode/dn/Node0}/config/priv_validator_key.json)
+   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
+fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
@@ -167,7 +166,7 @@ section "Recreating an ADI fails and the synthetic transaction is recorded"
 TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
-STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status${NODE_ROOT:-~/.testnode/dn}`
+STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
 [ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction was not delivered"
 [ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not fail"
 echo $STATUS | jq -re .message 1> /dev/null || die "Synthetic transaction does not have a message"
@@ -266,7 +265,7 @@ RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 
 section "Query signature chain range by URL"
 RESULT=$(accumulate -j get "keytest/tokens#signature" | jq -re .total) || die "Failed to get entries"
-[ "$RESULT" -eq 2 ] || die "Wrong total: want 2, got $RESULT${NODE_ROOT:-~/.testnode/dn}"
+[ "$RESULT" -eq 2 ] || die "Wrong total: want 2, got $RESULT"
 success
 
 section "Sign the pending transaction using the other key"
@@ -469,8 +468,8 @@ else
 fi
 
 section "Shutdown dynamic validator"
-#if [ -f "$NODE_PRIV_VAL" ]; then
-#    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
-#    [ -z "${ACCPID}" ] || kill -9 $ACCPID
-#    rm -rf ${NODE_ROOT:-~/.testnode}
-#fi
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+    [ -z "${ACCPID}" ] || kill -9 $ACCPID
+    rm -rf ${NODE_ROOT:-~/.testnode}
+fi
