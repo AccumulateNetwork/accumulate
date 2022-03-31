@@ -51,9 +51,22 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
-
 		ledgerState.PendingOracle = body.AcmeOraclePrice
 		st.Update(ledgerState)
+	} else {
+		//Add the burnt acme tokens back to the supply
+		var issuerState *protocol.TokenIssuer
+		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load acme ledger")
+		}
+		var ledgerState *protocol.InternalLedger
+		err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load main ledger: %w", err)
+		}
+		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
+		st.Update(issuerState)
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name

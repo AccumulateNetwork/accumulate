@@ -199,6 +199,11 @@ func (w *Writer) WriteDuration(n uint, v time.Duration) {
 
 // WriteBigInt writes the value as a big-endian byte slice.
 func (w *Writer) WriteBigInt(n uint, v *big.Int) {
+	if v.Sign() < 0 {
+		w.last = n
+		w.err = fmt.Errorf("negative big int values are not supported")
+		return
+	}
 	w.WriteBytes(n, v.Bytes())
 }
 

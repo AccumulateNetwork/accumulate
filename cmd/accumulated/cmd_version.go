@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var cmdVersion = &cobra.Command{
@@ -37,6 +38,10 @@ func showVersion(*cobra.Command, []string) {
 		return
 	}
 
-	fmt.Printf("%s %s\n", cmdMain.Short, accumulate.Version)
+	var name = "MainNet"
+	if protocol.IsTestNet {
+		name = "TestNet"
+	}
+	fmt.Printf("%s %s %s\n", cmdMain.Short, name, accumulate.Version)
 	fmt.Println(accumulate.Commit)
 }
