@@ -469,7 +469,7 @@ else
 fi
 
 section "Shutdown dynamic validator"
-if [ -f "$NODE_PRIV_VAL" -a ! -z "$hexPubKey" ]; then
+if [ -f "$NODE_PRIV_VAL"] && [ -f /.dockerenv]; then
       wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
       [ ! -z "${ACCPID}" ] || kill -9 $ACCPID
       rm -rf ${NODE_ROOT:-~/.testnode}
