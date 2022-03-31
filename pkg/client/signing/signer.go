@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 type Signer struct {
@@ -132,14 +131,13 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 func (s *Signer) sign(sig protocol.Signature, message []byte) {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
-		withNonce := append(common.Uint64Bytes(s.Timestamp), message...)
-		sig.Signature = ed25519.Sign(s.PrivateKey, withNonce)
+		protocol.SignLegacyED25519(sig, s.PrivateKey, message)
 
 	case *protocol.ED25519Signature:
-		sig.Signature = ed25519.Sign(s.PrivateKey, message)
+		protocol.SignED25519(sig, s.PrivateKey, message)
 
 	case *protocol.RCD1Signature:
-		sig.Signature = ed25519.Sign(s.PrivateKey, message)
+		protocol.SignRCD1(sig, s.PrivateKey, message)
 
 	default:
 		panic("unreachable")
@@ -206,18 +204,5 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 
 func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	fs := protocol.Faucet.Signer()
-	sig := new(protocol.LegacyED25519Signature)
-	sig.Signer = protocol.FaucetUrl
-	sig.SignerVersion = 1
-	sig.Timestamp = fs.Timestamp()
-	sig.PublicKey = fs.PublicKey()
-
-	init, err := sig.InitiatorHash()
-	if err != nil {
-		return nil, err
-	}
-
-	txn.Header.Initiator = *(*[32]byte)(init)
-	sig.Signature = fs.Sign(txn.GetHash())
-	return sig, nil
+	return fs.Initiate(txn), nil
 }
