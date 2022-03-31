@@ -89,12 +89,14 @@ NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.js
 # section "Add a new DN validator"
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/null; then
    #spin up a DN validator
-   rm -rf ${NODE_ROOT:-~/.testnode}
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
-   accumulated run -n 0 -w ${NODE_ROOT:-~/.testnode/dn} &
+   #rm -rf ${NODE_ROOT:-~/.testnode}
+   declare -g TEST_NODE_WORK_DIR=${NODE_ROOT:-~/.testnode}
+   echo "Creating WorkDir $TEST_NODE_WORK_DIR"
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR" --skip-version-check --no-website
+   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
    declare -g ACCPID=$!
    sleep 5
-   pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.testnode/dn/Node0}/config/priv_validator_key.json)
+   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
    wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
@@ -472,5 +474,5 @@ section "Shutdown dynamic validator"
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/null; then
       wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
       [ ! -z "${ACCPID}" ] || kill -9 $ACCPID
-      rm -rf ${NODE_ROOT:-~/.testnode}
+      rm -rf $TEST_NODE_WORK_DIR
 fi
