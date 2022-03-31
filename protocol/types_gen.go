@@ -169,7 +169,6 @@ type DirectoryIndexMetadata struct {
 
 type ED25519Signature struct {
 	fieldsSet     []bool
-	privateKey    []byte
 	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
@@ -287,7 +286,6 @@ type KeySpecParams struct {
 
 type LegacyED25519Signature struct {
 	fieldsSet     []bool
-	privateKey    []byte
 	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
@@ -340,7 +338,6 @@ type ObjectMetadata struct {
 
 type RCD1Signature struct {
 	fieldsSet     []bool
-	privateKey    []byte
 	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
