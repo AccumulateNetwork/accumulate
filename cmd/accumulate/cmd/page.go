@@ -229,10 +229,10 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 
 		oldKeyHash := sha256.Sum256(oldKey)
 		newKeyHash := sha256.Sum256(newKey)
-		ukp.Operation = &protocol.UpdateKeyOperation{
+		ukp.Operation = append(ukp.Operation, &protocol.UpdateKeyOperation{
 			OldEntry: protocol.KeySpecParams{KeyHash: oldKeyHash[:]},
 			NewEntry: protocol.KeySpecParams{KeyHash: newKeyHash[:]},
-		}
+		})
 	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
@@ -242,9 +242,9 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.AddKeyOperation{
+		ukp.Operation = append(ukp.Operation, &protocol.AddKeyOperation{
 			Entry: protocol.KeySpecParams{KeyHash: newKeyHash[:]},
-		}
+		})
 	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
@@ -255,9 +255,9 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.RemoveKeyOperation{
+		ukp.Operation = append(ukp.Operation, &protocol.RemoveKeyOperation{
 			Entry: protocol.KeySpecParams{KeyHash: oldKeyHash[:]},
-		}
+		})
 	}
 
 	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)
@@ -284,7 +284,7 @@ func setKeyPageThreshold(args []string) (string, error) {
 	op := new(protocol.SetThresholdKeyPageOperation)
 	op.Threshold = uint64(value)
 	txn := new(protocol.UpdateKeyPage)
-	txn.Operation = op
+	txn.Operation = append(txn.Operation, op)
 
 	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }
@@ -298,7 +298,7 @@ func lockKeyPage(args []string) (string, error) {
 	op := new(protocol.UpdateAllowedKeyPageOperation)
 	op.Deny = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
 	txn := new(protocol.UpdateKeyPage)
-	txn.Operation = op
+	txn.Operation = append(txn.Operation, op)
 
 	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }
@@ -312,7 +312,7 @@ func unlockKeyPage(args []string) (string, error) {
 	op := new(protocol.UpdateAllowedKeyPageOperation)
 	op.Allow = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
 	txn := new(protocol.UpdateKeyPage)
-	txn.Operation = op
+	txn.Operation = append(txn.Operation, op)
 
 	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }
