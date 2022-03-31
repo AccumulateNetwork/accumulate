@@ -96,7 +96,7 @@ if [ -f "$NODE_PRIV_VAL" ] && which accumulated > /dev/null; then
   sleep 5
   pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.testnode/dn/Node0}/config/priv_validator_key.json)
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-  hexPubKey=$(echo $pubkey | tr -d ' ')
+  declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
 fi
 
@@ -470,6 +470,7 @@ fi
 
 section "Shutdown dynamic validator"
 if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
     [ -z "${ACCPID}" ] || kill -9 $ACCPID
     rm -rf ${NODE_ROOT:-~/.testnode}
 fi
