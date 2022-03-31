@@ -19,6 +19,9 @@ InternalLedger:
       type: uvarint
     - name: ActiveOracle
       type: uvarint
+    - name: AcmeBurnt
+      type: bigint
+
 
 InternalSyntheticLedger:
   union: { type: account }

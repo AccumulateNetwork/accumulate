@@ -25,15 +25,15 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	defer batch.Discard()
 	require.NoError(t, testing2.CreateTokenAccount(batch, protocol.FaucetUrl.String(), protocol.ACME, 1e9, true))
 
-	st, err := NewStateManager(batch, protocol.SubnetUrl(t.Name()), gtx)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, gtx)
+	defer st.Discard()
 
-	_, err = SyntheticDepositTokens{}.Validate(st, gtx)
+	_, err := SyntheticDepositTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account
-	tas := new(protocol.LiteTokenAccount)
-	require.NoError(t, st.LoadUrlAs(st.OriginUrl, tas))
+	var tas *protocol.LiteTokenAccount
+	require.NoError(t, st.LoadUrlAs(st.OriginUrl, &tas))
 	require.Equal(t, gtx.Transaction.Header.Principal.String(), tas.Url.String(), "invalid chain header")
 	require.Equal(t, tokenUrl, tas.TokenUrl.String(), "token url of state doesn't match expected")
 

@@ -1,10 +1,12 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type CreateIdentity struct{}
@@ -34,24 +36,34 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 	identity.ManagerKeyBook = body.Manager
 
 	accounts := []protocol.Account{identity}
-	book := protocol.NewKeyBook()
-	bookExists := st.LoadUrlAs(bookUrl, book) == nil
-	if !bookExists {
-		if len(body.PublicKey) == 0 {
+	var book *protocol.KeyBook
+	err = st.LoadUrlAs(bookUrl, &book)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, storage.ErrNotFound):
+		if len(body.KeyHash) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
+
+		book = new(protocol.KeyBook)
 		book.Url = bookUrl
 		book.PageCount = 1
 		accounts = append(accounts, book)
-
+		if len(body.KeyHash) != 32 {
+			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
+		}
 		page := protocol.NewKeyPage()
 		page.KeyBook = bookUrl
+		page.Version = 1
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 		page.Threshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
-		keySpec.PublicKey = body.PublicKey
+		keySpec.PublicKeyHash = body.KeyHash
 		page.Keys = append(page.Keys, keySpec)
 		accounts = append(accounts, page)
+	default:
+		return nil, err
 	}
 
 	st.Create(accounts...)

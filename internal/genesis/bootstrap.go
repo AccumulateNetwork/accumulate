@@ -1,8 +1,10 @@
 package genesis
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
@@ -11,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -31,7 +34,13 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		return nil, err
 	}
 
-	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
+	block := new(chain.Block)
+	block.Index = protocol.GenesisBlock
+	block.Time = opts.GenesisTime
+	block.Batch = db.Begin(true)
+	defer block.Batch.Discard()
+
+	err = exec.Genesis(block, func(st *chain.StateManager) error {
 		var records []protocol.Account
 
 		// Create the ADI
@@ -52,12 +61,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
 		page.KeyBook = uBook
 		page.Threshold = 1
+		page.Version = 1
 		records = append(records, page)
 
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {
 			spec := new(protocol.KeySpec)
-			spec.PublicKey = val.PubKey.Bytes()
+			kh := sha256.Sum256(val.PubKey.Bytes())
+			spec.PublicKeyHash = kh[:]
 			page.Keys[i] = spec
 		}
 
@@ -66,7 +77,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
 
 		// Create the ledger
-		ledger := protocol.NewInternalLedger()
+		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
 		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1
@@ -92,13 +103,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		for i, r := range records {
 			urls[i] = r.Header().Url
 		}
-
-		acme := new(protocol.TokenIssuer)
-		acme.KeyBook = uBook
-		acme.Url = protocol.AcmeUrl()
-		acme.Precision = 8
-		acme.Symbol = "ACME"
-		records = append(records, acme)
 
 		type DataRecord struct {
 			Account *protocol.DataAccount
@@ -152,7 +156,20 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
 
-			// TODO Move ACME to DN
+			acme := new(protocol.TokenIssuer)
+			acme.KeyBook = uBook
+			acme.Url = protocol.AcmeUrl()
+			acme.Precision = 8
+			acme.Symbol = "ACME"
+			records = append(records, acme)
+
+			if protocol.IsTestNet {
+				// On the TestNet, set the issued amount to the faucet balance
+				acme.Issued.SetString(protocol.AcmeFaucetBalance, 10)
+			} else {
+				// On the MainNet, set the supply limit
+				acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+			}
 
 		case config.BlockValidator:
 			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
@@ -161,11 +178,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
-			lite := protocol.NewLiteTokenAccount()
-			lite.Url = protocol.FaucetUrl
-			lite.TokenUrl = protocol.AcmeUrl()
-			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
-			records = append(records, lite)
+			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
+			if err == nil && subnet == opts.Network.LocalSubnetID {
+				lite := protocol.NewLiteTokenAccount()
+				lite.Url = protocol.FaucetUrl
+				lite.TokenUrl = protocol.AcmeUrl()
+				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+				records = append(records, lite)
+			}
 		}
 
 		st.Update(records...)
@@ -176,4 +196,16 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		return st.AddDirectoryEntry(adi.Url, urls...)
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = block.Batch.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	batch := db.Begin(false)
+	defer batch.Discard()
+	return batch.GetMinorRootChainAnchor(&opts.Network)
 }

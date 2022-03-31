@@ -104,7 +104,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.LegacyED25519Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerHeight = s.Height
+		sig.SignerVersion = s.Height
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -112,7 +112,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.ED25519Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerHeight = s.Height
+		sig.SignerVersion = s.Height
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -120,7 +120,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.RCD1Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerHeight = s.Height
+		sig.SignerVersion = s.Height
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -208,8 +208,8 @@ func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	fs := protocol.Faucet.Signer()
 	sig := new(protocol.LegacyED25519Signature)
 	sig.Signer = protocol.FaucetUrl
-	sig.SignerHeight = 1
-	sig.Timestamp = fs.Nonce()
+	sig.SignerVersion = 1
+	sig.Timestamp = fs.Timestamp()
 	sig.PublicKey = fs.PublicKey()
 
 	init, err := sig.InitiatorHash()

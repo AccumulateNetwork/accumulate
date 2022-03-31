@@ -102,7 +102,7 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &CreateIdentity{
 				Url:        adiName,
-				PublicKey:  adiKey[32:],
+				KeyHash:    adiKey[32:],
 				KeyBookUrl: bookUrl,
 			},
 		})
@@ -182,7 +182,7 @@ func TestValidate(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
 		keys = append(keys, &KeySpecParams{
-			PublicKey: adiKey[32:],
+			KeyHash: adiKey[32:],
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
 			Origin: keyBookUrl.String(),
@@ -220,12 +220,12 @@ func TestValidate(t *testing.T) {
 			Origin: keyPageUrl.String(),
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: &AddKeyOperation{
+				Operation: []protocol.KeyPageOperation{&AddKeyOperation{
 					Entry: KeySpecParams{
-						PublicKey: adiKey2[32:],
-						Owner:     makeUrl(t, "acc://foo/book1"),
+						KeyHash: adiKey2[32:],
+						Owner:   makeUrl(t, "acc://foo/book1"),
 					},
-				},
+				}},
 			},
 		})
 		keyPage := NewKeyPage()

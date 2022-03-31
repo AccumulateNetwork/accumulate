@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strconv"
@@ -162,16 +163,17 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		ksp := protocol.KeySpecParams{}
 
 		pk, err := LookupByLabel(keyLabels[i])
+
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
-			ksp.PublicKey, err = pubKeyFromString(keyLabels[i])
+			pk, err = pubKeyFromString(keyLabels[i])
 			if err != nil {
 				return "", fmt.Errorf("key name %s, does not exist in wallet, nor is it a valid public key", keyLabels[i])
 			}
-		} else {
-			ksp.PublicKey = pk[32:]
-		}
 
+		}
+		pkh := sha256.Sum256(pk[32:])
+		ksp.KeyHash = pkh[:]
 		ckp.Keys[i] = &ksp
 	}
 
@@ -219,36 +221,43 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if err != nil {
 			return "", err
 		}
+
 		newKey, err = resolvePublicKey(args[1])
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.UpdateKeyOperation{
-			OldEntry: protocol.KeySpecParams{PublicKey: oldKey},
-			NewEntry: protocol.KeySpecParams{PublicKey: newKey},
-		}
+
+		oldKeyHash := sha256.Sum256(oldKey)
+		newKeyHash := sha256.Sum256(newKey)
+		ukp.Operation = append(ukp.Operation, &protocol.UpdateKeyOperation{
+			OldEntry: protocol.KeySpecParams{KeyHash: oldKeyHash[:]},
+			NewEntry: protocol.KeySpecParams{KeyHash: newKeyHash[:]},
+		})
 	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		newKey, err = resolvePublicKey(args[0])
+		newKeyHash := sha256.Sum256(newKey)
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.AddKeyOperation{
-			Entry: protocol.KeySpecParams{PublicKey: newKey},
-		}
+		ukp.Operation = append(ukp.Operation, &protocol.AddKeyOperation{
+			Entry: protocol.KeySpecParams{KeyHash: newKeyHash[:]},
+		})
 	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		oldKey, err = resolvePublicKey(args[0])
+		oldKeyHash := sha256.Sum256(oldKey)
+
 		if err != nil {
 			return "", err
 		}
-		ukp.Operation = &protocol.RemoveKeyOperation{
-			Entry: protocol.KeySpecParams{PublicKey: oldKey},
-		}
+		ukp.Operation = append(ukp.Operation, &protocol.RemoveKeyOperation{
+			Entry: protocol.KeySpecParams{KeyHash: oldKeyHash[:]},
+		})
 	}
 
 	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)
@@ -275,7 +284,7 @@ func setKeyPageThreshold(args []string) (string, error) {
 	op := new(protocol.SetThresholdKeyPageOperation)
 	op.Threshold = uint64(value)
 	txn := new(protocol.UpdateKeyPage)
-	txn.Operation = op
+	txn.Operation = append(txn.Operation, op)
 
 	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }
@@ -289,7 +298,7 @@ func lockKeyPage(args []string) (string, error) {
 	op := new(protocol.UpdateAllowedKeyPageOperation)
 	op.Deny = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
 	txn := new(protocol.UpdateKeyPage)
-	txn.Operation = op
+	txn.Operation = append(txn.Operation, op)
 
 	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }
@@ -303,7 +312,7 @@ func unlockKeyPage(args []string) (string, error) {
 	op := new(protocol.UpdateAllowedKeyPageOperation)
 	op.Allow = append(op.Deny, protocol.TransactionTypeUpdateKeyPage)
 	txn := new(protocol.UpdateKeyPage)
-	txn.Operation = op
+	txn.Operation = append(txn.Operation, op)
 
 	return dispatchTxAndPrintResponse("update-key-page", txn, nil, principal, signer)
 }

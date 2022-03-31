@@ -75,6 +75,9 @@ const (
 	GenesisBlock = 1
 )
 
+//AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
+const AcmeSupplyLimit = 500_000_000
+
 // AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
@@ -95,6 +98,7 @@ const AcmeOraclePrecision = 10000
 
 // CreditPrecision is the precision of credit balances.
 const CreditPrecision = 1e2
+const CreditPrecisionPower = 2
 
 // CreditsPerDollar is the credits per dollar in external units (100.00)
 const CreditsPerDollar = 1e2
@@ -189,6 +193,10 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
+	return liteTokenAddress(pubKey, tokenUrl), nil
+}
+
+func liteTokenAddress(pubKey []byte, tokenUrl *url.URL) *url.URL {
 	liteUrl := new(url.URL)
 	keyHash := sha256.Sum256(pubKey)
 	keyStr := fmt.Sprintf("%x", keyHash[:20])
@@ -196,7 +204,7 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
 	liteUrl.Authority = keyStr + checkStr
 	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
-	return liteUrl, nil
+	return liteUrl
 }
 
 // ParseLiteTokenAddress extracts the key hash and token URL from an lite token

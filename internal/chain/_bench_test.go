@@ -9,7 +9,6 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
@@ -99,7 +98,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			env := acctesting.NewTransaction().
 				WithPrincipal(fromUrl).
 				WithSigner(fromUrl, 1).
-				WithNonce(1).
+				WithTimestamp(1).
 				WithBody(&protocol.SendTokens{
 					To: []*protocol.TokenRecipient{
 						{Url: toUrl0, Amount: *big.NewInt(1)},
@@ -110,7 +109,7 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				// Creating but never discarding the database batch should be OK with a memory DB
-				_, err := exec.BeginBlock(abci.BeginBlockRequest{IsLeader: true, Height: 1})
+				_, err := exec.BeginBlock(BeginBlockRequest{IsLeader: true, Height: 1})
 				if err != nil {
 					b.Fatal(err)
 				}

@@ -26,23 +26,23 @@ func TestLiteTokenTransactions(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	sponsorUrl := acctesting.AcmeLiteAddressStdPriv(privKey)
-	liteAcct := new(protocol.LiteTokenAccount)
-	require.NoError(t, db.Begin(true).Account(sponsorUrl).GetStateAs(liteAcct))
+	var liteAcct *protocol.LiteTokenAccount
+	require.NoError(t, db.Begin(true).Account(sponsorUrl).GetStateAs(&liteAcct))
 
 	//now move some tokens around
 	destAddr := testing2.AcmeLiteAddressStdPriv(destPrivKey).String()
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 	require.NoError(t, err)
 
-	st, err := NewStateManager(db.Begin(true), protocol.SubnetUrl(t.Name()), gtx)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, gtx)
+	defer st.Discard()
 
 	_, err = SendTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//pull the chains again
-	tas := new(protocol.LiteTokenAccount)
-	require.NoError(t, st.LoadUrlAs(st.OriginUrl, tas))
+	var tas *protocol.LiteTokenAccount
+	require.NoError(t, st.LoadUrlAs(st.OriginUrl, &tas))
 	require.Equal(t, *tokenUrl.AsString(), tas.TokenUrl.String(), "token url of state doesn't match expected")
 
 }

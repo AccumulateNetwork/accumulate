@@ -59,6 +59,26 @@ func (*{{.Name}}) GetType() {{pkg "protocol"}}{{.UnionType}} { return {{pkg "pro
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}
+func (v *{{.Name}}) Copy() *{{.Name}} {
+	u := new({{.Name}})
+
+	{{range .Embeddings}}
+	u.{{.Name}} = *v.{{.Name}}.Copy()
+	{{- end}}
+
+	{{- range .Fields}}
+	{{- if .IsMarshalled}}
+	{{copy . (print "u." .Name) (print "v." .Name)}}
+	{{- end}}
+	{{- end}}
+
+	return u
+}
+
+func (v *{{.Name}}) CopyAsInterface() interface{} { return v.Copy() }
+{{end}}{{end}}
+
+{{range .Types}}{{if .IsComparable}}
 func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 	{{- range .Embeddings}}
 	if !v.{{.Name}}.Equal(&u.{{.Name}}) {

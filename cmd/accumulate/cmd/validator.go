@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/sha256"
+
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -86,8 +88,10 @@ func updateValidatorKey(args []string) (string, error) {
 		return "", err
 	}
 
+	oldKeyHash := sha256.Sum256(oldKey)
+	newKeyHash := sha256.Sum256(newKey)
 	txn := new(protocol.UpdateValidatorKey)
-	txn.OldKey = oldKey
-	txn.NewKey = newKey
+	txn.KeyHash = oldKeyHash[:]
+	txn.NewKeyHash = newKeyHash[:]
 	return dispatchTxAndPrintResponse("update-validator-key", txn, nil, principal, signer)
 }

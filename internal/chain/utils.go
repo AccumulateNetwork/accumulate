@@ -210,7 +210,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if txn.Transaction.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -250,7 +250,8 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 		return nil
 	default:
 		// Load the origin's key book
-		err := batch.Account(origin.Header().KeyBook).GetStateAs(new(protocol.KeyBook))
+		var keyBook *protocol.KeyBook
+		err := batch.Account(origin.Header().KeyBook).GetStateAs(&keyBook)
 		if err != nil {
 			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
 		}
@@ -264,14 +265,14 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 	}
 
 	// If height no longer matches, the transaction is invalidated
-	if signatures[0].GetSignerHeight() != uint64(pageChain.Height()) {
+	if signatures[0].GetSignerVersion() != uint64(pageChain.Height()) {
 		resp.Invalidated = true
 		return nil
 	}
 
 	// Load the page's state
-	keyPage := new(protocol.KeyPage)
-	err = pageAcnt.GetStateAs(keyPage)
+	var keyPage *protocol.KeyPage
+	err = pageAcnt.GetStateAs(&keyPage)
 	if err != nil {
 		return fmt.Errorf("failed to load %v: %v", signatures[0].GetSigner(), err)
 	}

@@ -22,8 +22,9 @@ LiteTokenAccount:
       pointer: true
     - name: Balance
       type: bigint
-    - name: Nonce
+    - name: LastUsedOn
       type: uvarint
+      alternative: Nonce
     - name: CreditBalance
       type: uvarint
 
@@ -63,6 +64,8 @@ KeyPage:
     - name: CreditBalance
       type: uvarint
     - name: Threshold
+      type: uvarint
+    - name: Version
       type: uvarint
     - name: Keys
       repeatable: true
@@ -121,10 +124,12 @@ Anchor:
 
 KeySpec:
   fields:
-    - name: PublicKey
+    - name: PublicKeyHash
       type: bytes
-    - name: Nonce
+      alternative: PublicKey
+    - name: LastUsedOn
       type: uvarint
+      alternative: Nonce
     - name: Owner
       type: url
       pointer: true

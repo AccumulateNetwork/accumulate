@@ -1,14 +1,12 @@
 package database
 
 import (
-	"encoding"
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/etcd"
@@ -20,8 +18,9 @@ const markPower = 8
 
 // Database is an Accumulate database.
 type Database struct {
-	store  storage.KeyValueStore
-	logger log.Logger
+	store       storage.KeyValueStore
+	logger      log.Logger
+	nextBatchId int
 }
 
 // New creates a new database using the given key-value store.
@@ -94,69 +93,12 @@ func (d *Database) Close() error {
 	return d.store.Close()
 }
 
-// Begin starts a new batch.
-func (d *Database) Begin(writable bool) *Batch {
-	tx := new(Batch)
-	tx.store = d.store.Begin(writable)
-	tx.bpt = pmt.NewBPTManager(tx.store)
-	return tx
-}
-
-// View runs the function with a read-only transaction.
-func (d *Database) View(fn func(*Batch) error) error {
-	batch := d.Begin(false)
-	defer batch.Discard()
-	return fn(batch)
-}
-
-// Update runs the function with a writable transaction and commits if the
-// function succeeds.
-func (d *Database) Update(fn func(*Batch) error) error {
-	batch := d.Begin(true)
-	defer batch.Discard()
-	err := fn(batch)
-	if err != nil {
-		return err
-	}
-	return batch.Commit()
-}
-
-// Batch batches database writes.
-type Batch struct {
-	store storage.KeyValueTxn
-	bpt   *pmt.Manager
-}
-
-func (b *Batch) getAs(key storage.Key, value encoding.BinaryUnmarshaler) error {
-	data, err := b.store.Get(key)
-	if err != nil {
-		return err
-	}
-
-	return value.UnmarshalBinary(data)
-}
-
-func (b *Batch) putAs(key storage.Key, value encoding.BinaryMarshaler) error {
-	data, err := value.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	return b.store.Put(key, data)
-}
-
-// UpdateBpt updates the Patricia Tree hashes with the values from the updates
-// since the last update.
-func (b *Batch) UpdateBpt() error {
-	return b.bpt.Bpt.Update()
-}
-
-// BptRootHash returns the root hash of the BPT.
-func (b *Batch) BptRootHash() []byte {
-	// Make a copy
-	h := b.bpt.Bpt.RootHash
-	return h[:]
-}
+// // BptRootHash returns the root hash of the BPT.
+// func (b *Batch) BptRootHash() []byte {
+// 	// Make a copy
+// 	h := b.bpt.Bpt.RootHash
+// 	return h[:]
+// }
 
 // Account returns an Account for the given URL.
 func (b *Batch) Account(u *url.URL) *Account {
@@ -187,32 +129,7 @@ func (b *Batch) Transaction(id []byte) *Transaction {
 
 // Import imports values from another database.
 func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
-	err := b.bpt.Bpt.Update()
-	if err != nil {
-		return err
-	}
-	err = b.store.PutAll(db.Export())
-	if err != nil {
-		return err
-	}
-	b.bpt = pmt.NewBPTManager(b.store)
-	return nil
-}
-
-// Commit commits pending writes to the key-value store. Attempting to use the
-// Batch after calling Commit will result in a panic.
-func (b *Batch) Commit() error {
-	err := b.UpdateBpt()
-	if err != nil {
-		return err
-	}
-	return b.store.Commit()
-}
-
-// Discard discards pending writes. Attempting to use the Batch after calling
-// Discard will result in a panic.
-func (b *Batch) Discard() {
-	b.store.Discard()
+	return b.store.PutAll(db.Export())
 }
 
 func (b *Batch) GetMinorRootChainAnchor(network *config.Network) ([]byte, error) {

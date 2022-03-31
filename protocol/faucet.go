@@ -9,25 +9,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
-const AcmeFaucetAmount = 2000000
+const AcmeFaucetAmount = 2_000_000
 
-var FaucetUrl *url.URL
-var Faucet faucet
+const AcmeFaucetBalance = "314159265358979323846264338327950288419716939937510582097494459"
 
 var faucetSeed = sha256.Sum256([]byte("faucet"))
 var faucetKey = ed25519.NewKeyFromSeed(faucetSeed[:])
 
+var Faucet faucet
+var FaucetUrl = liteTokenAddress(Faucet.PublicKey(), AcmeUrl())
+
 // TODO Set the balance to 0 and/or use a bogus URL for the faucet. Otherwise, a
 // bad actor could generate the faucet private key using the same method we do,
 // then sign arbitrary transactions using the faucet.
-
-func init() {
-	var err error
-	FaucetUrl, err = LiteTokenAddress(Faucet.PublicKey(), AcmeUrl().String())
-	if err != nil {
-		panic(err)
-	}
-}
 
 type faucet struct{}
 
@@ -45,7 +39,7 @@ func (faucet) Signer() faucetSigner {
 
 type faucetSigner uint64
 
-func (s faucetSigner) Nonce() uint64 {
+func (s faucetSigner) Timestamp() uint64 {
 	return uint64(s)
 }
 
@@ -54,6 +48,6 @@ func (s faucetSigner) PublicKey() []byte {
 }
 
 func (s faucetSigner) Sign(message []byte) []byte {
-	withNonce := append(common.Uint64Bytes(s.Nonce()), message...)
+	withNonce := append(common.Uint64Bytes(s.Timestamp()), message...)
 	return ed25519.Sign(faucetKey, withNonce)
 }

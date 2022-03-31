@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"reflect"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -14,6 +15,18 @@ import (
 
 // Some of these methods have no parameters because they are used by generated
 // code
+
+func BytesCopy(v []byte) []byte {
+	u := make([]byte, len(v))
+	copy(u, v)
+	return v
+}
+
+func BigintCopy(v *big.Int) *big.Int {
+	u := new(big.Int)
+	u.Set(v)
+	return u
+}
 
 func BoolBinarySize(_ bool) int {
 	return 1
@@ -400,5 +413,39 @@ func UnmarshalEnumType(r io.Reader, value EnumValueSetter) error {
 	if !value.SetEnumValue(v) {
 		return fmt.Errorf("field Type: invalid value %d", v)
 	}
+	return nil
+}
+
+// SetPtr sets *target = value
+func SetPtr(value, target interface{}) (err error) {
+	if value == nil {
+		panic("value is nil")
+	}
+	if target == nil {
+		panic("target is nil")
+	}
+
+	// Make sure target is a non-nil pointer
+	rtarget := reflect.ValueOf(target)
+	if rtarget.Kind() != reflect.Ptr {
+		panic(fmt.Errorf("target %T is not a pointer", target))
+	}
+	if rtarget.IsNil() {
+		panic("target is nil")
+	}
+	rtarget = rtarget.Elem()
+
+	// If target is a pointer to value, there's nothing to do
+	rvalue := reflect.ValueOf(value)
+	if rvalue.Kind() == reflect.Ptr && rtarget.Kind() == reflect.Ptr && rvalue.Pointer() == rtarget.Pointer() {
+		return nil
+	}
+
+	// Check if we can: *target = value
+	if !rvalue.Type().AssignableTo(rtarget.Type()) {
+		return fmt.Errorf("cannot assign %T to %v", value, rtarget.Type())
+	}
+
+	rtarget.Set(rvalue)
 	return nil
 }

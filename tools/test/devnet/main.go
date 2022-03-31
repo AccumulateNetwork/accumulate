@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/fatih/color"
 )
@@ -138,12 +139,17 @@ func run() bool {
 		fmt.Printf("Error: interrupt devnet: %v\n", err)
 	}
 
+	go func() {
+		time.Sleep(time.Minute)
+		_ = runCmd.Process.Kill()
+	}()
+
 	err = runCmd.Wait()
 	if err != nil {
 		fmt.Printf("Error: wait for devnet: %v\n", err)
 	}
 
-	return !ok
+	return ok
 }
 
 func fatalf(format string, args ...interface{}) {

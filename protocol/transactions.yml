@@ -65,7 +65,7 @@ LegacyED25519Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
 
 RCD1Signature:
@@ -81,7 +81,7 @@ RCD1Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
     - name: Timestamp
       type: uint
@@ -100,7 +100,7 @@ ED25519Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
     - name: Timestamp
       type: uint
@@ -145,7 +145,7 @@ CreateIdentity:
     - name: Url
       type: url
       pointer: true
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
       optional: true
     - name: KeyBookUrl
@@ -321,6 +321,7 @@ UpdateKeyPage:
     - name: Operation
       type: KeyPageOperation
       marshal-as: value
+      repeatable: true
       unmarshal-with: UnmarshalKeyPageOperation
       zero-value: nil
 
@@ -360,9 +361,9 @@ RemoveValidator:
 UpdateValidatorKey:
   union: { type: transaction }
   fields:
-    - name: OldKey
+    - name: KeyHash
       type: bytes
-    - name: NewKey
+    - name: NewKeyHash
       type: bytes
 
 SignPending:
@@ -418,6 +419,10 @@ SyntheticAnchor:
     - name: RootIndex
       description: is the index of the root anchor chain anchor
       type: uvarint
+    - name: AcmeBurnt
+      description: is the amount of acme tokens burnt in the transaction
+      type: bigint
+
     - name: Block
       description: is the index of the block
       type: uvarint
@@ -570,7 +575,7 @@ ChainParams:
 
 KeySpecParams:
   fields:
-    - name: PublicKey
+    - name: KeyHash
       type: bytes
     - name: Owner
       type: url

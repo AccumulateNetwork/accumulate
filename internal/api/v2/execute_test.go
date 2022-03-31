@@ -26,10 +26,10 @@ func TestExecuteCheckOnly(t *testing.T) {
 		Signer: Signer{
 			PublicKey: make([]byte, 32),
 			Url:       url.MustParse("check"),
-			Nonce:     1,
+			Timestamp: 1,
 		},
 		KeyPage: KeyPage{
-			Height: 1,
+			Version: 1,
 		},
 		Signature: make([]byte, 64),
 	}
