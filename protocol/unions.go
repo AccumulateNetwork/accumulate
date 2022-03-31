@@ -43,6 +43,7 @@ type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
 	Verify(hash []byte) bool
+	MetadataHash() []byte
 	InitiatorHash() ([]byte, error)
 
 	GetSigner() *url.URL
