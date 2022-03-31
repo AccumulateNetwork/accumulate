@@ -981,8 +981,9 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 }
 
 func ValidateSigType(input string) (protocol.SignatureType, error) {
-	sigtype := protocol.SignatureTypeLegacyED25519
+	var sigtype protocol.SignatureType
 	var err error
+	input = strings.ToLower(input)
 	switch input {
 	case "rcd1":
 		sigtype = protocol.SignatureTypeRCD1
@@ -991,15 +992,6 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 		sigtype = protocol.SignatureTypeED25519
 		err = nil
 	case "led25519":
-		sigtype = protocol.SignatureTypeLegacyED25519
-		err = nil
-	case "rCD1":
-		sigtype = protocol.SignatureTypeRCD1
-		err = nil
-	case "eD25519":
-		sigtype = protocol.SignatureTypeED25519
-		err = nil
-	case "legacyED25519":
 		sigtype = protocol.SignatureTypeLegacyED25519
 		err = nil
 	default:

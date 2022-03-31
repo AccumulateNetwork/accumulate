@@ -615,10 +615,7 @@ func ImportFactoidKey(pkhex string, label string) (out string, err error) {
 	} else {
 		pk = token
 	}
-	rcdhash := make([]byte, len(pk[32:])+1)
-	rcdhash[0] = 1
-	copy(rcdhash[1:], pk[32:])
-
+	rcdhash := protocol.GetRCDHashFromPublicKey(pk[32:], 1)
 	if label == "" {
 
 		lt, err := protocol.LiteTokenAddress(rcdhash, protocol.AcmeUrl().String())
