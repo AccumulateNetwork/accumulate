@@ -468,8 +468,8 @@ else
 fi
 
 section "Shutdown dynamic validator"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
-    [ -z "${ACCPID}" ] || kill -9 $ACCPID
-    rm -rf ${NODE_ROOT:-~/.testnode}
+if [ -f "$NODE_PRIV_VAL" -a ! -z "$hexPubKey" ]; then
+      wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+      [ ! -z "${ACCPID}" ] || kill -9 $ACCPID
+      rm -rf ${NODE_ROOT:-~/.testnode}
 fi
