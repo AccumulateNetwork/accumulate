@@ -12,74 +12,57 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, blockState *BlockState) (*BlockState, error) {
+func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+	if len(produced) == 0 {
+		return nil
+	}
 
 	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
-
-	// If SynthReceiptEnvelope is still there, ProcessTransaction did not complete because of an error.
-	// We still need SynthReceipts for failed, so create a new state manager and process the SynthReceipts with it
-	srEnv := x.SynthReceiptEnvelope
-	if srEnv != nil {
-		x.SynthReceiptEnvelope = nil
-
-		stateMgr, err := x.buildStateManager(batch, from)
-		if err != nil {
-			return nil, err
-		}
-		defer stateMgr.Discard()
-
-		stateMgr.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
-		if stateMgr.blockState.ProducedTxns != nil && len(stateMgr.blockState.ProducedTxns) > 0 {
-			err = stateMgr.Commit()
-			if err != nil {
-				return nil, err
-			}
-			if blockState == nil {
-				blockState = &stateMgr.blockState
-			}
-		}
-	}
-
-	if blockState != nil {
-		err := x.addSynthTxns(st, blockState.ProducedTxns)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	_, err := st.Commit()
+	err := x.addSynthTxns(st, produced)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return blockState, nil
-}
-
-func (x *Executor) buildStateManager(batch *database.Batch, from *protocol.Transaction) (*StateManager, error) {
-	var signer protocol.SignerAccount
-	signerUrl := x.Network.ValidatorPage(0)
-	err := batch.Account(signerUrl).GetStateAs(&signer)
+	_, err = st.Commit()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	stateMgr := NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signerUrl, signer, nil, from)
-	stateMgr.logger.L = x.logger
-	return stateMgr, nil
+
+	return nil
 }
 
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction) error {
-	ids := make([][32]byte, len(produced))
-	for i, sub := range produced {
+	for _, sub := range produced {
 		tx, err := m.buildSynthTxn(st, sub.Header.Principal, sub.Body)
 		if err != nil {
 			return err
 		}
 		sub.Header = tx.Header
-		copy(ids[i][:], tx.GetHash())
+
+		// Don't record txn -> produced synth txn for internal transactions
+		if st.txType.IsInternal() {
+			continue
+		}
+
+		// TODO This is a workaround for AC-1238. Once the DN anchor race is
+		// fixed, remove this.
+		if sub.Body.Type() == protocol.TransactionTypeSyntheticReceipt {
+			continue
+		}
+
+		swo, ok := sub.Body.(protocol.SynthTxnWithOrigin)
+		if !ok {
+			// This should not happen. Other than InternalSendTransactions, a
+			// transaction should never produce a synthetic transaction that
+			// does not have an origin.
+			return fmt.Errorf("transaction type %v does not have a synthetic origin", sub.Body.Type())
+		}
+
+		cause, _ := swo.GetSyntheticOrigin()
+		st.AddSyntheticTxn(cause, *(*[32]byte)(tx.GetHash()))
 	}
 
-	st.AddSyntheticTxns(st.txHash[:], ids)
 	return nil
 }
 

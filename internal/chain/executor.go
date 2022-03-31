@@ -24,15 +24,11 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors            map[protocol.TransactionType]TxExecutor
-	governor             *governor
-	logger               logging.OptionalLogger
-	SynthReceiptEnvelope *SynthReceiptEnvelope
-}
+	executors map[protocol.TransactionType]TxExecutor
+	governor  *governor
+	logger    logging.OptionalLogger
 
-type SynthReceiptEnvelope struct {
-	DestUrl          *url.URL
-	SyntheticReceipt *protocol.SyntheticReceipt
+	// oldBlockMeta blockMetadata
 }
 
 type ExecutorOptions struct {
@@ -146,9 +142,9 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 		return err
 	}
 
-	block.State.Merge(&st.blockState)
+	block.State.MergeTransaction(&st.state)
 
-	_, err = m.ProduceSynthetic(block.Batch, txn, &block.State)
+	err = m.ProduceSynthetic(block.Batch, txn, st.state.ProducedTxns)
 	if err != nil {
 		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
@@ -364,7 +360,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		"delivered", block.State.Delivered,
 		"signed", block.State.SynthSigned,
 		"sent", block.State.SynthSent,
-		"updated", len(block.State.ChainUpdates),
+		"updated", len(block.State.ChainUpdates.Entries),
 		"submitted", len(block.State.ProducedTxns))
 	t := time.Now()
 
@@ -431,11 +427,11 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		indexing.TransactionChainEntry
 		Txid []byte
 	}
-	txChainEntries := make([]*txChainIndexEntry, 0, len(block.State.ChainUpdates))
+	txChainEntries := make([]*txChainIndexEntry, 0, len(block.State.ChainUpdates.Entries))
 
 	// Process chain updates
 	accountSeen := map[string]bool{}
-	for _, u := range block.State.ChainUpdates {
+	for _, u := range block.State.ChainUpdates.Entries {
 		// Do not create root chain or BPT entries for the ledger
 		if ledgerUrl.Equal(u.Account) {
 			continue
@@ -485,14 +481,14 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	var synthAnchorIndex uint64
 	if len(block.State.ProducedTxns) > 0 {
 		synthAnchorIndex = uint64(rootChain.Height())
-		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, rootChain)
+		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, ledgerState, rootChain)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Add the BPT to the root chain
-	err = m.anchorBPT(block, rootChain)
+	err = m.anchorBPT(block, ledgerState, rootChain)
 	if err != nil {
 		return err
 	}
@@ -614,13 +610,13 @@ func (m *Executor) updateAccountBPT(account *database.Account) (err error) {
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, rootChain *database.Chain) (indexIndex uint64, err error) {
+func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, ledgerState *protocol.InternalLedger, rootChain *database.Chain) (indexIndex uint64, err error) {
 	indexIndex, _, err = addChainAnchor(rootChain, ledger, ledgerUrl, protocol.SyntheticChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return 0, err
 	}
 
-	block.State.DidUpdateChain(ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(ChainUpdate{
 		Name:    protocol.SyntheticChain,
 		Type:    protocol.ChainTypeTransaction,
 		Account: ledgerUrl,
@@ -631,13 +627,13 @@ func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledg
 }
 
 // anchorBPT anchors the BPT after ensuring any pending changes have been flushed.
-func (m *Executor) anchorBPT(block *Block, rootChain *database.Chain) error {
+func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger, rootChain *database.Chain) error {
 	root, err := block.Batch.CommitBpt()
 	if err != nil {
 		return err
 	}
 
-	block.State.DidUpdateChain(ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(ChainUpdate{
 		Name:    "bpt",
 		Account: m.Network.NodeUrl(),
 		Index:   uint64(block.Index - 1),
@@ -709,7 +705,7 @@ func (m *Executor) buildAnchorTxn(block *Block, ledger *protocol.InternalLedger,
 
 	anchorUrl := m.Network.NodeUrl(protocol.AnchorPool)
 	anchor := block.Batch.Account(anchorUrl)
-	for _, update := range block.State.ChainUpdates {
+	for _, update := range block.State.ChainUpdates.Entries {
 		// Is it an anchor chain?
 		if update.Type != protocol.ChainTypeAnchor {
 			continue
