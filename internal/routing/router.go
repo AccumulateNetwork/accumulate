@@ -128,8 +128,12 @@ type RouterInstance struct {
 
 var _ Router = (*RouterInstance)(nil)
 
+func RouteAccount(net *config.Network, account *url.URL) (string, error) {
+	return routeModulo(net, account)
+}
+
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
-	return routeModulo(r.Network, account)
+	return RouteAccount(r.Network, account)
 }
 
 // Route routes the account using modulo routing.
