@@ -827,7 +827,7 @@ func TestAddKey(t *testing.T) {
 		op := new(protocol.AddKeyOperation)
 		op.Entry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -862,7 +862,7 @@ func TestUpdateKey(t *testing.T) {
 		op.OldEntry.KeyHash = kh[:]
 		op.NewEntry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -894,7 +894,7 @@ func TestRemoveKey(t *testing.T) {
 
 		op.Entry.KeyHash = h2[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -907,7 +907,7 @@ func TestRemoveKey(t *testing.T) {
 
 		op.Entry.KeyHash = h1[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 2).

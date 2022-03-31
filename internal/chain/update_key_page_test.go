@@ -44,7 +44,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			op.OldEntry.KeyHash = kh[:]
 			op.NewEntry.KeyHash = nkh[:]
 			body := new(protocol.UpdateKeyPage)
-			body.Operation = op
+			body.Operation = append(body.Operation, op)
 
 			env := acctesting.NewTransaction().
 				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).

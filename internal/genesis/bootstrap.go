@@ -34,7 +34,13 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		return nil, err
 	}
 
-	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
+	block := new(chain.Block)
+	block.Index = protocol.GenesisBlock
+	block.Time = opts.GenesisTime
+	block.Batch = db.Begin(true)
+	defer block.Batch.Discard()
+
+	err = exec.Genesis(block, func(st *chain.StateManager) error {
 		var records []protocol.Account
 
 		// Create the ADI
@@ -190,4 +196,16 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		return st.AddDirectoryEntry(adi.Url, urls...)
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = block.Batch.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	batch := db.Begin(false)
+	defer batch.Discard()
+	return batch.GetMinorRootChainAnchor(&opts.Network)
 }

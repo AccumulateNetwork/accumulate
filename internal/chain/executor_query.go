@@ -623,10 +623,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 	return &qr, nil
 }
 
-func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
-	batch := m.DB.Begin(false)
-	defer batch.Discard()
-
+func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
 	switch q.Type {
 	case types.QueryTypeTxId:
 		txr := query.RequestByTxId{}
