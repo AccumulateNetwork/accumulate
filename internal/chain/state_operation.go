@@ -331,10 +331,10 @@ func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
 
 type addSyntheticTxns struct {
 	txid  []byte
-	synth [][32]byte
+	synth [32]byte
 }
 
-func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
+func (m *stateCache) AddSyntheticTxn(txid []byte, synth [32]byte) {
 	m.operations = append(m.operations, &addSyntheticTxns{
 		txid:  txid,
 		synth: synth,
@@ -342,5 +342,5 @@ func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
 }
 
 func (op *addSyntheticTxns) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth...)
+	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth)
 }

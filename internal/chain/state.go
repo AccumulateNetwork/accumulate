@@ -77,7 +77,7 @@ func (m *StateManager) Discard() {
 
 // Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
-	if m.txType.IsSynthetic() && body.GetType() != protocol.TransactionTypeSyntheticReceipt {
+	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	if url == nil {
