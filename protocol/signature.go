@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
@@ -12,9 +13,24 @@ import (
 
 var ErrCannotInitiate = errors.New("signature cannot initiate a transaction: values are missing")
 
+func signatureHash(sig Signature) []byte {
+	// This should never fail unless the signature uses bigints
+	data, _ := sig.MarshalBinary()
+	hash := sha256.Sum256(data)
+	return hash[:]
+}
+
 /*
  * Legacy ED25519 Signature
  */
+
+func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, txnHash []byte) {
+	data := sig.MetadataHash()
+	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+	sig.Signature = ed25519.Sign(privateKey, hash[:])
+}
 
 // GetSigner returns Signer.
 func (s *LegacyED25519Signature) GetSigner() *url.URL { return s.Signer }
@@ -30,6 +46,13 @@ func (s *LegacyED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // GetSignature returns Signature.
 func (s *LegacyED25519Signature) GetSignature() []byte { return s.Signature }
+
+// MetadataHash hashes the signature metadata.
+func (s *LegacyED25519Signature) MetadataHash() []byte {
+	r := *s                  // Copy the struct
+	r.Signature = nil        // Clear the signature
+	return signatureHash(&r) // Hash it
+}
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *LegacyED25519Signature) InitiatorHash() ([]byte, error) {
@@ -47,14 +70,27 @@ func (s *LegacyED25519Signature) InitiatorHash() ([]byte, error) {
 
 // Verify returns true if this signature is a valid legacy ED25519 signature of
 // the hash.
-func (e *LegacyED25519Signature) Verify(hash []byte) bool {
-	nonceHash := append(common.Uint64Bytes(e.Timestamp), hash...)
-	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, nonceHash, e.Signature)
+func (e *LegacyED25519Signature) Verify(txnHash []byte) bool {
+	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
+		return false
+	}
+	data := e.MetadataHash()
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
 
 /*
  * ED25519 Signature
  */
+
+func SignED25519(sig *ED25519Signature, privateKey, txnHash []byte) {
+	data := sig.MetadataHash()
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+	sig.Signature = ed25519.Sign(privateKey, hash[:])
+}
 
 // GetSigner returns Signer.
 func (s *ED25519Signature) GetSigner() *url.URL { return s.Signer }
@@ -70,6 +106,13 @@ func (s *ED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // GetSignature returns Signature.
 func (s *ED25519Signature) GetSignature() []byte { return s.Signature }
+
+// MetadataHash hashes the signature metadata.
+func (s *ED25519Signature) MetadataHash() []byte {
+	r := *s                  // Copy the struct
+	r.Signature = nil        // Clear the signature
+	return signatureHash(&r) // Hash it
+}
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *ED25519Signature) InitiatorHash() ([]byte, error) {
@@ -87,13 +130,26 @@ func (s *ED25519Signature) InitiatorHash() ([]byte, error) {
 
 // Verify returns true if this signature is a valid ED25519 signature of the
 // hash.
-func (e *ED25519Signature) Verify(hash []byte) bool {
-	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
+func (e *ED25519Signature) Verify(txnHash []byte) bool {
+	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
+		return false
+	}
+	data := e.MetadataHash()
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
 
 /*
  * RCD1 Signature
  */
+
+func SignRCD1(sig *RCD1Signature, privateKey, txnHash []byte) {
+	data := sig.MetadataHash()
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+	sig.Signature = ed25519.Sign(privateKey, hash[:])
+}
 
 // GetSigner returns Signer.
 func (s *RCD1Signature) GetSigner() *url.URL { return s.Signer }
@@ -113,13 +169,26 @@ func (s *RCD1Signature) GetPublicKey() []byte {
 }
 
 // Verify returns true if this signature is a valid RCD1 signature of the hash.
-func (e *RCD1Signature) Verify(hash []byte) bool {
-	return len(e.PublicKey) == 32 && len(e.Signature) == 64 && ed25519.Verify(e.PublicKey, hash, e.Signature)
+func (e *RCD1Signature) Verify(txnHash []byte) bool {
+	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
+		return false
+	}
+	data := e.MetadataHash()
+	data = append(data, txnHash...)
+	hash := sha256.Sum256(data)
+	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
 
 // GetSignature returns Signature.
 func (s *RCD1Signature) GetSignature() []byte {
 	return s.Signature
+}
+
+// MetadataHash hashes the signature metadata.
+func (s *RCD1Signature) MetadataHash() []byte {
+	r := *s                  // Copy the struct
+	r.Signature = nil        // Clear the signature
+	return signatureHash(&r) // Hash it
 }
 
 // InitiatorHash calculates the Merkle hash of the signature.
@@ -164,6 +233,11 @@ func (s *ReceiptSignature) GetSignature() []byte {
 	return b
 }
 
+// MetadataHash hashes the signature metadata.
+func (s *ReceiptSignature) MetadataHash() []byte {
+	return signatureHash(s) // Hash it
+}
+
 // InitiatorHash panics
 func (s *ReceiptSignature) InitiatorHash() ([]byte, error) {
 	panic("a receipt signature cannot initiate a transaction")
@@ -199,6 +273,11 @@ func (s *SyntheticSignature) GetPublicKey() []byte { return nil }
 
 // GetSignature returns nil.
 func (s *SyntheticSignature) GetSignature() []byte { return nil }
+
+// MetadataHash hashes the signature metadata.
+func (s *SyntheticSignature) MetadataHash() []byte {
+	return signatureHash(s) // Hash it
+}
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *SyntheticSignature) InitiatorHash() ([]byte, error) {
@@ -240,6 +319,11 @@ func (s *InternalSignature) GetPublicKey() []byte { return nil }
 
 // GetSignature returns nil.
 func (s *InternalSignature) GetSignature() []byte { return nil }
+
+// MetadataHash hashes the signature metadata.
+func (s *InternalSignature) MetadataHash() []byte {
+	return signatureHash(s) // Hash it
+}
 
 // InitiatorHash panics
 func (s *InternalSignature) InitiatorHash() ([]byte, error) {
