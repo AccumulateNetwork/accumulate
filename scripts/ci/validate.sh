@@ -85,20 +85,20 @@ function success {
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
-section "Add a new DN validator"
-if [ -f "$NODE_PRIV_VAL" ] && which accumulated > /dev/null; then
+# section "Add a new DN validator"
+# if [ -f "$NODE_PRIV_VAL" ] && which accumulated > /dev/null; then
   #spin up a DN validator
-  cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
-  rm -rf ${NODE_ROOT:-~/.testnode}
-  accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
-  accumulated run -n 0 -w ${NODE_ROOT:-~/.testnode/dn} &
-  declare -g ACCPID=$!
-  sleep 5
-  pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.testnode/dn/Node0}/config/priv_validator_key.json)
-  pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-  declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
-  wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
-fi
+#   cat ${NODE_ROOT:-~/.accumulate/dn/Node0}/config/accumulate.toml
+#   rm -rf ${NODE_ROOT:-~/.testnode}
+#   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.10:26656 -w ${NODE_ROOT:-~/.testnode} --skip-version-check --no-website
+#   accumulated run -n 0 -w ${NODE_ROOT:-~/.testnode/dn} &
+#   declare -g ACCPID=$!
+#   sleep 5
+#   pubkey=$(jq -re .pub_key.value ${NODE_ROOT:-~/.testnode/dn/Node0}/config/priv_validator_key.json)
+#   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+#   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+#   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
+# fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
@@ -469,8 +469,8 @@ else
 fi
 
 section "Shutdown dynamic validator"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
-    [ -z "${ACCPID}" ] || kill -9 $ACCPID
-    rm -rf ${NODE_ROOT:-~/.testnode}
-fi
+#if [ -f "$NODE_PRIV_VAL" ]; then
+#    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+#    [ -z "${ACCPID}" ] || kill -9 $ACCPID
+#    rm -rf ${NODE_ROOT:-~/.testnode}
+#fi
