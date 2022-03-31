@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
@@ -31,6 +32,7 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
+	block    *chain.Block
 	txct     int64
 	timer    time.Time
 	didPanic bool
@@ -39,7 +41,7 @@ type Accumulator struct {
 }
 
 type AccumulatorOptions struct {
-	Chain   Chain
+	Chain   *chain.Executor
 	DB      *database.Database
 	Logger  log.Logger
 	Network config.Network
@@ -183,7 +185,10 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, customErr := app.Chain.Query(qu, reqQuery.Height, reqQuery.Prove)
+	batch := app.DB.Begin(false)
+	defer batch.Discard()
+
+	k, v, customErr := app.Chain.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
 	switch {
 	case customErr == nil:
 		//Ok
@@ -218,9 +223,31 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	app.logger.Info("Initializing")
-	root, err := app.Chain.InitChain(req.AppStateBytes, req.Time)
+	block := new(chain.Block)
+	block.Index = protocol.GenesisBlock
+	block.Time = req.Time
+	block.IsLeader = true
+	block.Batch = app.DB.Begin(true)
+	defer block.Batch.Discard()
+
+	// Initialize the chain
+	root, err := app.Chain.InitChain(block, req.AppStateBytes)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
+	}
+
+	// Commit the batch
+	err = block.Batch.Commit()
+	if err != nil {
+		panic(fmt.Errorf("failed to commit block: %v", err))
+	}
+
+	// Notify the executor that we comitted
+	batch := app.DB.Begin(false)
+	defer batch.Discard()
+	err = app.Chain.DidCommit(block, batch)
+	if err != nil {
+		panic(fmt.Errorf("failed to notify governor: %v", err))
 	}
 
 	return abci.ResponseInitChain{AppHash: root}
@@ -232,14 +259,16 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var ret abci.ResponseBeginBlock
 
+	app.block = new(chain.Block)
+	app.block.IsLeader = bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
+	app.block.Index = req.Header.Height
+	app.block.Time = req.Header.Time
+	app.block.CommitInfo = &req.LastCommitInfo
+	app.block.Evidence = req.ByzantineValidators
+	app.block.Batch = app.DB.Begin(true)
+
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	_, err := app.Chain.BeginBlock(BeginBlockRequest{
-		IsLeader:   bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
-		Height:     req.Header.Height,
-		Time:       req.Header.Time,
-		CommitInfo: &req.LastCommitInfo,
-		Evidence:   req.ByzantineValidators,
-	})
+	_, err := app.Chain.BeginBlock(app.block)
 	if err != nil {
 		app.fatal(err, true)
 		return ret
@@ -289,7 +318,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), app.Chain.CheckTx, req.Tx)
+	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Chain, app.DB), req.Tx)
 	if err != nil {
 		return abci.ResponseCheckTx{
 			Code: uint32(err.Code),
@@ -329,7 +358,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 	}
 
-	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), app.Chain.DeliverTx, req.Tx)
+	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Chain, app.block), req.Tx)
 	if err != nil {
 		return abci.ResponseDeliverTx{
 			Code: uint32(err.Code),
@@ -343,21 +372,28 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
+func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil, true)
 
-	r := app.Chain.EndBlock(EndBlockRequest{})
-
-	if len(r.ValidatorsUpdates) > 0 {
-		resp.ValidatorUpdates = getValidatorUpdates(r)
+	if app.block.State.Empty() {
+		return abci.ResponseEndBlock{}
 	}
+
+	err := app.Chain.EndBlock(app.block)
+	if err != nil {
+		app.fatal(err, true)
+		return abci.ResponseEndBlock{}
+	}
+
+	var resp abci.ResponseEndBlock
+	resp.ValidatorUpdates = getValidatorUpdates(app.block.State.ValidatorsUpdates)
 	return resp
 }
 
 // getValidatorUpdates adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
-func getValidatorUpdates(r EndBlockResponse) []abci.ValidatorUpdate {
-	validatorUpdates := make([]abci.ValidatorUpdate, len(r.ValidatorsUpdates))
-	for i, u := range r.ValidatorsUpdates {
+func getValidatorUpdates(updates []chain.ValidatorUpdate) []abci.ValidatorUpdate {
+	validatorUpdates := make([]abci.ValidatorUpdate, len(updates))
+	for i, u := range updates {
 		var pwr int64
 		if u.Enabled {
 			pwr = 1
@@ -378,17 +414,50 @@ func getValidatorUpdates(r EndBlockResponse) []abci.ValidatorUpdate {
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
 //
 // Commits the transaction block to the chains.
-func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
+func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer app.recover(nil, true)
+	defer func() { app.block = nil }()
 
-	//end the current batch of transactions in the Stateful Merkle Tree
+	// Is the block empty?
+	if app.block.State.Empty() {
+		// Discard changes
+		app.block.Batch.Discard()
 
-	mdRoot, err := app.Chain.Commit()
-	resp.Data = mdRoot
+		// Get the old root
+		batch := app.DB.Begin(false)
+		defer batch.Discard()
+		root, err := batch.GetMinorRootChainAnchor(&app.Network)
+		if err != nil {
+			app.fatal(err, true)
+			return abci.ResponseCommit{}
+		}
 
+		duration := time.Since(app.timer)
+		app.logger.Debug("Committed empty block", "duration", duration.String())
+		return abci.ResponseCommit{Data: root}
+	}
+
+	// Commit the batch
+	err := app.block.Batch.Commit()
 	if err != nil {
 		app.fatal(err, true)
-		return
+		return abci.ResponseCommit{}
+	}
+
+	// Get the root
+	batch := app.DB.Begin(false)
+	defer batch.Discard()
+	root, err := batch.GetMinorRootChainAnchor(&app.Network)
+	if err != nil {
+		app.fatal(err, true)
+		return abci.ResponseCommit{}
+	}
+
+	// Notify the executor that we comitted
+	err = app.Chain.DidCommit(app.block, batch)
+	if err != nil {
+		app.fatal(err, true)
+		return abci.ResponseCommit{}
 	}
 
 	//this will truncate what tendermint stores since we only care about current state
@@ -399,8 +468,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
-
-	return resp
+	return abci.ResponseCommit{Data: root}
 }
 
 // ListSnapshots implements github.com/tendermint/tendermint/abci/types.Application.

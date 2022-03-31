@@ -575,7 +575,7 @@ type UpdateKeyOperation struct {
 
 type UpdateKeyPage struct {
 	fieldsSet []bool
-	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
+	Operation []KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
 }
 
 type UpdateManager struct {
@@ -2038,7 +2038,10 @@ func (v *UpdateKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
 func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 	u := new(UpdateKeyPage)
 
-	u.Operation = v.Operation
+	u.Operation = make([]KeyPageOperation, len(v.Operation))
+	for i, v := range v.Operation {
+		u.Operation[i] = v
+	}
 
 	return u
 }
@@ -3429,8 +3432,13 @@ func (v *UpdateKeyOperation) Equal(u *UpdateKeyOperation) bool {
 }
 
 func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
-	if !(v.Operation == u.Operation) {
+	if len(v.Operation) != len(u.Operation) {
 		return false
+	}
+	for i := range v.Operation {
+		if !(v.Operation[i] == u.Operation[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -7307,8 +7315,10 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, TransactionTypeUpdateKeyPage)
-	if !(v.Operation == (nil)) {
-		writer.WriteValue(2, v.Operation)
+	if !(len(v.Operation) == 0) {
+		for _, v := range v.Operation {
+			writer.WriteValue(2, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateKeyPage)
@@ -7320,7 +7330,7 @@ func (v *UpdateKeyPage) IsValid() error {
 
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Operation is missing")
-	} else if v.Operation == (nil) {
+	} else if len(v.Operation) == 0 {
 		errs = append(errs, "field Operation is not set")
 	}
 
@@ -9655,13 +9665,18 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateKeyPage, typ)
 	}
 
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalKeyPageOperation(b)
-		if err == nil {
-			v.Operation = x
+	for {
+		ok := reader.ReadValue(2, func(b []byte) error {
+			x, err := UnmarshalKeyPageOperation(b)
+			if err == nil {
+				v.Operation = append(v.Operation, x)
+			}
+			return err
+		})
+		if !ok {
+			break
 		}
-		return err
-	})
+	}
 
 	seen, err := reader.Reset(fieldNames_UpdateKeyPage)
 	v.fieldsSet = seen
@@ -10824,14 +10839,17 @@ func (v *UpdateKeyOperation) MarshalJSON() ([]byte, error) {
 
 func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Operation json.RawMessage `json:"operation,omitempty"`
+		Type      TransactionType   `json:"type"`
+		Operation []json.RawMessage `json:"operation,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if x, err := json.Marshal(v.Operation); err != nil {
-		return nil, fmt.Errorf("error encoding Operation: %w", err)
-	} else {
-		u.Operation = x
+	u.Operation = make([]json.RawMessage, len(v.Operation))
+	for i, x := range v.Operation {
+		if y, err := json.Marshal(x); err != nil {
+			return nil, fmt.Errorf("error encoding Operation: %w", err)
+		} else {
+			u.Operation[i] = y
+		}
 	}
 	return json.Marshal(&u)
 }
@@ -12660,24 +12678,29 @@ func (v *UpdateKeyOperation) UnmarshalJSON(data []byte) error {
 
 func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Operation json.RawMessage `json:"operation,omitempty"`
+		Type      TransactionType   `json:"type"`
+		Operation []json.RawMessage `json:"operation,omitempty"`
 	}{}
 	u.Type = v.Type()
-	if x, err := json.Marshal(v.Operation); err != nil {
-		return fmt.Errorf("error encoding Operation: %w", err)
-	} else {
-		u.Operation = x
+	u.Operation = make([]json.RawMessage, len(v.Operation))
+	for i, x := range v.Operation {
+		if y, err := json.Marshal(x); err != nil {
+			return fmt.Errorf("error encoding Operation: %w", err)
+		} else {
+			u.Operation[i] = y
+		}
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := UnmarshalKeyPageOperationJSON(u.Operation); err != nil {
-		return fmt.Errorf("error decoding Operation: %w", err)
-	} else {
-		v.Operation = x
+	v.Operation = make([]KeyPageOperation, len(u.Operation))
+	for i, x := range u.Operation {
+		if y, err := UnmarshalKeyPageOperationJSON(x); err != nil {
+			return fmt.Errorf("error decoding Operation: %w", err)
+		} else {
+			v.Operation[i] = y
+		}
 	}
-
 	return nil
 }
 
