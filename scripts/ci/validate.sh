@@ -471,5 +471,5 @@ fi
 section "Shutdown dynamic validator"
 if [ -f "$NODE_PRIV_VAL" ]; then
     [ -z "${ACCPID}" ] || kill -9 $ACCPID
-    ${NODE_ROOT:-~/.testnode/dn}
+    rm -rf ${NODE_ROOT:-~/.testnode}
 fi
