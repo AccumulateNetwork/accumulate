@@ -170,9 +170,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Submit SyntheticReceipt to the current state manager/batch so ProduceSynthetic doesn't have to create a new separate one
-	srEnv := x.blockState.SynthReceiptEnvelope
+	srEnv := x.SynthReceiptEnvelope
 	if srEnv != nil {
-		x.blockState.SynthReceiptEnvelope = nil
+		x.SynthReceiptEnvelope = nil
 		st.Submit(srEnv.DestUrl, srEnv.SyntheticReceipt)
 	}
 
@@ -229,10 +229,10 @@ func (x *Executor) recordTransaction(batch *database.Batch, transaction *protoco
 	// When the transaction is synthetic, send a receipt back to its origin
 	txt := stateEnv.Transaction.Type()
 	if txt.IsSynthetic() && NeedsReceipt(txt) { // recordTransactionError can pass in a nil state manager
-		if x.blockState.SynthReceiptEnvelope != nil {
+		if x.SynthReceiptEnvelope != nil {
 			panic("BlockState can hold only one SynthReceiptEnvelope")
 		}
-		x.blockState.SynthReceiptEnvelope = CreateSynthReceipt(stateEnv, status, x.Network.NodeUrl())
+		x.SynthReceiptEnvelope = CreateSynthReceipt(stateEnv, status, x.Network.NodeUrl())
 	}
 	return nil
 }

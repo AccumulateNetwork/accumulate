@@ -24,11 +24,15 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors map[protocol.TransactionType]TxExecutor
-	governor  *governor
-	logger    logging.OptionalLogger
+	executors            map[protocol.TransactionType]TxExecutor
+	governor             *governor
+	logger               logging.OptionalLogger
+	SynthReceiptEnvelope *SynthReceiptEnvelope
+}
 
-	// oldBlockMeta blockMetadata
+type SynthReceiptEnvelope struct {
+	DestUrl          *url.URL
+	SyntheticReceipt *protocol.SyntheticReceipt
 }
 
 type ExecutorOptions struct {
@@ -144,7 +148,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 
 	block.State.Merge(&st.blockState)
 
-	err = m.ProduceSynthetic(block.Batch, txn, st.blockState.ProducedTxns)
+	_, err = m.ProduceSynthetic(block.Batch, txn, &block.State)
 	if err != nil {
 		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
@@ -481,14 +485,14 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	var synthAnchorIndex uint64
 	if len(block.State.ProducedTxns) > 0 {
 		synthAnchorIndex = uint64(rootChain.Height())
-		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, ledgerState, rootChain)
+		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, rootChain)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Add the BPT to the root chain
-	err = m.anchorBPT(block, ledgerState, rootChain)
+	err = m.anchorBPT(block, rootChain)
 	if err != nil {
 		return err
 	}
@@ -532,13 +536,13 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 
 	// Build synthetic receipts on Directory nodes
 	if m.Network.Type == config.Directory {
-		err = m.createLocalDNReceipt(rootChain, synthAnchorIndex)
+		err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = m.buildSynthReceipts(block, rootChain, int64(synthIndexIndex), int64(rootIndexIndex))
+	err = m.buildSynthReceipts(block, rootChain.Anchor(), int64(synthIndexIndex), int64(rootIndexIndex))
 	if err != nil {
 		return err
 	}
@@ -546,7 +550,7 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	return m.buildAnchorTxn(block, ledgerState, rootChain)
 }
 
-func (m *Executor) createLocalDNReceipt(rootChain *database.Chain, synthAnchorIndex uint64) error {
+func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
 	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
 	if err != nil {
 		return err
@@ -558,14 +562,14 @@ func (m *Executor) createLocalDNReceipt(rootChain *database.Chain, synthAnchorIn
 		panic("!")
 	}
 
-	synthChain, err := m.blockBatch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
+	synthChain, err := block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
 	if err != nil {
 		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
 	}
 
 	height := synthChain.Height()
-	offset := height - int64(len(m.blockState.ProducedTxns))
-	for i, txn := range m.blockState.ProducedTxns {
+	offset := height - int64(len(block.State.ProducedTxns))
+	for i, txn := range block.State.ProducedTxns {
 		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
 			// Do not generate a receipt for the anchor
 			continue
@@ -586,7 +590,7 @@ func (m *Executor) createLocalDNReceipt(rootChain *database.Chain, synthAnchorIn
 
 		sig := new(protocol.ReceiptSignature)
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
-		sigs, err := m.blockBatch.Transaction(txn.GetHash()).GetSignatures()
+		sigs, err := block.Batch.Transaction(txn.GetHash()).GetSignatures()
 		if err != nil {
 			return err
 		}
@@ -610,7 +614,7 @@ func (m *Executor) updateAccountBPT(account *database.Account) (err error) {
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, ledgerState *protocol.InternalLedger, rootChain *database.Chain) (indexIndex uint64, err error) {
+func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, rootChain *database.Chain) (indexIndex uint64, err error) {
 	indexIndex, _, err = addChainAnchor(rootChain, ledger, ledgerUrl, protocol.SyntheticChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return 0, err
@@ -627,7 +631,7 @@ func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledg
 }
 
 // anchorBPT anchors the BPT after ensuring any pending changes have been flushed.
-func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger, rootChain *database.Chain) error {
+func (m *Executor) anchorBPT(block *Block, rootChain *database.Chain) error {
 	root, err := block.Batch.CommitBpt()
 	if err != nil {
 		return err
@@ -661,7 +665,7 @@ func (m *Executor) buildSynthReceipts(block *Block, rootAnchor []byte, synthInde
 	offset := height - int64(len(block.State.ProducedTxns))
 	for i, txn := range block.State.ProducedTxns {
 		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
-			// Do not generate a ledger entry for the anchor
+			// Do not generate a receipt for the anchor
 			continue
 		}
 
