@@ -86,7 +86,8 @@ function success {
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d | wc -l)
-# section "Add a new DN validator"
+echo "$NUM_DNNS ================"
+section "Add a new DN validator"
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then #which accumulated > /dev/null; then
    #spin up 2 DN validators, we cannot have 2 validators, so need either 1 or 3, since 1 is running we need to add 2
    declare -g TEST_NODE_WORK_DIR_1=~/node1
