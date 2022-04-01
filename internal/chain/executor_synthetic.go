@@ -12,9 +12,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) (err error) {
+func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+	if len(produced) == 0 {
+		return nil
+	}
+
 	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
-	err = x.addSynthTxns(st, produced)
+	err := x.addSynthTxns(st, produced)
 	if err != nil {
 		return err
 	}
@@ -29,17 +33,36 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction) error {
-	ids := make([][32]byte, len(produced))
-	for i, sub := range produced {
+	for _, sub := range produced {
 		tx, err := m.buildSynthTxn(st, sub.Header.Principal, sub.Body)
 		if err != nil {
 			return err
 		}
 		sub.Header = tx.Header
-		copy(ids[i][:], tx.GetHash())
+
+		// Don't record txn -> produced synth txn for internal transactions
+		if st.txType.IsInternal() {
+			continue
+		}
+
+		// TODO This is a workaround for AC-1238. Once the DN anchor race is
+		// fixed, remove this.
+		if sub.Body.Type() == protocol.TransactionTypeSyntheticReceipt {
+			continue
+		}
+
+		swo, ok := sub.Body.(protocol.SynthTxnWithOrigin)
+		if !ok {
+			// This should not happen. Other than InternalSendTransactions, a
+			// transaction should never produce a synthetic transaction that
+			// does not have an origin.
+			return fmt.Errorf("transaction type %v does not have a synthetic origin", sub.Body.Type())
+		}
+
+		cause, _ := swo.GetSyntheticOrigin()
+		st.AddSyntheticTxn(cause, *(*[32]byte)(tx.GetHash()))
 	}
 
-	st.AddSyntheticTxns(st.txHash[:], ids)
 	return nil
 }
 

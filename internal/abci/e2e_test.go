@@ -1216,6 +1216,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
+		body.Source = n.network.NodeUrl()
 		body.Token = n.ParseUrl("foo2/tokens")
 		body.Amount.SetUint64(123)
 
