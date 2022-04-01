@@ -30,19 +30,16 @@ type BPT struct {
 // GetRoot
 // Get the Root node for the BPT.  This may load the BPT Root node from disk if not loaded yet.
 func (b *BPT) GetRoot() (root *BptNode) {
-	if b.Root == nil {
-		rootNodeKey, _ := GetNodeKey(0, [32]byte{})
-		if b.manager == nil {
-			return nil
+	if b.Root == nil { //                              If we have a root node, we are good
+		rootNodeKey, _ := GetNodeKey(0, [32]byte{}) // Get the root Node Key
+		b.Root = new(BptNode)                       // Allocate a Root Node
+		if b.manager != nil {                       // If we have a manager, pull from the DB
+			if data, err := b.manager.DBManager.Get(kBpt.Append(rootNodeKey)); err == nil {
+				b.Root.UnMarshal(data) //              Unmarshal what we get from the DB
+			}
 		}
-
-		if data, err := b.manager.DBManager.Get(kBpt.Append(rootNodeKey)); err != nil {
-			return nil
-		} else {
-			root := new(BptNode)
-			root.UnMarshal(data)
-			b.RootHash = root.Hash
-		}
+		b.Root.Height = 0            //                Height of root is always zero
+		b.Root.NodeKey = rootNodeKey //                The rootNodeKey is an array of zeros
 	}
 	return b.Root
 }
@@ -270,6 +267,23 @@ func GetHash(e Entry) []byte {
 	return e.GetHash() //         Otherwise, call the function to return the Hash for the entry.
 }
 
+// GetNodeHash
+// Compute the hash of a node from its children
+func GetNodeHash(n *BptNode) {
+	L := GetHash(n.Left)  //                        Get the Left Branch
+	R := GetHash(n.Right) //                        Get the Right Branch
+	switch {              //                        Sort four conditions:
+	case L != nil && R != nil: //                   If we have both L and R then combine
+		n.Hash = sha256.Sum256(append(L, R...)) //  Take the hash of L+R
+	case L != nil: //                               The next condition is where we only have L
+		copy(n.Hash[:], L) //                       Just use L.  No hash required
+	case R != nil: //                               Just have R.  Again, just use R.
+		copy(n.Hash[:], R) //                       No Hash Required
+	default: //                                     The fourth condition never happens, and bad if it does.
+		panic("dead nodes should not exist") //     This is a node without a child somewhere up the tree.
+	}
+}
+
 // Update the Patricia Tree hashes with the values from the
 // updates since the last update
 func (b *BPT) Update() error {
@@ -287,23 +301,13 @@ func (b *BPT) Update() error {
 					return err
 				}
 			} //
-			L := GetHash(n.Left)  //                        Get the Left Branch
-			R := GetHash(n.Right) //                        Get the Right Branch
-			switch {              //                        Sort four conditions:
-			case L != nil && R != nil: //                   If we have both L and R then combine
-				n.Hash = sha256.Sum256(append(L, R...)) //  Take the hash of L+R
-			case L != nil: //                               The next condition is where we only have L
-				copy(n.Hash[:], L) //                       Just use L.  No hash required
-			case R != nil: //                               Just have R.  Again, just use R.
-				copy(n.Hash[:], R) //                       No Hash Required
-			default: //                                     The fourth condition never happens, and bad if it does.
-				panic("dead nodes should not exist") //     This is a node without a child somewhere up the tree.
-			}
+			GetNodeHash(n)    //                            Set the node hash from its children
 			b.Clean(n)        //                            Node has been updated, so it is clean
 			b.Dirty(n.Parent) //                            The Parent is dirty cause it must consider this new state
 		}
 	}
 	if b.manager != nil { //                                Root doesn't get flushed (has no parent)
+		b.manager.Bpt.RootHash = b.manager.Bpt.Root.Hash
 		err := b.manager.FlushNode(b.GetRoot()) //          So flush it special
 		if err != nil {
 			return err
