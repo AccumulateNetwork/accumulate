@@ -835,12 +835,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		params.Count = uint64(10)
 		params.Expand = true
 
-		data, err := json.Marshal(&params)
-		if err != nil {
-			return "", err
-		}
 		var adiRes api2.MultiResponse
-		if err := Client.RequestAPIv2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
+		if err := Client.RequestAPIv2(context.Background(), "query-directory", &params, &adiRes); err != nil {
 			ret, err := PrintJsonRpcError(err)
 			if err != nil {
 				return "", err
