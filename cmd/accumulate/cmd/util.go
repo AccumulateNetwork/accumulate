@@ -251,11 +251,23 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.GetPublicKey()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
 	req.Metadata = env.Transaction.Header.Metadata
+
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		req.Signer.PublicKey = sig.PublicKey
+	case *protocol.ED25519Signature:
+		req.Signer.PublicKey = sig.PublicKey
+	case *protocol.RCD1Signature:
+		req.Signer.PublicKey = sig.PublicKey
+	default:
+		// Should not happen because this type switch should contain all the
+		// types we support
+		panic("unknown key type")
+	}
 
 	if TxPretend {
 		req.CheckOnly = true
@@ -634,7 +646,7 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKey())
+		out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKeyHash())
 	}
 	out += fmt.Sprintf("===\n")
 	return out

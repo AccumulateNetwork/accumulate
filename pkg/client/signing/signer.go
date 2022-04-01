@@ -202,7 +202,7 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 	return initSig, nil
 }
 
-func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
+func Faucet(txn *protocol.Transaction) (*protocol.LegacyED25519Signature, error) {
 	fs := protocol.Faucet.Signer()
 	return fs.Initiate(txn), nil
 }
