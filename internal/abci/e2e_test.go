@@ -1433,6 +1433,6 @@ func TestAccountAuth(t *testing.T) {
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.UpdateKeyBookAuth(batch, "foo/book0", true))
+	require.NoError(t, acctesting.UpdateAccountAuth(batch, "foo/book0", true))
 	require.NoError(t, batch.Commit())
 }

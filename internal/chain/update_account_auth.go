@@ -19,11 +19,17 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *protocol.Envelope) (prot
 	}
 
 	for _, op := range body.Operations {
-		switch op.(type) {
+		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:
+			if !st.Origin.Header().KeyBook.Equal(op.Authority) {
+				return nil, fmt.Errorf("cannot enable auth for %v", op.Authority)
+			}
 			st.Origin.Header().AuthDisabled = false
 
 		case *protocol.DisableAccountAuthOperation:
+			if !st.Origin.Header().KeyBook.Equal(op.Authority) {
+				return nil, fmt.Errorf("cannot enable auth for %v", op.Authority)
+			}
 			st.Origin.Header().AuthDisabled = true
 
 		default:
