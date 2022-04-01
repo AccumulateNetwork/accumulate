@@ -66,4 +66,6 @@ func TestRcdHashAddressFromPrivKey(t *testing.T) {
 	add2, _ := GetFactoidAddressFromRCDHash(rcd2)
 	add3, _ := GetFactoidAddressFromRCDHash(rcd3)
 	require.Equal(t, add1, add2, add3)
+./accumulate key import factoid Fs1ipNRjEXcWj8RUn1GRLMJYVoPFBL1yw9rn6sCxWGcxciC4HdPd FA2PdKfzGP5XwoSbeW1k9QunCHwC8DY6d8xgEdfm57qfR31nTueb 
+
 }

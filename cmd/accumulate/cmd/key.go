@@ -660,7 +660,7 @@ func ImportFactoidKey(factoidkey string, label string) (out string, err error) {
 			out = fmt.Sprintf("\tname\t\t:%s\n\trcd Hash\t:%x\n", label, rcdhash)
 		}
 	} else {
-		out, err = ImportKey(factoidkey, label)
+		out, err = "", fmt.Errorf("invalid factoid key must begin with `Fs`")
 	}
-	return out, nil
+	return out, err
 }
