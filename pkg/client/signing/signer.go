@@ -17,7 +17,7 @@ type Signer struct {
 	Type       protocol.SignatureType
 	Url        *url.URL
 	PrivateKey []byte
-	Height     uint64
+	Version    uint64
 	Timestamp  uint64
 }
 
@@ -41,8 +41,8 @@ func (s *Signer) SetPrivateKey(privKey []byte) *Signer {
 	return s
 }
 
-func (s *Signer) SetHeight(height uint64) *Signer {
-	s.Height = height
+func (s *Signer) SetVersion(version uint64) *Signer {
+	s.Version = version
 	return s
 }
 
@@ -69,8 +69,8 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 	if len(s.PrivateKey) == 0 {
 		errs = append(errs, "missing private key")
 	}
-	if init && s.Height == 0 {
-		errs = append(errs, "missing height")
+	if init && s.Version == 0 {
+		errs = append(errs, "missing version")
 	}
 	if init && s.Timestamp == 0 {
 		errs = append(errs, "missing timestamp")
@@ -103,7 +103,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.LegacyED25519Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerVersion = s.Height
+		sig.SignerVersion = s.Version
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -111,7 +111,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.ED25519Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerVersion = s.Height
+		sig.SignerVersion = s.Version
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -119,7 +119,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.RCD1Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerVersion = s.Height
+		sig.SignerVersion = s.Version
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -175,8 +175,8 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 	if s.Url == nil {
 		errs = append(errs, "missing signer")
 	}
-	if s.Height == 0 {
-		errs = append(errs, "missing timestamp")
+	if s.Version == 0 {
+		errs = append(errs, "missing version")
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
@@ -190,7 +190,7 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = s.Url
 	initSig.DestinationNetwork = protocol.SubnetUrl(destSubnet)
-	initSig.SequenceNumber = s.Height
+	initSig.SequenceNumber = s.Version
 
 	initHash, err := initSig.InitiatorHash()
 	if err != nil {

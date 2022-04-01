@@ -73,16 +73,15 @@ type ResponseAccount struct {
 }
 
 type ResponseByTxId struct {
-	fieldsSet          []bool
-	TxId               [32]byte                    `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	Envelope           *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	Status             *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	TxSynthTxIds       []byte                      `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
-	Height             int64                       `json:"height" form:"height" query:"height" validate:"required"`
-	ChainState         [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
-	Receipts           []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	SignatureThreshold uint64                      `json:"signatureThreshold,omitempty" form:"signatureThreshold" query:"signatureThreshold" validate:"required"`
-	Invalidated        bool                        `json:"invalidated,omitempty" form:"invalidated" query:"invalidated" validate:"required"`
+	fieldsSet    []bool
+	TxId         [32]byte                    `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	Envelope     *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
+	Status       *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	TxSynthTxIds []byte                      `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
+	Height       int64                       `json:"height" form:"height" query:"height" validate:"required"`
+	ChainState   [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	Receipts     []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Signers      []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
 }
 
 type ResponseChainEntry struct {
@@ -130,6 +129,12 @@ type ResponseTxHistory struct {
 	End          uint64           `json:"end" form:"end" query:"end" validate:"required"`
 	Total        uint64           `json:"total" form:"total" query:"total" validate:"required"`
 	Transactions []ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+}
+
+type SignatureSet struct {
+	fieldsSet  []bool
+	Account    protocol.Account     `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 }
 
 type TxReceipt struct {
@@ -265,8 +270,10 @@ func (v *ResponseByTxId) Copy() *ResponseByTxId {
 			u.Receipts[i] = (v).Copy()
 		}
 	}
-	u.SignatureThreshold = v.SignatureThreshold
-	u.Invalidated = v.Invalidated
+	u.Signers = make([]SignatureSet, len(v.Signers))
+	for i, v := range v.Signers {
+		u.Signers[i] = *(&v).Copy()
+	}
 
 	return u
 }
@@ -373,6 +380,20 @@ func (v *ResponseTxHistory) Copy() *ResponseTxHistory {
 }
 
 func (v *ResponseTxHistory) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignatureSet) Copy() *SignatureSet {
+	u := new(SignatureSet)
+
+	u.Account = v.Account
+	u.Signatures = make([]protocol.Signature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		u.Signatures[i] = v
+	}
+
+	return u
+}
+
+func (v *SignatureSet) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TxReceipt) Copy() *TxReceipt {
 	u := new(TxReceipt)
@@ -566,11 +587,13 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 			return false
 		}
 	}
-	if !(v.SignatureThreshold == u.SignatureThreshold) {
+	if len(v.Signers) != len(u.Signers) {
 		return false
 	}
-	if !(v.Invalidated == u.Invalidated) {
-		return false
+	for i := range v.Signers {
+		if !((&v.Signers[i]).Equal(&u.Signers[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -696,6 +719,22 @@ func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 	}
 	for i := range v.Transactions {
 		if !((&v.Transactions[i]).Equal(&u.Transactions[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *SignatureSet) Equal(u *SignatureSet) bool {
+	if !(v.Account == u.Account) {
+		return false
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !(v.Signatures[i] == u.Signatures[i]) {
 			return false
 		}
 	}
@@ -1148,8 +1187,7 @@ var fieldNames_ResponseByTxId = []string{
 	5: "Height",
 	6: "ChainState",
 	7: "Receipts",
-	8: "SignatureThreshold",
-	9: "Invalidated",
+	8: "Signers",
 }
 
 func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
@@ -1179,11 +1217,10 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(7, v)
 		}
 	}
-	if !(v.SignatureThreshold == 0) {
-		writer.WriteUint(8, v.SignatureThreshold)
-	}
-	if !(!v.Invalidated) {
-		writer.WriteBool(9, v.Invalidated)
+	if !(len(v.Signers) == 0) {
+		for _, v := range v.Signers {
+			writer.WriteValue(8, &v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseByTxId)
@@ -1229,14 +1266,9 @@ func (v *ResponseByTxId) IsValid() error {
 		errs = append(errs, "field Receipts is not set")
 	}
 	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
-		errs = append(errs, "field SignatureThreshold is missing")
-	} else if v.SignatureThreshold == 0 {
-		errs = append(errs, "field SignatureThreshold is not set")
-	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
-		errs = append(errs, "field Invalidated is missing")
-	} else if !v.Invalidated {
-		errs = append(errs, "field Invalidated is not set")
+		errs = append(errs, "field Signers is missing")
+	} else if len(v.Signers) == 0 {
+		errs = append(errs, "field Signers is not set")
 	}
 
 	switch len(errs) {
@@ -1596,6 +1628,52 @@ func (v *ResponseTxHistory) IsValid() error {
 	}
 }
 
+var fieldNames_SignatureSet = []string{
+	1: "Account",
+	2: "Signatures",
+}
+
+func (v *SignatureSet) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == (nil)) {
+		writer.WriteValue(1, v.Account)
+	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_SignatureSet)
+	return buffer.Bytes(), err
+}
+
+func (v *SignatureSet) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == (nil) {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TxReceipt = []string{
 	1: "Account",
 	2: "Chain",
@@ -1902,11 +1980,12 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadUint(8); ok {
-		v.SignatureThreshold = x
-	}
-	if x, ok := reader.ReadBool(9); ok {
-		v.Invalidated = x
+	for {
+		if x := new(SignatureSet); reader.ReadValue(8, x.UnmarshalBinary) {
+			v.Signers = append(v.Signers, *x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseByTxId)
@@ -2082,6 +2161,38 @@ func (v *ResponseTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *SignatureSet) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, func(b []byte) error {
+		x, err := protocol.UnmarshalAccount(b)
+		if err == nil {
+			v.Account = x
+		}
+		return err
+	})
+	for {
+		ok := reader.ReadValue(2, func(b []byte) error {
+			x, err := protocol.UnmarshalSignature(b)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_SignatureSet)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *TxReceipt) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2181,15 +2292,14 @@ func (v *ResponseAccount) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId               string                      `json:"txId,omitempty"`
-		Envelope           *protocol.Envelope          `json:"envelope,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds       *string                     `json:"txSynthTxIds,omitempty"`
-		Height             int64                       `json:"height"`
-		ChainState         []*string                   `json:"chainState,omitempty"`
-		Receipts           []*TxReceipt                `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
+		TxId         string                      `json:"txId,omitempty"`
+		Envelope     *protocol.Envelope          `json:"envelope,omitempty"`
+		Status       *protocol.TransactionStatus `json:"status,omitempty"`
+		TxSynthTxIds *string                     `json:"txSynthTxIds,omitempty"`
+		Height       int64                       `json:"height"`
+		ChainState   []*string                   `json:"chainState,omitempty"`
+		Receipts     []*TxReceipt                `json:"receipts,omitempty"`
+		Signers      []SignatureSet              `json:"signers,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.TxId)
 	u.Envelope = v.Envelope
@@ -2201,8 +2311,7 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 		u.ChainState[i] = encoding.BytesToJSON(x)
 	}
 	u.Receipts = v.Receipts
-	u.SignatureThreshold = v.SignatureThreshold
-	u.Invalidated = v.Invalidated
+	u.Signers = v.Signers
 	return json.Marshal(&u)
 }
 
@@ -2255,6 +2364,27 @@ func (v *ResponsePending) MarshalJSON() ([]byte, error) {
 	u.Transactions = make([]string, len(v.Transactions))
 	for i, x := range v.Transactions {
 		u.Transactions[i] = encoding.ChainToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *SignatureSet) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Account    json.RawMessage   `json:"account,omitempty"`
+		Signatures []json.RawMessage `json:"signatures,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.Account); err != nil {
+		return nil, fmt.Errorf("error encoding Account: %w", err)
+	} else {
+		u.Account = x
+	}
+	u.Signatures = make([]json.RawMessage, len(v.Signatures))
+	for i, x := range v.Signatures {
+		if y, err := json.Marshal(x); err != nil {
+			return nil, fmt.Errorf("error encoding Signatures: %w", err)
+		} else {
+			u.Signatures[i] = y
+		}
 	}
 	return json.Marshal(&u)
 }
@@ -2392,15 +2522,14 @@ func (v *ResponseAccount) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId               string                      `json:"txId,omitempty"`
-		Envelope           *protocol.Envelope          `json:"envelope,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds       *string                     `json:"txSynthTxIds,omitempty"`
-		Height             int64                       `json:"height"`
-		ChainState         []*string                   `json:"chainState,omitempty"`
-		Receipts           []*TxReceipt                `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
+		TxId         string                      `json:"txId,omitempty"`
+		Envelope     *protocol.Envelope          `json:"envelope,omitempty"`
+		Status       *protocol.TransactionStatus `json:"status,omitempty"`
+		TxSynthTxIds *string                     `json:"txSynthTxIds,omitempty"`
+		Height       int64                       `json:"height"`
+		ChainState   []*string                   `json:"chainState,omitempty"`
+		Receipts     []*TxReceipt                `json:"receipts,omitempty"`
+		Signers      []SignatureSet              `json:"signers,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.TxId)
 	u.Envelope = v.Envelope
@@ -2412,8 +2541,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 		u.ChainState[i] = encoding.BytesToJSON(x)
 	}
 	u.Receipts = v.Receipts
-	u.SignatureThreshold = v.SignatureThreshold
-	u.Invalidated = v.Invalidated
+	u.Signers = v.Signers
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2439,8 +2567,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Receipts = u.Receipts
-	v.SignatureThreshold = u.SignatureThreshold
-	v.Invalidated = u.Invalidated
+	v.Signers = u.Signers
 	return nil
 }
 
@@ -2543,6 +2670,44 @@ func (v *ResponsePending) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("error decoding Transactions: %w", err)
 		} else {
 			v.Transactions[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *SignatureSet) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Account    json.RawMessage   `json:"account,omitempty"`
+		Signatures []json.RawMessage `json:"signatures,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.Account); err != nil {
+		return fmt.Errorf("error encoding Account: %w", err)
+	} else {
+		u.Account = x
+	}
+	u.Signatures = make([]json.RawMessage, len(v.Signatures))
+	for i, x := range v.Signatures {
+		if y, err := json.Marshal(x); err != nil {
+			return fmt.Errorf("error encoding Signatures: %w", err)
+		} else {
+			u.Signatures[i] = y
+		}
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := protocol.UnmarshalAccountJSON(u.Account); err != nil {
+		return fmt.Errorf("error decoding Account: %w", err)
+	} else {
+		v.Account = x
+	}
+
+	v.Signatures = make([]protocol.Signature, len(u.Signatures))
+	for i, x := range u.Signatures {
+		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
+			return fmt.Errorf("error decoding Signatures: %w", err)
+		} else {
+			v.Signatures[i] = y
 		}
 	}
 	return nil
