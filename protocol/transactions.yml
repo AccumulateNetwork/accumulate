@@ -101,7 +101,11 @@ ReceiptSignature:
   union: { type: signature }
   embeddings:
   - Receipt
-  fields: []
+  fields:
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
 
 SyntheticSignature:
   union: { type: signature }

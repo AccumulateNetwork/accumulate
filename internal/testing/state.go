@@ -260,6 +260,7 @@ func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) er
 
 	page := new(protocol.KeyPage)
 	page.KeyBook = bookUrl
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
 	if len(publicKey) == 1 {

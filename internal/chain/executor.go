@@ -120,10 +120,10 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 	st.logger = m.logger
 	defer st.Discard()
 
-	err = block.Batch.Transaction(txn.GetHash()).Put(
-		&protocol.Envelope{Transaction: txn},
+	err = putSyntheticTransaction(
+		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		[]protocol.Signature{&protocol.InternalSignature{Network: m.Network.NodeUrl()}})
+		&protocol.InternalSignature{Network: m.Network.NodeUrl()})
 	if err != nil {
 		return err
 	}
@@ -331,10 +331,10 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 
 	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
 
-	err = block.Batch.Transaction(txn.GetHash()).Put(
-		&protocol.Envelope{Transaction: txn},
+	err = putSyntheticTransaction(
+		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		[]protocol.Signature{&protocol.InternalSignature{Network: signerUrl}})
+		&protocol.InternalSignature{Network: signerUrl})
 	if err != nil {
 		return err
 	}
@@ -576,14 +576,13 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 			return err
 		}
 
+		// This should be the second signature (SyntheticSignature should be first)
 		sig := new(protocol.ReceiptSignature)
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
-		sigs, err := block.Batch.Transaction(txn.GetHash()).GetSignatures()
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
 		if err != nil {
 			return err
 		}
-		// This should be the second signature (SyntheticSignature should be first)
-		sigs.Add(sig)
 	}
 	return nil
 }

@@ -85,10 +85,24 @@ ResponseByTxId:
       type: TxReceipt
       marshal-as: reference
       pointer: true
-    - name: SignatureThreshold
-      type: uvarint
-    - name: Invalidated
-      type: bool
+    - name: Signers
+      type: SignatureSet
+      marshal-as: reference
+      repeatable: true
+
+SignatureSet:
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalAccount
+      zero-value: nil
+    - name: Signatures
+      type: protocol.Signature
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalSignature
+      zero-value: nil
+      repeatable: true
 
 TxReceipt:
   fields:

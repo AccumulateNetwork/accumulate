@@ -26,28 +26,28 @@ func packStateResponse(account protocol.Account, chains []query.ChainState) (*Ch
 	return res, nil
 }
 
-func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*TransactionQueryResponse, error) {
+func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
 	res.Type = envelope.Transaction.Body.GetType().String()
 	res.Data = envelope.Transaction.Body
-	res.TransactionHash = txid[:]
+	res.TransactionHash = qrResp.TxId[:]
 	res.MainChain = ms
 	res.Transaction = envelope.Transaction
 
-	if len(synth)%32 != 0 {
+	if len(qrResp.TxSynthTxIds)%32 != 0 {
 		return nil, fmt.Errorf("invalid synthetic transaction information, not divisible by 32")
 	}
 
-	if synth != nil {
-		res.SyntheticTxids = make([][32]byte, len(synth)/32)
+	if qrResp.TxSynthTxIds != nil {
+		res.SyntheticTxids = make([][32]byte, len(qrResp.TxSynthTxIds)/32)
 		for i := range res.SyntheticTxids {
-			copy(res.SyntheticTxids[i][:], synth[i*32:(i+1)*32])
+			copy(res.SyntheticTxids[i][:], qrResp.TxSynthTxIds[i*32:(i+1)*32])
 		}
 	}
 
 	switch payload := envelope.Transaction.Body.(type) {
 	case *protocol.SendTokens:
-		if synth != nil && len(res.SyntheticTxids) != len(payload.To) {
+		if qrResp.TxSynthTxIds != nil && len(res.SyntheticTxids) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
@@ -58,8 +58,8 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, envelope *prot
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
 			data.To[i].Amount = to.Amount
-			if synth != nil {
-				data.To[i].Txid = synth[i*32 : (i+1)*32]
+			if qrResp.TxSynthTxIds != nil {
+				data.To[i].Txid = qrResp.TxSynthTxIds[i*32 : (i+1)*32]
 			}
 		}
 
@@ -75,8 +75,37 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, envelope *prot
 		res.Data = payload
 	}
 
-	res.Signatures = envelope.Signatures
 	res.Status = status
+	res.Receipts = qrResp.Receipts
+
+	books := map[string]*SignatureBook{}
+	for _, signer := range qrResp.Signers {
+		res.Signatures = append(res.Signatures, signer.Signatures...)
+
+		var book *SignatureBook
+		signerUrl := signer.Account.Header().Url
+		bookUrl, _, ok := protocol.ParseKeyPageUrl(signerUrl)
+		if !ok {
+			book = new(SignatureBook)
+			book.Authority = signerUrl
+			res.SignatureBooks = append(res.SignatureBooks, book)
+		} else if book, ok = books[bookUrl.String()]; !ok {
+			book = new(SignatureBook)
+			book.Authority = bookUrl
+			res.SignatureBooks = append(res.SignatureBooks, book)
+		}
+
+		page := new(SignaturePage)
+		book.Pages = append(book.Pages, page)
+		page.Signer.Type = signer.Account.Type()
+		page.Signer.Url = signerUrl
+		page.Signatures = signer.Signatures
+
+		keyPage, ok := signer.Account.(*protocol.KeyPage)
+		if ok {
+			page.Signer.AcceptThreshold = keyPage.Threshold
+		}
+	}
 
 	return res, nil
 }

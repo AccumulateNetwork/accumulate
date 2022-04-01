@@ -112,11 +112,27 @@ type QueryPagination struct {
 	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
 }
 
+type SignatureBook struct {
+	Authority *url.URL         `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	Pages     []*SignaturePage `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+}
+
+type SignaturePage struct {
+	Signer     SignerMetadata       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+}
+
 type Signer struct {
 	PublicKey     []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
+}
+
+type SignerMetadata struct {
+	Type            protocol.AccountType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Url             *url.URL             `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	AcceptThreshold uint64               `json:"acceptThreshold,omitempty" form:"acceptThreshold" query:"acceptThreshold" validate:"required"`
 }
 
 type StatusResponse struct {
@@ -135,18 +151,17 @@ type TokenSend struct {
 }
 
 type TransactionQueryResponse struct {
-	Type               string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MainChain          *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
-	Data               interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Origin             *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	TransactionHash    []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
-	Transaction        *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Signatures         []protocol.Signature        `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
-	Status             *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	SyntheticTxids     [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
-	Receipts           []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	SignatureThreshold uint64                      `json:"signatureThreshold,omitempty" form:"signatureThreshold" query:"signatureThreshold" validate:"required"`
-	Invalidated        bool                        `json:"invalidated,omitempty" form:"invalidated" query:"invalidated" validate:"required"`
+	Type            string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain       *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Data            interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Origin          *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	TransactionHash []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	Transaction     *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Signatures      []protocol.Signature        `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Status          *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	SyntheticTxids  [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+	Receipts        []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty" form:"signatureBooks" query:"signatureBooks" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -169,7 +184,7 @@ type TxRequest struct {
 
 type TxResponse struct {
 	TransactionHash []byte      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
-	EnvelopeHash    []byte      `json:"envelopeHash,omitempty" form:"envelopeHash" query:"envelopeHash" validate:"required"`
+	SignatureHashes [][]byte    `json:"signatureHashes,omitempty" form:"signatureHashes" query:"signatureHashes" validate:"required"`
 	SimpleHash      []byte      `json:"simpleHash,omitempty" form:"simpleHash" query:"simpleHash" validate:"required"`
 	Code            uint64      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Message         string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
@@ -653,6 +668,23 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SignaturePage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Signer     SignerMetadata    `json:"signer,omitempty"`
+		Signatures []json.RawMessage `json:"signatures,omitempty"`
+	}{}
+	u.Signer = v.Signer
+	u.Signatures = make([]json.RawMessage, len(v.Signatures))
+	for i, x := range v.Signatures {
+		if y, err := json.Marshal(x); err != nil {
+			return nil, fmt.Errorf("error encoding Signatures: %w", err)
+		} else {
+			u.Signatures[i] = y
+		}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey     *string                `json:"publicKey,omitempty"`
@@ -683,21 +715,20 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type               string                      `json:"type,omitempty"`
-		MainChain          *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState        *MerkleState                `json:"merkleState,omitempty"`
-		Data               interface{}                 `json:"data,omitempty"`
-		Origin             *url.URL                    `json:"origin,omitempty"`
-		Sponsor            *url.URL                    `json:"sponsor,omitempty"`
-		TransactionHash    *string                     `json:"transactionHash,omitempty"`
-		Txid               *string                     `json:"txid,omitempty"`
-		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
-		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
-		Receipts           []*query.TxReceipt          `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
+		Type            string                      `json:"type,omitempty"`
+		MainChain       *MerkleState                `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
+		Data            interface{}                 `json:"data,omitempty"`
+		Origin          *url.URL                    `json:"origin,omitempty"`
+		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
+		TransactionHash *string                     `json:"transactionHash,omitempty"`
+		Txid            *string                     `json:"txid,omitempty"`
+		Transaction     *protocol.Transaction       `json:"transaction,omitempty"`
+		Signatures      []json.RawMessage           `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
+		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
+		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -722,8 +753,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
 	}
 	u.Receipts = v.Receipts
-	u.SignatureThreshold = v.SignatureThreshold
-	u.Invalidated = v.Invalidated
+	u.SignatureBooks = v.SignatureBooks
 	return json.Marshal(&u)
 }
 
@@ -771,7 +801,7 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		TransactionHash *string     `json:"transactionHash,omitempty"`
 		Txid            *string     `json:"txid,omitempty"`
-		EnvelopeHash    *string     `json:"envelopeHash,omitempty"`
+		SignatureHashes []*string   `json:"signatureHashes,omitempty"`
 		SimpleHash      *string     `json:"simpleHash,omitempty"`
 		Hash            *string     `json:"hash,omitempty"`
 		Code            uint64      `json:"code,omitempty"`
@@ -781,7 +811,10 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
-	u.EnvelopeHash = encoding.BytesToJSON(v.EnvelopeHash)
+	u.SignatureHashes = make([]*string, len(v.SignatureHashes))
+	for i, x := range v.SignatureHashes {
+		u.SignatureHashes[i] = encoding.BytesToJSON(x)
+	}
 	u.SimpleHash = encoding.BytesToJSON(v.SimpleHash)
 	u.Hash = encoding.BytesToJSON(v.SimpleHash)
 	u.Code = v.Code
@@ -1190,6 +1223,35 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SignaturePage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Signer     SignerMetadata    `json:"signer,omitempty"`
+		Signatures []json.RawMessage `json:"signatures,omitempty"`
+	}{}
+	u.Signer = v.Signer
+	u.Signatures = make([]json.RawMessage, len(v.Signatures))
+	for i, x := range v.Signatures {
+		if y, err := json.Marshal(x); err != nil {
+			return fmt.Errorf("error encoding Signatures: %w", err)
+		} else {
+			u.Signatures[i] = y
+		}
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Signer = u.Signer
+	v.Signatures = make([]protocol.Signature, len(u.Signatures))
+	for i, x := range u.Signatures {
+		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
+			return fmt.Errorf("error decoding Signatures: %w", err)
+		} else {
+			v.Signatures[i] = y
+		}
+	}
+	return nil
+}
+
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey     *string                `json:"publicKey,omitempty"`
@@ -1249,21 +1311,20 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type               string                      `json:"type,omitempty"`
-		MainChain          *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState        *MerkleState                `json:"merkleState,omitempty"`
-		Data               interface{}                 `json:"data,omitempty"`
-		Origin             *url.URL                    `json:"origin,omitempty"`
-		Sponsor            *url.URL                    `json:"sponsor,omitempty"`
-		TransactionHash    *string                     `json:"transactionHash,omitempty"`
-		Txid               *string                     `json:"txid,omitempty"`
-		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
-		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
-		Receipts           []*query.TxReceipt          `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
+		Type            string                      `json:"type,omitempty"`
+		MainChain       *MerkleState                `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
+		Data            interface{}                 `json:"data,omitempty"`
+		Origin          *url.URL                    `json:"origin,omitempty"`
+		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
+		TransactionHash *string                     `json:"transactionHash,omitempty"`
+		Txid            *string                     `json:"txid,omitempty"`
+		Transaction     *protocol.Transaction       `json:"transaction,omitempty"`
+		Signatures      []json.RawMessage           `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
+		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
+		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -1288,8 +1349,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
 	}
 	u.Receipts = v.Receipts
-	u.SignatureThreshold = v.SignatureThreshold
-	u.Invalidated = v.Invalidated
+	u.SignatureBooks = v.SignatureBooks
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1341,8 +1401,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Receipts = u.Receipts
-	v.SignatureThreshold = u.SignatureThreshold
-	v.Invalidated = u.Invalidated
+	v.SignatureBooks = u.SignatureBooks
 	return nil
 }
 
@@ -1429,7 +1488,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		TransactionHash *string     `json:"transactionHash,omitempty"`
 		Txid            *string     `json:"txid,omitempty"`
-		EnvelopeHash    *string     `json:"envelopeHash,omitempty"`
+		SignatureHashes []*string   `json:"signatureHashes,omitempty"`
 		SimpleHash      *string     `json:"simpleHash,omitempty"`
 		Hash            *string     `json:"hash,omitempty"`
 		Code            uint64      `json:"code,omitempty"`
@@ -1439,7 +1498,10 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	}{}
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
-	u.EnvelopeHash = encoding.BytesToJSON(v.EnvelopeHash)
+	u.SignatureHashes = make([]*string, len(v.SignatureHashes))
+	for i, x := range v.SignatureHashes {
+		u.SignatureHashes[i] = encoding.BytesToJSON(x)
+	}
 	u.SimpleHash = encoding.BytesToJSON(v.SimpleHash)
 	u.Hash = encoding.BytesToJSON(v.SimpleHash)
 	u.Code = v.Code
@@ -1462,10 +1524,13 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 			v.TransactionHash = x
 		}
 	}
-	if x, err := encoding.BytesFromJSON(u.EnvelopeHash); err != nil {
-		return fmt.Errorf("error decoding EnvelopeHash: %w", err)
-	} else {
-		v.EnvelopeHash = x
+	v.SignatureHashes = make([][]byte, len(u.SignatureHashes))
+	for i, x := range u.SignatureHashes {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding SignatureHashes: %w", err)
+		} else {
+			v.SignatureHashes[i] = x
+		}
 	}
 	if u.SimpleHash != nil {
 		if x, err := encoding.BytesFromJSON(u.SimpleHash); err != nil {
