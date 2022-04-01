@@ -112,11 +112,27 @@ type QueryPagination struct {
 	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
 }
 
+type SignatureBook struct {
+	Authority *url.URL         `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	Pages     []*SignaturePage `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+}
+
+type SignaturePage struct {
+	Signer     SignerMetadata       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+}
+
 type Signer struct {
 	PublicKey     []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
+}
+
+type SignerMetadata struct {
+	Type            protocol.AccountType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Url             *url.URL             `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	AcceptThreshold uint64               `json:"acceptThreshold,omitempty" form:"acceptThreshold" query:"acceptThreshold" validate:"required"`
 }
 
 type StatusResponse struct {
@@ -145,7 +161,7 @@ type TransactionQueryResponse struct {
 	Status          *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids  [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
 	Receipts        []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	Signers         []query.SignatureSet        `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty" form:"signatureBooks" query:"signatureBooks" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -652,6 +668,23 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SignaturePage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Signer     SignerMetadata    `json:"signer,omitempty"`
+		Signatures []json.RawMessage `json:"signatures,omitempty"`
+	}{}
+	u.Signer = v.Signer
+	u.Signatures = make([]json.RawMessage, len(v.Signatures))
+	for i, x := range v.Signatures {
+		if y, err := json.Marshal(x); err != nil {
+			return nil, fmt.Errorf("error encoding Signatures: %w", err)
+		} else {
+			u.Signatures[i] = y
+		}
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey     *string                `json:"publicKey,omitempty"`
@@ -695,7 +728,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		Status          *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
 		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
-		Signers         []query.SignatureSet        `json:"signers,omitempty"`
+		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -720,7 +753,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
 	}
 	u.Receipts = v.Receipts
-	u.Signers = v.Signers
+	u.SignatureBooks = v.SignatureBooks
 	return json.Marshal(&u)
 }
 
@@ -1190,6 +1223,35 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SignaturePage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Signer     SignerMetadata    `json:"signer,omitempty"`
+		Signatures []json.RawMessage `json:"signatures,omitempty"`
+	}{}
+	u.Signer = v.Signer
+	u.Signatures = make([]json.RawMessage, len(v.Signatures))
+	for i, x := range v.Signatures {
+		if y, err := json.Marshal(x); err != nil {
+			return fmt.Errorf("error encoding Signatures: %w", err)
+		} else {
+			u.Signatures[i] = y
+		}
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Signer = u.Signer
+	v.Signatures = make([]protocol.Signature, len(u.Signatures))
+	for i, x := range u.Signatures {
+		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
+			return fmt.Errorf("error decoding Signatures: %w", err)
+		} else {
+			v.Signatures[i] = y
+		}
+	}
+	return nil
+}
+
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey     *string                `json:"publicKey,omitempty"`
@@ -1262,7 +1324,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		Status          *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
 		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
-		Signers         []query.SignatureSet        `json:"signers,omitempty"`
+		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -1287,7 +1349,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
 	}
 	u.Receipts = v.Receipts
-	u.Signers = v.Signers
+	u.SignatureBooks = v.SignatureBooks
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1339,7 +1401,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Receipts = u.Receipts
-	v.Signers = u.Signers
+	v.SignatureBooks = u.SignatureBooks
 	return nil
 }
 

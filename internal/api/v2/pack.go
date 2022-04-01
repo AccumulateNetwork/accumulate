@@ -76,10 +76,35 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 	}
 
 	res.Status = status
-	res.Signers = qrResp.Signers
 	res.Receipts = qrResp.Receipts
+
+	books := map[string]*SignatureBook{}
 	for _, signer := range qrResp.Signers {
 		res.Signatures = append(res.Signatures, signer.Signatures...)
+
+		var book *SignatureBook
+		signerUrl := signer.Account.Header().Url
+		bookUrl, _, ok := protocol.ParseKeyPageUrl(signerUrl)
+		if !ok {
+			book = new(SignatureBook)
+			book.Authority = signerUrl
+			res.SignatureBooks = append(res.SignatureBooks, book)
+		} else if book, ok = books[bookUrl.String()]; !ok {
+			book = new(SignatureBook)
+			book.Authority = bookUrl
+			res.SignatureBooks = append(res.SignatureBooks, book)
+		}
+
+		page := new(SignaturePage)
+		book.Pages = append(book.Pages, page)
+		page.Signer.Type = signer.Account.Type()
+		page.Signer.Url = signerUrl
+		page.Signatures = signer.Signatures
+
+		keyPage, ok := signer.Account.(*protocol.KeyPage)
+		if ok {
+			page.Signer.AcceptThreshold = keyPage.Threshold
+		}
 	}
 
 	return res, nil

@@ -602,14 +602,16 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
-	for _, sig := range res.Signers {
-		out += fmt.Sprintf("  - Signatures            :\n")
-		out += fmt.Sprintf("    - Signer              : %s (%v)\n", sig.Account.Header().Url, sig.Account.Type())
-		for _, sig := range sig.Signatures {
-			if sig.Type().IsSystem() {
-				out += fmt.Sprintf("      -                   : %v\n", sig.Type())
-			} else {
-				out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+	for _, book := range res.SignatureBooks {
+		for _, page := range book.Pages {
+			out += fmt.Sprintf("  - Signatures            :\n")
+			out += fmt.Sprintf("    - Signer              : %s (%v)\n", page.Signer.Url, page.Signer.Type)
+			for _, sig := range page.Signatures {
+				if sig.Type().IsSystem() {
+					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
+				} else {
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+				}
 			}
 		}
 	}

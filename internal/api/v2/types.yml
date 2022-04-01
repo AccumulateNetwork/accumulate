@@ -59,10 +59,51 @@ TransactionQueryResponse:
       type: query.TxReceipt
       marshal-as: reference
       pointer: true
-    - name: Signers
-      type: query.SignatureSet
+    - name: SignatureBooks
+      type: SignatureBook
       marshal-as: reference
+      pointer: true
       repeatable: true
+
+SignatureBook:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Authority
+      type: url
+      pointer: true
+    - name: Pages
+      type: SignaturePage
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+SignaturePage:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Signer
+      type: SignerMetadata
+      marshal-as: reference
+    - name: Signatures
+      type: protocol.Signature
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalSignature
+      zero-value: nil
+      repeatable: true
+
+SignerMetadata:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Type
+      type: protocol.AccountType
+      marshal-as: enum
+    - name: Url
+      type: url
+      pointer: true
+    - name: AcceptThreshold
+      type: uint
 
 MerkleState:
   non-binary: true
