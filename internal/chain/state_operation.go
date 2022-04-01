@@ -72,15 +72,16 @@ func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("retrieving status for transaction %s failed: %w", logging.AsHex(u.txid), err)
 	}
 
-	// Update the status when changed
-	if curStatus == nil || !statusEqual(curStatus, u.status) {
-		err := tx.PutStatus(u.status)
-		if err != nil {
-			return nil, err
-		}
+	// Only update the status when changed
+	if curStatus != nil && statusEqual(curStatus, u.status) {
+		return nil, nil
 	}
 
-	return make([]protocol.Account, 0), nil
+	err = tx.PutStatus(u.status)
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
 func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {

@@ -552,12 +552,6 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		return err
 	}
 
-	if !bytes.Equal(rootReceipt.MDRoot, rootChain.Anchor()) {
-		// If this fails it means the second parameter to Receipt above was
-		// wrong. If this check passes, delete it.
-		panic("!")
-	}
-
 	synthChain, err := block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
 	if err != nil {
 		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
@@ -578,10 +572,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 		receipt, err := synthReceipt.Combine(rootReceipt)
 		if err != nil {
-			// If this fails it means the second parameter to Receipt above
-			// was wrong. If this check passes, replace it with a normal
-			// error check.
-			panic("!")
+			return err
 		}
 
 		sig := new(protocol.ReceiptSignature)
