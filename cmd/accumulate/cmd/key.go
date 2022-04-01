@@ -3,9 +3,11 @@ package cmd
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -16,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -138,6 +141,41 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
+func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error) {
+	sig, err := Db.Get(BucketSigType, pubKey)
+	switch {
+	case err == nil:
+		// Ok
+
+	case errors.Is(err, db.ErrNotFound):
+		// Default to legacy ED25519
+		hash := sha256.Sum256(pubKey)
+		return protocol.SignatureTypeLegacyED25519, hash[:], nil
+
+	default:
+		return 0, nil, err
+	}
+
+	sigType, err := ValidateSigType(string(sig))
+	if err != nil {
+		return 0, nil, err
+	}
+
+	switch sigType {
+	case protocol.SignatureTypeLegacyED25519,
+		protocol.SignatureTypeED25519:
+		hash := sha256.Sum256(pubKey)
+		return sigType, hash[:], nil
+
+	case protocol.SignatureTypeRCD1:
+		hash := protocol.GetRCDHashFromPublicKey(pubKey, 1)
+		return sigType, hash, nil
+
+	default:
+		return 0, nil, fmt.Errorf("unsupported signature type %v", sigType)
+	}
+}
+
 func resolvePrivateKey(s string) ([]byte, error) {
 	pub, priv, err := parseKey(s)
 	if err != nil {
@@ -151,13 +189,18 @@ func resolvePrivateKey(s string) ([]byte, error) {
 	return LookupByPubKey(pub)
 }
 
-func resolvePublicKey(s string) ([]byte, error) {
+func resolvePublicKey(s string) (pubKey, keyHash []byte, sigType protocol.SignatureType, err error) {
 	pub, _, err := parseKey(s)
 	if err != nil {
-		return nil, err
+		return nil, nil, 0, err
 	}
 
-	return pub, nil
+	sigType, keyHash, err = resolveKeyTypeAndHash(pub)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	return pub, keyHash, sigType, nil
 }
 
 func parseKey(s string) (pubKey, privKey []byte, err error) {
@@ -637,6 +680,11 @@ func ImportFactoidKey(factoidkey string, label string) (out string, err error) {
 			return "", err
 		}
 		err = Db.Put(BucketSigType, rcdhash, []byte(protocol.SignatureTypeRCD1.String()))
+
+		if err != nil {
+			return "", err
+		}
+		err = Db.Put(BucketSigType, privatekey[32:], []byte(protocol.SignatureTypeRCD1.String()))
 
 		if err != nil {
 			return "", err

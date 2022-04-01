@@ -122,7 +122,7 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	} else {
 		keyName = originKeyName
 	}
-	pbkey, err := resolvePublicKey(keyName)
+	pbkey, _, _, err := resolvePublicKey(keyName)
 	if err != nil {
 		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
 	}

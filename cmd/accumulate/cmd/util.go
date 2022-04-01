@@ -65,21 +65,11 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-		sig, err := Db.Get(BucketSigType, privKey[32:])
-		if err == nil {
-			sigtype, _ := ValidateSigType(string(sig))
-			i := sigtype.GetEnumValue()
-			switch i {
-			case 1:
-				signer.Type = protocol.SignatureTypeLegacyED25519
-			case 2:
-				signer.Type = protocol.SignatureTypeED25519
-			case 3:
-				signer.Type = protocol.SignatureTypeRCD1
-
-			}
-
+		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
+		if err != nil {
+			return nil, nil, err
 		}
+		signer.Type = sigType
 		signer.Url = origin
 		signer.Height = 1
 		signer.PrivateKey = privKey
@@ -93,7 +83,13 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 	signer.PrivateKey = privKey
 	ct++
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
+	sigType, keyHash, err := resolveKeyTypeAndHash(privKey[32:])
+	if err != nil {
+		return nil, nil, err
+	}
+	signer.Type = sigType
+
+	keyInfo, err := getKey(origin.String(), keyHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
@@ -112,22 +108,6 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
 	signer.Height = ms.Height
-
-	sig, err := Db.Get(BucketSigType, privKey[32:])
-	if err == nil {
-		sigtype, _ := ValidateSigType(string(sig))
-		i := sigtype.GetEnumValue()
-		switch i {
-		case 1:
-			signer.Type = protocol.SignatureTypeLegacyED25519
-		case 2:
-			signer.Type = protocol.SignatureTypeED25519
-		case 3:
-			signer.Type = protocol.SignatureTypeRCD1
-
-		}
-
-	}
 
 	return args[ct:], signer, nil
 }

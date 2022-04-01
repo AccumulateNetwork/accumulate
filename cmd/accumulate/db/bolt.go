@@ -1,10 +1,13 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/boltdb/bolt"
 )
+
+var ErrNotFound = errors.New("key not found")
 
 type BoltDB struct {
 	db *bolt.DB
@@ -37,7 +40,7 @@ func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 		}
 		value = b.Get(key)
 		if value == nil {
-			return fmt.Errorf("key not found")
+			return ErrNotFound
 		}
 		return err
 	})
