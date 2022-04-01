@@ -1,11 +1,20 @@
-SignatureSet:
+sigSetData:
   fields:
-    - name: Signatures
+    - name: Version
+      type: uint
+    - name: Entries
+      type: sigSetKeyData
+      marshal-as: reference
       repeatable: true
-      type: protocol.Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: protocol.UnmarshalSignature
+
+sigSetKeyData:
+  fields:
+    - name: System
+      type: bool
+    - name: KeyHash
+      type: hash
+    - name: EntryHash
+      type: hash
 
 txSyntheticTxns:
   fields:

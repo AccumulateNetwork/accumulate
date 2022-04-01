@@ -11,12 +11,19 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type SignatureSet struct {
-	fieldsSet  []bool
-	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+type sigSetData struct {
+	fieldsSet []bool
+	Version   uint64          `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Entries   []sigSetKeyData `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+}
+
+type sigSetKeyData struct {
+	fieldsSet []bool
+	System    bool     `json:"system,omitempty" form:"system" query:"system" validate:"required"`
+	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 }
 
 type txSyntheticTxns struct {
@@ -24,18 +31,31 @@ type txSyntheticTxns struct {
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 }
 
-func (v *SignatureSet) Copy() *SignatureSet {
-	u := new(SignatureSet)
+func (v *sigSetData) Copy() *sigSetData {
+	u := new(sigSetData)
 
-	u.Signatures = make([]protocol.Signature, len(v.Signatures))
-	for i, v := range v.Signatures {
-		u.Signatures[i] = v
+	u.Version = v.Version
+	u.Entries = make([]sigSetKeyData, len(v.Entries))
+	for i, v := range v.Entries {
+		u.Entries[i] = *(&v).Copy()
 	}
 
 	return u
 }
 
-func (v *SignatureSet) CopyAsInterface() interface{} { return v.Copy() }
+func (v *sigSetData) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *sigSetKeyData) Copy() *sigSetKeyData {
+	u := new(sigSetKeyData)
+
+	u.System = v.System
+	u.KeyHash = v.KeyHash
+	u.EntryHash = v.EntryHash
+
+	return u
+}
+
+func (v *sigSetKeyData) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
 	u := new(txSyntheticTxns)
@@ -50,14 +70,31 @@ func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
 
 func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SignatureSet) Equal(u *SignatureSet) bool {
-	if len(v.Signatures) != len(u.Signatures) {
+func (v *sigSetData) Equal(u *sigSetData) bool {
+	if !(v.Version == u.Version) {
 		return false
 	}
-	for i := range v.Signatures {
-		if !(v.Signatures[i] == u.Signatures[i]) {
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((&v.Entries[i]).Equal(&u.Entries[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *sigSetKeyData) Equal(u *sigSetKeyData) bool {
+	if !(v.System == u.System) {
+		return false
+	}
+	if !(v.KeyHash == u.KeyHash) {
+		return false
+	}
+	if !(v.EntryHash == u.EntryHash) {
+		return false
 	}
 
 	return true
@@ -76,31 +113,93 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 	return true
 }
 
-var fieldNames_SignatureSet = []string{
-	1: "Signatures",
+var fieldNames_sigSetData = []string{
+	1: "Version",
+	2: "Entries",
 }
 
-func (v *SignatureSet) MarshalBinary() ([]byte, error) {
+func (v *sigSetData) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Signatures) == 0) {
-		for _, v := range v.Signatures {
-			writer.WriteValue(1, v)
+	if !(v.Version == 0) {
+		writer.WriteUint(1, v.Version)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(2, &v)
 		}
 	}
 
-	_, _, err := writer.Reset(fieldNames_SignatureSet)
+	_, _, err := writer.Reset(fieldNames_sigSetData)
 	return buffer.Bytes(), err
 }
 
-func (v *SignatureSet) IsValid() error {
+func (v *sigSetData) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Signatures is missing")
-	} else if len(v.Signatures) == 0 {
-		errs = append(errs, "field Signatures is not set")
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_sigSetKeyData = []string{
+	1: "System",
+	2: "KeyHash",
+	3: "EntryHash",
+}
+
+func (v *sigSetKeyData) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(!v.System) {
+		writer.WriteBool(1, v.System)
+	}
+	if !(v.KeyHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.KeyHash)
+	}
+	if !(v.EntryHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.EntryHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_sigSetKeyData)
+	return buffer.Bytes(), err
+}
+
+func (v *sigSetKeyData) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field System is missing")
+	} else if !v.System {
+		errs = append(errs, "field System is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field KeyHash is missing")
+	} else if v.KeyHash == ([32]byte{}) {
+		errs = append(errs, "field KeyHash is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field EntryHash is missing")
+	} else if v.EntryHash == ([32]byte{}) {
+		errs = append(errs, "field EntryHash is not set")
 	}
 
 	switch len(errs) {
@@ -150,27 +249,47 @@ func (v *txSyntheticTxns) IsValid() error {
 	}
 }
 
-func (v *SignatureSet) UnmarshalBinary(data []byte) error {
+func (v *sigSetData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
+	if x, ok := reader.ReadUint(1); ok {
+		v.Version = x
+	}
 	for {
-		ok := reader.ReadValue(1, func(b []byte) error {
-			x, err := protocol.UnmarshalSignature(b)
-			if err == nil {
-				v.Signatures = append(v.Signatures, x)
-			}
-			return err
-		})
-		if !ok {
+		if x := new(sigSetKeyData); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, *x)
+		} else {
 			break
 		}
 	}
 
-	seen, err := reader.Reset(fieldNames_SignatureSet)
+	seen, err := reader.Reset(fieldNames_sigSetData)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *sigSetKeyData) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *sigSetKeyData) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBool(1); ok {
+		v.System = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.KeyHash = *x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.EntryHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_sigSetKeyData)
 	v.fieldsSet = seen
 	return err
 }
@@ -195,18 +314,15 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *SignatureSet) MarshalJSON() ([]byte, error) {
+func (v *sigSetKeyData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Signatures []json.RawMessage `json:"signatures,omitempty"`
+		System    bool   `json:"system,omitempty"`
+		KeyHash   string `json:"keyHash,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
 	}{}
-	u.Signatures = make([]json.RawMessage, len(v.Signatures))
-	for i, x := range v.Signatures {
-		if y, err := json.Marshal(x); err != nil {
-			return nil, fmt.Errorf("error encoding Signatures: %w", err)
-		} else {
-			u.Signatures[i] = y
-		}
-	}
+	u.System = v.System
+	u.KeyHash = encoding.ChainToJSON(v.KeyHash)
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
 }
 
@@ -221,28 +337,28 @@ func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *SignatureSet) UnmarshalJSON(data []byte) error {
+func (v *sigSetKeyData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Signatures []json.RawMessage `json:"signatures,omitempty"`
+		System    bool   `json:"system,omitempty"`
+		KeyHash   string `json:"keyHash,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
 	}{}
-	u.Signatures = make([]json.RawMessage, len(v.Signatures))
-	for i, x := range v.Signatures {
-		if y, err := json.Marshal(x); err != nil {
-			return fmt.Errorf("error encoding Signatures: %w", err)
-		} else {
-			u.Signatures[i] = y
-		}
-	}
+	u.System = v.System
+	u.KeyHash = encoding.ChainToJSON(v.KeyHash)
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Signatures = make([]protocol.Signature, len(u.Signatures))
-	for i, x := range u.Signatures {
-		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
-			return fmt.Errorf("error decoding Signatures: %w", err)
-		} else {
-			v.Signatures[i] = y
-		}
+	v.System = u.System
+	if x, err := encoding.ChainFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
+	} else {
+		v.KeyHash = x
+	}
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
 	}
 	return nil
 }

@@ -122,11 +122,6 @@ func (b *Batch) AccountByKey(key storage.Key) *Account {
 	return &Account{b, accountBucket{objectBucket(key)}}
 }
 
-// Transaction returns a Transaction for the given transaction ID.
-func (b *Batch) Transaction(id []byte) *Transaction {
-	return &Transaction{b, transaction(id)}
-}
-
 // Import imports values from another database.
 func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
 	return b.store.PutAll(db.Export())

@@ -102,15 +102,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			ms.Roots = res.ChainState
 		}
 
-		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, res.Envelope, res.Status)
-		if err != nil {
-			return nil, err
-		}
-		packed.Invalidated = res.Invalidated
-		packed.SignatureThreshold = res.SignatureThreshold
-
-		packed.Receipts = res.Receipts
-		return packed, nil
+		return packTxResponse(res, ms, res.Envelope, res.Status)
 
 	case "tx-history":
 		txh := new(query.ResponseTxHistory)
@@ -126,12 +118,10 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
+			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
 			if err != nil {
 				return nil, err
 			}
-			queryRes.Invalidated = tx.Invalidated
-			queryRes.SignatureThreshold = tx.SignatureThreshold
 
 			res.Items[i] = queryRes
 		}
@@ -337,15 +327,7 @@ query:
 		return nil, fmt.Errorf("invalid TX response: %v", err)
 	}
 
-	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, res.Envelope, res.Status)
-	if err != nil {
-		return nil, err
-	}
-	packed.Invalidated = res.Invalidated
-	packed.SignatureThreshold = res.SignatureThreshold
-
-	packed.Receipts = res.Receipts
-	return packed, nil
+	return packTxResponse(res, nil, res.Envelope, res.Status)
 }
 
 func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
@@ -387,13 +369,10 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
+		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
 		if err != nil {
 			return nil, err
 		}
-		queryRes.Invalidated = tx.Invalidated
-		queryRes.SignatureThreshold = tx.SignatureThreshold
-
 		res.Items[i] = queryRes
 	}
 

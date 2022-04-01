@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -116,17 +115,16 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			}
 
 			// Parse the results
-			rd := bytes.NewReader(resp.Data)
-			for rd.Len() > 0 {
-				status := new(protocol.TransactionStatus)
-				err := status.UnmarshalBinaryFrom(rd)
-				if err != nil {
-					errs <- err
-					break
-				}
+			rset := new(protocol.TransactionResultSet)
+			err = rset.UnmarshalBinary(resp.Data)
+			if err != nil {
+				errs <- err
+				return
+			}
 
-				if status.Code != 0 {
-					errs <- errors.New(status.Message)
+			for _, r := range rset.Results {
+				if r.Code != 0 {
+					errs <- errors.New(r.Message)
 				}
 			}
 		}()
