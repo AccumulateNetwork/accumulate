@@ -52,9 +52,6 @@ Transaction:
 LegacyED25519Signature:
   union: { type: signature }
   fields:
-    - name: privateKey
-      type: bytes
-      marshal-as: none
     - name: Timestamp
       type: uint
       alternative: Nonce
@@ -71,9 +68,6 @@ LegacyED25519Signature:
 RCD1Signature:
   union: { type: signature }
   fields:
-    - name: privateKey
-      type: bytes
-      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
@@ -90,9 +84,6 @@ RCD1Signature:
 ED25519Signature:
   union: { type: signature }
   fields:
-    - name: privateKey
-      type: bytes
-      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
@@ -428,6 +419,10 @@ SyntheticAnchor:
     - name: RootIndex
       description: is the index of the root anchor chain anchor
       type: uvarint
+    - name: AcmeBurnt
+      description: is the amount of acme tokens burnt in the transaction
+      type: bigint
+
     - name: Block
       description: is the index of the block
       type: uvarint

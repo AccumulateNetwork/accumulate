@@ -105,10 +105,10 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	sdc.Amount = credits.Uint64()
 	st.Submit(body.Recipient, sdc)
 
-	//Create synthetic burn token
-	burnAcme := new(protocol.SyntheticBurnTokens)
-	burnAcme.Amount = body.Amount
-	st.Submit(account.GetTokenUrl(), burnAcme)
+	// Add the burnt acme to the internal ledger and send it with the anchor
+	// transaction
+	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
+	st.Update(ledgerState)
 
 	res := new(protocol.AddCreditsResult)
 	res.Oracle = ledgerState.ActiveOracle

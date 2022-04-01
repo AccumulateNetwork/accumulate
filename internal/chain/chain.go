@@ -28,6 +28,11 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
+
+			// DN validator set management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
 		)
 
 	case config.BlockValidator:
@@ -47,10 +52,13 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			WriteDataTo{},
 			UpdateManager{},
 			RemoveManager{},
+
+			// BVN validator management
 			AddValidator{},
 			RemoveValidator{},
 			UpdateValidatorKey{},
 
+			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
 			SyntheticCreateChain{},

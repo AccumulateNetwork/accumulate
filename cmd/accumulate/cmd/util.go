@@ -499,7 +499,11 @@ func PrintJsonRpcError(err error) (string, error) {
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
-		cmd.PrintErrf("Error: %v\n", err)
+		if WantJsonOutput {
+			cmd.PrintErrf("{\"error\":%v}", err)
+		} else {
+			cmd.PrintErrf("Error: %v\n", err)
+		}
 		DidError = err
 	} else {
 		cmd.Println(out)
@@ -797,15 +801,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%d\n", protocol.CreditPrecision*ss.CreditBalance)
-		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
 			name, err := FindLabelFromPubKey(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -684,7 +685,7 @@ func (m *Executor) buildAnchorTxn(block *Block, ledger *protocol.InternalLedger,
 	txn.RootIndex = uint64(rootChain.Height() - 1)
 	txn.RootAnchor = *(*[32]byte)(rootChain.Anchor())
 	txn.Block = uint64(block.Index)
-
+	txn.AcmeBurnt, ledger.AcmeBurnt = ledger.AcmeBurnt, *big.NewInt(int64(0))
 	if m.Network.Type == config.Directory {
 		txn.AcmeOraclePrice = ledger.PendingOracle
 	}
