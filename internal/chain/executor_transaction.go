@@ -143,7 +143,6 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	result, err := executor.Validate(st, &protocol.Envelope{Transaction: transaction})
 	if err != nil {
-		st.stateCache.state.ProducedTxns = make([]*protocol.Transaction, 0) // Clear synth txs if any were produced, we only want to keep SyntheticReceipt
 		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
