@@ -11,9 +11,11 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
@@ -529,7 +531,11 @@ func PrintJsonRpcError(err error) (string, error) {
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
-		cmd.PrintErrf("Error: %v\n", err)
+		if WantJsonOutput {
+			cmd.PrintErrf("{\"error\":%v}", err)
+		} else {
+			cmd.PrintErrf("Error: %v\n", err)
+		}
 		DidError = err
 	} else {
 		cmd.Println(out)
@@ -827,15 +833,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%d\n", protocol.CreditPrecision*ss.CreditBalance)
-		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
 			name, err := FindLabelFromPubKey(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -856,24 +862,25 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += "\n"
 		return out, nil
 	default:
-		data, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		out := fmt.Sprintf("Unknown account type %s:\n\t%s\n", res.Type, data)
-		return out, nil
+		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
 }
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
-	switch string(res.Type) {
-	case protocol.TransactionTypeSendTokens.String():
-		tx := new(api.TokenSend)
-		err := Remarshal(res.Data, &tx)
+	typStr := res.Data.(map[string]interface{})["type"].(string)
+	typ, ok := protocol.TransactionTypeByName(typStr)
+	if !ok {
+		return "", fmt.Errorf("Unknown transaction type %s", typStr)
+	}
+
+	if typ == protocol.TransactionTypeSendTokens {
+		txn := new(api.TokenSend)
+		err := Remarshal(res.Data, txn)
 		if err != nil {
 			return "", err
 		}
 
+		tx := txn
 		var out string
 		for i := range tx.To {
 			amt, err := formatAmount("acc://ACME", &tx.To[i].Amount)
@@ -886,13 +893,21 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case protocol.TransactionTypeSyntheticDepositTokens.String():
-		deposit := new(protocol.SyntheticDepositTokens)
-		err := Remarshal(res.Data, &deposit)
-		if err != nil {
-			return "", err
-		}
+	}
 
+	txn, err := protocol.NewTransactionBody(typ)
+	if err != nil {
+		return "", err
+	}
+
+	err = Remarshal(res.Data, txn)
+	if err != nil {
+		return "", err
+	}
+
+	switch txn := txn.(type) {
+	case *protocol.SyntheticDepositTokens:
+		deposit := txn
 		out := "\n"
 		amt, err := formatAmount(deposit.Token.String(), &deposit.Amount)
 		if err != nil {
@@ -902,13 +917,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case protocol.TransactionTypeSyntheticCreateChain.String():
-		scc := new(protocol.SyntheticCreateChain)
-		err := Remarshal(res.Data, &scc)
-		if err != nil {
-			return "", err
-		}
-
+	case *protocol.SyntheticCreateChain:
+		scc := txn
 		var out string
 		for _, cp := range scc.Chains {
 			c, err := protocol.UnmarshalAccount(cp.Data)
@@ -923,13 +933,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
 		}
 		return out, nil
-	case protocol.TransactionTypeCreateIdentity.String():
-		id := protocol.CreateIdentity{}
-		err := Remarshal(res.Data, &id)
-		if err != nil {
-			return "", err
-		}
-
+	case *protocol.CreateIdentity:
+		id := txn
 		out := "\n"
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
@@ -945,13 +950,93 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		return out, nil
 
 	default:
-		data, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
-		return out, nil
+		return printReflection("", "", reflect.ValueOf(txn)), nil
 	}
+}
+
+func printReflection(field, indent string, value reflect.Value) string {
+	typ := value.Type()
+	out := fmt.Sprintf("%s%s:", indent, field)
+	if field == "" {
+		out = ""
+	}
+
+	switch value.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if value.IsNil() {
+			return ""
+		}
+		return printReflection(field, indent, value.Elem())
+	case reflect.Slice, reflect.Array:
+		out += "\n"
+		for i, n := 0, value.Len(); i < n; i++ {
+			out += printReflection(fmt.Sprintf("%d (elem)", i), indent+"   ", value.Index(i))
+		}
+		return out
+	case reflect.Map:
+		out += "\n"
+		for iter := value.MapRange(); iter.Next(); {
+			out += printReflection(fmt.Sprintf("%s (key)", iter.Key()), indent+"   ", iter.Value())
+		}
+		return out
+	case reflect.Struct:
+		out += "\n"
+		out += fmt.Sprintf("%s   (type): %s\n", indent, natural(typ.Name()))
+
+		callee := value
+		m, ok := typ.MethodByName("Type")
+		if !ok {
+			m, ok = reflect.PtrTo(typ).MethodByName("Type")
+			callee = value.Addr()
+		}
+		if ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1 {
+			v := m.Func.Call([]reflect.Value{callee})[0]
+			if _, ok := v.Type().MethodByName("GetEnumValue"); ok {
+				out += fmt.Sprintf("%s   %s: %s\n", indent, natural(v.Type().Name()), natural(fmt.Sprint(v)))
+			}
+		}
+
+		for i, n := 0, value.NumField(); i < n; i++ {
+			f := typ.Field(i)
+			if !f.IsExported() {
+				continue
+			}
+			out += printReflection(f.Name, indent+"   ", value.Field(i))
+		}
+		return out
+	default:
+		return out + " " + fmt.Sprint(value) + "\n"
+	}
+}
+
+func natural(name string) string {
+	var splits []int
+
+	var wasLower bool
+	for i, r := range name {
+		if wasLower && unicode.IsUpper(r) {
+			splits = append(splits, i)
+		}
+		wasLower = unicode.IsLower(r)
+	}
+
+	w := new(strings.Builder)
+	w.Grow(len(name) + len(splits))
+
+	var word string
+	var split int
+	var offset int
+	for len(splits) > 0 {
+		split, splits = splits[0], splits[1:]
+		split -= offset
+		offset += split
+		word, name = name[:split], name[split:]
+		w.WriteString(word)
+		w.WriteRune(' ')
+	}
+
+	w.WriteString(name)
+	return w.String()
 }
 
 func nonceFromTimeNow() uint64 {

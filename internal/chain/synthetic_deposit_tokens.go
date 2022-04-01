@@ -73,6 +73,5 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
 	st.Update(account)
-
 	return nil, nil
 }

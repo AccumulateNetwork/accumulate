@@ -83,7 +83,24 @@ function success {
     echo
 }
 
+
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+
+#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
+NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+   section "Add a new DN validator"
+   declare -g TEST_NODE_WORK_DIR=~/node1
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
+   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
+   declare -g ACCPID=$!
+   # Get Keys
+   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
+   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+   # Register new validator
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
+fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
@@ -126,9 +143,6 @@ TXID=$(cli-tx credits ${LITE} ${LITE} 2200)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 2200 ] || die "${LITE} should have at least 2200 credits but only has ${BALANCE}"
-TXID=$(accumulate -j tx get ${TXID} | jq -re .syntheticTxids[1]) # this depends on the burn coming last
-TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
-[ "$TYPE" == "syntheticBurnTokens" ] || die "Expected a syntheticBurnTokens, got ${TYPE}"
 success
 
 section "Generate keys"
@@ -204,7 +218,7 @@ wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
 success
 
 section "Set threshold to 2 of 2"
-wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": { "type": "setThreshold", "threshold": 2 }}'
+wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
 
@@ -451,4 +465,11 @@ if [ -f "$NODE_PRIV_VAL" ]; then
     [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
 else
     echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
+fi
+
+if [ ! -z "${ACCPID}" ]; then
+    section "Shutdown dynamic validator"
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+    kill -9 $ACCPID
+    rm -rf $TEST_NODE_WORK_DIR
 fi
