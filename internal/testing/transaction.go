@@ -44,7 +44,7 @@ func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
 
 func (tb TransactionBuilder) WithSigner(signer *url.URL, height uint64) TransactionBuilder {
 	tb.signer.SetUrl(signer)
-	tb.signer.SetHeight(height)
+	tb.signer.SetVersion(height)
 	return tb
 }
 
@@ -126,14 +126,14 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 	if tb.signer.Url == nil {
 		panic("missing signer")
 	}
-	if tb.signer.Height == 0 {
-		panic("missing timestamp")
+	if tb.signer.Version == 0 {
+		panic("missing version")
 	}
 
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = tb.signer.Url
 	initSig.DestinationNetwork = destSubnetUrl
-	initSig.SequenceNumber = tb.signer.Height
+	initSig.SequenceNumber = tb.signer.Version
 
 	initHash, err := initSig.InitiatorHash()
 	if err != nil {

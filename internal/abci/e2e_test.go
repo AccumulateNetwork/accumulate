@@ -595,18 +595,13 @@ func TestLiteAccountTx(t *testing.T) {
 	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob).String()
 	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
 
-	batch = n.db.Begin(false)
-	defer batch.Discard()
-	state, _ := batch.Account(aliceUrl).GetState()
-	fmt.Println(state)
-
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
 		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
 		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl, 2).
+			WithSigner(aliceUrl, 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, alice))
 	})
@@ -1255,13 +1250,15 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			if seen[id32] {
 				continue
 			}
-			txState, txStatus, txSigs, err := batch.Transaction(id32[:]).Get()
+			txState, err := batch.Transaction(id).GetState()
+			require.NoError(t, err)
+			txStatus, err := batch.Transaction(id).GetStatus()
 			require.NoError(t, err)
 			if seen[*(*[32]byte)(txState.Transaction.GetHash())] {
 				fmt.Printf("      TX: hash=%X\n", txState.Transaction.GetHash())
 				continue
 			}
-			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.Transaction.Body.GetType(), txState.Transaction.Header.Principal, txStatus, len(txSigs))
+			fmt.Printf("      TX: type=%v origin=%v status=%#v\n", txState.Transaction.Body.GetType(), txState.Transaction.Header.Principal, txStatus)
 			seen[id32] = true
 		}
 	}
@@ -1365,8 +1362,8 @@ func TestMultisig(t *testing.T) {
 	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
 	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
 
-	t.Log("Double signing with key 1 should complete the transaction")
-	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+	t.Log("Double signing with key 1 should not complete the transaction")
+	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithNonceVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
@@ -1376,14 +1373,14 @@ func TestMultisig(t *testing.T) {
 			WithBody(&protocol.SignPending{}).
 			Sign(protocol.SignatureTypeED25519, key1.Bytes()))
 	})
-	n.MustWaitForTxns(convertIds32(envHashes...)...)
+	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
 	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
 	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
 
 	t.Log("Signing with key 2 should complete the transaction")
-	envHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
+	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithNonceVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
@@ -1393,7 +1390,7 @@ func TestMultisig(t *testing.T) {
 			WithBody(&protocol.SignPending{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()))
 	})
-	n.MustWaitForTxns(convertIds32(envHashes...)...)
+	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
 	require.True(t, txnResp.Status.Delivered, "Transaction is was not delivered")

@@ -473,16 +473,10 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
 	}
 
-	signatures, err := tx.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	}
-
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
 	qr.Envelope.Transaction = txState.Transaction
 	qr.Status = status
-	qr.Envelope.Signatures = signatures.Signatures
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
 
@@ -496,9 +490,39 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, &txState.Transaction.Header, status, signatures.Signatures, &qr)
-	if err != nil {
-		return nil, err
+	for _, signerUrl := range status.Signers {
+		// Load the signer (if it exists here)
+		var qset query.SignatureSet
+		signer, err := batch.Account(signerUrl).GetState()
+		switch {
+		case err == nil:
+			qset.Account = signer
+
+		case errors.Is(err, storage.ErrNotFound):
+			account := new(protocol.UnknownAccount)
+			account.Url = signerUrl
+			qset.Account = account
+
+		default:
+			return nil, err
+		}
+
+		// Load the signature set
+		sigset, err := tx.ReadSignatures(signerUrl)
+		if err != nil {
+			return nil, err
+		}
+
+		// Load all the signatures
+		for _, entryHash := range sigset.EntryHashes() {
+			state, err := batch.Transaction(entryHash[:]).GetState()
+			if err != nil {
+				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
+			}
+			qset.Signatures = append(qset.Signatures, state.Signatures...)
+		}
+
+		qr.Signers = append(qr.Signers, qset)
 	}
 
 	if !prove {
