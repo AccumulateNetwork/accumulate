@@ -1,8 +1,10 @@
 package genesis
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
@@ -11,10 +13,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type InitOpts struct {
@@ -22,14 +24,6 @@ type InitOpts struct {
 	Validators  []tmtypes.GenesisValidator
 	GenesisTime time.Time
 	Logger      log.Logger
-}
-
-func mustParseUrl(s string) *url.URL {
-	u, err := url.Parse(s)
-	if err != nil {
-		panic(err)
-	}
-	return u
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
@@ -40,8 +34,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		return nil, err
 	}
 
-	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
-		var records []state.Chain
+	block := new(chain.Block)
+	block.Index = protocol.GenesisBlock
+	block.Time = opts.GenesisTime
+	block.Batch = db.Begin(true)
+	defer block.Batch.Discard()
+
+	err = exec.Genesis(block, func(st *chain.StateManager) error {
+		var records []protocol.Account
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
@@ -60,13 +60,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		page := protocol.NewKeyPage()
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
 		page.KeyBook = uBook
-		page.Threshold = protocol.GetValidatorsMOfN(len(opts.Validators))
+		page.Threshold = 1
+		page.Version = 1
 		records = append(records, page)
 
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {
 			spec := new(protocol.KeySpec)
-			spec.PublicKey = val.PubKey.Bytes()
+			kh := sha256.Sum256(val.PubKey.Bytes())
+			spec.PublicKeyHash = kh[:]
 			page.Keys[i] = spec
 		}
 
@@ -75,7 +77,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
 
 		// Create the ledger
-		ledger := protocol.NewInternalLedger()
+		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
 		ledger.KeyBook = uBook
 		ledger.Synthetic.Nonce = 1
@@ -99,15 +101,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))
 		for i, r := range records {
-			urls[i], _ = r.Header().ParseUrl()
+			urls[i] = r.Header().Url
 		}
-
-		acme := new(protocol.TokenIssuer)
-		acme.KeyBook = uBook
-		acme.Url = protocol.AcmeUrl()
-		acme.Precision = 8
-		acme.Symbol = "ACME"
-		records = append(records, acme)
 
 		type DataRecord struct {
 			Account *protocol.DataAccount
@@ -118,7 +113,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		//create a vote scratch chain
 		wd := new(protocol.WriteData)
 		lci := types.LastCommitInfo{}
-		wd.Entry.Data, err = json.Marshal(&lci)
+		d, err := json.Marshal(&lci)
+		if err != nil {
+			return err
+		}
+		wd.Entry.Data = append(wd.Entry.Data, d)
 
 		da := new(protocol.DataAccount)
 		da.Scratch = true
@@ -143,7 +142,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			oracle := new(protocol.AcmeOracle)
 			oracle.Price = oraclePrice
 			wd := new(protocol.WriteData)
-			wd.Entry.Data, err = json.Marshal(&oracle)
+			d, err = json.Marshal(&oracle)
+			if err != nil {
+				return err
+			}
+			wd.Entry.Data = append(wd.Entry.Data, d)
 
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
@@ -153,7 +156,20 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
 
-			// TODO Move ACME to DN
+			acme := new(protocol.TokenIssuer)
+			acme.KeyBook = uBook
+			acme.Url = protocol.AcmeUrl()
+			acme.Precision = 8
+			acme.Symbol = "ACME"
+			records = append(records, acme)
+
+			if protocol.IsTestNet {
+				// On the TestNet, set the issued amount to the faucet balance
+				acme.Issued.SetString(protocol.AcmeFaucetBalance, 10)
+			} else {
+				// On the MainNet, set the supply limit
+				acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+			}
 
 		case config.BlockValidator:
 			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
@@ -162,11 +178,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
-			lite := protocol.NewLiteTokenAccount()
-			lite.Url = protocol.FaucetUrl
-			lite.TokenUrl = protocol.AcmeUrl()
-			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
-			records = append(records, lite)
+			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
+			if err == nil && subnet == opts.Network.LocalSubnetID {
+				lite := protocol.NewLiteTokenAccount()
+				lite.Url = protocol.FaucetUrl
+				lite.TokenUrl = protocol.AcmeUrl()
+				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+				records = append(records, lite)
+			}
 		}
 
 		st.Update(records...)
@@ -175,7 +194,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
 		}
 
-		adiUrl, _ := adi.Header().ParseUrl()
-		return st.AddDirectoryEntry(adiUrl, urls...)
+		return st.AddDirectoryEntry(adi.Url, urls...)
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = block.Batch.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	batch := db.Begin(false)
+	defer batch.Discard()
+	return batch.GetMinorRootChainAnchor(&opts.Network)
 }

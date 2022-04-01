@@ -32,15 +32,14 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithOriginStr("foo").
-		WithKeyPage(0, 1).
-		WithNonce(1).
+		WithPrincipal(url.MustParse("foo")).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
+		WithTimestamp(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey).
-		Build()
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, env)
+	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
@@ -68,15 +67,14 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithOriginStr("foo").
-		WithKeyPage(0, 1).
-		WithNonce(1).
+		WithPrincipal(url.MustParse("foo")).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
+		WithTimestamp(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey).
-		Build()
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, env)
+	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
 	require.NoError(t, err) // We created ADI acc://foo not acc://foo/bar

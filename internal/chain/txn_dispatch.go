@@ -1,8 +1,10 @@
 package chain
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -10,6 +12,7 @@ import (
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type txBatch []byte
@@ -35,9 +38,9 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	return d
 }
 
-// BroadcastTxAsync dispatches the txn to the appropriate client.
-func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) error {
-	subnet, err := d.Router.Route(u)
+// BroadcastTx dispatches the txn to the appropriate client.
+func (d *dispatcher) BroadcastTx(ctx context.Context, u *url.URL, tx []byte) error {
+	subnet, err := d.Router.RouteAccount(u)
 	if err != nil {
 		return err
 	}
@@ -47,7 +50,7 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
-func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
+func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx []byte) {
 	subnet := d.Network.LocalSubnetID
 	d.batches[subnet] = append(d.batches[subnet], tx...)
 }
@@ -99,10 +102,32 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		subnet, batch := subnet, batch // Don't capture loop variables
 		go func() {
 			defer wg.Done()
-			_, err := d.Router.Submit(ctx, subnet, batch, false, true)
+			resp, err := d.Router.Submit(ctx, subnet, batch, false, false)
 			err = d.checkError(err)
 			if err != nil {
 				errs <- err
+				return
+			}
+
+			if resp == nil {
+				//Guard put here to prevent nil responses.
+				errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
+				return
+			}
+
+			// Parse the results
+			rd := bytes.NewReader(resp.Data)
+			for rd.Len() > 0 {
+				status := new(protocol.TransactionStatus)
+				err := status.UnmarshalBinaryFrom(rd)
+				if err != nil {
+					errs <- err
+					break
+				}
+
+				if status.Code != 0 {
+					errs <- errors.New(status.Message)
+				}
 			}
 		}()
 	}

@@ -4,28 +4,27 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type SyntheticWriteData struct{}
 
-func (SyntheticWriteData) Type() types.TransactionType { return types.TxTypeSyntheticWriteData }
+func (SyntheticWriteData) Type() protocol.TransactionType {
+	return protocol.TransactionTypeSyntheticWriteData
+}
 
-func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticWriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
-	var account state.Chain
+	var account protocol.Account
 	result := new(protocol.WriteDataResult)
 	if st.Origin != nil {
 
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteDataAccount:
-			liteDataAccountId, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin)
+			liteDataAccountId, err := protocol.ParseLiteDataAddress(tx.Transaction.Header.Principal)
 			if err != nil {
 				return nil, err
 			}
@@ -41,13 +40,13 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			account = origin
 			result.EntryHash = *(*[32]byte)(entryHash)
 			result.AccountID = liteDataAccountId
-			result.AccountUrl = tx.Transaction.Origin
+			result.AccountUrl = tx.Transaction.Header.Principal
 		default:
 			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
 				protocol.AccountTypeLiteDataAccount, origin.GetType())
 		}
-	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
-		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)
+	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Header.Principal); err != nil {
+		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Header.Principal.String(), err)
 	} else {
 		// Address is lite, but the lite data account doesn't exist, so create one
 		liteDataAccountId := protocol.ComputeLiteDataAccountId(&body.Entry)
@@ -57,7 +56,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		}
 
 		//the computed data account chain id must match the origin url.
-		if !tx.Transaction.Origin.Equal(u) {
+		if !tx.Transaction.Header.Principal.Equal(u) {
 			return nil, fmt.Errorf("first entry doesnt match chain id")
 		}
 

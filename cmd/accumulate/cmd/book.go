@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -96,7 +97,7 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 	originKeyName := args[0]
 
-	args, si, privKey, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -105,6 +106,9 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 
 	newUrl, err := url2.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
 	if newUrl.Authority != originUrl.Authority {
 		return "", fmt.Errorf("the authority of book url to create (%s) doesn't match the origin adi's authority (%s)", newUrl.Authority, originUrl.Authority)
 	}
@@ -118,13 +122,15 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	} else {
 		keyName = originKeyName
 	}
-	publicKeyHash, err := resolvePublicKey(keyName)
+	pbkey, err := resolvePublicKey(keyName)
 	if err != nil {
 		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
 	}
-	keyBook.PublicKeyHash = publicKeyHash
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, si, privKey)
+	ph := sha256.Sum256(pbkey)
+	publicKeyHash := ph[:]
+	keyBook.PublicKeyHash = publicKeyHash
+	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}

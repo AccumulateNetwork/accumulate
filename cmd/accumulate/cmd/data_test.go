@@ -19,8 +19,7 @@ func init() {
 func testCase2_8(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("account create data acc://RedWagon red1 acc://RedWagon/DataAccount")
-	_, err := tc.executeTx(t, commandLine)
+	_, err := tc.executeTx(t, "account create data acc://RedWagon red1 acc://RedWagon/DataAccount")
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
@@ -32,13 +31,11 @@ func testCase2_9a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
-	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef cafef00dbabe8badf00d")
-	_, err := tc.executeTx(t, commandLine)
+	_, err := tc.executeTx(t, "data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef cafef00dbabe8badf00d")
 	require.NoError(t, err)
 
 	//now read back the response
-	commandLine = fmt.Sprintf("data get acc://RedWagon/DataAccount")
-	_, err = tc.execute(t, commandLine)
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount")
 	require.NoError(t, err)
 
 	//now read it back as a set
@@ -54,14 +51,13 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
-	commandLine := fmt.Sprintf("account create data lite acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
-	r, err := tc.executeTx(t, commandLine)
+	r, err := tc.executeTx(t, "account create data lite acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
 	require.NoError(t, err)
 
 	aldr := ActionLiteDataResponse{}
 	require.NoError(t, json.Unmarshal([]byte(r), &aldr))
 	//now read back the response
-	commandLine = fmt.Sprintf("data get %s", aldr.AccountUrl)
+	commandLine := fmt.Sprintf("data get %s", aldr.AccountUrl)
 	_, err = tc.execute(t, commandLine)
 	require.NoError(t, err)
 
@@ -71,7 +67,7 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
 	commandLine = fmt.Sprintf("data write-to acc://RedWagon/DataAccount red1 %s 0badc0de", aldr.AccountUrl)
-	r, err = tc.executeTx(t, commandLine)
+	_, err = tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
 	//now read it back as a expanded set

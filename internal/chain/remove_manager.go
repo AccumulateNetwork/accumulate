@@ -4,14 +4,13 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type RemoveManager struct{}
 
 func (RemoveManager) Type() protocol.TransactionType { return protocol.TransactionTypeRemoveManager }
 
-func (RemoveManager) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (RemoveManager) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	_, ok := tx.Transaction.Body.(*protocol.RemoveManager)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.RemoveManager), tx.Transaction.Body)

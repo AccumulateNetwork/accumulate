@@ -3,16 +3,17 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type InternalTransactionsSent struct{}
 
-func (InternalTransactionsSent) Type() types.TxType { return types.TxTypeInternalTransactionsSent }
+func (InternalTransactionsSent) Type() protocol.TransactionType {
+	return protocol.TransactionTypeInternalTransactionsSent
+}
 
-func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSent)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.InternalTransactionsSent), tx.Transaction.Body)
@@ -37,13 +38,14 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Enve
 			ledger.Synthetic.Unsent = append(ledger.Synthetic.Unsent, id)
 			continue
 		}
+		st.logger.Debug("Did send transaction", "txid", logging.AsHex(id), "module", "governor")
 	}
 
 	st.Update(ledger)
 
 	// Update the synth ledger
-	synthLedger := new(protocol.InternalSyntheticLedger)
-	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), synthLedger)
+	var synthLedger *protocol.InternalSyntheticLedger
+	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), &synthLedger)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load synthetic transaction ledger: %w", err)
 	}

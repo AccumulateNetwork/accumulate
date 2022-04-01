@@ -89,6 +89,11 @@ func (c *Chain) State(height int64) (*managed.MerkleState, error) {
 	return c.merkle.GetAnyState(height)
 }
 
+// CurrentState returns the current state of the chain.
+func (c *Chain) CurrentState() *managed.MerkleState {
+	return c.merkle.MS
+}
+
 // HeightOf returns the height of the given entry in the chain.
 func (c *Chain) HeightOf(hash []byte) (int64, error) {
 	return c.merkle.GetElementIndex(hash)
@@ -110,9 +115,11 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 		return fmt.Errorf("chain opened as read-only")
 	}
 
-	// TODO MerkleManager.AddHash really should return an error
-	c.merkle.AddHash(entry, unique)
-	return nil
+	if entry == nil {
+		panic("attempted to add a nil entry to a chain")
+	}
+
+	return c.merkle.AddHash(entry, unique)
 }
 
 // Receipt builds a receipt from one index to another

@@ -11,7 +11,7 @@ func (n *Network) NodeUrl(path ...string) *url.URL {
 		return protocol.DnUrl().JoinPath(path...)
 	}
 
-	return protocol.BvnUrl(n.LocalSubnetID).JoinPath(path...)
+	return protocol.SubnetUrl(n.LocalSubnetID).JoinPath(path...)
 }
 
 // Ledger returns the URL of the subnet's ledger account.
@@ -27,6 +27,11 @@ func (n *Network) SyntheticLedger() *url.URL {
 // ValidatorBook returns the URL of the subnet's validator key book.
 func (n *Network) ValidatorBook() *url.URL {
 	return n.NodeUrl(protocol.ValidatorBook)
+}
+
+// ValidatorPage returns the URL of the page of the subnet's validator key book.
+func (n *Network) ValidatorPage(index uint64) *url.URL {
+	return protocol.FormatKeyPageUrl(n.ValidatorBook(), index)
 }
 
 // AnchorPool returns the URL of the subnet's anchor pool.

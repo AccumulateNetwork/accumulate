@@ -7,16 +7,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
+func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
 	switch opts.Network.Type {
 	case config.Directory:
-		return newExecutor(opts,
+		return newExecutor(opts, db,
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
 
@@ -30,10 +27,15 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
+
+			// DN validator set management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
 		)
 
 	case config.BlockValidator:
-		return newExecutor(opts,
+		return newExecutor(opts, db,
 			AddCredits{},
 			BurnTokens{},
 			CreateDataAccount{},
@@ -50,6 +52,12 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			UpdateManager{},
 			RemoveManager{},
 
+			// BVN validator management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
+
+			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
 			SyntheticCreateChain{},
@@ -75,29 +83,27 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 // the genesis state.
 func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
-		DB:        db,
 		Network:   network,
 		Logger:    logger,
 		isGenesis: true,
-	})
+	}, db)
 }
 
 // TxExecutor executes a specific type of transaction.
 type TxExecutor interface {
 	// Type is the transaction type the executor can execute.
-	Type() types.TransactionType
+	Type() protocol.TransactionType
 
 	// Validate fully validates and executes the transaction.
-	Validate(*StateManager, *transactions.Envelope) (protocol.TransactionResult, error)
+	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
 }
 
-type creditChain interface {
-	state.Chain
-	SetNonce(key []byte, nonce uint64) error
-	protocol.CreditHolder
-}
+// creditChain = protocol.SignerAccount
+//
+// Deprecated: use protocol.SignerAccount
+type creditChain = protocol.SignerAccount
 
-type tokenChain interface {
-	state.Chain
-	protocol.TokenHolder
-}
+// tokenChain = protocol.TokenHolderAccount
+//
+// Deprecated: use protocol.TokenHolderAccount
+type tokenChain = protocol.TokenHolderAccount

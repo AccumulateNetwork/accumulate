@@ -4,15 +4,13 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type IssueTokens struct{}
 
-func (IssueTokens) Type() types.TxType { return types.TxTypeIssueTokens }
+func (IssueTokens) Type() protocol.TransactionType { return protocol.TransactionTypeIssueTokens }
 
-func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (IssueTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.IssueTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.IssueTokens), tx.Transaction.Body)
@@ -23,10 +21,11 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
 	}
 
-	if issuer.Supply.Cmp(&body.Amount) < 0 && issuer.HasSupplyLimit {
-		return nil, fmt.Errorf("can't issue more than the limited supply")
+	issuer.Issued.Add(&issuer.Issued, &body.Amount)
+
+	if issuer.SupplyLimit != nil && issuer.Issued.Cmp(issuer.SupplyLimit) > 0 {
+		return nil, fmt.Errorf("cannot exceed supply limit")
 	}
-	issuer.Supply.Sub(&issuer.Supply, &body.Amount)
 
 	deposit := new(protocol.SyntheticDepositTokens)
 	copy(deposit.Cause[:], tx.GetTxHash())

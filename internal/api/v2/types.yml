@@ -9,6 +9,10 @@ ChainQueryResponse:
       pointer: true
       marshal-as: reference
       alternative: MerkleState
+    - name: Chains
+      type: query.ChainState
+      repeatable: true
+      marshal-as: reference
     - name: Data
       type: any
     - name: ChainId
@@ -31,10 +35,6 @@ TransactionQueryResponse:
       type: url
       pointer: true
       alternative: Sponsor
-    - name: KeyPage
-      type: KeyPage
-      pointer: true
-      marshal-as: reference
     - name: TransactionHash
       type: bytes
       alternative: Txid
@@ -101,15 +101,9 @@ KeyPage:
   non-binary: true
   incomparable: true
   fields:
-    - name: Height
+    - name: Version
       type: uvarint
-    - name: Index
-      type: uvarint
-      optional: true
-      keep-empty: true
-    - name: Threshold
-      type: uvarint
-      optional: true
+      alternative: Height
 
 Signer:
   non-binary: true
@@ -117,8 +111,16 @@ Signer:
   fields:
   - name: PublicKey
     type: bytes
-  - name: Nonce
+  - name: Timestamp
     type: uvarint
+    alternative: Nonce
+  - name: Url
+    type: url
+    pointer: true
+  - name: SignatureType
+    type: protocol.SignatureType
+    optional: true
+
 
 TokenSend:
   non-binary: true
@@ -301,10 +303,8 @@ TxResponse:
 
 DataEntry:
   fields:
-    - name: ExtIds
-      repeatable: true
-      type: bytes
     - name: Data
+      repeatable: true
       type: bytes
 
 
@@ -349,6 +349,8 @@ VersionResponse:
     - name: Commit
       type: string
     - name: VersionIsKnown
+      type: bool
+    - name: IsTestNet
       type: bool
 
 DescriptionResponse:

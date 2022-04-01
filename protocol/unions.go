@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 //go:generate go run ../tools/cmd/gen-types --language go-union --out unions_gen.go accounts.yml general.yml internal.yml query.yml transactions.yml
@@ -23,17 +24,33 @@ type Account interface {
 	GetType() AccountType
 	Type() AccountType
 	Header() *AccountHeader
+	CopyAsInterface() interface{}
+}
+
+type SignerAccount interface {
+	Account
+	KeyHolder
+	CreditHolder
+	GetSignatureThreshold() uint64
+}
+
+type TokenHolderAccount interface {
+	Account
+	TokenHolder
 }
 
 type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
-
-	GetPublicKey() []byte
-	GetSignature() []byte
-
-	Sign(nonce uint64, privateKey []byte, msghash []byte) error
 	Verify(hash []byte) bool
+	MetadataHash() []byte
+	InitiatorHash() ([]byte, error)
+
+	GetSigner() *url.URL
+	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion
+	GetTimestamp() uint64
+	GetPublicKey() []byte
+	GetSignature() []byte // TODO Remove once the API is improved
 }
 
 type TransactionBody interface {
@@ -45,5 +62,10 @@ type TransactionBody interface {
 type TransactionResult interface {
 	GetType() TransactionType
 	Type() TransactionType
+	encoding.BinaryValue
+}
+
+type KeyPageOperation interface {
+	Type() KeyPageOperationType
 	encoding.BinaryValue
 }

@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type txSignatures struct {
+type SignatureSet struct {
 	fieldsSet  []bool
 	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 }
@@ -24,7 +24,33 @@ type txSyntheticTxns struct {
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 }
 
-func (v *txSignatures) Equal(u *txSignatures) bool {
+func (v *SignatureSet) Copy() *SignatureSet {
+	u := new(SignatureSet)
+
+	u.Signatures = make([]protocol.Signature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		u.Signatures[i] = v
+	}
+
+	return u
+}
+
+func (v *SignatureSet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
+	u := new(txSyntheticTxns)
+
+	u.Txids = make([][32]byte, len(v.Txids))
+	for i, v := range v.Txids {
+		u.Txids[i] = v
+	}
+
+	return u
+}
+
+func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignatureSet) Equal(u *SignatureSet) bool {
 	if len(v.Signatures) != len(u.Signatures) {
 		return false
 	}
@@ -50,11 +76,11 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 	return true
 }
 
-var fieldNames_txSignatures = []string{
+var fieldNames_SignatureSet = []string{
 	1: "Signatures",
 }
 
-func (v *txSignatures) MarshalBinary() ([]byte, error) {
+func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -64,11 +90,11 @@ func (v *txSignatures) MarshalBinary() ([]byte, error) {
 		}
 	}
 
-	_, _, err := writer.Reset(fieldNames_txSignatures)
+	_, _, err := writer.Reset(fieldNames_SignatureSet)
 	return buffer.Bytes(), err
 }
 
-func (v *txSignatures) IsValid() error {
+func (v *SignatureSet) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -124,11 +150,11 @@ func (v *txSyntheticTxns) IsValid() error {
 	}
 }
 
-func (v *txSignatures) UnmarshalBinary(data []byte) error {
+func (v *SignatureSet) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *txSignatures) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
@@ -144,7 +170,7 @@ func (v *txSignatures) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 
-	seen, err := reader.Reset(fieldNames_txSignatures)
+	seen, err := reader.Reset(fieldNames_SignatureSet)
 	v.fieldsSet = seen
 	return err
 }
@@ -169,7 +195,7 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *txSignatures) MarshalJSON() ([]byte, error) {
+func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signatures []json.RawMessage `json:"signatures,omitempty"`
 	}{}
@@ -195,7 +221,7 @@ func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *txSignatures) UnmarshalJSON(data []byte) error {
+func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Signatures []json.RawMessage `json:"signatures,omitempty"`
 	}{}

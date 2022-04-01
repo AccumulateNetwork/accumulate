@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -156,8 +155,8 @@ func addChainAnchor(rootChain *database.Chain, account *database.Account, accoun
 	return indexIndex, true, nil
 }
 
-func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.DirectoryIndexMetadata, error) {
-	b, err := batch.AccountByID(chainId).Index("Directory", "Metadata").Get()
+func loadDirectoryMetadata(batch *database.Batch, account *url.URL) (*protocol.DirectoryIndexMetadata, error) {
+	b, err := batch.Account(account).Index("Directory", "Metadata").Get()
 	if err != nil {
 		return nil, err
 	}
@@ -171,8 +170,8 @@ func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.Dir
 	return md, nil
 }
 
-func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (string, error) {
-	b, err := batch.AccountByID(chainId).Index("Directory", index).Get()
+func loadDirectoryEntry(batch *database.Batch, account *url.URL, index uint64) (string, error) {
+	b, err := batch.Account(account).Index("Directory", index).Get()
 	if err != nil {
 		return "", err
 	}
@@ -202,31 +201,6 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 	return arec, nil
 }
 
-func buildProof(batch *database.Batch, u *ChainUpdate, rootChain *database.Chain, rootIndex, rootHeight int64) (*managed.Receipt, error) {
-	anchorChain, err := batch.Account(u.Account).ReadChain(u.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	anchorHeight := anchorChain.Height()
-	r1, err := anchorChain.Receipt(int64(u.Index), anchorHeight-1)
-	if err != nil {
-		return nil, fmt.Errorf("unable to construct a receipt for %s#chain/%s: %w", u.Account, u.Name, err)
-	}
-
-	r2, err := rootChain.Receipt(rootIndex, rootHeight-1)
-	if err != nil {
-		return nil, fmt.Errorf("unable to construct a receipt for the root chain: %w", err)
-	}
-
-	r, err := r1.Combine(r2)
-	if err != nil {
-		return nil, err
-	}
-
-	return r, nil
-}
-
 func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 	var count int
 	for _, hash := range txids {
@@ -236,7 +210,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 			continue
 		}
 
-		if txn.Transaction.Type() != types.TxTypeSyntheticAnchor {
+		if txn.Transaction.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -247,7 +221,7 @@ func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 func countExceptAnchors2(txns []*protocol.Transaction) int {
 	var count int
 	for _, txn := range txns {
-		if txn.Type() != types.TxTypeSyntheticAnchor {
+		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
 			count++
 			continue
 		}
@@ -255,19 +229,19 @@ func countExceptAnchors2(txns []*protocol.Transaction) int {
 	return count
 }
 
-func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, resp *query.ResponseByTxId) error {
+func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, signatures []protocol.Signature, resp *query.ResponseByTxId) error {
 	// If it's not pending, don't bother
 	if !status.Pending {
 		return nil
 	}
 
-	origin, err := batch.Account(header.Origin).GetState()
+	origin, err := batch.Account(header.Principal).GetState()
 	if err != nil {
 		return err
 	}
 
 	// Find the origin's key book
-	keyBook, ok := origin.(*protocol.KeyBook)
+	_, ok := origin.(*protocol.KeyBook)
 	switch {
 	case ok:
 		// Key books are their own key books
@@ -276,36 +250,31 @@ func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader,
 		return nil
 	default:
 		// Load the origin's key book
-		keyBook = new(protocol.KeyBook)
-		err := batch.Account(origin.Header().KeyBook).GetStateAs(keyBook)
+		var keyBook *protocol.KeyBook
+		err := batch.Account(origin.Header().KeyBook).GetStateAs(&keyBook)
 		if err != nil {
 			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
 		}
 	}
 
-	// Sanity check
-	if header.KeyPageIndex >= keyBook.PageCount {
-		return fmt.Errorf("invalid transaction: book has %d pages, transaction specifies page %d", keyBook.PageCount, header.KeyPageIndex)
-	}
-
 	// Read the page's main chain
-	pageAcnt := batch.Account(protocol.FormatKeyPageUrl(keyBook.Url, header.KeyPageIndex))
+	pageAcnt := batch.Account(signatures[0].GetSigner())
 	pageChain, err := pageAcnt.ReadChain(protocol.MainChain)
 	if err != nil {
-		return fmt.Errorf("failed to load main chain of key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
+		return fmt.Errorf("failed to load main chain of %v: %v", signatures[0].GetSigner(), err)
 	}
 
 	// If height no longer matches, the transaction is invalidated
-	if header.KeyPageHeight != uint64(pageChain.Height()) {
+	if signatures[0].GetSignerVersion() != uint64(pageChain.Height()) {
 		resp.Invalidated = true
 		return nil
 	}
 
 	// Load the page's state
-	keyPage := new(protocol.KeyPage)
-	err = pageAcnt.GetStateAs(keyPage)
+	var keyPage *protocol.KeyPage
+	err = pageAcnt.GetStateAs(&keyPage)
 	if err != nil {
-		return fmt.Errorf("failed to load key page %d of %q: %v", header.KeyPageIndex, origin.Header().Url, err)
+		return fmt.Errorf("failed to load %v: %v", signatures[0].GetSigner(), err)
 	}
 
 	// Set the threshold

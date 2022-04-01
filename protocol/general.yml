@@ -68,13 +68,9 @@ IndexEntry:
 
 DataEntry:
   fields:
-    - name: ExtIds
-      optional: true
+    - name: Data
       repeatable: true
       type: bytes
-    - name: Data
-      type: bytes
-      optional: true
 
 DirectoryIndexMetadata:
   fields:
@@ -117,3 +113,9 @@ ReceiptEntry:
       type: bool
     - name: Hash
       type: bytes
+
+HashSet:
+  fields:
+    - name: Hashes
+      type: hash
+      repeatable: true

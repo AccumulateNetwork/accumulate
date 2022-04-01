@@ -1,22 +1,19 @@
 package chain
 
 import (
-	"bytes"
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type UpdateKeyPage struct{}
 
-func (UpdateKeyPage) Type() types.TxType {
-	return types.TxTypeUpdateKeyPage
+func (UpdateKeyPage) Type() protocol.TransactionType {
+	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
@@ -31,142 +28,163 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (prot
 		return nil, fmt.Errorf("invalid origin record: page %s does not have a KeyBook", page.Url)
 	}
 
-	// We're changing the height of the key page, so reset all the nonces
-	for _, key := range page.Keys {
-		key.Nonce = 0
-	}
-
-	// Find the old key.  Also go ahead and check cases where we must have the
-	// old key, can't have the old key, and don't care about the old key.
-	var bodyKey *protocol.KeySpec
-	indexKey := -1
-	indexNewKey := -1
-	if len(body.Key) > 0 { // SetThreshold doesn't care about the old key
-		for i, key := range page.Keys { // Look for the old key
-			if bytes.Equal(key.PublicKey, body.Key) { // User must supply an exact match of the key as is on the key page
-				bodyKey, indexKey = key, i
-				break
-			}
-		}
-	}
-	if len(body.NewKey) > 0 {
-		for i, key := range page.Keys { // Look for the old key
-			if bytes.Equal(key.PublicKey, body.NewKey) { // User must supply an exact match of the key as is on the key page
-				indexNewKey = i
-				break
-			}
-		}
-	}
-
-	book := new(protocol.KeyBook)
-	err := st.LoadUrlAs(page.KeyBook, book)
+	var book *protocol.KeyBook
+	err := st.LoadUrlAs(page.KeyBook, &book)
 	if err != nil {
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
 
-	priority := getPriority(st, book)
-	if priority < 0 {
-		return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
+	if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
+		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
+	}
+
+	pagePri, ok := getKeyPageIndex(page.Url)
+	if !ok {
+		return nil, fmt.Errorf("cannot parse key page URL: %v", page.Url)
+	}
+
+	signerPri, ok := getKeyPageIndex(st.SignatorUrl)
+	if !ok {
+		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
 	}
 
 	// 0 is the highest priority, followed by 1, etc
-	if tx.Transaction.KeyPageIndex > uint64(priority) {
-		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
+	if signerPri > pagePri {
+		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
 	}
 
-	isValidatorBook := st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url)
-	switch body.Operation {
-	case protocol.KeyPageOperationAdd:
-		// Check that a NewKey was provided, and that the key isn't already on
-		// the Key Page
-		if len(body.NewKey) == 0 { // Provided
-			return nil, fmt.Errorf("must provide a new key")
-		}
-		if indexNewKey > 0 { // Not on the Key Page
-			return nil, fmt.Errorf("cannot have duplicate keys on key page")
-		}
-
-		key := &protocol.KeySpec{
-			PublicKey: body.NewKey,
-		}
-		if body.Owner != nil {
-			key.Owner = body.Owner
-		}
-		page.Keys = append(page.Keys, key)
-
-		if isValidatorBook && len(body.NewKey) == ed25519.PubKeySize {
-			st.AddValidator(body.NewKey)
-			page.Threshold = protocol.GetValidatorsMOfN(len(page.Keys))
-		}
-
-	case protocol.KeyPageOperationUpdate:
-		// check that the Key to update is on the key Page, and the new Key
-		// is not already on the Key Page
-		if indexKey < 0 { // The Key to update is on key page
-			return nil, fmt.Errorf("key to be updated not found on the key page")
-		}
-		if indexNewKey >= 0 { // The new key is not on the key page
-			return nil, fmt.Errorf("key must be updated to a key not found on key page")
-		}
-
-		bodyKey.PublicKey = body.NewKey
-		if body.Owner != nil {
-			bodyKey.Owner = body.Owner
-		}
-
-		if len(body.NewKey) == ed25519.PubKeySize && isValidatorBook {
-			st.DisableValidator(body.Key)
-			st.AddValidator(body.NewKey)
-		}
-
-	case protocol.KeyPageOperationRemove:
-		// Make sure the key to be removed is on the Key Page
-		if indexKey < 0 {
-			return nil, fmt.Errorf("key to be removed not found on the key page")
-		}
-
-		page.Keys = append(page.Keys[:indexKey], page.Keys[indexKey+1:]...)
-
-		keyCount := len(page.Keys)
-		if keyCount == 0 && priority == 0 {
-			return nil, fmt.Errorf("cannot delete last key of the highest priority page of a key book")
-		}
-
-		if isValidatorBook {
-			st.DisableValidator(body.Key)
-			page.Threshold = protocol.GetValidatorsMOfN(keyCount)
-		} else {
-			if page.Threshold > uint64(keyCount) {
-				page.Threshold = uint64(keyCount)
-			}
-		}
-
-		// SetThreshold sets the signature threshold for the Key Page
-	case protocol.KeyPageOperationSetThreshold:
-		if isValidatorBook {
-			return nil, fmt.Errorf("the threshold of a validator book is controlled automatically and therefore it can't be set manually")
-		}
-
-		// Don't care what values are provided by keys....
-		if err := page.SetThreshold(body.Threshold); err != nil {
+	for _, op := range body.Operation {
+		err = UpdateKeyPage{}.executeOperation(page, pagePri, signerPri, op)
+		if err != nil {
 			return nil, err
 		}
-
-	default:
-		return nil, fmt.Errorf("invalid operation: %v", body.Operation)
 	}
 
+	page.Version += 1
+
+	didUpdateKeyPage(page)
 	st.Update(page)
 	return nil, nil
 }
 
-func getPriority(st *StateManager, book *protocol.KeyBook) int {
-	var priority = -1
-	for i := uint64(0); i < book.PageCount; i++ {
-		pageUrl := protocol.FormatKeyPageUrl(book.Url, i)
-		if pageUrl.AccountID32() == st.OriginChainId {
-			priority = int(i)
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri uint64, op protocol.KeyPageOperation) error {
+	switch op := op.(type) {
+	case *protocol.AddKeyOperation:
+		if op.Entry.IsEmpty() {
+			return fmt.Errorf("cannot add an empty entry")
 		}
+
+		_, _, found := findKeyPageEntry(page, &op.Entry)
+		if found {
+			return fmt.Errorf("cannot have duplicate entries on key page")
+		}
+
+		entry := new(protocol.KeySpec)
+		entry.PublicKeyHash = op.Entry.KeyHash
+		entry.Owner = op.Entry.Owner
+		page.Keys = append(page.Keys, entry)
+		return nil
+
+	case *protocol.RemoveKeyOperation:
+		index, _, found := findKeyPageEntry(page, &op.Entry)
+		if !found {
+			return fmt.Errorf("entry to be removed not found on the key page")
+		}
+
+		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+
+		if len(page.Keys) == 0 && pagePri == 0 {
+			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
+		}
+
+		if page.Threshold > uint64(len(page.Keys)) {
+			page.Threshold = uint64(len(page.Keys))
+		}
+		return nil
+
+	case *protocol.UpdateKeyOperation:
+		if op.NewEntry.IsEmpty() {
+			return fmt.Errorf("cannot add an empty entry")
+		}
+
+		_, entry, found := findKeyPageEntry(page, &op.OldEntry)
+		if !found {
+			return fmt.Errorf("entry to be updated not found on the key page")
+		}
+
+		_, _, found = findKeyPageEntry(page, &op.NewEntry)
+		if found {
+			return fmt.Errorf("cannot have duplicate entries on key page")
+		}
+
+		entry.PublicKeyHash = op.NewEntry.KeyHash
+		entry.Owner = op.NewEntry.Owner
+		return nil
+
+	case *protocol.SetThresholdKeyPageOperation:
+		return page.SetThreshold(op.Threshold)
+
+	case *protocol.UpdateAllowedKeyPageOperation:
+		if signerPri == pagePri {
+			return fmt.Errorf("%v cannot modify its own allowed operations", page.Url)
+		}
+
+		if page.TransactionBlacklist == nil {
+			page.TransactionBlacklist = new(protocol.AllowedTransactions)
+		}
+
+		for _, txn := range op.Allow {
+			bit, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
+			}
+			page.TransactionBlacklist.Clear(bit)
+		}
+
+		for _, txn := range op.Deny {
+			bit, ok := txn.AllowedTransactionBit()
+			if !ok {
+				return fmt.Errorf("transaction type %v cannot be (dis)allowed", txn)
+			}
+			page.TransactionBlacklist.Set(bit)
+		}
+
+		if *page.TransactionBlacklist == 0 {
+			page.TransactionBlacklist = nil
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("invalid operation: %v", op.Type())
 	}
-	return priority
+}
+
+func getKeyPageIndex(page *url.URL) (uint64, bool) {
+	_, index, ok := protocol.ParseKeyPageUrl(page)
+	return index - 1, ok
+}
+
+func didUpdateKeyPage(page *protocol.KeyPage) {
+	// We're changing the height of the key page, so reset all the nonces
+	for _, key := range page.Keys {
+		key.LastUsedOn = 0
+	}
+}
+
+func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (int, *protocol.KeySpec, bool) {
+	if len(search.KeyHash) > 0 {
+		i, entry, ok := page.EntryByKeyHash(search.KeyHash)
+		var keySpec *protocol.KeySpec
+		if ok {
+			// If this is not true, something is seriously wrong
+			keySpec = entry.(*protocol.KeySpec)
+		}
+		return i, keySpec, ok
+	}
+
+	if search.Owner != nil {
+		return page.EntryByOwner(search.Owner)
+	}
+
+	return -1, nil, false
 }

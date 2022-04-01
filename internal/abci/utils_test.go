@@ -5,6 +5,7 @@ import (
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -15,16 +16,15 @@ func generateKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(key)
 }
 
-func edSigner(key tmed25519.PrivKey) func(nonce uint64, hash []byte) (protocol.Signature, error) {
-	return func(nonce uint64, hash []byte) (protocol.Signature, error) {
-		sig := new(protocol.LegacyED25519Signature)
-		return sig, sig.Sign(nonce, key, hash)
-	}
-}
-
 func newTxn(origin string) acctesting.TransactionBuilder {
-	return acctesting.NewTransaction().
-		WithOriginStr(origin).
-		WithKeyPage(0, 1).
+	u := url.MustParse(origin)
+	tb := acctesting.NewTransaction().
+		WithPrincipal(u).
 		WithNonceVar(&globalNonce)
+
+	if key, _, _ := protocol.ParseLiteTokenAddress(u); key != nil {
+		tb = tb.WithSigner(u, 1)
+	}
+
+	return tb
 }

@@ -7,15 +7,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type AcmeFaucet struct{}
 
-func (AcmeFaucet) Type() types.TxType { return types.TxTypeAcmeFaucet }
+func (AcmeFaucet) Type() protocol.TransactionType { return protocol.TransactionTypeAcmeFaucet }
 
-func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
 	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
 	if !ok {
@@ -24,17 +22,12 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 
 	// Check the recipient
 	u := body.Url
-	account := new(protocol.LiteTokenAccount)
-	err := st.LoadUrlAs(u, account)
+	var account *protocol.LiteTokenAccount
+	err := st.LoadUrlAs(u, &account)
 	switch {
 	case err == nil:
 		// If the recipient exists, it must be an ACME lite token account
-		u, err := account.ParseTokenUrl()
-		if err != nil {
-			return nil, fmt.Errorf("invalid record: bad token URL: %v", err)
-		}
-
-		if !protocol.AcmeUrl().Equal(u) {
+		if !protocol.AcmeUrl().Equal(account.GetTokenUrl()) {
 			return nil, fmt.Errorf("invalid recipient: %q is not an ACME account", u)
 		}
 
@@ -55,8 +48,8 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	}
 
 	// Load the faucet state
-	faucet := new(protocol.LiteTokenAccount)
-	err = st.LoadUrlAs(protocol.FaucetUrl, faucet)
+	var faucet *protocol.LiteTokenAccount
+	err = st.LoadUrlAs(protocol.FaucetUrl, &faucet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load faucet: %v", err)
 	}
@@ -71,7 +64,6 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *amount
 	st.Submit(u, deposit)
-
 	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
 	// err = deposit.SetDeposit(protocol.ACME, amount)
 

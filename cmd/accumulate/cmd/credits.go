@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -13,8 +14,9 @@ import (
 
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
-	Use:   "credits",
-	Short: "Send credits to a recipient",
+	Use:   "credits [origin token account] [key page or lite account URL] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",
+	Short: "Purchase credits with acme and send to recipient.",
+	Args:  cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
@@ -29,8 +31,8 @@ var creditsCmd = &cobra.Command{
 }
 
 func PrintCredits() {
-	fmt.Println("  accumulate credits [origin lite token account] [lite token account or key page url] [amount] 		Send credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin lite token account] [lite token account or key page url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits to send to another lite token account or adi key page")
 }
 
 func AddCredits(origin string, args []string) (string, error) {
@@ -40,7 +42,7 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -54,16 +56,61 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	amt, err := strconv.ParseFloat(args[1], 64)
+	acmeOracle, err := QueryAcmeOracle()
 	if err != nil {
-		return "", fmt.Errorf("amount must be an integer %v", err)
+		return "", err
+	}
+
+	// credits desired
+	cred, err := strconv.ParseFloat(args[1], 64)
+	if err != nil {
+		return "", err
+	}
+
+	// precision of 1 acme (Token Units / ACME)
+	estAcme := big.NewInt(protocol.AcmePrecision) // Do everything with ACME precision
+
+	// credits wanted Credit Units / dollar
+	estAcme.Mul(estAcme, big.NewInt(int64(cred)))               // Credits
+	estAcme.Div(estAcme, big.NewInt(protocol.CreditsPerDollar)) // Credit / Dollar
+
+	//dollars / ACME
+	estAcme.Mul(estAcme, big.NewInt(protocol.AcmeOraclePrecision)) // Oracle Precision
+	estAcme.Div(estAcme, big.NewInt(int64(acmeOracle.Price)))      // Oracle Precision * Dollars / Acme
+
+	//now test the cost of the credits against the max amount the user wants to spend
+	if len(args) > 2 {
+		tstAmt, err := amountToBigInt(protocol.ACME, args[2]) // amount in acme
+		if err != nil {
+			return "", fmt.Errorf("amount must be an integer %v", err)
+		}
+
+		//determine slippage value if applicable
+		slipAmount := big.NewFloat(1.0).SetInt(tstAmt)
+		if len(args) > 3 {
+			slip, err := strconv.ParseFloat(args[3], 64)
+			if err != nil || slip < 0.0 {
+				return "", fmt.Errorf("slippage should be a percentage >= 0.0")
+			}
+			slip /= 100.0
+			slip += 1.0
+			slipAmount.Mul(slipAmount, big.NewFloat(slip))
+		}
+
+		if estAcme.Cmp(tstAmt) > 0 {
+			slipAmount.Int(tstAmt)
+			if estAcme.Cmp(tstAmt) > 0 {
+				return "", fmt.Errorf("amount of credits requested will not be satisfied by amount of acme to be spent")
+			}
+		}
 	}
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
-	credits.Amount = uint64(amt * protocol.CreditPrecision)
+	credits.Amount = *estAcme
+	credits.Oracle = acmeOracle.Price
 
-	res, err := dispatchTxRequest("add-credits", &credits, nil, u, si, privKey)
+	res, err := dispatchTxRequest("add-credits", &credits, nil, u, signer)
 	if err != nil {
 		return "", err
 	}

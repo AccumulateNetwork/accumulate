@@ -91,6 +91,12 @@ func (u *URL) URL() *url.URL {
 	return v
 }
 
+// Copy returns a copy of the url.
+func (u *URL) Copy() *URL {
+	v := *u
+	return &v
+}
+
 // String reassembles the URL into a valid URL string. See net/url.URL.String().
 func (u *URL) String() string {
 	return u.URL().String()
@@ -150,6 +156,16 @@ func id(s string) [32]byte {
 	return h
 }
 
+func concatId(ids ...[32]byte) [32]byte {
+	digest := sha256.New()
+	for _, id := range ids {
+		digest.Write(id[:])
+	}
+	var result [32]byte
+	copy(result[:], digest.Sum(nil))
+	return result
+}
+
 func ensurePath(s string) string {
 	if s == "" || s[0] == '/' {
 		return s
@@ -159,9 +175,9 @@ func ensurePath(s string) string {
 
 // RootIdentity returns a copy of the URL with an empty path.
 func (u *URL) RootIdentity() *URL {
-	v := *u
+	v := u.Copy()
 	v.Path = ""
-	return &v
+	return v
 }
 
 // Identity returns a copy of the URL with the last section cut off the path.
@@ -172,13 +188,11 @@ func (u *URL) Identity() *URL {
 
 // Parent gets the URL's parent path, or returns the original URL and false.
 func (u *URL) Parent() (*URL, bool) {
-	v := *u
+	v := u.Copy()
 	// Canonicalize the path
-	if strings.HasSuffix(v.Path, "/") {
-		v.Path = v.Path[:len(v.Path)-1]
-	}
+	v.Path = strings.TrimSuffix(v.Path, "/")
 	if len(v.Path) == 0 {
-		return &v, false
+		return v, false
 	}
 	slashIdx := strings.LastIndex(v.Path, "/")
 	if slashIdx == -1 {
@@ -186,7 +200,7 @@ func (u *URL) Parent() (*URL, bool) {
 	} else {
 		v.Path = v.Path[:slashIdx]
 	}
-	return &v, true
+	return v, true
 }
 
 // IdentityAccountID constructs an account identifier from the lower case
@@ -225,6 +239,22 @@ func (u *URL) Routing() uint64 {
 	return binary.BigEndian.Uint64(u.IdentityAccountID())
 }
 
+// Hash calculates a hash of the URL starting with AccountID, hashing and
+// concatenating Query unless it is empty, and hashing and concatenating
+// Fragment unless it is empty. If Query and Fragment are both non-empty, with H
+// defined as the SHA-256 hash of the lower case of the operand, the result is
+// H(H(AccountID + H(Query)) + H(Fragment)).
+func (u *URL) Hash() []byte {
+	hash := u.AccountID32()
+	if u.Query != "" {
+		hash = concatId(hash, id(u.Query))
+	}
+	if u.Fragment != "" {
+		hash = concatId(hash, id(u.Fragment))
+	}
+	return hash[:]
+}
+
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,
 // are equal under Unicode case-folding.
 func (u *URL) Equal(v *URL) bool {
@@ -239,9 +269,9 @@ func (u *URL) Equal(v *URL) bool {
 
 // JoinPath returns a copy of U with additional path elements.
 func (u *URL) JoinPath(s ...string) *URL {
-	v := *u
+	v := u.Copy()
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
-	return &v
+	return v
 }
 
 // MarshalJSON marshals the URL to JSON as a string.

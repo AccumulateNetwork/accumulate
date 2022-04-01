@@ -13,7 +13,7 @@ AccountHeader:
     pointer: true
 
 LiteTokenAccount:
-  kind: chain
+  union: { type: account, value: LiteTokenAccount }
   embeddings:
   - AccountHeader
   fields:
@@ -22,13 +22,14 @@ LiteTokenAccount:
       pointer: true
     - name: Balance
       type: bigint
-    - name: Nonce
+    - name: LastUsedOn
       type: uvarint
+      alternative: Nonce
     - name: CreditBalance
-      type: bigint
+      type: uvarint
 
 LiteDataAccount:
-  kind: chain
+  union: { type: account, value: LiteDataAccount }
   embeddings:
     - AccountHeader
   fields:
@@ -36,14 +37,13 @@ LiteDataAccount:
       type: bytes
 
 ADI:
-  kind: chain
+  union: { type: account, value: Identity }
   embeddings:
     - AccountHeader
-  chain-type: Identity
   fields: [ ]
 
 TokenAccount:
-  kind: chain
+  union: { type: account, value: TokenAccount }
   embeddings:
   - AccountHeader
   fields:
@@ -57,22 +57,29 @@ TokenAccount:
       optional: true
 
 KeyPage:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields:
     - name: CreditBalance
-      type: bigint
+      type: uvarint
     - name: Threshold
+      type: uvarint
+    - name: Version
       type: uvarint
     - name: Keys
       repeatable: true
       type: KeySpec
       pointer: true
       marshal-as: reference
+    - name: TransactionBlacklist
+      type: AllowedTransactions
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 KeyBook:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields:
@@ -80,7 +87,7 @@ KeyBook:
       type: uvarint
 
 DataAccount:
-  kind: chain
+  union: { type: account, value: DataAccount }
   embeddings:
   - AccountHeader
   fields:
@@ -89,7 +96,7 @@ DataAccount:
       optional: true
 
 TokenIssuer:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields:
@@ -100,15 +107,15 @@ TokenIssuer:
     - name: Properties
       type: url
       pointer: true
-    - name: Supply
+    - name: Issued
       type: bigint
-      optional: true
-    - name: HasSupplyLimit
-      type: bool
+    - name: SupplyLimit
+      type: bigint
+      pointer: true
       optional: true
 
 Anchor:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields: [ ]
@@ -117,16 +124,18 @@ Anchor:
 
 KeySpec:
   fields:
-    - name: PublicKey
+    - name: PublicKeyHash
       type: bytes
-    - name: Nonce
+      alternative: PublicKey
+    - name: LastUsedOn
       type: uvarint
+      alternative: Nonce
     - name: Owner
       type: url
       pointer: true
 
 LiteIdentity:
-  kind: chain
+  union: { type: account }
   embeddings:
   - AccountHeader
   fields: [ ]

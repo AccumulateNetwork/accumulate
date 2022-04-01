@@ -1,20 +1,19 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type CreateIdentity struct{}
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
-	// *protocol.IdentityCreate, *url.URL, state.Chain
+func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
@@ -37,31 +36,41 @@ func (ci CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (
 	identity.ManagerKeyBook = body.Manager
 
 	accounts := []protocol.Account{identity}
-	book := protocol.NewKeyBook()
-	bookExists := st.LoadUrlAs(bookUrl, book) == nil
-	if !bookExists {
-		if len(body.PublicKey) == 0 {
+	var book *protocol.KeyBook
+	err = st.LoadUrlAs(bookUrl, &book)
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, storage.ErrNotFound):
+		if len(body.KeyHash) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
+
+		book = new(protocol.KeyBook)
 		book.Url = bookUrl
 		book.PageCount = 1
 		accounts = append(accounts, book)
-
+		if len(body.KeyHash) != 32 {
+			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
+		}
 		page := protocol.NewKeyPage()
 		page.KeyBook = bookUrl
+		page.Version = 1
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 		page.Threshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
-		keySpec.PublicKey = body.PublicKey
+		keySpec.PublicKeyHash = body.KeyHash
 		page.Keys = append(page.Keys, keySpec)
 		accounts = append(accounts, page)
+	default:
+		return nil, err
 	}
 
 	st.Create(accounts...)
 	return nil, nil
 }
 
-func validateAdiUrl(body *protocol.CreateIdentity, origin state.Chain) error {
+func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) error {
 	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
@@ -69,7 +78,7 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin state.Chain) error {
 
 	switch v := origin.(type) {
 	case *protocol.LiteTokenAccount:
-	// OK
+		// OK
 	case *protocol.ADI:
 		if len(body.Url.Path) > 0 {
 			parent, _ := body.Url.Parent()
@@ -103,19 +112,5 @@ func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 	if !parent.Equal(adiUrl) {
 		return fmt.Errorf("KeyBook %s must be a direct child of its ADI %s", bookUrl.String(), adiUrl.String())
 	}
-	return nil
-}
-
-func validateKeyPageUrl(pageUrl *url.URL, bookUrl *url.URL) error {
-	kpParentUrl, ok := pageUrl.Parent()
-	if !ok {
-		return fmt.Errorf("invalid URL: %s, the KeyPage URL must be adi_path/KeyPage", pageUrl)
-	}
-
-	bkParentUrl, _ := bookUrl.Parent()
-	if !bkParentUrl.Equal(kpParentUrl) {
-		return fmt.Errorf("KeyPage %s must be in the same path as its KeyBook %s", pageUrl, bookUrl)
-	}
-
 	return nil
 }

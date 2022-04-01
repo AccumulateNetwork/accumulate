@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -32,29 +30,21 @@ func PrintOracles() {
 }
 
 func GetCreditValue() (string, error) {
-	params := api.DataEntryQuery{}
-	params.Url = protocol.PriceOracle()
-
-	res := new(api.ChainQueryResponse)
-	entry := new(api.DataEntryQueryResponse)
-	res.Data = entry
-
-	err := Client.RequestAPIv2(context.Background(), "query-data", &params, &res)
+	acmeOracle, err := QueryAcmeOracle()
 	if err != nil {
 		return "", err
 	}
 
 	if WantJsonOutput {
-		return string(entry.Entry.Data), nil
-	}
-
-	var acmeOracle protocol.AcmeOracle
-	if err = json.Unmarshal(entry.Entry.Data, &acmeOracle); err != nil {
-		return "", err
+		data, err := json.Marshal(&acmeOracle)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
 	}
 
 	usd := float64(acmeOracle.Price) / protocol.AcmeOraclePrecision
-	credits := (usd * protocol.CreditsPerFiatUnit) / protocol.CreditPrecision
+	credits := (usd * protocol.CreditUnitsPerFiatUnit) / protocol.CreditPrecision
 	out := "USD per ACME : $" + strconv.FormatFloat(usd, 'f', 4, 64)
 	out += "\nCredits per ACME : " + strconv.FormatFloat(credits, 'f', 2, 64)
 

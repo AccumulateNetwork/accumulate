@@ -4,15 +4,13 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type CreateToken struct{}
 
-func (CreateToken) Type() types.TxType { return types.TxTypeCreateToken }
+func (CreateToken) Type() protocol.TransactionType { return protocol.TransactionTypeCreateToken }
 
-func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
+func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateToken)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), tx.Transaction.Body)
@@ -25,8 +23,7 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	token := protocol.NewTokenIssuer()
 	token.Url = body.Url
 	token.Precision = body.Precision
-	token.Supply = body.InitialSupply
-	token.HasSupplyLimit = body.HasSupplyLimit
+	token.SupplyLimit = body.SupplyLimit
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
 	token.ManagerKeyBook = body.Manager

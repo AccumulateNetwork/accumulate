@@ -24,6 +24,7 @@ import (
 const nodeDirPerm = 0755
 
 type InitOptions struct {
+	Version    int
 	WorkDir    string
 	Port       int
 	GenesisDoc *types.GenesisDoc
@@ -37,6 +38,23 @@ type InitOptions struct {
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
 func Init(opts InitOptions) (err error) {
+	switch opts.Version {
+	case 0:
+		fallthrough
+	case 1:
+		err = initV1(opts)
+	case 2:
+		//todo: err = initV2(opts)
+	default:
+		return fmt.Errorf("unknown version to init")
+	}
+	return err
+}
+
+// initV1 creates the initial configuration for a set of nodes, using
+// the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
+// length.
+func initV1(opts InitOptions) (err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(opts.WorkDir)

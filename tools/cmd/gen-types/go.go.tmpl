@@ -53,8 +53,29 @@ func New{{.Name}}() *{{.Name}} {
 
 {{range .Types}}{{if .IsUnion}}
 func (*{{.Name}}) Type() {{pkg "protocol"}}{{.UnionType}} { return {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}} }
-{{end}}{{if or .IsTransaction .IsTxResult .IsAccount }}
+
+// Deprated: use Type
 func (*{{.Name}}) GetType() {{pkg "protocol"}}{{.UnionType}} { return {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}} }
+{{end}}{{end}}
+
+{{range .Types}}{{if .IsComparable}}
+func (v *{{.Name}}) Copy() *{{.Name}} {
+	u := new({{.Name}})
+
+	{{range .Embeddings}}
+	u.{{.Name}} = *v.{{.Name}}.Copy()
+	{{- end}}
+
+	{{- range .Fields}}
+	{{- if .IsMarshalled}}
+	{{copy . (print "u." .Name) (print "v." .Name)}}
+	{{- end}}
+	{{- end}}
+
+	return u
+}
+
+func (v *{{.Name}}) CopyAsInterface() interface{} { return v.Copy() }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}
@@ -98,7 +119,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	{{if .IsUnion}}
-	writer.WriteUint(1, {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}}.ID())
+	writer.WriteEnum(1, {{pkg "protocol"}}{{.UnionType}}{{.UnionValue}})
 	{{- end}}
 
 	{{- range .Embeddings}}

@@ -48,8 +48,8 @@ const (
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
 
-	// PendingChain is the pending signature chain of a record.
-	PendingChain = "pending"
+	// SignatureChain is the pending signature chain of a record.
+	SignatureChain = "signature"
 
 	// DataChain is the data chain of a record.
 	DataChain = "data"
@@ -79,6 +79,9 @@ const (
 	ValidatorMofNFactor = 2.0 / 3.0
 )
 
+//AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
+const AcmeSupplyLimit = 500_000_000
+
 // AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
@@ -99,14 +102,17 @@ const AcmeOraclePrecision = 10000
 
 // CreditPrecision is the precision of credit balances.
 const CreditPrecision = 1e2
+const CreditPrecisionPower = 2
 
-// CreditsPerFiatUnit is the conversion rate from credit balances to fiat
+// CreditsPerDollar is the credits per dollar in external units (100.00)
+const CreditsPerDollar = 1e2
+
+// CreditUnitsPerFiatUnit is the conversion rate from credit balances to fiat
 // currency. We expect to use USD indefinitely as the fiat currency.
 //
 // 100 credits converts to 1 dollar, but we charge down to 0.01 credits. So the
-// actual conversion rate of the credit balance field to dollars is 10,000 to
-// 1.
-const CreditsPerFiatUnit = 1e2 * CreditPrecision
+// actual conversion rate of the credit balance field to dollars is 10,000 to 1.
+const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 
 // LiteDataAddress returns a lite address for the given chain id as
 // `acc://<chain-id-hash-and-checksum>`.
@@ -191,6 +197,10 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
+	return liteTokenAddress(pubKey, tokenUrl), nil
+}
+
+func liteTokenAddress(pubKey []byte, tokenUrl *url.URL) *url.URL {
 	liteUrl := new(url.URL)
 	keyHash := sha256.Sum256(pubKey)
 	keyStr := fmt.Sprintf("%x", keyHash[:20])
@@ -198,7 +208,7 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
 	liteUrl.Authority = keyStr + checkStr
 	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
-	return liteUrl, nil
+	return liteUrl
 }
 
 // ParseLiteTokenAddress extracts the key hash and token URL from an lite token
@@ -318,8 +328,11 @@ func DnUrl() *url.URL {
 	return &url.URL{Authority: "dn"}
 }
 
-// BvnUrl returns `acc://bvn-${subnet}`.
-func BvnUrl(subnet string) *url.URL {
+// SubnetUrl returns `acc://bvn-${subnet}` or `acc://dn`.
+func SubnetUrl(subnet string) *url.URL {
+	if strings.EqualFold(subnet, Directory) {
+		return DnUrl()
+	}
 	return &url.URL{Authority: "bvn-" + subnet}
 }
 
@@ -376,7 +389,28 @@ func ParseAnchorChain(name string) (string, bool) {
 	return name[7:], true
 }
 
-// FormatKeyPageUrl provides a global method to format the KeyPage URL which is currently acc://id/book/1
-func FormatKeyPageUrl(keyBookUrl *url.URL, pageNr uint64) *url.URL {
-	return keyBookUrl.JoinPath(strconv.FormatUint(pageNr+1, 10))
+// FormatKeyPageUrl constructs the URL of a key page from the URL of its key
+// book and the page index. For example, the URL for the first page of id/book
+// is id/book/1.
+func FormatKeyPageUrl(keyBook *url.URL, pageIndex uint64) *url.URL {
+	return keyBook.JoinPath(strconv.FormatUint(pageIndex+1, 10))
+}
+
+// ParseKeyPageUrl parses a key page URL, returning the key book URL and the
+// page number. If the URL does not represent a key page, the last return value
+// is false. ParseKeyPageUrl is the inverse of FormatKeyPageUrl.
+func ParseKeyPageUrl(keyPage *url.URL) (*url.URL, uint64, bool) {
+	i := strings.LastIndexByte(keyPage.Path, '/')
+	if i < 0 {
+		return nil, 0, false
+	}
+
+	index, err := strconv.ParseUint(keyPage.Path[i+1:], 10, 16)
+	if err != nil {
+		return nil, 0, false
+	}
+
+	keyBook := *keyPage
+	keyBook.Path = keyBook.Path[:i]
+	return &keyBook, index, true
 }

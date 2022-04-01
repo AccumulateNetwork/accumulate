@@ -29,8 +29,10 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("executor", "debug").
 	// SetModule("governor", "debug").
 	// SetModule("synthetic", "debug").
+	// SetModule("storage", "debug").
+	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
-	// SetModule("fake-tendermint", "debug").
+	// SetModule("fake-tendermint", "info").
 	String()
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {

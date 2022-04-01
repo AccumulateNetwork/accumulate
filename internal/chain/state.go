@@ -1,26 +1,20 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type StateManager struct {
 	stateCache
 
-	Origin        state.Chain
-	OriginUrl     *url.URL
-	OriginChainId [32]byte
+	Origin    protocol.Account
+	OriginUrl *url.URL
 
 	Signator    creditChain
 	SignatorUrl *url.URL
@@ -29,37 +23,15 @@ type StateManager struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.Envelope) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction) *StateManager {
+	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
-	txid := types.Bytes(env.GetTxHash()).AsBytes32()
-	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
-	m.OriginUrl = env.Transaction.Origin
-
-	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
-
-	// Find the origin
-	var err error
-	m.Origin, err = m.LoadUrl(m.OriginUrl)
-	switch {
-	case err == nil:
-		// Found the origin
-		return m, nil
-
-	case errors.Is(err, storage.ErrNotFound):
-		// Origin is missing
-		m.Origin = nil
-		return m, nil
-		// return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
-
-	default:
-		// Unknown error
-		return nil, err
-	}
-}
-
-func (m *StateManager) Reset() {
-	m.stateCache.Reset()
-	m.blockState = BlockState{}
+	m.SignatorUrl = signerUrl
+	m.Signator = signer
+	m.OriginUrl = transaction.Header.Principal
+	m.Origin = principal
+	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
+	return m
 }
 
 // commit writes pending records to the database.
@@ -77,18 +49,13 @@ func (m *StateManager) Commit() error {
 
 	create := map[string]*protocol.SyntheticCreateChain{}
 	for _, record := range records {
-		u, err := record.Header().ParseUrl()
-		if err != nil {
-			return err
-		}
-
 		data, err := record.MarshalBinary()
 		if err != nil {
 			return err
 		}
 
 		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := u.RootIdentity()
+		id := record.Header().Url.RootIdentity()
 		scc, ok := create[id.String()]
 		if ok {
 			scc.Chains = append(scc.Chains, params)
@@ -102,23 +69,24 @@ func (m *StateManager) Commit() error {
 		m.Submit(id, scc)
 	}
 
-	return nil
+	return m.batch.Commit()
+}
+
+func (m *StateManager) Discard() {
+	m.batch.Discard()
 }
 
 // Submit queues a synthetic transaction for submission.
-func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
+func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 
-	txn := new(protocol.Transaction)
-	txn.Origin = url
-	txn.Body = body
-	m.blockState.DidProduceTxn(txn)
+	m.blockState.DidProduceTxn(url, body)
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, abci.ValidatorUpdate{
+	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: true,
 	})
@@ -126,7 +94,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, abci.ValidatorUpdate{
+	m.blockState.ValidatorsUpdates = append(m.blockState.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: false,
 	})
@@ -138,8 +106,8 @@ func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
 		return nil
 	}
 
-	book := new(protocol.KeyBook)
-	err := m.LoadUrlAs(u, book)
+	var book *protocol.KeyBook
+	err := m.LoadUrlAs(u, &book)
 	if err != nil {
 		return fmt.Errorf("invalid key book %q: %v", u, err)
 	}

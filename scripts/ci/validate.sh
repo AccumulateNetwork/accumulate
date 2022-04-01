@@ -83,27 +83,39 @@ function success {
     echo
 }
 
-NODE_PRIV_VAL0="${NODE_ROOT_0:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-NODE_PRIV_VAL1="${NODE_ROOT_1:-~/.accumulate/dn/Node1}/config/priv_validator_key.json"
+
+NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+
+#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
+NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+   section "Add a new DN validator"
+   declare -g TEST_NODE_WORK_DIR=~/node1
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
+   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
+   declare -g ACCPID=$!
+   # Get Keys
+   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
+   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+   # Register new validator
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
+fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL0" ] && [ -f "$NODE_PRIV_VAL1" ]; then
-    TXID=$(cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}')
-    wait-for-tx $TXID
-    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-    wait-for cli-tx-env tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
-    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
-    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
-
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
     RESULT=$(accumulate -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data | xxd -r -p | jq -re .price)
+    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
     [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
     echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+    echo
 fi
 
 section "Setup"
-if ! which accumulate > /dev/null ; then
+if which go > /dev/null || ! which accumulate > /dev/null ; then
+    echo "Installing CLI"
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
@@ -131,9 +143,6 @@ TXID=$(cli-tx credits ${LITE} ${LITE} 2200)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 2200 ] || die "${LITE} should have at least 2200 credits but only has ${BALANCE}"
-TXID=$(accumulate -j tx get ${TXID} | jq -re .syntheticTxids[1]) # this depends on the burn coming last
-TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
-[ "$TYPE" == "syntheticBurnTokens" ] || die "Expected a syntheticBurnTokens, got ${TYPE}"
 success
 
 section "Generate keys"
@@ -154,7 +163,7 @@ BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
 
 section "Recreating an ADI fails and the synthetic transaction is recorded"
-TXID=`cli-tx adi create ${LITE} keytest keytest-2-0 keytest/book` || return 1
+TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
@@ -176,6 +185,29 @@ accumulate page get keytest/book/3 1> /dev/null || die "Cannot find page keytest
 success
 
 section "Add credits to the ADI's key page 2"
+wait-for cli-tx credits ${LITE} keytest/book/2 1000
+BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 1000 ] && success || die "keytest/book/2 should have 1000 credits but has ${BALANCE}"
+
+section "Attempting to log key page 2 using itself fails"
+wait-for cli-tx page lock keytest/book/2 keytest-2-0 && die "Key page 2 locked itself" || success
+
+section "Lock key page 2 using page 1"
+wait-for cli-tx page lock keytest/book/2 keytest-1-0
+success
+
+section "Attempting to update key page 3 using page 2 fails"
+cli-tx page key add keytest/book/3 keytest-2-0 1 keytest-3-1 && die "Executed disallowed operation" || success
+
+section "Unlock key page 2 using page 1"
+wait-for cli-tx page unlock keytest/book/2 keytest-1-0
+success
+
+section "Update key page 3 using page 2"
+cli-tx page key add keytest/book/3 keytest-2-0 keytest-3-1
+success
+
+section "Add credits to the ADI's key page 2"
 wait-for cli-tx credits ${LITE} keytest/book/2 100
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "keytest/book/2 should have 100 credits but has ${BALANCE}"
@@ -185,12 +217,8 @@ wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-1
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
 success
 
-section "Add a key to page 2 using a key from page 1"
-wait-for cli-tx page key add keytest/book/3 keytest-2-0 1 keytest-3-1
-success
-
 section "Set threshold to 2 of 2"
-wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
+wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
 
@@ -220,8 +248,9 @@ wait-for-tx $TXID
 success
 
 section "Query pending by URL"
-accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
-
+accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null|| die "Failed to retrieve pending transactions"
+accumulate -j get keytest/tokens#signature | jq -re .items[0] &> /dev/null|| die "Failed to retrieve signature transactions"
+success
 
 section "Query pending chain at height 0 by URL"
 TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
@@ -233,6 +262,11 @@ RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionH
 section "Query pending chain range by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
+
+section "Query signature chain range by URL"
+RESULT=$(accumulate -j get "keytest/tokens#signature" | jq -re .total) || die "Failed to get entries"
+[ "$RESULT" -eq 2 ] || die "Wrong total: want 2, got $RESULT"
+success
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
@@ -254,7 +288,7 @@ BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
 AFTER=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
-[ $DIFF -eq 200000000000 ] && success || die "Faucet did not work, want +200000000000, got ${DIFF}"
+[ $DIFF -eq 200000000000000 ] && success || die "Faucet did not work, want +200000000000000, got ${DIFF}"
 
 section "Parse acme faucet TXNs (API v2, AC-603)"
 api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "url": "7117c50f04f1254d56b704dc05298912deeb25dbc1d26ef6/ACME", "count": 10 } }' | jq -r '.result.items | map(.type)[]' | grep -q acmeFaucet
@@ -359,18 +393,18 @@ RESULT=$(accumulate -j token get keytest/foocoin)
 success
 
 section "Query latest data entry by URL"
-RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
+RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data[0])
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo'"
 
 section "Query data entry at height 0 by URL"
-RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry at height 0 is not 'bar'"
+RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data[0])
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Entry at height 0 is not 'foo'"
 
 section "Query data entry with hash by URL"
 ENTRY=$(accumulate -j get keytest/data#data/0 | jq -re .data.entryHash)
-RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data)
+RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data[0])
 ENTRY2=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entryHash)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'bar'"
+[ "$RESULT" == $(echo -n foo | xxd -p) ] || die "Entry with hash ${ENTRY} is not 'foo'"
 [ "$ENTRY" == "$ENTRY2" ] || die "Entry hash mismatch ${ENTRY} ${ENTRY2}"
 success
 
@@ -411,13 +445,13 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 section "Transaction with Memo"
 TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
 wait-for-tx $TXID
-MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.memo)
+MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Query votes chain"
 if [ -f "$NODE_PRIV_VAL" ]; then
     #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
-    RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+    RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
     #convert the node address to search for to base64
     NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
     VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
@@ -431,4 +465,11 @@ if [ -f "$NODE_PRIV_VAL" ]; then
     [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
 else
     echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
+fi
+
+if [ ! -z "${ACCPID}" ]; then
+    section "Shutdown dynamic validator"
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+    kill -9 $ACCPID
+    rm -rf $TEST_NODE_WORK_DIR
 fi

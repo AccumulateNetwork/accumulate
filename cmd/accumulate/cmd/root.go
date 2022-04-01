@@ -75,11 +75,12 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(tokenCmd)
 	cmd.AddCommand(managerCmd)
 	cmd.AddCommand(oracleCmd)
+	cmd.AddCommand(validatorCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
 
-	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+	cmd.PersistentPreRunE = func(*cobra.Command, []string) error {
 		switch serverAddr {
 		case "local":
 			serverAddr = "http://127.0.1.1:26660/v2"
@@ -133,7 +134,7 @@ var (
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {
 	var ret db.DB
-	if memDb == true {
+	if memDb {
 		ret = new(db.MemoryDB)
 	} else {
 		err := os.MkdirAll(defaultWorkDir, 0700)

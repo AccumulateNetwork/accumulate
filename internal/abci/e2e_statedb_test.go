@@ -33,10 +33,11 @@ func TestStateDBConsistency(t *testing.T) {
 	}
 
 	getDb := func(d *accumulated.Daemon) (*database.Database, error) { return database.New(stores[d], d.Logger), nil }
-	nodes := RunTestNet(t, subnets, daemons, getDb, true)
+	nodes := RunTestNet(t, subnets, daemons, getDb, true, nil)
 	n := nodes[subnets[1]][0]
 
-	n.testLiteTx(10)
+	credits := 40.0
+	n.testLiteTx(10, credits)
 
 	for _, nodes := range nodes {
 		for _, node := range nodes {
@@ -45,9 +46,9 @@ func TestStateDBConsistency(t *testing.T) {
 	}
 
 	ledger := n.network.NodeUrl(protocol.Ledger)
-	ledger1 := protocol.NewInternalLedger()
+	var ledger1 *protocol.InternalLedger
 	batch := n.db.Begin(false)
-	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
+	require.NoError(t, batch.Account(ledger).GetStateAs(&ledger1))
 	anchor, err := batch.GetMinorRootChainAnchor(n.network)
 	if err != nil {
 		panic(fmt.Errorf("failed to get anchor: %v", err))
@@ -60,16 +61,17 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin(false)
-	ledger2 := protocol.NewInternalLedger()
+	var ledger2 *protocol.InternalLedger
 	anchor, err = batch.GetMinorRootChainAnchor(n.network)
 	require.NoError(t, err)
-	require.NoError(t, batch.Account(ledger).GetStateAs(ledger2))
+	require.NoError(t, batch.Account(ledger).GetStateAs(&ledger2))
 	require.Equal(t, ledger1, ledger2, "Ledger does not match after load from disk")
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", anchor), "Hash does not match after load from disk")
 	batch.Discard()
 
 	// Recreate the app and try to do more transactions
-	nodes = RunTestNet(t, subnets, daemons, getDb, false)
+	nodes = RunTestNet(t, subnets, daemons, getDb, false, nil)
 	n = nodes[subnets[1]][0]
-	n.testLiteTx(10)
+
+	n.testLiteTx(10, credits)
 }

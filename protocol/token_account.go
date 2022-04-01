@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"errors"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -12,14 +11,14 @@ type TokenHolder interface {
 	CreditTokens(amount *big.Int) bool
 	CanDebitTokens(amount *big.Int) bool
 	DebitTokens(amount *big.Int) bool
-
-	// Deprecated: use TokenUrl field
-	ParseTokenUrl() (*url.URL, error)
+	GetTokenUrl() *url.URL
 }
 
 type CreditHolder interface {
+	GetCreditBalance() uint64
 	CreditCredits(amount uint64)
 	DebitCredits(amount uint64) bool
+	CanDebitCredits(amount uint64) bool
 }
 
 var _ TokenHolder = (*TokenAccount)(nil)
@@ -53,25 +52,28 @@ func (acct *TokenAccount) DebitTokens(amount *big.Int) bool {
 	return true
 }
 
-// Deprecated: use TokenUrl field
-func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
-	return acct.TokenUrl, nil
+func (acct *TokenAccount) GetTokenUrl() *url.URL {
+	return acct.TokenUrl
 }
 
-func (ms *KeyPage) CreditCredits(amount uint64) {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	ms.CreditBalance.Add(&ms.CreditBalance, amt)
+func (page *KeyPage) CreditCredits(amount uint64) {
+	page.CreditBalance = amount
 }
 
-func (ms *KeyPage) DebitCredits(amount uint64) bool {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	if amt.Cmp(&ms.CreditBalance) > 0 {
+func (page *KeyPage) GetCreditBalance() uint64 {
+	return page.CreditBalance
+}
+
+func (page *KeyPage) CanDebitCredits(amount uint64) bool {
+	return amount <= page.CreditBalance
+}
+
+func (page *KeyPage) DebitCredits(amount uint64) bool {
+	if !page.CanDebitCredits(amount) {
 		return false
 	}
 
-	ms.CreditBalance.Sub(&ms.CreditBalance, amt)
+	page.CreditBalance -= amount
 	return true
 }
 
@@ -102,40 +104,25 @@ func (acct *LiteTokenAccount) DebitTokens(amount *big.Int) bool {
 }
 
 func (acct *LiteTokenAccount) CreditCredits(amount uint64) {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	acct.CreditBalance.Add(&acct.CreditBalance, amt)
+	acct.CreditBalance += amount
+}
+
+func (acct *LiteTokenAccount) GetCreditBalance() uint64 {
+	return acct.CreditBalance
+}
+
+func (acct *LiteTokenAccount) CanDebitCredits(amount uint64) bool {
+	return amount <= acct.CreditBalance
 }
 
 func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
-	amt := new(big.Int)
-	amt.SetUint64(amount)
-	if amt.Cmp(&acct.CreditBalance) > 0 {
+	if !acct.CanDebitCredits(amount) {
 		return false
 	}
-
-	acct.CreditBalance.Sub(&acct.CreditBalance, amt)
+	acct.CreditBalance -= amount
 	return true
 }
 
-// Deprecated: use TokenUrl field
-func (acct *LiteTokenAccount) ParseTokenUrl() (*url.URL, error) {
-	return acct.TokenUrl, nil
-}
-
-func (acct *LiteTokenAccount) SetNonce(key []byte, nonce uint64) error {
-	// TODO Check the key hash?
-	acct.Nonce = nonce
-	return nil
-}
-
-func (page *KeyPage) SetNonce(key []byte, nonce uint64) error {
-	ks := page.FindKey(key)
-	if ks == nil {
-		// Should never happen
-		return errors.New("failed to find key spec")
-	}
-
-	ks.Nonce = nonce
-	return nil
+func (acct *LiteTokenAccount) GetTokenUrl() *url.URL {
+	return acct.TokenUrl
 }
