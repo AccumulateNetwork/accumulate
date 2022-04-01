@@ -13,3 +13,11 @@ MetricsResponse:
   fields:
     - name: Value
       type: any
+
+TransactionResultSet:
+  fields:
+  - name: Results
+    type: TransactionStatus
+    pointer: true
+    marshal-as: reference
+    repeatable: true

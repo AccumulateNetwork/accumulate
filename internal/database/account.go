@@ -15,8 +15,8 @@ type Account struct {
 	key   accountBucket
 }
 
-// ensureObject ensures that the record's object metadata is up to date.
-func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.ObjectMetadata, error) {
+// ensureChain ensures that the account's metadata includes the given chain.
+func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
 	// Load the current metadata, if any
 	meta, err := r.GetObject()
 	switch {
@@ -25,50 +25,21 @@ func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.O
 	case errors.Is(err, storage.ErrNotFound):
 		meta.Type = protocol.ObjectTypeAccount
 	default:
-		return nil, err
+		return err
 	}
 
-	if len(addChains) == 0 {
-		return meta, nil
-	}
-
-	// Check for existing chains
-	existing := map[string]int{}
-	for i, chain := range meta.Chains {
-		existing[chain.Name] = i
-	}
-
-	// Add new chains
-	origLen := len(meta.Chains)
-	for _, chain := range addChains {
-		i, ok := existing[chain.Name]
-		if !ok {
-			existing[chain.Name] = len(meta.Chains)
-			meta.Chains = append(meta.Chains, chain)
-			continue
-		}
-
-		if meta.Chains[i].Equal(&chain) {
-			continue
-		}
-
-		if i <= origLen {
-			return nil, fmt.Errorf("cannot alter metadata for chain %s", chain.Name)
-		}
-		return nil, fmt.Errorf("attempted to add chain %s multiple times with different types", chain.Name)
-	}
-
-	if len(meta.Chains) == origLen {
-		return meta, nil
+	err = meta.AddChain(newChain.Name, newChain.Type)
+	if err != nil {
+		return err
 	}
 
 	r.batch.putValue(r.key.Object(), meta)
-	return meta, nil
+	return nil
 }
 
 // GetObject loads the object metadata.
-func (r *Account) GetObject() (*protocol.ObjectMetadata, error) {
-	meta := new(protocol.ObjectMetadata)
+func (r *Account) GetObject() (*protocol.Object, error) {
+	meta := new(protocol.Object)
 	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
 	return meta, err
 }
@@ -123,7 +94,7 @@ func (r *Account) chain(name string, writable bool) (*Chain, error) {
 
 // Chain returns a chain manager for the given chain.
 func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
-	_, err := r.ensureObject(protocol.ChainMetadata{Name: name, Type: typ})
+	err := r.ensureChain(protocol.ChainMetadata{Name: name, Type: typ})
 	if err != nil {
 		return nil, err
 	}

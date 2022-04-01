@@ -215,7 +215,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			SetType(protocol.SignatureTypeED25519).
 			SetPrivateKey(g.Key).
 			SetKeyPageUrl(g.Network.ValidatorBook(), 0).
-			SetHeight(1).
+			SetVersion(1).
 			SetTimestamp(1).
 			Sign(txid[:])
 		if err != nil {
@@ -243,11 +243,26 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 
 	// For each unsent synthetic transaction
 	for _, id := range unsent {
-		// Load it
-		pending, _, signatures, err := batch.Transaction(id[:]).Get()
+		// Load state
+		obj := batch.Transaction(id[:])
+		pending, err := obj.GetState()
 		if err != nil {
 			g.logger.Error("Failed to load pending transaction", "txid", logging.AsHex(id), "error", err)
 			continue
+		}
+
+		// Load status
+		status, err := obj.GetStatus()
+		if err != nil {
+			g.logger.Error("Failed to load pending transaction status", "txid", logging.AsHex(id), "error", err)
+			return
+		}
+
+		// Load signatures
+		signatures, err := getAllSignatures(batch, obj, status, pending.Transaction.Header.Initiator[:])
+		if err != nil {
+			g.logger.Error("Failed to load pending transaction signatures", "txid", logging.AsHex(id), "error", err)
+			return
 		}
 
 		if len(signatures) == 0 {
@@ -420,7 +435,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(g.Key).
 		SetUrl(g.Network.ValidatorPage(0)).
-		SetHeight(1).
+		SetVersion(1).
 		SetTimestamp(uint64(ledgerState.Index) + 1).
 		Initiate(env.Transaction)
 	if err != nil {
