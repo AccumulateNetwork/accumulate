@@ -86,7 +86,7 @@ function success {
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d | wc -l)
-echo "$(find ${NODE_ROOT:-~/.accumulate/}) ======="
+echo "$(find /) ======="
 echo "$NUM_DNNS ================"
 section "Add a new DN validator"
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then #which accumulated > /dev/null; then
