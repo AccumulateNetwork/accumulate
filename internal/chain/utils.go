@@ -14,7 +14,7 @@ import (
 
 // addChainEntry adds an entry to a chain and records the chain update in the
 // block state.
-func addChainEntry(block *BlockState, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
+func addChainEntry(updates *ChainUpdates, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// Check if the account exists
 	_, err := batch.Account(account).GetState()
 	if err != nil {
@@ -34,11 +34,11 @@ func addChainEntry(block *BlockState, batch *database.Batch, account *url.URL, n
 	}
 
 	// Update the ledger
-	return didAddChainEntry(block, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
+	return didAddChainEntry(updates, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
 }
 
 // didAddChainEntry records a chain update in the block state.
-func didAddChainEntry(block *BlockState, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
+func didAddChainEntry(updates *ChainUpdates, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
 	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
 		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
 			Transaction: entry,
@@ -57,7 +57,7 @@ func didAddChainEntry(block *BlockState, batch *database.Batch, u *url.URL, name
 	update.SourceIndex = sourceIndex
 	update.SourceBlock = sourceBlock
 	update.Entry = entry
-	block.DidUpdateChain(update)
+	updates.DidUpdateChain(update)
 	return nil
 }
 
@@ -318,4 +318,11 @@ func combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Recei
 	}
 
 	return r, nil
+}
+
+// statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
+func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
+	vb, _ := v.MarshalBinary()
+	ub, _ := u.MarshalBinary()
+	return bytes.Equal(vb, ub)
 }
