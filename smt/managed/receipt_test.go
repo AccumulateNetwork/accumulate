@@ -270,3 +270,31 @@ func TestReceipt_Combine(t *testing.T) {
 	}
 
 }
+
+// TestReceiptSimple
+// Make a simple SMT from a list of hashes and values
+func TestReceiptSimple(t *testing.T) {
+
+	var cnt = 5000 //                          number of tests
+
+	var rh common.RandHash     //              Create a list of values
+	var list [][]byte          //
+	for i := 0; i < cnt; i++ { //              Create a value for every numberValues
+		list = append(list, rh.Next()) //
+	}
+
+	store := memory.NewDB()                //  Set up a memory db
+	storeTx := store.Begin(true)           //
+	m, err := NewMerkleManager(storeTx, 2) //
+	require.Nil(t, err, "fail NewMerkleManager")
+
+	for _, v := range list { //                Put all the values into the SMT
+		require.NoError(t, m.AddHash(v, false), "Error") //
+	}
+
+	// We can now generate a receipt
+	receipt, err := GetReceipt(m, list[0], list[cnt-1])
+	require.Nil(t, err, "fail GetReceipt")
+	require.True(t, receipt.Validate(), "Receipt failed")
+
+}

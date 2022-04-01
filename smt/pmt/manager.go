@@ -50,7 +50,7 @@ func (m *Manager) LoadNode(node *BptNode) {
 		panic("Should have a Byte Block for any persisted BPT")
 	}
 	m.Bpt.UnMarshalByteBlock(node, data) //                      unpack it
-
+	GetNodeHash(node)
 }
 
 // FlushNode
