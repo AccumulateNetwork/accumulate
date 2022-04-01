@@ -464,7 +464,7 @@ func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
 	for _, env := range env {
 		txnType := env.Type()
 		if !txnType.IsInternal() && txnType != protocol.TransactionTypeSyntheticAnchor {
-			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
+			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.GetTxHash()).Slice(0, 4), "env", logging.AsHex(env.EnvHash()).Slice(0, 4))
 		}
 	}
 }

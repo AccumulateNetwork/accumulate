@@ -69,9 +69,9 @@ func (b *transactionBucket) Status() storage.Key {
 }
 
 // Signatures returns the storage key for the transaction's signatures.
-func (b *transactionBucket) Signatures() storage.Key {
+func (b *transactionBucket) Signatures(signer *url.URL) storage.Key {
 	// TODO Handle this through signature chains.
-	return b.Object().Append("Signatures")
+	return b.Object().Append("Signatures", signer)
 }
 
 // Synthetic returns the storage key for IDs of synthetic transactions produced
