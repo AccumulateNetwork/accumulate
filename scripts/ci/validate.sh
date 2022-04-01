@@ -85,35 +85,26 @@ function success {
 
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-
+NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d | wc -l)
 # section "Add a new DN validator"
-if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/null; then
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then #which accumulated > /dev/null; then
    #spin up 2 DN validators, we cannot have 2 validators, so need either 1 or 3, since 1 is running we need to add 2
    declare -g TEST_NODE_WORK_DIR_1=~/node1
-   declare -g TEST_NODE_WORK_DIR_2=~/node2
    echo "$NODE_ROOT || $NODE_PRIV_VAL ========================="
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1" --skip-version-check --no-website
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.101:26656 -w "$TEST_NODE_WORK_DIR_2" --skip-version-check --no-website
 
    find $TEST_NODE_WORK_DIR_1
-   find $TEST_NODE_WORK_DIR_2
 
    accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_1/dn" &
    declare -g ACCPID_1=$!
-   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_2/dn" &
-   declare -g ACCPID_2=$!
 
    #sleep 5
    # Get Keys
    pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR_1/dn/Node0/config/priv_validator_key.json)
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey_1=$(echo $pubkey | tr -d ' ')
-   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR_2/dn/Node0/config/priv_validator_key.json)
-   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-   declare -g hexPubKey_2=$(echo $pubkey | tr -d ' ')
 
    wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey_1
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey_2
 fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
@@ -487,7 +478,5 @@ fi
 section "Shutdown dynamic validator"
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/null; then
       [ ! -z "${ACCPID_1}" ] || kill -9 $ACCPID_1
-      [ ! -z "${ACCPID_2}" ] || kill -9 $ACCPID_2
       rm -rf $TEST_NODE_WORK_DIR_1
-      rm -rf $TEST_NODE_WORK_DIR_2
 fi
