@@ -93,7 +93,7 @@ if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; t
    #spin up 2 DN validators, we cannot have 2 validators, so need either 1 or 3, since 1 is running we need to add 2
    declare -g TEST_NODE_WORK_DIR_1=~/node1
    echo "$NODE_ROOT || $NODE_PRIV_VAL ========================="
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1" --skip-version-check --no-website
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1/dn" --skip-version-check --no-website
 
    find $TEST_NODE_WORK_DIR_1
 
