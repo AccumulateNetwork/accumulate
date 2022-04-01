@@ -143,9 +143,6 @@ TXID=$(cli-tx credits ${LITE} ${LITE} 2200)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 2200 ] || die "${LITE} should have at least 2200 credits but only has ${BALANCE}"
-TXID=$(accumulate -j tx get ${TXID} | jq -re .syntheticTxids[1]) # this depends on the burn coming last
-TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
-[ "$TYPE" == "syntheticBurnTokens" ] || die "Expected a syntheticBurnTokens, got ${TYPE}"
 success
 
 section "Generate keys"
@@ -221,7 +218,7 @@ wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
 success
 
 section "Set threshold to 2 of 2"
-wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": { "type": "setThreshold", "threshold": 2 }}'
+wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
 
