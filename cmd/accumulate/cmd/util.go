@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -76,6 +77,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 				signer.Type = protocol.SignatureTypeRCD1
 
 			}
+			ed25519.NewKeyFromSeed([]byte{1})
 
 		}
 		signer.Url = origin
@@ -991,7 +993,7 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 	case "ed25519":
 		sigtype = protocol.SignatureTypeED25519
 		err = nil
-	case "led25519":
+	case "legacyed25519":
 		sigtype = protocol.SignatureTypeLegacyED25519
 		err = nil
 	default:

@@ -95,7 +95,7 @@ var keyCmd = &cobra.Command{
 }
 
 func init() {
-	keyCmd.Flags().StringVar(&SigType, "sigtype", "led25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; led25519 for LegacyED25519")
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
 
 }
 
@@ -600,75 +600,67 @@ func ExportMnemonic() (string, error) {
 	}
 }
 
-// ImportFactoidKey will import the private key and assign it to the label
-func ImportFactoidKey(pkhex string, label string) (out string, err error) {
+func ImportFactoidKey(factoidkey string, label string) (out string, err error) {
 
-	var pk ed25519.PrivateKey
-
-	token, err := hex.DecodeString(pkhex)
-	if err != nil {
-		return "", err
-	}
-
-	if len(token) == 32 {
-		pk = ed25519.NewKeyFromSeed(token)
-	} else {
-		pk = token
-	}
-	rcdhash := protocol.GetRCDHashFromPublicKey(pk[32:], 1)
-	if label == "" {
-
-		lt, err := protocol.LiteTokenAddress(rcdhash, protocol.AcmeUrl().String())
-		if err != nil {
-			return "", fmt.Errorf("no label specified and cannot import as lite token account")
-		}
-		label = lt.String()
-	}
-
-	//here will change the label if it is a lite account specified, otherwise just use the label
-	label, _ = LabelForLiteTokenAccount(label)
-
-	_, err = LookupByLabel(label)
-	if err == nil {
-		return "", fmt.Errorf("key name is already being used")
-	}
-
-	_, err = LookupByPubKey(rcdhash)
-	lab := "not found"
-	if err == nil {
-		b, _ := Db.GetBucket(BucketLabel)
-		if b != nil {
-			for _, v := range b.KeyValueList {
-				if bytes.Equal(v.Value, rcdhash) {
-					lab = string(v.Key)
-					break
-				}
-			}
-			return "", fmt.Errorf("private key already exists in wallet by key name of %s", lab)
-		}
-	}
-
-	err = Db.Put(BucketKeys, rcdhash, pk)
-	if err != nil {
-		return "", err
-	}
-
-	err = Db.Put(BucketLabel, []byte(label), rcdhash)
-	if err != nil {
-		return "", err
-	}
-
-	if WantJsonOutput {
-		a := KeyResponse{}
-		a.Label = types.String(label)
-		a.PublicKey = types.Bytes(rcdhash)
-		dump, err := json.Marshal(&a)
+	if strings.Contains(factoidkey, "Fs") {
+		fa, rcdhash, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
 		if err != nil {
 			return "", err
 		}
-		out = fmt.Sprintf("%s\n", string(dump))
+		if label == "" {
+			label = fa
+		}
+		label, _ = LabelForLiteTokenAccount(label)
+		_, err = LookupByLabel(label)
+		if err == nil {
+			return "", fmt.Errorf("key name is already being used")
+		}
+
+		_, err = LookupByPubKey(rcdhash)
+		lab := "not found"
+		if err == nil {
+			b, _ := Db.GetBucket(BucketLabel)
+			if b != nil {
+				for _, v := range b.KeyValueList {
+					if bytes.Equal(v.Value, rcdhash) {
+						lab = string(v.Key)
+						break
+					}
+				}
+				return "", fmt.Errorf("private key already exists in wallet by key name of %s", lab)
+			}
+		}
+
+		err = Db.Put(BucketKeys, rcdhash, privatekey)
+
+		if err != nil {
+			return "", err
+		}
+		err = Db.Put(BucketSigType, rcdhash, []byte(protocol.SignatureTypeRCD1.String()))
+
+		if err != nil {
+			return "", err
+		}
+
+		err = Db.Put(BucketLabel, []byte(label), rcdhash)
+		if err != nil {
+			return "", err
+		}
+
+		if WantJsonOutput {
+			a := KeyResponse{}
+			a.Label = types.String(label)
+			a.PublicKey = types.Bytes(rcdhash)
+			dump, err := json.Marshal(&a)
+			if err != nil {
+				return "", err
+			}
+			out = fmt.Sprintf("%s\n", string(dump))
+		} else {
+			out = fmt.Sprintf("\tname\t\t:%s\n\trcd Hash\t:%x\n", label, rcdhash)
+		}
 	} else {
-		out = fmt.Sprintf("\tname\t\t:%s\n\tpublic key\t:%x\n", label, rcdhash)
+		out, err = ImportKey(factoidkey, label)
 	}
 	return out, nil
 }
