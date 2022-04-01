@@ -108,11 +108,6 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 	return env.Transaction, nil
 }
 
-// LoadSignatures loads and unmarshals a transaction's signatures
-func (c *stateCache) LoadSignatures(txid [32]byte) (*database.SignatureSet, error) {
-	return c.batch.Transaction(txid[:]).GetSignatures()
-}
-
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
 	return AddDirectoryEntry(func(u *url.URL, key ...interface{}) Value {
 		return c.RecordIndex(u, key...)
