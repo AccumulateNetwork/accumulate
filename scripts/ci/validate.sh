@@ -94,6 +94,10 @@ if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/n
    echo "$NODE_ROOT || $NODE_PRIV_VAL ========================="
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1" --skip-version-check --no-website
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.101:26656 -w "$TEST_NODE_WORK_DIR_2" --skip-version-check --no-website
+
+   find $TEST_NODE_WORK_DIR_1
+   find $TEST_NODE_WORK_DIR_2
+
    accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_1/dn" &
    declare -g ACCPID_1=$!
    accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_2/dn" &
