@@ -289,7 +289,7 @@ func TestReceiptSimple(t *testing.T) {
 	require.Nil(t, err, "fail NewMerkleManager")
 
 	for _, v := range list { //                Put all the values into the SMT
-		m.AddHash(v, false) //
+		require.NoError(t,m.AddHash(v, false),"Error") //
 	}
 
 	// We can now generate a receipt
