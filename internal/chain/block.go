@@ -60,6 +60,71 @@ type BlockMeta struct {
 	Evidence   []types.Evidence
 }
 
+// BlockState tracks various metrics of a block of transactions as they are
+// executed.
+type BlockState struct {
+	Delivered         uint64
+	Signed            uint64
+	SynthSigned       uint64
+	SynthSent         uint64
+	ValidatorsUpdates []ValidatorUpdate
+	ProducedTxns      []*protocol.Transaction
+	ChainUpdates      ChainUpdates
+}
+
+// Empty returns true if nothing happened during the block.
+func (s *BlockState) Empty() bool {
+	return s.Delivered == 0 &&
+		s.Signed == 0 &&
+		s.SynthSigned == 0 &&
+		s.SynthSent == 0 &&
+		len(s.ValidatorsUpdates) == 0 &&
+		len(s.ProducedTxns) == 0 &&
+		len(s.ChainUpdates.Entries) == 0
+}
+
+type ProcessSignatureState struct {
+}
+
+func (s *ProcessSignatureState) Merge(r *ProcessSignatureState) {
+}
+
+func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
+	s.Signed++
+}
+
+type ProcessTransactionState struct {
+	ValidatorsUpdates []ValidatorUpdate
+	ProducedTxns      []*protocol.Transaction
+	ChainUpdates      ChainUpdates
+}
+
+// DidProduceTxn records a produced transaction.
+func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.TransactionBody) {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = url
+	txn.Body = body
+	s.ProducedTxns = append(s.ProducedTxns, txn)
+}
+
+func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
+	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
+	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
+	s.ChainUpdates.Merge(&r.ChainUpdates)
+}
+
+func (s *BlockState) MergeTransaction(r *ProcessTransactionState) {
+	s.Delivered++
+	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
+	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
+	s.ChainUpdates.Merge(&r.ChainUpdates)
+}
+
+type ChainUpdates struct {
+	chains  map[string]*ChainUpdate
+	Entries []ChainUpdate
+}
+
 // ChainUpdate records an update to a chain of an account.
 type ChainUpdate struct {
 	Account     *url.URL
@@ -71,67 +136,26 @@ type ChainUpdate struct {
 	Entry       []byte
 }
 
-// BlockState tracks various metrics of a block of transactions as they are
-// executed.
-type BlockState struct {
-	chains map[string]*ChainUpdate
-
-	Delivered         uint64
-	Signed            uint64
-	SynthSigned       uint64
-	SynthSent         uint64
-	ValidatorsUpdates []ValidatorUpdate
-	ProducedTxns      []*protocol.Transaction
-	ChainUpdates      []ChainUpdate
-}
-
-// Empty returns true if nothing happened during the block.
-func (s *BlockState) Empty() bool {
-	return s.Delivered == 0 &&
-		s.Signed == 0 &&
-		s.SynthSigned == 0 &&
-		s.SynthSent == 0 &&
-		len(s.ValidatorsUpdates) == 0 &&
-		len(s.ProducedTxns) == 0 &&
-		len(s.ChainUpdates) == 0
-}
-
-// Merge merges pending block changes into the block state.
-func (s *BlockState) Merge(r *BlockState) {
-	s.Delivered += r.Delivered
-	s.Signed += r.Signed
-	s.SynthSigned += r.SynthSigned
-	s.SynthSent += r.SynthSent
-	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
-	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
-
-	for _, u := range r.ChainUpdates {
-		s.DidUpdateChain(u)
+func (c *ChainUpdates) Merge(d *ChainUpdates) {
+	for _, u := range d.Entries {
+		c.DidUpdateChain(u)
 	}
 }
 
 // DidUpdateChain records a chain update.
-func (s *BlockState) DidUpdateChain(update ChainUpdate) {
-	if s.chains == nil {
-		s.chains = map[string]*ChainUpdate{}
+func (c *ChainUpdates) DidUpdateChain(update ChainUpdate) {
+	if c.chains == nil {
+		c.chains = map[string]*ChainUpdate{}
 	}
 
 	str := strings.ToLower(fmt.Sprintf("%s#chain/%s", update.Account, update.Name))
-	ptr, ok := s.chains[str]
+	ptr, ok := c.chains[str]
 	if ok {
 		*ptr = update
 		return
 	}
 
-	i := len(s.ChainUpdates)
-	s.ChainUpdates = append(s.ChainUpdates, update)
-	s.chains[str] = &s.ChainUpdates[i]
-}
-
-// DidProduceTxn records a produced transaction.
-func (s *BlockState) DidProduceTxn(url *url.URL, body protocol.TransactionBody) {
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = url
-	txn.Body = body
-	s.ProducedTxns = append(s.ProducedTxns, txn)
+	i := len(c.Entries)
+	c.Entries = append(c.Entries, update)
+	c.chains[str] = &c.Entries[i]
 }

@@ -72,6 +72,7 @@ func BenchmarkHighTps(b *testing.B) {
 	require.NoError(b, err)
 
 	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Source = network.NodeUrl()
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *big.NewInt(1)
 	deposit.Cause[0] = 1
@@ -154,8 +155,8 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 		WithSigner(exec.Network.ValidatorPage(0), 1).
 		WithCurrentTimestamp().
 		WithBody(&protocol.SyntheticDepositCredits{
-			Cause:  [32]byte{1},
-			Amount: 1,
+			SyntheticOrigin: protocol.SyntheticOrigin{Cause: [32]byte{1}},
+			Amount:          1,
 		}).
 		InitiateSynthetic(protocol.SubnetUrl(exec.Network.LocalSubnetID)).
 		Sign(protocol.SignatureTypeED25519, exec.Key)

@@ -363,11 +363,20 @@ SignPending:
 
 ##### Synthetic #####
 
-SyntheticCreateChain:
-  union: { type: transaction }
+SyntheticOrigin:
   fields:
+    - name: Source
+      description: is the principal of the transaction that produced this transaction
+      type: url
+      pointer: true
     - name: Cause
       type: chain
+
+SyntheticCreateChain:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
     - name: Chains
       repeatable: true
       type: ChainParams
@@ -376,18 +385,18 @@ SyntheticCreateChain:
 
 SyntheticWriteData:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Entry
       type: DataEntry
       marshal-as: reference
 
 SyntheticDepositTokens:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Token
       type: url
       pointer: true
@@ -398,7 +407,7 @@ SyntheticAnchor:
   union: { type: transaction }
   fields:
     - name: Source
-      description: is the subnet the anchor originates from
+      description: is the principal of the transaction that produced this transaction
       type: url
       pointer: true
     - name: Major
@@ -427,17 +436,17 @@ SyntheticAnchor:
 
 SyntheticDepositCredits:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: uvarint
 
 SyntheticBurnTokens:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: bigint
 
@@ -449,11 +458,23 @@ SyntheticMirror:
       type: AnchoredRecord
       marshal-as: reference
 
+SyntheticReceipt:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: SynthTxHash
+      type: chain
+    - name: Status
+      type: TransactionStatus
+      marshal-as: reference
+      pointer: true
+
 SegWitDataEntry:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: EntryUrl
       type: url
       pointer: true

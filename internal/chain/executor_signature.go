@@ -11,7 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*BlockState, error) {
+func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*ProcessSignatureState, error) {
 	// Load the existing signature set
 	sigSet, err := batch.Transaction(transaction.GetHash()).GetSignatures()
 	if err != nil {
@@ -69,7 +69,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 
 	// For non-user transactions, do not append to the signature chain
 	if !transaction.Body.Type().IsUser() {
-		return &BlockState{Signed: 1}, nil
+		return &ProcessSignatureState{}, nil
 	}
 
 	// Store the signature as an envelope
@@ -101,7 +101,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		return nil, fmt.Errorf("store chain: %w", err)
 	}
 
-	return &BlockState{Signed: 1}, nil
+	return &ProcessSignatureState{}, nil
 }
 
 // validateInitialSignature verifies that the signature is a valid initial
