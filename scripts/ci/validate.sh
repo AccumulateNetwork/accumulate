@@ -85,27 +85,20 @@ function success {
 
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+
 NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
-echo "$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/..) ======="
-echo "$NUM_DNNS ================"
-section "Add a new DN validator"
-if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then #which accumulated > /dev/null; then
-   #spin up 2 DN validators, we cannot have 2 validators, so need either 1 or 3, since 1 is running we need to add 2
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+   section "Add a new DN validator"
+   #spin up a DN validator, we cannot have 2 validators, so need either 1 or >= 3
    declare -g TEST_NODE_WORK_DIR_1=~/node1
-   echo "$NODE_ROOT || $NODE_PRIV_VAL ========================="
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1/dn" --skip-version-check --no-website
-
-   find $TEST_NODE_WORK_DIR_1
-
    accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_1/dn" &
    declare -g ACCPID_1=$!
-
-   #sleep 5
    # Get Keys
    pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR_1/dn/Node0/config/priv_validator_key.json)
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey_1=$(echo $pubkey | tr -d ' ')
-
+   # Register new validator
    wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey_1
 fi
 
@@ -477,8 +470,8 @@ else
     echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
 fi
 
-section "Shutdown dynamic validator"
-if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/null; then
-      [ ! -z "${ACCPID_1}" ] || kill -9 $ACCPID_1
-      rm -rf $TEST_NODE_WORK_DIR_1
+if [ ! -z "${ACCPID_1}" ]; then
+    section "Shutdown dynamic validator"
+    kill -9 $ACCPID_1
+    rm -rf $TEST_NODE_WORK_DIR_1
 fi
