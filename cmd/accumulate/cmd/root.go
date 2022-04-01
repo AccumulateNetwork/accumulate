@@ -20,7 +20,7 @@ var (
 	Db             db.DB
 	WantJsonOutput = false
 	TxPretend      = false
-	TxProve        = false
+	Prove          = false
 	Memo           string
 	Metadata       string
 )
@@ -55,7 +55,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVarP(&ClientDebug, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
-	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
+	flags.BoolVar(&Prove, "prove", false, "Request a receipt proving the transaction or account")
 	flags.BoolVar(&TxNoWait, "no-wait", false, "Don't wait for the transaction to complete")
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")

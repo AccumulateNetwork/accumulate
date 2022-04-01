@@ -183,48 +183,6 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	require.NotZero(t, status.Code)
 }
 
-func setupWithGenesis(t *testing.T) *chain.Executor {
-	// Setup
-	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	// db := database.OpenInMemory(logger)
-	db, err := database.OpenBadger(filepath.Join(t.TempDir(), "accumulate.db"), logger)
-	require.NoError(t, err)
-	key := acctesting.GenerateKey(t.Name())
-	network := config.Network{
-		Type:          config.BlockValidator,
-		LocalSubnetID: strings.ReplaceAll(t.Name(), "_", "-"),
-	}
-	exec, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		DB:      db,
-		Logger:  logger,
-		Key:     key,
-		Network: network,
-		Router:  acctesting.NullRouter{},
-	})
-	require.NoError(t, err)
-	require.NoError(t, exec.Start())
-
-	// Genesis
-	temp := memory.New(logger)
-	_, err = genesis.Init(temp, genesis.InitOpts{
-		Network:     network,
-		GenesisTime: time.Now(),
-		Logger:      logger,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: ed25519.PubKey(key[32:])},
-		},
-	})
-	require.NoError(t, err)
-
-	state, err := temp.MarshalJSON()
-	require.NoError(t, err)
-
-	_, err = exec.InitChain(state, time.Now())
-	require.NoError(t, err)
-
-	return exec
-}
-
 func TestExecutor_ProcessTransaction(t *testing.T) {
 	exec := setupWithGenesis(t)
 

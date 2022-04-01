@@ -64,7 +64,10 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelo
 
 		// Send the transaction
 		ledger.Synthetic.Unsent = append(ledger.Synthetic.Unsent, id)
-		st.logger.Debug("Did sign transaction", "txid", logging.AsHex(id), "module", "governor")
+		st.logger.Debug("Did sign transaction",
+			"type", txn.Body.Type(),
+			"txid", logging.AsHex(id).Slice(0, 4),
+			"module", "governor")
 	}
 
 	st.Update(ledger)
