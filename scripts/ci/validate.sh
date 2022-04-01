@@ -469,6 +469,7 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
     section "Shutdown dynamic validator"
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
     kill -9 $ACCPID
     rm -rf $TEST_NODE_WORK_DIR
 fi
