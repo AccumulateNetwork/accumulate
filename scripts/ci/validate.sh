@@ -86,20 +86,20 @@ function success {
 
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
+#spin up a DN validator, we cannot have 2 validators, so need either 1 or >= 3
 NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
    section "Add a new DN validator"
-   #spin up a DN validator, we cannot have 2 validators, so need either 1 or >= 3
-   declare -g TEST_NODE_WORK_DIR_1=~/node1
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1/dn" --skip-version-check --no-website
-   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_1/dn" &
-   declare -g ACCPID_1=$!
+   declare -g TEST_NODE_WORK_DIR=~/node1
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
+   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
+   declare -g ACCPID=$!
    # Get Keys
-   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR_1/dn/Node0/config/priv_validator_key.json)
+   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-   declare -g hexPubKey_1=$(echo $pubkey | tr -d ' ')
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
    # Register new validator
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey_1
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
 fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
@@ -470,8 +470,8 @@ else
     echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
 fi
 
-if [ ! -z "${ACCPID_1}" ]; then
+if [ ! -z "${ACCPID}" ]; then
     section "Shutdown dynamic validator"
-    kill -9 $ACCPID_1
-    rm -rf $TEST_NODE_WORK_DIR_1
+    kill -9 $ACCPID
+    rm -rf $TEST_NODE_WORK_DIR
 fi
