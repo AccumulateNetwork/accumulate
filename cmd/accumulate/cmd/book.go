@@ -40,7 +40,7 @@ var bookCmd = &cobra.Command{
 				}
 			case "auth":
 				if len(args) > 3 {
-					UpdateKeyBookAuth(args[1], args[2:])
+					out, err = UpdateKeyBookAuth(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
 					PrintUpdateKeyBookAuth()
@@ -177,17 +177,23 @@ func UpdateKeyBookAuth(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	updateKeyBook := protocol.UpdateKeyBookAuth{}
+	account, err := getAccount(origin)
+	if err != nil {
+		return "", err
+	}
+
+	var operation protocol.AccountAuthOperation
 	switch args[0] {
 	case "enable":
-		updateKeyBook.Enable = true
+		operation = &protocol.EnableAccountAuthOperation{Authority: account.Header().KeyBook}
 	case "disable":
-		updateKeyBook.Enable = false
+		operation = &protocol.DisableAccountAuthOperation{Authority: account.Header().KeyBook}
 	default:
 		return "", fmt.Errorf("invalid value passed in command")
 	}
 
-	res, err := dispatchTxRequest("update-keybook-auth", &updateKeyBook, nil, originUrl, signer)
+	txn := protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{operation}}
+	res, err := dispatchTxRequest("update-keybook-auth", &txn, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}

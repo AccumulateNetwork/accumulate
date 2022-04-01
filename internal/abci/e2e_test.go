@@ -1404,7 +1404,7 @@ func TestMultisig(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestKeyBookAuth(t *testing.T) {
+func TestAccountAuth(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
@@ -1416,7 +1416,7 @@ func TestKeyBookAuth(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, barKey, "bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bazKey, "baz", 1e9))
-	require.NoError(t, acctesting.UpdateKeyBookAuth(batch, "foo/book0", false))
+	require.NoError(t, acctesting.UpdateAccountAuth(batch, "foo/book0", false))
 	require.NoError(t, batch.Commit())
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {

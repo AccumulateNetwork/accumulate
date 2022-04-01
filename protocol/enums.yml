@@ -69,6 +69,17 @@ KeyPageOperationType:
     value: 5
     description: updates the transactions the key page is allowed to execute
 
+AccountAuthOperationType:
+  Unknown:
+    value: 0
+    description: is used when the authorization operation is not known
+  Enable:
+    value: 1
+    description: enables authorization checks for a key book
+  Disable:
+    value: 2
+    description: disables authorization checks for a key book
+
 TransactionMax:
   User:
     value: 0x30
@@ -141,9 +152,9 @@ TransactionType:
   UpdateValidatorKey:
     value: 0x14
     description: update a validator key
-  UpdateKeyBookAuth:
+  UpdateAccountAuth:
     value: 0x15
-    description: enable disable authentication for keybook
+    description: updates authorization for an account
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction

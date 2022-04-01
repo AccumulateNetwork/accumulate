@@ -283,18 +283,17 @@ func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
 	return db.Account(account).PutState(page)
 }
 
-func UpdateKeyBookAuth(db DB, account string, enable bool) error {
+func UpdateAccountAuth(db DB, account string, enable bool) error {
 	u, err := url.Parse(account)
 	if err != nil {
 		return err
 	}
-	var book *protocol.KeyBook
-	err = db.Account(u).GetStateAs(&book)
+	state, err := db.Account(u).GetState()
 	if err != nil {
 		return err
 	}
-	book.AuthEnabled = enable
-	return db.Account(u).PutState(book)
+	state.Header().AuthDisabled = !enable
+	return db.Account(u).PutState(state)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING

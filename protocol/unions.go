@@ -66,3 +66,8 @@ type KeyPageOperation interface {
 	Type() KeyPageOperationType
 	encoding.BinaryValue
 }
+
+type AccountAuthOperation interface {
+	Type() AccountAuthOperationType
+	encoding.BinaryValue
+}

@@ -212,8 +212,8 @@ ExecuteUpdateValidatorKey:
   rpc: update-validator-key
   input: UpdateValidatorKey
 
-ExecuteUpdateKeyBookAuth:
-  # description: submits an UpdateKeyBookAuth transaction
+ExecuteUpdateAccountAuth:
+  # description: submits an UpdateAccountAuth transaction
   kind: execute
-  rpc: update-keybook-auth
-  input: UpdateKeyBookAuth
+  rpc: update-account-auth
+  input: UpdateAccountAuth

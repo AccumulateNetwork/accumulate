@@ -326,6 +326,16 @@ UpdateKeyPage:
       unmarshal-with: UnmarshalKeyPageOperation
       zero-value: nil
 
+UpdateAccountAuth:
+  union: { type: transaction }
+  fields:
+    - name: Operations
+      type: AccountAuthOperation
+      marshal-as: value
+      unmarshal-with: UnmarshalAccountAuthOperation
+      zero-value: nil
+      repeatable: true
+
 UpdateManager:
   union: { type: transaction }
   fields:
@@ -512,6 +522,23 @@ UpdateAllowedKeyPageOperation:
       marshal-as: enum
       optional: true
 
+##### Authorization Operations #####
+
+EnableAccountAuthOperation:
+  union: { type: accountAuthOperation }
+  fields:
+  - name: Authority
+    description: is the authority (key book) to enable authorization for
+    type: url
+    pointer: true
+
+DisableAccountAuthOperation:
+  union: { type: accountAuthOperation }
+  fields:
+  - name: Authority
+    description: is the authority (key book) to enable authorization for
+    type: url
+    pointer: true
 
 ##### Result Types #####
 
@@ -585,9 +612,3 @@ AnchoredRecord:
       type: bytes
     - name: Anchor
       type: chain
-
-UpdateKeyBookAuth:
-  union: { type: transaction }
-  fields:
-    - name: Enable
-      type: bool
