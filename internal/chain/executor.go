@@ -576,14 +576,13 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 			return err
 		}
 
+		// This should be the second signature (SyntheticSignature should be first)
 		sig := new(protocol.ReceiptSignature)
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
-		sigs, err := block.Batch.Transaction(txn.GetHash()).GetSignatures()
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
 		if err != nil {
 			return err
 		}
-		// This should be the second signature (SyntheticSignature should be first)
-		sigs.Add(sig)
 	}
 	return nil
 }
