@@ -6,10 +6,40 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
+
+func TestSanity(t *testing.T) {
+	fakeKey := storage.MakeKey("Account", "foo")
+	fakeValue := storage.MakeKey("Value")
+
+	store := memory.NewDB()              // Create a database
+	batch := store.Begin(true)           // Start a batch
+	defer batch.Discard()                //
+	bpt := NewBPTManager(batch)          // Create a BPT manager
+	bpt.InsertKV(fakeKey, fakeValue)     // Insert a key, value pair
+	require.NoError(t, bpt.Bpt.Update()) // Push the update
+	require.NoError(t, batch.Commit())   // Commit the batch
+	rootHash1 := bpt.Bpt.RootHash        // Remember the root hash
+	nodeHash1 := bpt.Bpt.Root.Hash       //
+
+	batch = store.Begin(false)            // Start a batch
+	defer batch.Discard()                 //
+	bpt = NewBPTManager(batch)            // Create a BPT manager
+	bpt.Bpt.GetRoot()                     // Get the root node
+	rootHash2 := bpt.Bpt.RootHash         // Load the root hash
+	nodeHash2 := bpt.Bpt.Root.Hash        //
+	assert.Equal(t, rootHash1, rootHash2) // They should match
+	assert.Equal(t, nodeHash1, nodeHash2) //
+
+	receipt := bpt.Bpt.GetReceipt(fakeKey)      // Create a receipt
+	receiptRoot := *(*[32]byte)(receipt.MDRoot) //
+	assert.Equal(t, rootHash1, receiptRoot)     // The MDRoot should match the BPT root hash
+}
 
 var _ = PrintNode // Avoids highlighting that PrintNode isn't used.  It is useful for debugging.
 // PrintNode
