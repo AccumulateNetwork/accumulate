@@ -89,9 +89,9 @@ NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.js
 # section "Add a new DN validator"
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && which accumulated > /dev/null; then
    #spin up 2 DN validators, we cannot have 2 validators, so need either 1 or 3, since 1 is running we need to add 2
-   declare -g TEST_NODE_WORK_DIR_1=${NODE_ROOT:-~/.testnode1}
-   declare -g TEST_NODE_WORK_DIR_2=${NODE_ROOT:-~/.testnode2}
-   echo "$TEST_NODE_WORK_DIR_2 ========================="
+   declare -g TEST_NODE_WORK_DIR_1=~/node1
+   declare -g TEST_NODE_WORK_DIR_2=~/node2
+   echo "$NODE_ROOT || $NODE_PRIV_VAL ========================="
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR_1" --skip-version-check --no-website
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.101:26656 -w "$TEST_NODE_WORK_DIR_2" --skip-version-check --no-website
    accumulated run -n 0 -w "$TEST_NODE_WORK_DIR_1/dn" &
