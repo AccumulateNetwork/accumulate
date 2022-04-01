@@ -28,8 +28,8 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	return &storage.DebugBatch{Batch: b, Logger: db.logger, Writable: writable}
 }
 
-func (b *Batch) Begin() storage.KeyValueTxn {
-	if !b.writable {
+func (b *Batch) Begin(writable bool) storage.KeyValueTxn {
+	if !b.writable || !writable {
 		return memory.NewBatch(b.Get, nil)
 	}
 	return memory.NewBatch(b.Get, b.PutAll)

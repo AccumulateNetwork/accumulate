@@ -652,10 +652,14 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	acmeAmount := 100.00
+
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
+
 	require.NoError(t, batch.Commit())
 
+	acmeIssuer := n.GetTokenIssuer("acc://ACME")
+	acmeBeforeBurn := acmeIssuer.Issued
 	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
@@ -676,7 +680,6 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	// Check each anchor
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
-
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
@@ -689,9 +692,11 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
-
+	acmeIssuer = n.GetTokenIssuer(protocol.AcmeUrl().String())
+	acmeAfterBurn := acmeIssuer.Issued
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
+	require.Equal(t, *acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), acmeAfterBurn)
 }
 
 func TestCreateKeyPage(t *testing.T) {
@@ -822,7 +827,7 @@ func TestAddKey(t *testing.T) {
 		op := new(protocol.AddKeyOperation)
 		op.Entry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -857,7 +862,7 @@ func TestUpdateKey(t *testing.T) {
 		op.OldEntry.KeyHash = kh[:]
 		op.NewEntry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -889,7 +894,7 @@ func TestRemoveKey(t *testing.T) {
 
 		op.Entry.KeyHash = h2[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -902,7 +907,7 @@ func TestRemoveKey(t *testing.T) {
 
 		op.Entry.KeyHash = h1[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 2).
@@ -1042,6 +1047,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
+
 	check := CheckError{NewDefaultErrorHandler(t)}
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
