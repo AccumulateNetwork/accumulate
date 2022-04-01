@@ -292,7 +292,7 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 
 type ActionResponse struct {
 	TransactionHash types.Bytes                 `json:"transactionHash"`
-	SignatureHashes [][]byte                    `json:"signatureHashes"`
+	SignatureHashes []types.Bytes               `json:"signatureHashes"`
 	SimpleHash      types.Bytes                 `json:"simpleHash"`
 	Log             types.String                `json:"log"`
 	Code            types.String                `json:"code"`
@@ -377,10 +377,13 @@ func (a *ActionDataResponse) Print() (string, error) {
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
-		SignatureHashes: r.SignatureHashes,
+		SignatureHashes: make([]types.Bytes, len(r.SignatureHashes)),
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+	}
+	for i, hash := range r.SignatureHashes {
+		ar.SignatureHashes[i] = hash
 	}
 
 	result := new(protocol.TransactionStatus)
