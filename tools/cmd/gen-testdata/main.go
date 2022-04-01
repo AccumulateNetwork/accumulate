@@ -179,7 +179,7 @@ func txnTest(origin string, body TransactionBody) *TC {
 	signer.Type = SignatureTypeLegacyED25519
 	signer.Url = originUrl
 	signer.PrivateKey = key
-	signer.Height = 1
+	signer.Version = 1
 	signer.Timestamp = uint64(rand.Uint32())
 	env := new(Envelope)
 	txn := new(Transaction)

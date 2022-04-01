@@ -259,12 +259,14 @@ func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
 	n.Require().NoError(json.Unmarshal(data, result))
 }
 
-func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (envHashes, txnHashes [][32]byte, err error) {
+func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte, err error) {
 	n.t.Helper()
 
 	var blob []byte
 	inBlock(func(tx *protocol.Envelope) {
-		envHashes = append(envHashes, *(*[32]byte)(tx.EnvHash()))
+		for _, sig := range tx.Signatures {
+			sigHashes = append(sigHashes, *(*[32]byte)(sig.Hash()))
+		}
 		txnHashes = append(txnHashes, *(*[32]byte)(tx.GetTxHash()))
 		b, err := tx.MarshalBinary()
 		require.NoError(n.t, err)
@@ -282,15 +284,15 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (envHashes, t
 		return nil, nil, fmt.Errorf("%s", d)
 	}
 
-	return envHashes, txnHashes, nil
+	return sigHashes, txnHashes, nil
 }
 
-func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (envHashes, txnHashes [][32]byte) {
+func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte) {
 	n.t.Helper()
 
-	envHashes, txnHashes, err := n.Execute(inBlock)
+	sigHashes, txnHashes, err := n.Execute(inBlock)
 	require.NoError(n.t, err)
-	return envHashes, txnHashes
+	return sigHashes, txnHashes
 }
 
 func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*protocol.Envelope))) [][32]byte {

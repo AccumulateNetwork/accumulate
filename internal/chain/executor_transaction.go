@@ -80,24 +80,22 @@ func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envel
 // the transaction fails - in that case the status code will be non zero. It
 // only returns an error in cases like a database failure.
 func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
-	// Load the signatures
-	signatures, err := batch.Transaction(transaction.GetHash()).GetSignatures()
+	// Load the status
+	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Load the first signer
-	firstSig := signatures.Signatures[0]
-	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
-		err = protocol.Errorf(protocol.ErrorCodeInvalidRequest, "invalid transaction: initiated by receipt signature")
-		return x.recordFailedTransaction(batch, transaction, nil, err)
+	if status.Initiator == nil {
+		// This should never happen
+		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
+	// Load the initiator
 	var signer protocol.SignerAccount
-	err = batch.Account(firstSig.GetSigner()).GetStateAs(&signer)
+	err = batch.Account(status.Initiator).GetStateAs(&signer)
 	if err != nil {
-		err = fmt.Errorf("load signer: %w", err)
-		return x.recordFailedTransaction(batch, transaction, nil, err)
+		err = fmt.Errorf("load initiator: %w", err)
+		return recordFailedTransaction(batch, transaction, nil, err)
 	}
 
 	// Load the principal
@@ -107,22 +105,26 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		err = fmt.Errorf("load principal: %w", err)
-		return x.recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, signer, err)
 	case !transactionAllowsMissingPrincipal(transaction):
 		err = fmt.Errorf("load principal: %w", err)
-		return x.recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
 	// Check if the transaction is ready to be executed
-	if !transactionIsReady(transaction, signer, signatures) {
-		return x.recordPendingTransaction(batch, transaction)
+	ready, err := transactionIsReady(batch, transaction, status)
+	if err != nil {
+		return recordFailedTransaction(batch, transaction, signer, err)
+	}
+	if !ready {
+		return recordPendingTransaction(batch, transaction)
 	}
 
 	if transaction.Body.Type().IsSynthetic() {
 		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(&x.Network, batch, transaction, signatures.Signatures)
+		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
 		if err != nil {
-			return x.recordFailedTransaction(batch, transaction, signer, err)
+			return recordFailedTransaction(batch, transaction, signer, err)
 		}
 	}
 
@@ -136,23 +138,22 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	if !ok {
 		// An invalid transaction should not make it to this point
 		err = protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", transaction.Body.Type())
-		return x.recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
 	result, err := executor.Validate(st, &protocol.Envelope{Transaction: transaction})
 	if err != nil {
-		st.stateCache.state.ProducedTxns = make([]*protocol.Transaction, 0) // Clear synth txs if any were produced, we only want to keep SyntheticReceipt
-		return x.recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
 	// Commit changes, queue state creates for synthetic transactions
 	err = st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
-		return x.recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
-	return x.recordSuccessfulTransaction(batch, &st.state, transaction, result)
+	return recordSuccessfulTransaction(batch, &st.state, transaction, result)
 }
 
 func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
@@ -167,18 +168,40 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 	}
 }
 
-func transactionIsReady(transaction *protocol.Transaction, signer protocol.SignerAccount, signatures *database.SignatureSet) bool {
+func transactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// TODO When we implement 'pending' synthetic transactions, this is where
 	// the logic will go
 
 	if !transaction.Body.Type().IsUser() {
-		return true
+		return true, nil
 	}
 
-	return uint64(signatures.Count()) >= signer.GetSignatureThreshold()
+	// Check if any signer has reached its threshold
+	txnObj := batch.Transaction(transaction.GetHash())
+	for _, signerUrl := range status.Signers {
+		// Load the signer
+		var signer protocol.SignerAccount
+		err := batch.Account(signerUrl).GetStateAs(&signer)
+		if err != nil {
+			return false, fmt.Errorf("load signer %v: %w", signerUrl, err)
+		}
+
+		// Load the signature set
+		signatures, err := txnObj.ReadSignatures(signerUrl)
+		if err != nil {
+			return false, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
+		}
+
+		// Check if the threshold has been reached
+		if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
-func (x *Executor) recordTransaction(batch *database.Batch, transaction *protocol.Transaction, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
+func recordTransaction(batch *database.Batch, transaction *protocol.Transaction, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
 	stateEnv := new(protocol.Envelope)
 	stateEnv.Transaction = transaction
@@ -203,9 +226,9 @@ func (x *Executor) recordTransaction(batch *database.Batch, transaction *protoco
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func recordPendingTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
 	// Record the transaction
-	status, err := x.recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
+	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		status.Remote = false
 		status.Pending = true
 	})
@@ -223,9 +246,9 @@ func (x *Executor) recordPendingTransaction(batch *database.Batch, transaction *
 	return status, new(ProcessTransactionState), nil
 }
 
-func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *ProcessTransactionState, transaction *protocol.Transaction, result protocol.TransactionResult) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func recordSuccessfulTransaction(batch *database.Batch, state *ProcessTransactionState, transaction *protocol.Transaction, result protocol.TransactionResult) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
 	// Record the transaction
-	status, err := x.recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
+	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		status.Remote = false
 		status.Pending = false
 		status.Delivered = true
@@ -266,9 +289,9 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *Pro
 	return status, state, nil
 }
 
-func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, signer protocol.SignerAccount, failure error) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, signer protocol.SignerAccount, failure error) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
 	// Record the transaction
-	status, err := x.recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
+	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		failure := protocol.NewError(protocol.ErrorCodeUnknownError, failure)
 		status.Remote = false
 		status.Delivered = true

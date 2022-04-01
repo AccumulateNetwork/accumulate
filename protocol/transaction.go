@@ -2,9 +2,42 @@ package protocol
 
 import (
 	"math/big"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
+
+// AddSigner adds a signer to the object's list of signer using a binary search
+// to ensure ordering.
+func (s *TransactionStatus) AddSigner(signer *url.URL) {
+	// Initial signer
+	if len(s.Signers) == 0 {
+		s.Initiator = signer
+		s.Signers = []*url.URL{signer}
+		return
+	}
+
+	// Find the matching entry
+	i := sort.Search(len(s.Signers), func(i int) bool {
+		return s.Signers[i].Compare(signer) >= 0
+	})
+
+	// Append to the list
+	if i >= len(s.Signers) {
+		s.Signers = append(s.Signers, signer)
+		return
+	}
+
+	// A matching entry exists
+	if signer.Equal(s.Signers[i]) {
+		return
+	}
+
+	// Insert within the list
+	s.Signers = append(s.Signers, nil)
+	copy(s.Signers[i+1:], s.Signers[i:])
+	s.Signers[i] = signer
+}
 
 func NewTransaction(typ TransactionType) (TransactionBody, error) {
 	return NewTransactionBody(typ)
