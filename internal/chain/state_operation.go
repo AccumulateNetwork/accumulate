@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -55,6 +56,35 @@ func (m *stateCache) Update(record ...protocol.Account) {
 	}
 }
 
+type updateTxStatus struct {
+	txid   []byte
+	status *protocol.TransactionStatus
+}
+
+func (m *StateManager) UpdateStatus(txid []byte, status *protocol.TransactionStatus) {
+	m.operations = append(m.operations, &updateTxStatus{txid, status})
+}
+
+func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
+	// Load the transaction status & state
+	tx := st.batch.Transaction(u.txid)
+	curStatus, err := tx.GetStatus()
+	if err != nil {
+		return nil, fmt.Errorf("retrieving status for transaction %s failed: %w", logging.AsHex(u.txid), err)
+	}
+
+	// Only update the status when changed
+	if curStatus != nil && statusEqual(curStatus, u.status) {
+		return nil, nil
+	}
+
+	err = tx.PutStatus(u.status)
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
 func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
 	// Update: update an existing record. Non-synthetic transactions are
 	// not allowed to create accounts, so we must check if the record
@@ -91,7 +121,7 @@ func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type updateSignator struct {
@@ -143,7 +173,7 @@ func (op *updateSignator) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addDataEntry struct {
@@ -194,13 +224,13 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
 	}
 
-	err = didAddChainEntry(&st.blockState, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0, 0)
+	err = didAddChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
 	// Add TX to main chain
-	return nil, addChainEntry(&st.blockState, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addChainEntryOp struct {
@@ -230,7 +260,7 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 }
 
 func (op *addChainEntryOp) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, addChainEntry(&st.blockState, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
+	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
 }
 
 type writeIndex struct {
@@ -316,10 +346,10 @@ func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
 
 type addSyntheticTxns struct {
 	txid  []byte
-	synth [][32]byte
+	synth [32]byte
 }
 
-func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
+func (m *stateCache) AddSyntheticTxn(txid []byte, synth [32]byte) {
 	m.operations = append(m.operations, &addSyntheticTxns{
 		txid:  txid,
 		synth: synth,
@@ -327,5 +357,5 @@ func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
 }
 
 func (op *addSyntheticTxns) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth...)
+	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth)
 }

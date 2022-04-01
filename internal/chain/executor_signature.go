@@ -13,7 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*BlockState, error) {
+func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*ProcessSignatureState, error) {
 	// Load the transaction status
 	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
@@ -106,7 +106,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		return nil, fmt.Errorf("store signatures: %w", err)
 	}
 
-	return &BlockState{Signed: 1}, nil
+	return &ProcessSignatureState{}, nil
 }
 
 // validateInitialSignature verifies that the signature is a valid initial

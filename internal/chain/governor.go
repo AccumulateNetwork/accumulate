@@ -161,7 +161,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 		"height", msg.block.Index,
 		"time", msg.block.Time,
 		"mirror", msg.mirrorAdi,
-		"updated", len(msg.block.State.ChainUpdates),
+		"updated", len(msg.block.State.ChainUpdates.Entries),
 		"produced", producedCount,
 		"unsigned", unsignedCount,
 		"unsent", unsentCount,
@@ -308,7 +308,7 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced
-	if len(msg.block.State.ChainUpdates) == 0 && synthCountExceptAnchors == 0 {
+	if len(msg.block.State.ChainUpdates.Entries) == 0 && synthCountExceptAnchors == 0 {
 		return
 	}
 
@@ -317,7 +317,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 	}
 
 	kv := []interface{}{"root", logging.AsHex(msg.block.Anchor.RootAnchor)}
-	for i, c := range msg.block.State.ChainUpdates {
+	for i, c := range msg.block.State.ChainUpdates.Entries {
 		kv = append(kv, fmt.Sprintf("[%d]", i))
 		switch c.Name {
 		case "bpt":
