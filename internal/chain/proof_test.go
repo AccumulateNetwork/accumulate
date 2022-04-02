@@ -14,11 +14,7 @@ import (
 func TestExecutor_Query_ProveAccount(t *testing.T) {
 	// Initialize
 	router := SetupExecNetwork(t)
-	dn := router.Subnet(router.Network.Subnets[0].ID)
-	bvn := router.Subnet(router.Network.Subnets[1].ID)
-	InitChain(t, dn.Database, dn.Executor)
-	InitChain(t, bvn.Database, bvn.Executor)
-	router.WaitForGovernor()
+	router.InitChain()
 
 	// Create a lite address
 	alice := generateKey()

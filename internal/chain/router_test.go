@@ -63,6 +63,14 @@ func (r *TestRouter) QueryUrl(url *url.URL, req queryRequest, prove bool) interf
 	return Query(r, x.Database, x.Executor, req, prove)
 }
 
+func (r *TestRouter) InitChain() {
+	for _, subnet := range r.Network.Subnets {
+		x := r.Subnet(subnet.ID)
+		InitChain(r, x.Database, x.Executor)
+	}
+	r.WaitForGovernor()
+}
+
 func (r *TestRouter) WaitForGovernor() {
 	for _, subnet := range r.Network.Subnets {
 		r.Subnet(subnet.ID).Executor.WaitForGovernor()
