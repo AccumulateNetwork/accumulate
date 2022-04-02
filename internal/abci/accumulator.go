@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,7 +33,7 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block    *chain.Block
+	block    *block.Block
 	txct     int64
 	timer    time.Time
 	didPanic bool
@@ -41,11 +42,11 @@ type Accumulator struct {
 }
 
 type AccumulatorOptions struct {
-	Chain   *chain.Executor
-	DB      *database.Database
-	Logger  log.Logger
-	Network config.Network
-	Address crypto.Address // This is the address of this node, and is used to determine if the node is the leader
+	Executor *block.Executor
+	DB       *database.Database
+	Logger   log.Logger
+	Network  config.Network
+	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -55,7 +56,7 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Network.LocalSubnetID),
 	}
 
-	if app.Chain == nil {
+	if app.Executor == nil {
 		panic("Chain Validator Node not set!")
 	}
 
@@ -188,7 +189,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
 
-	k, v, customErr := app.Chain.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
+	k, v, customErr := app.Executor.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
 	switch {
 	case customErr == nil:
 		//Ok
@@ -223,7 +224,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	app.logger.Info("Initializing")
-	block := new(chain.Block)
+	block := new(block.Block)
 	block.Index = protocol.GenesisBlock
 	block.Time = req.Time
 	block.IsLeader = true
@@ -231,7 +232,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	defer block.Batch.Discard()
 
 	// Initialize the chain
-	root, err := app.Chain.InitChain(block, req.AppStateBytes)
+	root, err := app.Executor.InitChain(block, req.AppStateBytes)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
@@ -245,7 +246,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	// Notify the executor that we comitted
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
-	err = app.Chain.DidCommit(block, batch)
+	err = app.Executor.DidCommit(block, batch)
 	if err != nil {
 		panic(fmt.Errorf("failed to notify governor: %v", err))
 	}
@@ -259,7 +260,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	var ret abci.ResponseBeginBlock
 
-	app.block = new(chain.Block)
+	app.block = new(block.Block)
 	app.block.IsLeader = bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
 	app.block.Index = req.Header.Height
 	app.block.Time = req.Header.Time
@@ -268,7 +269,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	app.block.Batch = app.DB.Begin(true)
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	_, err := app.Chain.BeginBlock(app.block)
+	_, err := app.Executor.BeginBlock(app.block)
 	if err != nil {
 		app.fatal(err, true)
 		return ret
@@ -318,7 +319,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Chain, app.DB), req.Tx)
+	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, app.DB), req.Tx)
 	if err != nil {
 		return abci.ResponseCheckTx{
 			Code: uint32(err.Code),
@@ -358,7 +359,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 	}
 
-	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Chain, app.block), req.Tx)
+	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Executor, app.block), req.Tx)
 	if err != nil {
 		return abci.ResponseDeliverTx{
 			Code: uint32(err.Code),
@@ -379,7 +380,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 		return abci.ResponseEndBlock{}
 	}
 
-	err := app.Chain.EndBlock(app.block)
+	err := app.Executor.EndBlock(app.block)
 	if err != nil {
 		app.fatal(err, true)
 		return abci.ResponseEndBlock{}
@@ -454,7 +455,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Notify the executor that we comitted
-	err = app.Chain.DidCommit(app.block, batch)
+	err = app.Executor.DidCommit(app.block, batch)
 	if err != nil {
 		app.fatal(err, true)
 		return abci.ResponseCommit{}

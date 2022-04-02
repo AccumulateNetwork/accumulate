@@ -21,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
@@ -143,7 +143,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Network:           n.network,
 		ConnectionManager: connMgr,
 	}
-	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
+	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
@@ -152,11 +152,11 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
-		Chain:   mgr,
-		DB:      n.db,
-		Logger:  n.logger,
-		Network: *n.network,
-		Address: n.key.PubKey().Address(),
+		Executor: mgr,
+		DB:       n.db,
+		Logger:   n.logger,
+		Network:  *n.network,
+		Address:  n.key.PubKey().Address(),
 	})
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()

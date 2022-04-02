@@ -1,4 +1,4 @@
-package chain_test
+package block_test
 
 import (
 	"fmt"
@@ -17,7 +17,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	router.InitChain()
 
 	// Create a lite address
-	alice := generateKey()
+	alice := acctesting.GenerateTmKey(t.Name())
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 
 	// Fund the lite account

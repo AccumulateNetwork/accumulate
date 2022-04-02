@@ -1,64 +1,12 @@
-package chain
+package block
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
-
-// addChainEntry adds an entry to a chain and records the chain update in the
-// block state.
-func addChainEntry(updates *ChainUpdates, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
-	// Check if the account exists
-	_, err := batch.Account(account).GetState()
-	if err != nil {
-		return err
-	}
-
-	// Add an entry to the chain
-	chain, err := batch.Account(account).Chain(name, typ)
-	if err != nil {
-		return err
-	}
-
-	index := chain.Height()
-	err = chain.AddEntry(entry, true)
-	if err != nil {
-		return err
-	}
-
-	// Update the ledger
-	return didAddChainEntry(updates, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
-}
-
-// didAddChainEntry records a chain update in the block state.
-func didAddChainEntry(updates *ChainUpdates, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
-	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
-		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
-			Transaction: entry,
-			ChainEntry:  index,
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	var update ChainUpdate
-	update.Name = name
-	update.Type = typ
-	update.Account = u
-	update.Index = index
-	update.SourceIndex = sourceIndex
-	update.SourceBlock = sourceBlock
-	update.Entry = entry
-	updates.DidUpdateChain(update)
-	return nil
-}
 
 // shouldIndexChain returns true if the given chain should be indexed.
 func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error) {
@@ -246,29 +194,4 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 	}
 
 	return prev.Source + 1, entry.Source, entry.Anchor, nil
-}
-
-// combineReceipts combines multiple receipts and verifies the final value.
-func combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Receipt, error) {
-	r := receipts[0]
-	var err error
-	for _, s := range receipts[1:] {
-		r, err = r.Combine(s)
-		if err != nil {
-			return nil, fmt.Errorf("failed to combine receipts: %v", err)
-		}
-	}
-
-	if final != nil && !bytes.Equal(final, r.MDRoot) {
-		return nil, fmt.Errorf("invalid receipt end: want %X, got %X", final, r.MDRoot)
-	}
-
-	return r, nil
-}
-
-// statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
-func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
-	vb, _ := v.MarshalBinary()
-	ub, _ := u.MarshalBinary()
-	return bytes.Equal(vb, ub)
 }
