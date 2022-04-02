@@ -167,6 +167,20 @@ func GetUrl(url string) (*QueryResponse, error) {
 	return &res, nil
 }
 
+func getAccount(url string) (protocol.Account, error) {
+	qr, err := GetUrl(url)
+	if err != nil {
+		return nil, err
+	}
+
+	json, err := json.Marshal(qr.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	return protocol.UnmarshalAccountJSON(json)
+}
+
 func queryAs(method string, input, output interface{}) error {
 	err := Client.RequestAPIv2(context.Background(), method, input, output)
 	if err == nil {
