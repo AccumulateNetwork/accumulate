@@ -321,17 +321,5 @@ func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash
 		return nil, nil, e2 //
 	} //
 	s.HashFunction = m.MS.HashFunction // Get the hash function
-	s.PadPending()                     // Pad Pending with a nil to remove corner cases
-	for i, v := range s.Pending {      // Adding the hash is like incrementing a variable
-		if v == nil { //               Look for an empty slot; should not encounter one
-			return nil, nil, fmt.Errorf("should not encounter a nil at %d height %d", element, height)
-		}
-		if i+1 == int(height) { // Found the height
-			Left = v.Copy()         // Get the left and right
-			Right = hash.Copy()     //
-			return Left, Right, nil // return them
-		}
-		hash = v.Combine(s.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
-	}
-	return nil, nil, fmt.Errorf("no values found at height %d", height)
+	return s.GetIntermediate(hash, height)
 }
