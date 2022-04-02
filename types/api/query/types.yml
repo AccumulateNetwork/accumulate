@@ -36,6 +36,9 @@ ResponseTxHistory:
 
 ResponseChainRange:
   fields:
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
     - name: Start
       type: varint
       keep-empty: true
@@ -51,6 +54,9 @@ ResponseChainRange:
 
 ResponseChainEntry:
   fields:
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
     - name: Height
       type: varint
       keep-empty: true
@@ -59,6 +65,11 @@ ResponseChainEntry:
     - name: State
       repeatable: true
       type: bytes
+    - name: Receipt
+      type: GeneralReceipt
+      marshal-as: reference
+      pointer: true
+      optional: true
 
 ResponseByTxId:
   fields:
@@ -104,20 +115,27 @@ SignatureSet:
       zero-value: nil
       repeatable: true
 
+GeneralReceipt:
+  fields:
+    - name: LocalBlock
+      type: uvarint
+    - name: DirectoryBlock
+      type: uvarint
+    - name: Receipt
+      type: protocol.Receipt
+      marshal-as: reference
+    - name: Error
+      type: string
+
 TxReceipt:
+  embeddings:
+  - GeneralReceipt
   fields:
     - name: Account
       type: url
       marshal-as: reference
       pointer: true
     - name: Chain
-      type: string
-    # - name: DirectoryBlock
-    #   type: uvarint
-    - name: Receipt
-      type: protocol.Receipt
-      marshal-as: reference
-    - name: Error
       type: string
 
 ResponsePending:
@@ -234,3 +252,8 @@ ResponseAccount:
       type: ChainState
       marshal-as: reference
       repeatable: true
+    - name: Receipt
+      type: GeneralReceipt
+      marshal-as: reference
+      pointer: true
+      optional: true

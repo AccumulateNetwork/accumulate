@@ -198,15 +198,15 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 		return fmt.Errorf("store signature: %w", err)
 	}
 
-	// Add the signature to the principal's chain
-	chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
-	if err != nil {
-		return fmt.Errorf("load chain: %w", err)
-	}
-	err = chain.AddEntry(sigHash[:], true)
-	if err != nil {
-		return fmt.Errorf("store chain: %w", err)
-	}
+	// // Add the signature to the principal's chain
+	// chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+	// if err != nil {
+	// 	return fmt.Errorf("load chain: %w", err)
+	// }
+	// err = chain.AddEntry(sigHash[:], true)
+	// if err != nil {
+	// 	return fmt.Errorf("store chain: %w", err)
+	// }
 
 	return nil
 }

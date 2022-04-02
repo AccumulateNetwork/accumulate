@@ -104,6 +104,15 @@ func (c *Chain) Anchor() []byte {
 	return c.merkle.MS.GetMDRoot()
 }
 
+// AnchorAt calculates the anchor of the chain at the given height.
+func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
+	ms, err := c.State(int64(height))
+	if err != nil {
+		return nil, err
+	}
+	return ms.GetMDRoot(), nil
+}
+
 // Pending returns the pending roots of the current Merkle state.
 func (c *Chain) Pending() []managed.Hash {
 	return c.merkle.MS.Pending

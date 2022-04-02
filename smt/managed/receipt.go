@@ -154,6 +154,14 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 // takes the values collected by GetReceipt and flushes out the data structures
 // in the Receipt to represent a fully populated version.
 func (r *Receipt) BuildReceipt() error {
+	state, _ := r.manager.GetAnyState(r.AnchorIndex) // Get the state at the Anchor Index
+	state.Trim()                                     // If Pending has any trailing nils, remove them.
+	return r.BuildReceiptWith(r.manager.GetIntermediate, r.manager.MS.HashFunction, state)
+}
+
+type GetIntermediateFunc func(element, height int64) (l, r Hash, err error)
+
+func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc HashFunc, anchorState *MerkleState) error {
 	height := int64(1)   // Start the height at 1, because the element isn't part
 	r.MDRoot = r.Element // of the nodes collected.  To begin with, the element is the Merkle Dag Root
 	stay := true         // stay represents the fact that the proof is already in this column
@@ -171,15 +179,15 @@ func (r *Receipt) BuildReceipt() error {
 			idx++        // No point in handling the first intermediateHash, so move to the next column
 			stay = false // The proof is lagging in the previous column.
 		} else { // The Odd cases hold summary hashes
-			lHash, rHash, err := r.manager.GetIntermediate(idx, height) // Get the previous hight left/right hashes
-			if err != nil {                                             // Error means end of the column has been reached
+			lHash, rHash, err := getIntermediate(idx, height) // Get the previous hight left/right hashes
+			if err != nil {                                   // Error means end of the column has been reached
 				next := int64(math.Pow(2, float64(height-1))) //            Move to the next column 2^(height-1) columns
 				idx += next                                   //
 				stay = false                                  //            Changing columns
 				continue
 			}
-			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash) // We don't have to calculate the MDRoot, but it
-			if stay {                                                  //   helps debugging.  Check if still in column
+			r.MDRoot = lHash.Combine(hashFunc, rHash) // We don't have to calculate the MDRoot, but it
+			if stay {                                 //   helps debugging.  Check if still in column
 				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: lHash, Right: false}) // If so, combine from left
 			} else { //                                                     Otherwise
 				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: rHash, Right: true}) //  combine from right
@@ -199,9 +207,8 @@ func (r *Receipt) BuildReceipt() error {
 		return nil           // added to the merkle tree
 	}
 
-	stay = false                                     // Indicate no elements for the first index have been added
-	state, _ := r.manager.GetAnyState(r.AnchorIndex) // Get the state at the Anchor Index
-	state.Trim()                                     // If Pending has any trailing nils, remove them.
+	stay = false // Indicate no elements for the first index have been added
+	state := anchorState
 
 	var intermediateHash, lastIH Hash // The intermediateHash tracks the combining of hashes as we go. The
 	for i, v := range state.Pending { // last hash computed is the last intermediate Hash used in an anchor
@@ -215,9 +222,9 @@ func (r *Receipt) BuildReceipt() error {
 			}
 			continue
 		}
-		lastIH = intermediateHash.Copy()                                          // compute a new intermediate hash
-		intermediateHash = v.Combine(r.manager.MS.HashFunction, intermediateHash) // Combine Pending with intermediate
-		if int64(i) < height-1 {                                                  // If not to the proof height, skip
+		lastIH = intermediateHash.Copy()                         // compute a new intermediate hash
+		intermediateHash = v.Combine(hashFunc, intermediateHash) // Combine Pending with intermediate
+		if int64(i) < height-1 {                                 // If not to the proof height, skip
 			continue //                                                                 adding to the receipt
 		}
 		if stay { //                                                     If in the same column
