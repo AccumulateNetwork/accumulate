@@ -1416,7 +1416,7 @@ func TestAccountAuth(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, barKey, "bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bazKey, "baz", 1e9))
-	require.NoError(t, acctesting.UpdateAccountAuth(batch, "foo/book0", false))
+	require.NoError(t, acctesting.UpdateAccountAuth(batch, "foo/tokens", false))
 	require.NoError(t, batch.Commit())
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {

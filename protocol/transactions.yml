@@ -302,8 +302,6 @@ CreateKeyBook:
       type: url
       pointer: true
       optional: true
-    - name: AuthEnabled
-      type: bool
 
 AddCredits:
   union: { type: transaction }

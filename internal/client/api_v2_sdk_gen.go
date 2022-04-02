@@ -200,10 +200,10 @@ func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*ap
 	return &resp, nil
 }
 
-func (c *Client) ExecuteUpdateKeyBookAuth(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+func (c *Client) ExecuteUpdateAccountAuth(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 
-	err := c.RequestAPIv2(ctx, "update-keybook-auth", req, &resp)
+	err := c.RequestAPIv2(ctx, "update-account-auth", req, &resp)
 	if err != nil {
 		return nil, err
 	}

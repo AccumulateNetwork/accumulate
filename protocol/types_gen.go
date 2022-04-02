@@ -125,7 +125,6 @@ type CreateKeyBook struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	Manager       *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
-	AuthEnabled   bool     `json:"authEnabled,omitempty" form:"authEnabled" query:"authEnabled" validate:"required"`
 }
 
 type CreateKeyPage struct {
@@ -1300,9 +1299,6 @@ func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
 	case v.Manager == nil || u.Manager == nil:
 		return false
 	case !((v.Manager).Equal(u.Manager)):
-		return false
-	}
-	if !(v.AuthEnabled == u.AuthEnabled) {
 		return false
 	}
 
@@ -3194,7 +3190,6 @@ var fieldNames_CreateKeyBook = []string{
 	2: "Url",
 	3: "PublicKeyHash",
 	4: "Manager",
-	5: "AuthEnabled",
 }
 
 func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
@@ -3210,9 +3205,6 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Manager == nil) {
 		writer.WriteUrl(4, v.Manager)
-	}
-	if !(!v.AuthEnabled) {
-		writer.WriteBool(5, v.AuthEnabled)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateKeyBook)
@@ -3231,11 +3223,6 @@ func (v *CreateKeyBook) IsValid() error {
 		errs = append(errs, "field PublicKeyHash is missing")
 	} else if len(v.PublicKeyHash) == 0 {
 		errs = append(errs, "field PublicKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field AuthEnabled is missing")
-	} else if !v.AuthEnabled {
-		errs = append(errs, "field AuthEnabled is not set")
 	}
 
 	switch len(errs) {
@@ -7047,9 +7034,6 @@ func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(4); ok {
 		v.Manager = x
 	}
-	if x, ok := reader.ReadBool(5); ok {
-		v.AuthEnabled = x
-	}
 
 	seen, err := reader.Reset(fieldNames_CreateKeyBook)
 	v.fieldsSet = seen
@@ -9138,13 +9122,11 @@ func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
 		Url           *url.URL        `json:"url,omitempty"`
 		PublicKeyHash *string         `json:"publicKeyHash,omitempty"`
 		Manager       *url.URL        `json:"manager,omitempty"`
-		AuthEnabled   bool            `json:"authEnabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.Manager = v.Manager
-	u.AuthEnabled = v.AuthEnabled
 	return json.Marshal(&u)
 }
 
@@ -10411,13 +10393,11 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		Url           *url.URL        `json:"url,omitempty"`
 		PublicKeyHash *string         `json:"publicKeyHash,omitempty"`
 		Manager       *url.URL        `json:"manager,omitempty"`
-		AuthEnabled   bool            `json:"authEnabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.Manager = v.Manager
-	u.AuthEnabled = v.AuthEnabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -10428,7 +10408,6 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		v.PublicKeyHash = x
 	}
 	v.Manager = u.Manager
-	v.AuthEnabled = u.AuthEnabled
 	return nil
 }
 
