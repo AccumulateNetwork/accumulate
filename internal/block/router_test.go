@@ -1,4 +1,4 @@
-package chain_test
+package block_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -33,7 +33,7 @@ type RouterExecEntry struct {
 	submitted []*protocol.Envelope
 
 	Database *database.Database
-	Executor *chain.Executor
+	Executor *block.Executor
 }
 
 func (r *RouterExecEntry) Submit(envelopes ...*protocol.Envelope) {
