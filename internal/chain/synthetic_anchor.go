@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type SyntheticAnchor struct {
@@ -164,7 +165,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 
 		// Combine all of the receipts, from the txn to the synth anchor to the
 		// root anchor to the directory anchor
-		receipt, err := combineReceipts(nil, synthReceipt, rootReceipt, dirReceipt.Convert())
+		receipt, err := managed.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.Convert())
 		if err != nil {
 			return nil, err
 		}
