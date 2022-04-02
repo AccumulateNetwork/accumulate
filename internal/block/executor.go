@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -25,7 +26,7 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors map[protocol.TransactionType]TxExecutor
+	executors map[protocol.TransactionType]TransactionExecutor
 	governor  *governor
 	logger    logging.OptionalLogger
 
@@ -41,10 +42,10 @@ type ExecutorOptions struct {
 	isGenesis bool
 }
 
-func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TxExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts
-	m.executors = map[protocol.TransactionType]TxExecutor{}
+	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -105,7 +106,7 @@ func (m *Executor) Stop() error {
 	return m.governor.Stop()
 }
 
-func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) error {
+func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) error) error {
 	var err error
 
 	if !m.isGenesis {
@@ -116,8 +117,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.InternalGenesis)
 
-	st := NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn)
-	st.logger = m.logger
+	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = putSyntheticTransaction(
@@ -138,14 +138,14 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 		return err
 	}
 
-	err = st.Commit()
+	state, err := st.Commit()
 	if err != nil {
 		return err
 	}
 
-	block.State.MergeTransaction(&st.state)
+	block.State.MergeTransaction(state)
 
-	err = m.ProduceSynthetic(block.Batch, txn, st.state.ProducedTxns)
+	err = m.ProduceSynthetic(block.Batch, txn, state.ProducedTxns)
 	if err != nil {
 		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
@@ -318,9 +318,8 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), signerUrl, signer, nil, txn)
+	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), signerUrl, signer, nil, txn, m.logger)
 	defer st.Discard()
-	st.logger.L = m.logger
 
 	var da *protocol.DataAccount
 	va := block.Batch.Account(dataAccountUrl)
@@ -339,7 +338,7 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 		return err
 	}
 
-	err = st.Commit()
+	_, err = st.Commit()
 	return err
 }
 
@@ -594,7 +593,7 @@ func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledg
 		return 0, err
 	}
 
-	block.State.ChainUpdates.DidUpdateChain(ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(chain.ChainUpdate{
 		Name:    protocol.SyntheticChain,
 		Type:    protocol.ChainTypeTransaction,
 		Account: ledgerUrl,
@@ -612,7 +611,7 @@ func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger,
 	}
 
 	m.logger.Debug("Anchoring BPT", "root", logging.AsHex(root).Slice(0, 4))
-	block.State.ChainUpdates.DidUpdateChain(ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(chain.ChainUpdate{
 		Name:    "bpt",
 		Account: m.Network.NodeUrl(),
 		Index:   uint64(block.Index - 1),

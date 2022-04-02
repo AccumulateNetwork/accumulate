@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"context"
@@ -420,11 +420,9 @@ func (g *governor) sendMirror(batch *database.Batch) {
 }
 
 func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionBody) {
-	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
-
 	// Construct the signature transaction
 	var ledgerState *protocol.InternalLedger
-	err := st.LoadUrlAs(g.Network.Ledger(), &ledgerState)
+	err := batch.Account(g.Network.Ledger()).GetStateAs(&ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
