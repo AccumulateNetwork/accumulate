@@ -38,6 +38,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
+	case AccountTypeUnknown:
+		return new(UnknownAccount), nil
 	default:
 		return nil, fmt.Errorf("unknown account %v", typ)
 	}
@@ -181,6 +183,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
+	case TransactionTypeSyntheticReceipt:
+		return new(SyntheticReceipt), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
 	case TransactionTypeUpdateKeyPage:

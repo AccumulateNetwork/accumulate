@@ -27,7 +27,6 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	results := make([]*protocol.TransactionStatus, len(envelopes))
 	for i, env := range envelopes {
 		typ := env.Type()
-		txid := env.GetTxHash()
 		status := new(protocol.TransactionStatus)
 
 		result, err := execute(env)
@@ -35,8 +34,9 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 			sentry.CaptureException(err)
 			logger.Info("Transaction failed",
 				"type", env.Type(),
-				"txid", logging.AsHex(txid),
-				"hash", logging.AsHex(hash),
+				"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
+				"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),
+				"req-hash", logging.AsHex(hash).Slice(0, 4),
 				"error", err,
 				"principal", env.Transaction.Header.Principal)
 			if err, ok := err.(*protocol.Error); ok {
@@ -48,8 +48,9 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		} else if !typ.IsInternal() && typ != protocol.TransactionTypeSyntheticAnchor {
 			logger.Debug("Transaction succeeded",
 				"type", typ,
-				"txid", logging.AsHex(txid),
-				"hash", logging.AsHex(hash))
+				"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
+				"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),
+				"req-hash", logging.AsHex(hash).Slice(0, 4))
 		}
 
 		status.Result = result
@@ -58,18 +59,14 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 
 	// If the results can't be marshaled, provide no results but do not fail the
 	// batch
-	var data []byte
-	for _, r := range results {
-		d, err := r.MarshalBinary()
-		if err != nil {
-			sentry.CaptureException(err)
-			logger.Error("Unable to encode result", "error", err)
-			return envelopes, results, nil, nil
-		}
-		data = append(data, d...)
+	rset, err := (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
+	if err != nil {
+		sentry.CaptureException(err)
+		logger.Error("Unable to encode result", "error", err)
+		return envelopes, results, nil, nil
 	}
 
-	return envelopes, results, data, nil
+	return envelopes, results, rset, nil
 }
 
 func checkTx(chain *chain.Executor, db *database.Database) executeFunc {
@@ -94,11 +91,11 @@ func deliverTx(chain *chain.Executor, block *chain.Block) executeFunc {
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
-		blockState, err := processSignatures(chain, batch, envelope)
+		sigState, err := processSignatures(chain, batch, envelope)
 		if err != nil {
 			return nil, err
 		}
-		block.State.Merge(blockState)
+		block.State.MergeSignature(sigState)
 
 		err = batch.Commit()
 		if err != nil {
@@ -109,10 +106,11 @@ func deliverTx(chain *chain.Executor, block *chain.Block) executeFunc {
 		batch = block.Batch.Begin(true)
 		defer batch.Discard()
 
-		result, blockState, txnErr := processTransaction(chain, batch, envelope)
-		if txnErr == nil {
-			block.State.Merge(blockState)
+		status, txnState, err := processTransaction(chain, batch, envelope)
+		if err != nil {
+			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "execute transaction: %w", err)
 		}
+		block.State.MergeTransaction(txnState)
 
 		// Always commit
 		err = batch.Commit()
@@ -120,11 +118,15 @@ func deliverTx(chain *chain.Executor, block *chain.Block) executeFunc {
 			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
 		}
 
-		return result, txnErr
+		if status.Code != 0 {
+			return status.Result, protocol.NewError(protocol.ErrorCode(status.Code), errors.New(status.Message))
+		}
+
+		return status.Result, nil
 	}
 }
 
-func processSignatures(exec *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) (*chain.BlockState, error) {
+func processSignatures(exec *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) (*chain.ProcessSignatureState, error) {
 	// Load the transaction
 	transaction, err := exec.LoadTransaction(batch, envelope)
 	if err != nil {
@@ -132,35 +134,35 @@ func processSignatures(exec *chain.Executor, batch *database.Batch, envelope *pr
 	}
 
 	// Process each signature
-	blockState := new(chain.BlockState)
+	state := new(chain.ProcessSignatureState)
 	for _, signature := range envelope.Signatures {
-		bs, err := exec.ProcessSignature(batch, transaction, signature)
+		s, err := exec.ProcessSignature(batch, transaction, signature)
 		if err != nil {
 			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 		}
-		blockState.Merge(bs)
+		state.Merge(s)
 	}
 
-	return blockState, nil
+	return state, nil
 }
 
-func processTransaction(chain *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) (protocol.TransactionResult, *chain.BlockState, error) {
+func processTransaction(chain *chain.Executor, batch *database.Batch, envelope *protocol.Envelope) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	transaction, err := chain.LoadTransaction(batch, envelope)
 	if err != nil {
 		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
 
-	//   Process the transaction
-	result, blockState, err := chain.ProcessTransaction(batch, transaction)
+	// Process the transaction
+	status, state, err := chain.ProcessTransaction(batch, transaction)
 	if err != nil {
 		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
 
-	//   Process synthetic transactions generated by the validator
-	err = chain.ProduceSynthetic(batch, transaction, blockState.ProducedTxns)
+	// Process synthetic transactions generated by the validator
+	err = chain.ProduceSynthetic(batch, transaction, state.ProducedTxns)
 	if err != nil {
 		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
 
-	return result, blockState, nil
+	return status, state, nil
 }

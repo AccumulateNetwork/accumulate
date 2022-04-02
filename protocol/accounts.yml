@@ -12,6 +12,11 @@ AccountHeader:
     type: url
     pointer: true
 
+UnknownAccount:
+  union: { type: account, value: Unknown }
+  embeddings:
+  - AccountHeader
+
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }
   embeddings:

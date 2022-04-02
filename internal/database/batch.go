@@ -8,6 +8,7 @@ import (
 	encoding2 "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -269,6 +270,20 @@ func (b *Batch) CommitBpt() ([]byte, error) {
 
 	b.bptEntries = nil
 	return bpt.Bpt.RootHash[:], nil
+}
+
+func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
+	if len(b.bptEntries) > 0 {
+		return nil, errors.New("cannot generate a BPT receipt when there are uncommitted BPT entries")
+	}
+
+	bpt := pmt.NewBPTManager(b.store)
+	receipt := bpt.Bpt.GetReceipt(key)
+	if receipt == nil {
+		return nil, fmt.Errorf("%v %w in BPT", key, storage.ErrNotFound)
+	}
+
+	return receipt, nil
 }
 
 // Commit commits pending writes to the key-value store or the parent batch.
