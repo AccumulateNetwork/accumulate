@@ -21,7 +21,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	if st.Origin != nil {
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
