@@ -335,7 +335,7 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
 		} else {
 			if debugSendAnchor || typ != protocol.TransactionTypeSyntheticAnchor {
-				g.logger.Error("Sending synth txn",
+				g.logger.Debug("Sending synth txn",
 					"origin", env.Transaction.Header.Principal,
 					"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
 					"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),

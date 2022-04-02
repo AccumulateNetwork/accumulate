@@ -151,8 +151,52 @@ func (s *Simulator) ExecuteBlock(envelopes ...*protocol.Envelope) {
 	wg.Wait()
 }
 
+func (s *Simulator) findTxn(hash []byte) *ExecEntry {
+	for _, subnet := range s.Subnets {
+		x := s.Subnet(subnet.ID)
+
+		batch := x.Database.Begin(false)
+		defer batch.Discard()
+		obj, err := batch.Transaction(hash).GetStatus()
+		require.NoError(s, err)
+
+		if !obj.Delivered {
+			continue
+		}
+
+		return x
+	}
+
+	return nil
+}
+
+func (s *Simulator) WaitForTransaction(txnHash []byte) {
+	var x *ExecEntry
+	for i := 0; i < 50; i++ {
+		x = s.findTxn(txnHash)
+		if x != nil {
+			break
+		}
+
+		s.ExecuteBlock()
+		s.WaitForGovernor()
+	}
+	if x == nil {
+		s.Fatalf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
+	}
+
+	batch := x.Database.Begin(false)
+	synth, err := batch.Transaction(txnHash).GetSyntheticTxns()
+	batch.Discard()
+	require.NoError(s, err)
+
+	for _, id := range synth.Hashes {
+		s.WaitForTransaction(id[:])
+	}
+}
+
 type ExecEntry struct {
-	mu        sync.Mutex
+	mu    sync.Mutex
 	queue []*protocol.Envelope
 
 	Database *database.Database

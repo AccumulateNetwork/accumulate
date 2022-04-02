@@ -30,12 +30,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 		Faucet()
 	sim.ExecuteBlock(env)
 	sim.WaitForGovernor()
-
-	// Execute enough blocks to ensure the synthetic transaction has completed
-	for i := 0; i < 20; i++ {
-		sim.ExecuteBlock()
-		sim.WaitForGovernor()
-	}
+	sim.WaitForTransaction(env.GetTxHash())
 
 	// Get a proof of the account state
 	req := new(query.RequestByUrl)
