@@ -3,15 +3,12 @@ package chain_test
 import (
 	"fmt"
 	"math/big"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 	"unsafe"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -181,48 +178,6 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
 	require.NoError(t, err, "Failed to get the synthetic transaction status")
 	require.NotZero(t, status.Code)
-}
-
-func setupWithGenesis(t *testing.T) *chain.Executor {
-	// Setup
-	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	// db := database.OpenInMemory(logger)
-	db, err := database.OpenBadger(filepath.Join(t.TempDir(), "accumulate.db"), logger)
-	require.NoError(t, err)
-	key := acctesting.GenerateKey(t.Name())
-	network := config.Network{
-		Type:          config.BlockValidator,
-		LocalSubnetID: strings.ReplaceAll(t.Name(), "_", "-"),
-	}
-	exec, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		DB:      db,
-		Logger:  logger,
-		Key:     key,
-		Network: network,
-		Router:  acctesting.NullRouter{},
-	})
-	require.NoError(t, err)
-	require.NoError(t, exec.Start())
-
-	// Genesis
-	temp := memory.New(logger)
-	_, err = genesis.Init(temp, genesis.InitOpts{
-		Network:     network,
-		GenesisTime: time.Now(),
-		Logger:      logger,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: ed25519.PubKey(key[32:])},
-		},
-	})
-	require.NoError(t, err)
-
-	state, err := temp.MarshalJSON()
-	require.NoError(t, err)
-
-	_, err = exec.InitChain(state, time.Now())
-	require.NoError(t, err)
-
-	return exec
 }
 
 func TestExecutor_ProcessTransaction(t *testing.T) {
