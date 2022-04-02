@@ -1030,20 +1030,20 @@ func TestIssueTokens(t *testing.T) {
 }
 
 type CheckError struct {
-	H func(err error)
+	Disable bool
+	H       func(err error)
 }
 
 func (c *CheckError) ErrorHandler() func(err error) {
 	return func(err error) {
-		if c.H != nil {
+		if !c.Disable {
 			c.H(err)
 		}
 	}
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
-
-	check := CheckError{NewDefaultErrorHandler(t)}
+	check := CheckError{H: NewDefaultErrorHandler(t)}
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -1133,7 +1133,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 
 	// test over the limit, this should fail, so tell fake tendermint not to give up
 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
-	check.H = func(err error) {}
+	check.Disable = true
 	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
@@ -1153,7 +1153,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	require.Greater(t, overLimit, account.Balance.Int64())
 
 	//now lets buy some credits, so we can do a token burn
-	check.H = NewDefaultErrorHandler(t)
+	check.Disable = false
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddCredits)
 		//burn the underLimit amount to see if that gets returned to the pool
@@ -1327,7 +1327,7 @@ func TestUpdateValidators(t *testing.T) {
 }
 
 func TestMultisig(t *testing.T) {
-	check := CheckError{NewDefaultErrorHandler(t)}
+	check := CheckError{H: NewDefaultErrorHandler(t)}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
@@ -1398,7 +1398,7 @@ func TestMultisig(t *testing.T) {
 
 	// this should fail, so tell fake tendermint not to give up
 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
-	check.H = func(err error) {}
+	check.Disable = true
 	t.Log("Signing a complete transaction should fail")
 	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
@@ -1414,8 +1414,9 @@ func TestMultisig(t *testing.T) {
 }
 
 func TestAccountAuth(t *testing.T) {
+	check := CheckError{H: NewDefaultErrorHandler(t)}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
 	fooKey, barKey, bazKey := generateKey(), generateKey(), generateKey()
@@ -1425,9 +1426,39 @@ func TestAccountAuth(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, barKey, "bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bazKey, "baz", 1e9))
-	require.NoError(t, acctesting.UpdateAccountAuth(batch, "foo/tokens", false))
 	require.NoError(t, batch.Commit())
 
+	// Disable auth
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithBody(&protocol.UpdateAccountAuth{
+				Operations: []protocol.AccountAuthOperation{
+					&protocol.DisableAccountAuthOperation{
+						Authority: url.MustParse("foo/book0"),
+					},
+				},
+			}).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
+	})
+
+	// An unauthorized signer must not be allowed to enable auth
+	check.Disable = true
+	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("baz/book0/1"), 1).
+			WithBody(&protocol.UpdateAccountAuth{
+				Operations: []protocol.AccountAuthOperation{
+					&protocol.EnableAccountAuthOperation{
+						Authority: url.MustParse("foo/book0"),
+					},
+				},
+			}).
+			Initiate(protocol.SignatureTypeLegacyED25519, bazKey))
+	})
+	require.Error(t, err, "An unauthorized signer should not be able to enable auth")
+
+	// An unauthorized signer should be able to send tokens
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
@@ -1441,7 +1472,30 @@ func TestAccountAuth(t *testing.T) {
 	require.Equal(t, int64(protocol.AcmePrecision-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 
-	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.UpdateAccountAuth(batch, "foo/book0", true))
-	require.NoError(t, batch.Commit())
+	// Enable auth
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithBody(&protocol.UpdateAccountAuth{
+				Operations: []protocol.AccountAuthOperation{
+					&protocol.EnableAccountAuthOperation{
+						Authority: url.MustParse("foo/book0"),
+					},
+				},
+			}).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey))
+	})
+
+	// An unauthorized signer should no longer be able to send tokens
+	check.Disable = true
+	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+		exch := new(protocol.SendTokens)
+		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
+
+		send(newTxn("foo/tokens").
+			WithSigner(url.MustParse("baz/book0/1"), 1).
+			WithBody(exch).
+			Initiate(protocol.SignatureTypeLegacyED25519, bazKey))
+	})
+	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
 }
