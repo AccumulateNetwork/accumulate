@@ -1265,7 +1265,6 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestUpdateValidators(t *testing.T) {
-	t.Skip("AC-1200")
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
@@ -1273,16 +1272,14 @@ func TestUpdateValidators(t *testing.T) {
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
 	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	nh1 := sha256.Sum256(nodeKey1.PubKey().Bytes())
-	nh2 := sha256.Sum256(nodeKey2.PubKey().Bytes())
-	// Verify there is one validator (node key)
 
+	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 
 	// Add a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
-		body.Key = nh1[:]
+		body.Key = nodeKey1.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 1).
@@ -1290,17 +1287,15 @@ func TestUpdateValidators(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()))
 	})
 
-	nh := sha256.Sum256(n.key.PubKey().Bytes())
 	// Verify the validator was added
-	//	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey1.PubKey()})
-	require.ElementsMatch(t, n.client.Validators(), [][]byte{nh[:], nh1[:]})
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey1.PubKey()})
 
 	// Update a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
 
-		body.KeyHash = nh1[:]
-		body.NewKeyHash = nh2[:]
+		body.KeyHash = nodeKey1.PubKey().Bytes()
+		body.NewKeyHash = nodeKey2.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 2).

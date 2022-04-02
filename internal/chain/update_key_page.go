@@ -60,8 +60,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		}
 	}
 
-	page.Version += 1
-
 	didUpdateKeyPage(page)
 	st.Update(page)
 	return nil, nil
@@ -165,6 +163,8 @@ func getKeyPageIndex(page *url.URL) (uint64, bool) {
 }
 
 func didUpdateKeyPage(page *protocol.KeyPage) {
+	page.Version += 1
+
 	// We're changing the height of the key page, so reset all the nonces
 	for _, key := range page.Keys {
 		key.LastUsedOn = 0
