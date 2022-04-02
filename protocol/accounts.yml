@@ -11,6 +11,9 @@ AccountHeader:
   - name: ManagerKeyBook
     type: url
     pointer: true
+  - name: AuthDisabled
+    description: allows any key to sign for the main key book
+    type: bool
 
 UnknownAccount:
   union: { type: account, value: Unknown }
