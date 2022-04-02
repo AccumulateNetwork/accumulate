@@ -26,6 +26,8 @@ type AccountHeader struct {
 	Url            *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	KeyBook        *url.URL `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
 	ManagerKeyBook *url.URL `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
+	// AuthDisabled allows any key to sign for the main key book.
+	AuthDisabled bool `json:"authDisabled,omitempty" form:"authDisabled" query:"authDisabled" validate:"required"`
 }
 
 type AcmeFaucet struct {
@@ -167,6 +169,12 @@ type DirectoryIndexMetadata struct {
 	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 }
 
+type DisableAccountAuthOperation struct {
+	fieldsSet []bool
+	// Authority is the authority (key book) to enable authorization for.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+}
+
 type ED25519Signature struct {
 	fieldsSet     []bool
 	PublicKey     []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -178,6 +186,12 @@ type ED25519Signature struct {
 
 type EmptyResult struct {
 	fieldsSet []bool
+}
+
+type EnableAccountAuthOperation struct {
+	fieldsSet []bool
+	// Authority is the authority (key book) to enable authorization for.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 }
 
 type Envelope struct {
@@ -578,6 +592,11 @@ type UnknownAccount struct {
 	AccountHeader
 }
 
+type UpdateAccountAuth struct {
+	fieldsSet  []bool
+	Operations []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+}
+
 type UpdateAllowedKeyPageOperation struct {
 	fieldsSet []bool
 	Allow     []TransactionType `json:"allow,omitempty" form:"allow" query:"allow"`
@@ -772,6 +791,15 @@ func (*DataAccount) Type() AccountType { return AccountTypeDataAccount }
 // Deprated: use Type
 func (*DataAccount) GetType() AccountType { return AccountTypeDataAccount }
 
+func (*DisableAccountAuthOperation) Type() AccountAuthOperationType {
+	return AccountAuthOperationTypeDisable
+}
+
+// Deprated: use Type
+func (*DisableAccountAuthOperation) GetType() AccountAuthOperationType {
+	return AccountAuthOperationTypeDisable
+}
+
 func (*ED25519Signature) Type() SignatureType { return SignatureTypeED25519 }
 
 // Deprated: use Type
@@ -781,6 +809,15 @@ func (*EmptyResult) Type() TransactionType { return TransactionTypeUnknown }
 
 // Deprated: use Type
 func (*EmptyResult) GetType() TransactionType { return TransactionTypeUnknown }
+
+func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
+	return AccountAuthOperationTypeEnable
+}
+
+// Deprated: use Type
+func (*EnableAccountAuthOperation) GetType() AccountAuthOperationType {
+	return AccountAuthOperationTypeEnable
+}
 
 func (*InternalGenesis) Type() TransactionType { return TransactionTypeInternalGenesis }
 
@@ -977,6 +1014,11 @@ func (*UnknownAccount) Type() AccountType { return AccountTypeUnknown }
 // Deprated: use Type
 func (*UnknownAccount) GetType() AccountType { return AccountTypeUnknown }
 
+func (*UpdateAccountAuth) Type() TransactionType { return TransactionTypeUpdateAccountAuth }
+
+// Deprated: use Type
+func (*UpdateAccountAuth) GetType() TransactionType { return TransactionTypeUpdateAccountAuth }
+
 func (*UpdateAllowedKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeUpdateAllowed
 }
@@ -1043,6 +1085,7 @@ func (v *AccountHeader) Copy() *AccountHeader {
 	if v.ManagerKeyBook != nil {
 		u.ManagerKeyBook = (v.ManagerKeyBook).Copy()
 	}
+	u.AuthDisabled = v.AuthDisabled
 
 	return u
 }
@@ -1344,6 +1387,18 @@ func (v *DirectoryIndexMetadata) Copy() *DirectoryIndexMetadata {
 
 func (v *DirectoryIndexMetadata) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *DisableAccountAuthOperation) Copy() *DisableAccountAuthOperation {
+	u := new(DisableAccountAuthOperation)
+
+	if v.Authority != nil {
+		u.Authority = (v.Authority).Copy()
+	}
+
+	return u
+}
+
+func (v *DisableAccountAuthOperation) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ED25519Signature) Copy() *ED25519Signature {
 	u := new(ED25519Signature)
 
@@ -1367,6 +1422,18 @@ func (v *EmptyResult) Copy() *EmptyResult {
 }
 
 func (v *EmptyResult) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EnableAccountAuthOperation) Copy() *EnableAccountAuthOperation {
+	u := new(EnableAccountAuthOperation)
+
+	if v.Authority != nil {
+		u.Authority = (v.Authority).Copy()
+	}
+
+	return u
+}
+
+func (v *EnableAccountAuthOperation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Envelope) Copy() *Envelope {
 	u := new(Envelope)
@@ -2084,6 +2151,19 @@ func (v *UnknownAccount) Copy() *UnknownAccount {
 
 func (v *UnknownAccount) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
+	u := new(UpdateAccountAuth)
+
+	u.Operations = make([]AccountAuthOperation, len(v.Operations))
+	for i, v := range v.Operations {
+		u.Operations[i] = v
+	}
+
+	return u
+}
+
+func (v *UpdateAccountAuth) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
 	u := new(UpdateAllowedKeyPageOperation)
 
@@ -2230,6 +2310,9 @@ func (v *AccountHeader) Equal(u *AccountHeader) bool {
 	case v.ManagerKeyBook == nil || u.ManagerKeyBook == nil:
 		return false
 	case !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)):
+		return false
+	}
+	if !(v.AuthDisabled == u.AuthDisabled) {
 		return false
 	}
 
@@ -2623,6 +2706,19 @@ func (v *DirectoryIndexMetadata) Equal(u *DirectoryIndexMetadata) bool {
 	return true
 }
 
+func (v *DisableAccountAuthOperation) Equal(u *DisableAccountAuthOperation) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+
+	return true
+}
+
 func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -2649,6 +2745,19 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 }
 
 func (v *EmptyResult) Equal(u *EmptyResult) bool {
+
+	return true
+}
+
+func (v *EnableAccountAuthOperation) Equal(u *EnableAccountAuthOperation) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
 
 	return true
 }
@@ -3541,6 +3650,19 @@ func (v *UnknownAccount) Equal(u *UnknownAccount) bool {
 	return true
 }
 
+func (v *UpdateAccountAuth) Equal(u *UpdateAccountAuth) bool {
+	if len(v.Operations) != len(u.Operations) {
+		return false
+	}
+	for i := range v.Operations {
+		if !(v.Operations[i] == u.Operations[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *UpdateAllowedKeyPageOperation) Equal(u *UpdateAllowedKeyPageOperation) bool {
 	if len(v.Allow) != len(u.Allow) {
 		return false
@@ -3706,6 +3828,7 @@ var fieldNames_AccountHeader = []string{
 	1: "Url",
 	2: "KeyBook",
 	3: "ManagerKeyBook",
+	4: "AuthDisabled",
 }
 
 func (v *AccountHeader) MarshalBinary() ([]byte, error) {
@@ -3720,6 +3843,9 @@ func (v *AccountHeader) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.ManagerKeyBook == nil) {
 		writer.WriteUrl(3, v.ManagerKeyBook)
+	}
+	if !(!v.AuthDisabled) {
+		writer.WriteBool(4, v.AuthDisabled)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountHeader)
@@ -3743,6 +3869,11 @@ func (v *AccountHeader) IsValid() error {
 		errs = append(errs, "field ManagerKeyBook is missing")
 	} else if v.ManagerKeyBook == nil {
 		errs = append(errs, "field ManagerKeyBook is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field AuthDisabled is missing")
+	} else if !v.AuthDisabled {
+		errs = append(errs, "field AuthDisabled is not set")
 	}
 
 	switch len(errs) {
@@ -4717,6 +4848,43 @@ func (v *DirectoryIndexMetadata) IsValid() error {
 	}
 }
 
+var fieldNames_DisableAccountAuthOperation = []string{
+	1: "Type",
+	2: "Authority",
+}
+
+func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, AccountAuthOperationTypeDisable)
+	if !(v.Authority == nil) {
+		writer.WriteUrl(2, v.Authority)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DisableAccountAuthOperation)
+	return buffer.Bytes(), err
+}
+
+func (v *DisableAccountAuthOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ED25519Signature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -4801,6 +4969,43 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 
 func (v *EmptyResult) IsValid() error {
 	var errs []string
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_EnableAccountAuthOperation = []string{
+	1: "Type",
+	2: "Authority",
+}
+
+func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, AccountAuthOperationTypeEnable)
+	if !(v.Authority == nil) {
+		writer.WriteUrl(2, v.Authority)
+	}
+
+	_, _, err := writer.Reset(fieldNames_EnableAccountAuthOperation)
+	return buffer.Bytes(), err
+}
+
+func (v *EnableAccountAuthOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -7481,6 +7686,45 @@ func (v *UnknownAccount) IsValid() error {
 	}
 }
 
+var fieldNames_UpdateAccountAuth = []string{
+	1: "Type",
+	2: "Operations",
+}
+
+func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, TransactionTypeUpdateAccountAuth)
+	if !(len(v.Operations) == 0) {
+		for _, v := range v.Operations {
+			writer.WriteValue(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateAccountAuth) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Operations is missing")
+	} else if len(v.Operations) == 0 {
+		errs = append(errs, "field Operations is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_UpdateAllowedKeyPageOperation = []string{
 	1: "Type",
 	2: "Allow",
@@ -7897,6 +8141,9 @@ func (v *AccountHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.ManagerKeyBook = x
+	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.AuthDisabled = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountHeader)
@@ -8441,6 +8688,29 @@ func (v *DirectoryIndexMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *DisableAccountAuthOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ AccountAuthOperationType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != AccountAuthOperationTypeDisable {
+		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeDisable, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Authority = x
+	}
+
+	seen, err := reader.Reset(fieldNames_DisableAccountAuthOperation)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *ED25519Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -8491,6 +8761,29 @@ func (v *EmptyResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_EmptyResult)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *EnableAccountAuthOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *EnableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ AccountAuthOperationType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != AccountAuthOperationTypeEnable {
+		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeEnable, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Authority = x
+	}
+
+	seen, err := reader.Reset(fieldNames_EnableAccountAuthOperation)
 	v.fieldsSet = seen
 	return err
 }
@@ -9940,6 +10233,38 @@ func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *UpdateAccountAuth) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != TransactionTypeUpdateAccountAuth {
+		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateAccountAuth, typ)
+	}
+
+	for {
+		ok := reader.ReadValue(2, func(b []byte) error {
+			x, err := UnmarshalAccountAuthOperation(b)
+			if err == nil {
+				v.Operations = append(v.Operations, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateAccountAuth)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *UpdateAllowedKeyPageOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10188,11 +10513,13 @@ func (v *ADI) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	return json.Marshal(&u)
 }
 
@@ -10262,11 +10589,13 @@ func (v *Anchor) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	return json.Marshal(&u)
 }
 
@@ -10424,12 +10753,14 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		Scratch        bool        `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
@@ -10442,6 +10773,16 @@ func (v *DataEntry) MarshalJSON() ([]byte, error) {
 	for i, x := range v.Data {
 		u.Data[i] = encoding.BytesToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *DisableAccountAuthOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
 	return json.Marshal(&u)
 }
 
@@ -10468,6 +10809,16 @@ func (v *EmptyResult) MarshalJSON() ([]byte, error) {
 		Type TransactionType `json:"type"`
 	}{}
 	u.Type = v.Type()
+	return json.Marshal(&u)
+}
+
+func (v *EnableAccountAuthOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
 	return json.Marshal(&u)
 }
 
@@ -10515,6 +10866,7 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 		Url            *url.URL        `json:"url,omitempty"`
 		KeyBook        *url.URL        `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL        `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool            `json:"authDisabled,omitempty"`
 		Index          int64           `json:"index,omitempty"`
 		Timestamp      time.Time       `json:"timestamp,omitempty"`
 		Synthetic      SyntheticLedger `json:"synthetic,omitempty"`
@@ -10526,6 +10878,7 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
 	u.Synthetic = v.Synthetic
@@ -10561,12 +10914,14 @@ func (v *InternalSyntheticLedger) MarshalJSON() ([]byte, error) {
 		Url            *url.URL                `json:"url,omitempty"`
 		KeyBook        *url.URL                `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL                `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool                    `json:"authDisabled,omitempty"`
 		Pending        []*SyntheticLedgerEntry `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
@@ -10612,12 +10967,14 @@ func (v *KeyBook) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		PageCount      uint64      `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.PageCount = v.PageCount
 	return json.Marshal(&u)
 }
@@ -10628,6 +10985,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 		Url                  *url.URL             `json:"url,omitempty"`
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		ManagerKeyBook       *url.URL             `json:"managerKeyBook,omitempty"`
+		AuthDisabled         bool                 `json:"authDisabled,omitempty"`
 		CreditBalance        uint64               `json:"creditBalance,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
 		Version              uint64               `json:"version,omitempty"`
@@ -10638,6 +10996,7 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.CreditBalance = v.CreditBalance
 	u.Threshold = v.Threshold
 	u.Version = v.Version
@@ -10698,12 +11057,14 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		Tail           *string     `json:"tail,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Tail = encoding.BytesToJSON(v.Tail)
 	return json.Marshal(&u)
 }
@@ -10714,11 +11075,13 @@ func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	return json.Marshal(&u)
 }
 
@@ -10728,6 +11091,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
 		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
@@ -10738,6 +11102,7 @@ func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.LastUsedOn = v.LastUsedOn
@@ -11100,6 +11465,7 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
 		Scratch        bool        `json:"scratch,omitempty"`
@@ -11108,6 +11474,7 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.Scratch = v.Scratch
@@ -11120,6 +11487,7 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		Symbol         string      `json:"symbol,omitempty"`
 		Precision      uint64      `json:"precision,omitempty"`
 		Properties     *url.URL    `json:"properties,omitempty"`
@@ -11130,6 +11498,7 @@ func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
@@ -11224,11 +11593,30 @@ func (v *UnknownAccount) MarshalJSON() ([]byte, error) {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
+	return json.Marshal(&u)
+}
+
+func (v *UpdateAccountAuth) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType   `json:"type"`
+		Operations []json.RawMessage `json:"operations,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Operations = make([]json.RawMessage, len(v.Operations))
+	for i, x := range v.Operations {
+		if y, err := json.Marshal(x); err != nil {
+			return nil, fmt.Errorf("error encoding Operations: %w", err)
+		} else {
+			u.Operations[i] = y
+		}
+	}
 	return json.Marshal(&u)
 }
 
@@ -11337,17 +11725,20 @@ func (v *ADI) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	return nil
 }
 
@@ -11454,17 +11845,20 @@ func (v *Anchor) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	return nil
 }
 
@@ -11721,12 +12115,14 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		Scratch        bool        `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -11734,6 +12130,7 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.Scratch = u.Scratch
 	return nil
 }
@@ -11757,6 +12154,20 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 			v.Data[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *DisableAccountAuthOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Authority = u.Authority
 	return nil
 }
 
@@ -11802,6 +12213,20 @@ func (v *EmptyResult) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (v *EnableAccountAuthOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Authority = u.Authority
 	return nil
 }
 
@@ -11880,6 +12305,7 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 		Url            *url.URL        `json:"url,omitempty"`
 		KeyBook        *url.URL        `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL        `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool            `json:"authDisabled,omitempty"`
 		Index          int64           `json:"index,omitempty"`
 		Timestamp      time.Time       `json:"timestamp,omitempty"`
 		Synthetic      SyntheticLedger `json:"synthetic,omitempty"`
@@ -11891,6 +12317,7 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
 	u.Synthetic = v.Synthetic
@@ -11903,6 +12330,7 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.Index = u.Index
 	v.Timestamp = u.Timestamp
 	v.Synthetic = u.Synthetic
@@ -11950,12 +12378,14 @@ func (v *InternalSyntheticLedger) UnmarshalJSON(data []byte) error {
 		Url            *url.URL                `json:"url,omitempty"`
 		KeyBook        *url.URL                `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL                `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool                    `json:"authDisabled,omitempty"`
 		Pending        []*SyntheticLedgerEntry `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Pending = v.Pending
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -11963,6 +12393,7 @@ func (v *InternalSyntheticLedger) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.Pending = u.Pending
 	return nil
 }
@@ -12032,12 +12463,14 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		PageCount      uint64      `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.PageCount = v.PageCount
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -12045,6 +12478,7 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.PageCount = u.PageCount
 	return nil
 }
@@ -12055,6 +12489,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 		Url                  *url.URL             `json:"url,omitempty"`
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		ManagerKeyBook       *url.URL             `json:"managerKeyBook,omitempty"`
+		AuthDisabled         bool                 `json:"authDisabled,omitempty"`
 		CreditBalance        uint64               `json:"creditBalance,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
 		Version              uint64               `json:"version,omitempty"`
@@ -12065,6 +12500,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.CreditBalance = v.CreditBalance
 	u.Threshold = v.Threshold
 	u.Version = v.Version
@@ -12076,6 +12512,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.CreditBalance = u.CreditBalance
 	v.Threshold = u.Threshold
 	v.Version = u.Version
@@ -12187,12 +12624,14 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		Tail           *string     `json:"tail,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Tail = encoding.BytesToJSON(v.Tail)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -12200,6 +12639,7 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	if x, err := encoding.BytesFromJSON(u.Tail); err != nil {
 		return fmt.Errorf("error decoding Tail: %w", err)
 	} else {
@@ -12214,17 +12654,20 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	return nil
 }
 
@@ -12234,6 +12677,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
 		LastUsedOn     uint64      `json:"lastUsedOn,omitempty"`
@@ -12244,6 +12688,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.LastUsedOn = v.LastUsedOn
@@ -12255,6 +12700,7 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.TokenUrl = u.TokenUrl
 	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
 		return fmt.Errorf("error decoding Balance: %w", err)
@@ -12902,6 +13348,7 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		TokenUrl       *url.URL    `json:"tokenUrl,omitempty"`
 		Balance        *string     `json:"balance,omitempty"`
 		Scratch        bool        `json:"scratch,omitempty"`
@@ -12910,6 +13357,7 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	u.Scratch = v.Scratch
@@ -12919,6 +13367,7 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.TokenUrl = u.TokenUrl
 	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
 		return fmt.Errorf("error decoding Balance: %w", err)
@@ -12935,6 +13384,7 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 		Symbol         string      `json:"symbol,omitempty"`
 		Precision      uint64      `json:"precision,omitempty"`
 		Properties     *url.URL    `json:"properties,omitempty"`
@@ -12945,6 +13395,7 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
@@ -12956,6 +13407,7 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
 	v.Symbol = u.Symbol
 	v.Precision = u.Precision
 	v.Properties = u.Properties
@@ -13126,17 +13578,48 @@ func (v *UnknownAccount) UnmarshalJSON(data []byte) error {
 		Url            *url.URL    `json:"url,omitempty"`
 		KeyBook        *url.URL    `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL    `json:"managerKeyBook,omitempty"`
+		AuthDisabled   bool        `json:"authDisabled,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.AccountHeader.Url
 	u.KeyBook = v.AccountHeader.KeyBook
 	u.ManagerKeyBook = v.AccountHeader.ManagerKeyBook
+	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
+	v.AccountHeader.AuthDisabled = u.AuthDisabled
+	return nil
+}
+
+func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType   `json:"type"`
+		Operations []json.RawMessage `json:"operations,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Operations = make([]json.RawMessage, len(v.Operations))
+	for i, x := range v.Operations {
+		if y, err := json.Marshal(x); err != nil {
+			return fmt.Errorf("error encoding Operations: %w", err)
+		} else {
+			u.Operations[i] = y
+		}
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Operations = make([]AccountAuthOperation, len(u.Operations))
+	for i, x := range u.Operations {
+		if y, err := UnmarshalAccountAuthOperationJSON(x); err != nil {
+			return fmt.Errorf("error decoding Operations: %w", err)
+		} else {
+			v.Operations[i] = y
+		}
+	}
 	return nil
 }
 

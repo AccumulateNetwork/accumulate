@@ -210,23 +210,31 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		return fmt.Errorf("load principal: %w", err)
 	}
 
-	// Get the key book URL
-	pageBook, _, ok := protocol.ParseKeyPageUrl(signer.Url)
-	if !ok {
-		// If this happens, the database has bad data
-		return fmt.Errorf("invalid key page URL: %v", signer.Url)
-	}
-
-	// Verify that the key page is authorized to sign transactions for the book
+	// Determine the principal's key book URL
 	var principalBookUrl *url.URL
 	switch principal := principal.(type) {
 	case *protocol.KeyBook:
+		// Principal is a key book
 		principalBookUrl = principal.Url
+
+	case *protocol.KeyPage:
+		// Principal is a key page => get the book URL from the page URL
+		var ok bool
+		principalBookUrl, _, ok = protocol.ParseKeyPageUrl(signer.Url)
+		if !ok {
+			// If this happens, the database has bad data
+			return fmt.Errorf("invalid key page URL: %v", signer.Url)
+		}
+
 	default:
+		// Principal is something else => get the book URL from the header
 		principalBookUrl = principal.Header().KeyBook
 	}
-	if !principalBookUrl.Equal(pageBook) {
-		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.Header().Url)
+
+	// Verify the principal's key book exists
+	_, err = batch.Account(principalBookUrl).GetState()
+	if err != nil {
+		return fmt.Errorf("invalid key book URL: %v, %v", principalBookUrl, err)
 	}
 
 	// Verify that the key page is allowed to sign the transaction
@@ -235,7 +243,27 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
 	}
 
-	return nil
+	// Get the signer book URL
+	signerBook, _, ok := protocol.ParseKeyPageUrl(signer.Url)
+	if !ok {
+		// If this happens, the database has bad data
+		return fmt.Errorf("invalid key page URL: %v", signer.Url)
+	}
+
+	switch {
+	case principalBookUrl.Equal(signerBook):
+		// Page belongs to book => authorized
+		return nil
+
+	case principal.Header().AuthDisabled && !transaction.Body.Type().RequireAuthorization():
+		// Authorization is disabled and the transaction type does not force authorization => authorized
+		return nil
+
+	default:
+		// Authorization is enabled => unauthorized
+		// Transaction type forces authorization => unauthorized
+		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.Header().Url)
+	}
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.
