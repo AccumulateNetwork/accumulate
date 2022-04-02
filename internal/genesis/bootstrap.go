@@ -11,6 +11,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -29,12 +30,12 @@ type InitOpts struct {
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	db := database.New(kvdb, opts.Logger.With("module", "database"))
 
-	exec, err := chain.NewGenesisExecutor(db, opts.Logger, opts.Network)
+	exec, err := block.NewGenesisExecutor(db, opts.Logger, opts.Network)
 	if err != nil {
 		return nil, err
 	}
 
-	block := new(chain.Block)
+	block := new(block.Block)
 	block.Index = protocol.GenesisBlock
 	block.Time = opts.GenesisTime
 	block.Batch = db.Begin(true)

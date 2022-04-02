@@ -1,10 +1,11 @@
-package chain
+package block
 
 import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -79,7 +80,7 @@ func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envel
 // ProcessTransaction processes a transaction. It will not return an error if
 // the transaction fails - in that case the status code will be non zero. It
 // only returns an error in cases like a database failure.
-func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Load the status
 	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
@@ -129,9 +130,8 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Set up the state manager
-	st := NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
+	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction, x.logger.With("operation", "ProcessTransaction"))
 	defer st.Discard()
-	st.logger.L = x.logger.With("operation", "ProcessTransaction")
 
 	// Execute the transaction
 	executor, ok := x.executors[transaction.Body.Type()]
@@ -147,13 +147,13 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Commit changes, queue state creates for synthetic transactions
-	err = st.Commit()
+	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
 		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
-	return recordSuccessfulTransaction(batch, &st.state, transaction, result)
+	return recordSuccessfulTransaction(batch, state, transaction, result)
 }
 
 func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
@@ -226,7 +226,7 @@ func recordTransaction(batch *database.Batch, transaction *protocol.Transaction,
 	return status, nil
 }
 
-func recordPendingTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func recordPendingTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		status.Remote = false
@@ -243,10 +243,10 @@ func recordPendingTransaction(batch *database.Batch, transaction *protocol.Trans
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
 
-	return status, new(ProcessTransactionState), nil
+	return status, new(chain.ProcessTransactionState), nil
 }
 
-func recordSuccessfulTransaction(batch *database.Batch, state *ProcessTransactionState, transaction *protocol.Transaction, result protocol.TransactionResult) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, transaction *protocol.Transaction, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		status.Remote = false
@@ -264,8 +264,8 @@ func recordSuccessfulTransaction(batch *database.Batch, state *ProcessTransactio
 	}
 
 	// Create receipt
-	if NeedsReceipt(transaction.Body.Type()) {
-		state.DidProduceTxn(CreateSynthReceipt(transaction, status))
+	if chain.NeedsReceipt(transaction.Body.Type()) {
+		state.DidProduceTxn(chain.CreateSynthReceipt(transaction, status))
 	}
 
 	// Don't add internal transactions to chains
@@ -281,7 +281,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *ProcessTransactio
 	}
 
 	// Add the transaction to the principal's main chain
-	err = addChainEntry(&state.ChainUpdates, batch, transaction.Header.Principal, protocol.MainChain, protocol.ChainTypeTransaction, transaction.GetHash(), 0, 0)
+	err = state.ChainUpdates.AddChainEntry(batch, transaction.Header.Principal, protocol.MainChain, protocol.ChainTypeTransaction, transaction.GetHash(), 0, 0)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, fmt.Errorf("add to chain: %v", err)
 	}
@@ -289,7 +289,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *ProcessTransactio
 	return status, state, nil
 }
 
-func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, signer protocol.SignerAccount, failure error) (*protocol.TransactionStatus, *ProcessTransactionState, error) {
+func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, signer protocol.SignerAccount, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		failure := protocol.NewError(protocol.ErrorCodeUnknownError, failure)
@@ -303,9 +303,9 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 	}
 
 	// Create receipt
-	state := new(ProcessTransactionState)
-	if NeedsReceipt(transaction.Body.Type()) {
-		state.DidProduceTxn(CreateSynthReceipt(transaction, status))
+	state := new(chain.ProcessTransactionState)
+	if chain.NeedsReceipt(transaction.Body.Type()) {
+		state.DidProduceTxn(chain.CreateSynthReceipt(transaction, status))
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
