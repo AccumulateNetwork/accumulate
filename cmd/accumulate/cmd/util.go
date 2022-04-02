@@ -215,6 +215,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 			return nil, err
 		}
 		sig, err = signer.Initiate(env.Transaction)
+		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
 		payload = new(protocol.SignPending)
 		env = new(protocol.Envelope)
@@ -237,6 +238,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()
+	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo

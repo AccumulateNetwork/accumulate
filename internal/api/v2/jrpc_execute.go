@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -179,6 +180,14 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 			return validatorError(err)
 		}
 		env.Signatures = append(env.Signatures, sig)
+
+		if !env.VerifyTxHash() {
+			return validatorError(errors.New("invalid transaction hash"))
+		}
+
+		if !sig.Verify(env.Transaction.GetHash()) {
+			return validatorError(errors.New("invalid signature"))
+		}
 	}
 
 	// Route the request
