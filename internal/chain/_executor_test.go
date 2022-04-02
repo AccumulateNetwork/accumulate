@@ -3,15 +3,12 @@ package chain_test
 import (
 	"fmt"
 	"math/big"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 	"unsafe"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
