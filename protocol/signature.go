@@ -37,6 +37,12 @@ func netVal(u *url.URL) *url.URL {
 	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 0)
 }
 
+func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
+	sigInitHash, _ := sig.InitiatorHash()
+	sigMetaHash := sig.MetadataHash()
+	return bytes.Equal(txnInitHash, sigInitHash) || bytes.Equal(txnInitHash, sigMetaHash)
+}
+
 /*
  * Legacy ED25519 Signature
  */

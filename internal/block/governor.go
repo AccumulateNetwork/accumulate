@@ -214,7 +214,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Sign it
-		ed, err := new(signing.Signer).
+		ed, err := new(signing.Builder).
 			SetType(protocol.SignatureTypeED25519).
 			SetPrivateKey(g.Key).
 			SetKeyPageUrl(g.Network.ValidatorBook(), 0).
@@ -434,7 +434,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	env.Transaction.Body = body
 
 	// Sign it
-	ed, err := new(signing.Signer).
+	ed, err := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(g.Key).
 		SetUrl(g.Network.ValidatorPage(0)).

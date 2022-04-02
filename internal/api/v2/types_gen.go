@@ -135,6 +135,8 @@ type Signer struct {
 	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
+	// UseSimpleHash tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash.
+	UseSimpleHash bool `json:"useSimpleHash,omitempty" form:"useSimpleHash" query:"useSimpleHash"`
 }
 
 type SignerMetadata struct {
@@ -719,12 +721,14 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 		Nonce         uint64                 `json:"nonce,omitempty"`
 		Url           *url.URL               `json:"url,omitempty"`
 		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
+		UseSimpleHash bool                   `json:"useSimpleHash,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
 	u.SignatureType = v.SignatureType
+	u.UseSimpleHash = v.UseSimpleHash
 	return json.Marshal(&u)
 }
 
@@ -1328,12 +1332,14 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		Nonce         uint64                 `json:"nonce,omitempty"`
 		Url           *url.URL               `json:"url,omitempty"`
 		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
+		UseSimpleHash bool                   `json:"useSimpleHash,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
 	u.SignatureType = v.SignatureType
+	u.UseSimpleHash = v.UseSimpleHash
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1349,6 +1355,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.SignatureType = u.SignatureType
+	v.UseSimpleHash = u.UseSimpleHash
 	return nil
 }
 

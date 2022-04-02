@@ -165,6 +165,10 @@ Signer:
   - name: SignatureType
     type: protocol.SignatureType
     optional: true
+  - name: UseSimpleHash
+    description: tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash
+    type: bool
+    optional: true
 
 
 TokenSend:

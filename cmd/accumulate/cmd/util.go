@@ -50,13 +50,13 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, error) {
+func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder, error) {
 	ct := 0
 	if len(args) == 0 {
 		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	signer := new(signing.Signer)
+	signer := new(signing.Builder)
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
@@ -68,7 +68,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 
 		signer.Url = origin
 		signer.Version = 1
-		signer.PrivateKey = privKey
+		signer.SetPrivateKey(privKey)
 		return args, signer, nil
 	}
 
@@ -76,7 +76,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 	if err != nil {
 		return nil, nil, err
 	}
-	signer.PrivateKey = privKey
+	signer.SetPrivateKey(privKey)
 	ct++
 
 	keyInfo, err := getKey(origin.String(), privKey[32:])
@@ -103,7 +103,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 	return args[ct:], signer, nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Signer, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Builder, error) {
 	principal, err := url2.Parse(args[0])
 	if err != nil {
 		return nil, nil, nil, err
@@ -195,7 +195,7 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (string, error) {
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
 	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
 	if err != nil {
 		return "", err
@@ -204,7 +204,7 @@ func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody,
 	return ActionResponseFrom(res).Print()
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
 	var env *protocol.Envelope
 	var sig protocol.Signature
 	var err error
