@@ -86,7 +86,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, err
 		}
 
-		return packStateResponse(resp.Account, resp.ChainState)
+		return packStateResponse(resp.Account, resp.ChainState, resp.Receipt)
 
 	case "tx":
 		res := new(query.ResponseByTxId)
@@ -135,19 +135,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, fmt.Errorf("invalid response: %v", err)
 		}
 
-		mr := new(MultiResponse)
-		mr.Type = "chainEntrySet"
-		mr.Start = uint64(res.Start)
-		mr.Count = uint64(res.End - res.Start)
-		mr.Total = uint64(res.Total)
-		mr.Items = make([]interface{}, len(res.Entries))
-		for i, entry := range res.Entries {
-			qr := new(ChainQueryResponse)
-			mr.Items[i] = qr
-			qr.Type = "hex"
-			qr.Data = hex.EncodeToString(entry)
-		}
-		return mr, nil
+		return packChainValues(res), nil
 
 	case "chain-entry":
 		res := new(query.ResponseChainEntry)
@@ -156,13 +144,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, fmt.Errorf("invalid response: %v", err)
 		}
 
-		qr := new(ChainQueryResponse)
-		qr.Type = "chainEntry"
-		qr.Data = res
-		qr.MainChain = new(MerkleState)
-		qr.MainChain.Height = uint64(res.Height)
-		qr.MainChain.Roots = res.State
-		return qr, nil
+		return packChainValue(res), nil
 
 	case "data-entry":
 		res := new(query.ResponseDataEntry)
@@ -245,7 +227,7 @@ func responseDirFromProto(src *query.DirectoryQueryResult, pagination QueryPagin
 
 	dst.OtherItems = make([]interface{}, len(src.ExpandedEntries))
 	for i, entry := range src.ExpandedEntries {
-		response, err := packStateResponse(entry, nil)
+		response, err := packStateResponse(entry, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +257,7 @@ func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
 		return nil, err
 	}
 
-	return packStateResponse(resp.Account, resp.ChainState)
+	return packStateResponse(resp.Account, resp.ChainState, nil)
 }
 
 func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {

@@ -53,6 +53,7 @@ func TestReceipt(t *testing.T) {
 
 	fmt.Printf("%-7s %x %v\n", "e01", e01, e01[:3])
 	fmt.Printf("%-7s %x %v\n", "e23", e23, e23[:3])
+	fmt.Printf("%-7s %x %v\n", "e45", e45, e45[:3])
 	fmt.Printf("%-7s %x %v\n", "e0123", e0123, e0123[:3])
 
 	fmt.Printf("\n\n %3x %3x %3x %3x %3x %3x %3x\n", e0[:3], e1[:3], e2[:3], e3[:3], e4[:3], e5[:3], e6[:3])
