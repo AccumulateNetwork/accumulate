@@ -46,9 +46,11 @@ func (h Hash) Copy() Hash {
 
 func (h Hash) Equal(g Hash) bool { return bytes.Equal(h, g) }
 
+type HashFunc func([]byte) Hash
+
 // Combine
 // Hash this hash (the left hash) with the given right hash to produce a new hash
-func (h Hash) Combine(hf func(data []byte) Hash, right Hash) Hash {
+func (h Hash) Combine(hf HashFunc, right Hash) Hash {
 	return hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.MD
 }
 
