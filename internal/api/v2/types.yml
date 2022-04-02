@@ -17,6 +17,10 @@ ChainQueryResponse:
       type: any
     - name: ChainId
       type: bytes
+    - name: Receipt
+      type: query.GeneralReceipt
+      marshal-as: reference
+      pointer: true
 
 TransactionQueryResponse:
   non-binary: true
@@ -374,6 +378,21 @@ DataEntryQueryResponse:
     - name: Entry
       type: DataEntry
       marshal-as: reference
+
+ChainEntry:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Height
+      type: varint
+      keep-empty: true
+    - name: Entry
+      type: bytes
+    - name: State
+      repeatable: true
+      type: bytes
+    - name: Value
+      type: any
 
 StatusResponse:
   non-binary: true

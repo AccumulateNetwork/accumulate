@@ -1,11 +1,13 @@
 package database
 
 import (
-	"crypto/sha256"
+	"bytes"
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -83,11 +85,6 @@ func (r *Account) PutState(state protocol.Account) error {
 	return nil
 }
 
-// PutBpt writes the record's BPT entry.
-func (r *Account) PutBpt(hash [32]byte) {
-	r.batch.putBpt(r.key.Object(), hash)
-}
-
 func (r *Account) chain(name string, writable bool) (*Chain, error) {
 	return newChain(r.batch.store, r.key.Chain(name), writable)
 }
@@ -131,9 +128,13 @@ func (r *Account) Data() (*Data, error) {
 	return &Data{r.batch, r.key, chain}, nil
 }
 
-// StateHash derives a hash from the full state of an account.
-func (r *Account) StateHash() ([]byte, error) {
-	var hashes [][]byte
+// stateHashes returns a hasher populated with hashes of all of the account's
+// states.
+func (r *Account) stateHashes() (hash.Hasher, error) {
+	obj, err := r.GetObject()
+	if err != nil {
+		return nil, fmt.Errorf("load object metadata: %w", err)
+	}
 
 	state, err := r.GetState()
 	if err != nil {
@@ -145,13 +146,8 @@ func (r *Account) StateHash() ([]byte, error) {
 		return nil, fmt.Errorf("marshal account state: %w", err)
 	}
 
-	h := sha256.Sum256(data)
-	hashes = append(hashes, h[:])
-
-	obj, err := r.GetObject()
-	if err != nil {
-		return nil, fmt.Errorf("load object metadata: %w", err)
-	}
+	hasher := make(hash.Hasher, 0, len(obj.Chains)+1)
+	hasher.AddBytes(data)
 
 	for _, chainMeta := range obj.Chains {
 		chain, err := r.ReadChain(chainMeta.Name)
@@ -159,8 +155,45 @@ func (r *Account) StateHash() ([]byte, error) {
 			return nil, fmt.Errorf("load account chain: %w", err)
 		}
 
-		hashes = append(hashes, chain.Anchor())
+		hasher.AddHash((*[32]byte)(chain.Anchor()))
 	}
 
-	return protocol.ComputeEntryHash(hashes), nil
+	return hasher, nil
+}
+
+// PutBpt writes the record's BPT entry.
+func (r *Account) PutBpt() error {
+	hasher, err := r.stateHashes()
+	if err != nil {
+		return err
+	}
+
+	hash := *(*[32]byte)(hasher.MerkleHash())
+	r.batch.putBpt(r.key.Object(), hash)
+	return nil
+}
+
+// StateReceipt returns a Merkle receipt for the account state in the BPT.
+func (r *Account) StateReceipt() (*managed.Receipt, error) {
+	hasher, err := r.stateHashes()
+	if err != nil {
+		return nil, err
+	}
+
+	rBPT, err := r.batch.BptReceipt(r.key.Object(), *(*[32]byte)(hasher.MerkleHash()))
+	if err != nil {
+		return nil, err
+	}
+
+	rState := hasher.Receipt(0, len(hasher)-1)
+	if !bytes.Equal(rState.MDRoot, rBPT.Element) {
+		return nil, errors.New("bpt entry does not match account state")
+	}
+
+	receipt, err := rState.Combine(rBPT)
+	if err != nil {
+		return nil, fmt.Errorf("combine receipt: %w", err)
+	}
+
+	return receipt, nil
 }

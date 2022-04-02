@@ -450,7 +450,7 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		s := strings.ToLower(u.Account.String())
 		if !accountSeen[s] {
 			accountSeen[s] = true
-			err = m.updateAccountBPT(account)
+			err = account.PutBpt()
 			if err != nil {
 				return err
 			}
@@ -587,19 +587,6 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 	return nil
 }
 
-// updateAccountBPT updates the BPT entry of an account.
-func (m *Executor) updateAccountBPT(account *database.Account) (err error) {
-	// Load the state
-	entry, err := account.StateHash()
-	if err != nil {
-		return err
-	}
-
-	account.PutBpt(*(*[32]byte)(entry))
-
-	return nil
-}
-
 // anchorSynthChain anchors the synthetic transaction chain.
 func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, ledgerState *protocol.InternalLedger, rootChain *database.Chain) (indexIndex uint64, err error) {
 	indexIndex, _, err = addChainAnchor(rootChain, ledger, ledgerUrl, protocol.SyntheticChain, protocol.ChainTypeTransaction)
@@ -624,6 +611,7 @@ func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger,
 		return err
 	}
 
+	m.logger.Debug("Anchoring BPT", "root", logging.AsHex(root).Slice(0, 4))
 	block.State.ChainUpdates.DidUpdateChain(ChainUpdate{
 		Name:    "bpt",
 		Account: m.Network.NodeUrl(),

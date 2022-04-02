@@ -190,9 +190,7 @@ func ensurePath(s string) string {
 
 // RootIdentity returns a copy of the URL with an empty path.
 func (u *URL) RootIdentity() *URL {
-	v := u.Copy()
-	v.Path = ""
-	return v
+	return &URL{Authority: u.Authority, UserInfo: u.UserInfo}
 }
 
 // Identity returns a copy of the URL with the last section cut off the path.
@@ -203,7 +201,11 @@ func (u *URL) Identity() *URL {
 
 // Parent gets the URL's parent path, or returns the original URL and false.
 func (u *URL) Parent() (*URL, bool) {
-	v := u.Copy()
+	v := new(URL)
+	v.UserInfo = u.UserInfo
+	v.Authority = u.Authority
+	v.Path = u.Path
+
 	// Canonicalize the path
 	v.Path = strings.TrimSuffix(v.Path, "/")
 	if len(v.Path) == 0 {
