@@ -79,7 +79,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("failed to load recipient: %v", err)
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin
@@ -94,27 +94,21 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("%q tokens cannot be converted into credits", account.GetTokenUrl())
 	}
 
-	if !account.CanDebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
-	}
-
 	if !account.DebitTokens(&body.Amount) {
-		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Header.Principal)
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
 	}
 
 	st.Update(account)
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	copy(sdc.Cause[:], tx.GetTxHash())
 	sdc.Amount = credits.Uint64()
 	st.Submit(body.Recipient, sdc)
 
-	//Create synthetic burn token
-	burnAcme := new(protocol.SyntheticBurnTokens)
-	copy(sdc.Cause[:], tx.GetTxHash())
-	burnAcme.Amount = body.Amount
-	st.Submit(account.GetTokenUrl(), burnAcme)
+	// Add the burnt acme to the internal ledger and send it with the anchor
+	// transaction
+	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
+	st.Update(ledgerState)
 
 	res := new(protocol.AddCreditsResult)
 	res.Oracle = ledgerState.ActiveOracle

@@ -2,7 +2,9 @@ package database
 
 import (
 	"errors"
+	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -13,70 +15,25 @@ type Transaction struct {
 	key   transactionBucket
 }
 
+// Transaction returns a Transaction for the given transaction ID.
+func (b *Batch) Transaction(id []byte) *Transaction {
+	return &Transaction{b, transaction(id)}
+}
+
+// ensureSigner ensures that the transaction's status includes the given signer.
+func (t *Transaction) ensureSigner(signer *url.URL) error {
+	status, err := t.GetStatus()
+	if err != nil {
+		return err
+	}
+
+	status.AddSigner(signer)
+	return t.PutStatus(status)
+}
+
 // Index returns a value that can read or write an index value.
 func (t *Transaction) Index(key ...interface{}) *Value {
 	return &Value{t.batch, t.key.Index(key...)}
-}
-
-// Get loads the transaction state, status, and signatures.
-//
-// See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*protocol.Envelope, *protocol.TransactionStatus, []protocol.Signature, error) {
-	state, err := t.GetState()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, nil, nil, err
-	}
-
-	status, err := t.GetStatus()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, nil, nil, err
-	}
-
-	signatures, err := t.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, nil, nil, err
-	}
-
-	if state == nil && status == nil && signatures == nil {
-		return nil, nil, nil, storage.ErrNotFound
-	}
-
-	return state, status, signatures.Signatures, nil
-}
-
-// Put stores the transaction object metadata, state, status, and signatures.
-// Put appends signatures and does not overwrite existing signatures.
-//
-// See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *protocol.Envelope, status *protocol.TransactionStatus, sigs []protocol.Signature) error {
-	// Ensure the object metadata is stored. Transactions don't have chains, so
-	// we don't need to add chain metadata.
-	meta := new(protocol.ObjectMetadata)
-	err := t.batch.getValuePtr(t.key.Object(), meta, &meta, true)
-	if errors.Is(err, storage.ErrNotFound) {
-		meta.Type = protocol.ObjectTypeTransaction
-		t.batch.putValue(t.key.Object(), meta)
-	} else if err != nil {
-		return err
-	}
-
-	err = t.PutState(state)
-	if err != nil {
-		return err
-	}
-
-	err = t.PutStatus(status)
-	if err != nil {
-		return err
-	}
-
-	ss, err := t.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-
-	ss.Add(sigs...)
-	return t.PutSignatures(ss)
 }
 
 // GetState loads the transaction state.
@@ -99,7 +56,7 @@ func (t *Transaction) PutState(v *protocol.Envelope) error {
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
 	v := new(protocol.TransactionStatus)
 	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
-	if err != nil {
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
 	return v, nil
@@ -115,20 +72,51 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 	return nil
 }
 
-// GetSignatures loads the transaction's signatures.
-func (t *Transaction) GetSignatures() (*SignatureSet, error) {
-	v := new(SignatureSet)
-	err := t.batch.getValuePtr(t.key.Signatures(), v, &v, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	return v, nil
+// Signatures returns a signature set for the given signer.
+func (t *Transaction) Signatures(signer *url.URL) (*SignatureSet, error) {
+	return t.newSigSet(signer, true)
 }
 
-// PutSignatures stores the transaction's signatures.
-func (t *Transaction) PutSignatures(v *SignatureSet) error {
-	t.batch.putValue(t.key.Signatures(), v)
-	return nil
+// ReadSignatures returns a read-only signature set for the given signer.
+func (t *Transaction) ReadSignatures(signer *url.URL) (*SignatureSet, error) {
+	return t.newSigSet(signer, false)
+}
+
+// AddSignature loads the appropriate siganture set and adds the signature to
+// it.
+func (t *Transaction) AddSignature(newSignature protocol.Signature) (int, error) {
+	set, err := t.newSigSet(newSignature.GetSigner(), true)
+	if err != nil {
+		return 0, err
+	}
+
+	return set.Add(newSignature)
+}
+
+func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
+	var acct protocol.SignerAccount
+	var version uint64
+	err := t.batch.Account(signer).GetStateAs(&acct)
+	switch {
+	case err == nil:
+		// If the signer exists, use its version
+		version = acct.GetVersion()
+
+	case errors.Is(err, storage.ErrNotFound):
+		// If the signer does not exist, use version 0. This is for signatures
+		// on synthetic transactions.
+		version = 0
+
+	default:
+		return nil, fmt.Errorf("load signer: %w", err)
+	}
+
+	set, err := newSigSet(t, signer, version, writable)
+	if err != nil {
+		return nil, fmt.Errorf("load signature set: %w", err)
+	}
+
+	return set, nil
 }
 
 // GetSyntheticTxns loads the IDs of synthetic transactions produced by the

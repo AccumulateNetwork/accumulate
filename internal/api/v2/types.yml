@@ -17,6 +17,10 @@ ChainQueryResponse:
       type: any
     - name: ChainId
       type: bytes
+    - name: Receipt
+      type: query.GeneralReceipt
+      marshal-as: reference
+      pointer: true
 
 TransactionQueryResponse:
   non-binary: true
@@ -59,10 +63,51 @@ TransactionQueryResponse:
       type: query.TxReceipt
       marshal-as: reference
       pointer: true
-    - name: SignatureThreshold
-      type: uvarint
-    - name: Invalidated
-      type: bool
+    - name: SignatureBooks
+      type: SignatureBook
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+SignatureBook:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Authority
+      type: url
+      pointer: true
+    - name: Pages
+      type: SignaturePage
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+SignaturePage:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Signer
+      type: SignerMetadata
+      marshal-as: reference
+    - name: Signatures
+      type: protocol.Signature
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalSignature
+      zero-value: nil
+      repeatable: true
+
+SignerMetadata:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Type
+      type: protocol.AccountType
+      marshal-as: enum
+    - name: Url
+      type: url
+      pointer: true
+    - name: AcceptThreshold
+      type: uint
 
 MerkleState:
   non-binary: true
@@ -101,8 +146,9 @@ KeyPage:
   non-binary: true
   incomparable: true
   fields:
-    - name: Height
+    - name: Version
       type: uvarint
+      alternative: Height
 
 Signer:
   non-binary: true
@@ -286,8 +332,9 @@ TxResponse:
   - name: TransactionHash
     type: bytes
     alternative: Txid
-  - name: EnvelopeHash
+  - name: SignatureHashes
     type: bytes
+    repeatable: true
   - name: SimpleHash
     type: bytes
     alternative: Hash
@@ -332,6 +379,21 @@ DataEntryQueryResponse:
       type: DataEntry
       marshal-as: reference
 
+ChainEntry:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Height
+      type: varint
+      keep-empty: true
+    - name: Entry
+      type: bytes
+    - name: State
+      repeatable: true
+      type: bytes
+    - name: Value
+      type: any
+
 StatusResponse:
   non-binary: true
   incomparable: true
@@ -348,6 +410,8 @@ VersionResponse:
     - name: Commit
       type: string
     - name: VersionIsKnown
+      type: bool
+    - name: IsTestNet
       type: bool
 
 DescriptionResponse:

@@ -20,7 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -140,14 +140,13 @@ func (d *Daemon) Start() (err error) {
 		ConnectionManager: d.connectionManager,
 		Network:           &d.Config.Accumulate.Network,
 	}
-	execOpts := chain.ExecutorOptions{
-		DB:      d.db,
+	execOpts := block.ExecutorOptions{
 		Logger:  d.Logger,
 		Key:     d.Key().Bytes(),
 		Network: d.Config.Accumulate.Network,
 		Router:  &router,
 	}
-	exec, err := chain.NewNodeExecutor(execOpts)
+	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
@@ -158,11 +157,11 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
-		DB:      d.db,
-		Address: d.Key().PubKey().Address(),
-		Chain:   exec,
-		Logger:  d.Logger,
-		Network: d.Config.Accumulate.Network,
+		DB:       d.db,
+		Address:  d.Key().PubKey().Address(),
+		Executor: exec,
+		Logger:   d.Logger,
+		Network:  d.Config.Accumulate.Network,
 	})
 
 	// Create node

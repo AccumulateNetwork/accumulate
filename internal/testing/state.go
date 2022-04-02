@@ -19,6 +19,8 @@ import (
 
 type DB = *database.Batch
 
+var FakeBvn = MustParseUrl("acc://bvn0")
+
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
@@ -123,10 +125,11 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	ss := new(protocol.KeySpec)
 	ss.PublicKeyHash = keyHash[:]
 
-	mss := protocol.NewKeyPage()
-	mss.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-	mss.Keys = append(mss.Keys, ss)
-	mss.Threshold = 1
+	page := protocol.NewKeyPage()
+	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
+	page.Keys = append(page.Keys, ss)
+	page.Threshold = 1
+	page.Version = 1
 
 	book := protocol.NewKeyBook()
 	book.Url = bookUrl
@@ -136,7 +139,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	adi.Url = identityUrl
 	adi.KeyBook = bookUrl
 
-	return WriteStates(db, adi, book, mss)
+	return WriteStates(db, adi, book, page)
 }
 
 func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
@@ -257,6 +260,7 @@ func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) er
 
 	page := new(protocol.KeyPage)
 	page.KeyBook = bookUrl
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
 	if len(publicKey) == 1 {

@@ -1,21 +1,23 @@
-package chain
+package block
 
 import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
+func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
 	switch opts.Network.Type {
 	case config.Directory:
-		return newExecutor(opts,
+		return newExecutor(opts, db,
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
+			SyntheticReceipt{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
@@ -27,10 +29,15 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
+
+			// DN validator set management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
 		)
 
 	case config.BlockValidator:
-		return newExecutor(opts,
+		return newExecutor(opts, db,
 			AddCredits{},
 			BurnTokens{},
 			CreateDataAccount{},
@@ -46,10 +53,13 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			WriteDataTo{},
 			UpdateManager{},
 			RemoveManager{},
+
+			// BVN validator management
 			AddValidator{},
 			RemoveValidator{},
 			UpdateValidatorKey{},
 
+			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
 			SyntheticCreateChain{},
@@ -57,6 +67,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
 			SyntheticWriteData{},
+			SyntheticReceipt{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
@@ -75,28 +86,17 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 // the genesis state.
 func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
-		DB:        db,
 		Network:   network,
 		Logger:    logger,
 		isGenesis: true,
-	})
+	}, db)
 }
 
-// TxExecutor executes a specific type of transaction.
-type TxExecutor interface {
+// TransactionExecutor executes a specific type of transaction.
+type TransactionExecutor interface {
 	// Type is the transaction type the executor can execute.
 	Type() protocol.TransactionType
 
 	// Validate fully validates and executes the transaction.
 	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
 }
-
-// creditChain = protocol.SignerAccount
-//
-// Deprecated: use protocol.SignerAccount
-type creditChain = protocol.SignerAccount
-
-// tokenChain = protocol.TokenHolderAccount
-//
-// Deprecated: use protocol.TokenHolderAccount
-type tokenChain = protocol.TokenHolderAccount

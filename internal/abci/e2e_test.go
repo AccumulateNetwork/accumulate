@@ -601,7 +601,7 @@ func TestLiteAccountTx(t *testing.T) {
 		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
 		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl, 2).
+			WithSigner(aliceUrl, 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, alice))
 	})
@@ -647,10 +647,14 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	acmeAmount := 100.00
+
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
+
 	require.NoError(t, batch.Commit())
 
+	acmeIssuer := n.GetTokenIssuer("acc://ACME")
+	acmeBeforeBurn := acmeIssuer.Issued
 	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
@@ -671,7 +675,6 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	// Check each anchor
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
-
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
 	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
@@ -684,9 +687,11 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	ks := n.GetKeyPage("foo/book0/1")
 	acct := n.GetTokenAccount("foo/tokens")
-
+	acmeIssuer = n.GetTokenIssuer(protocol.AcmeUrl().String())
+	acmeAfterBurn := acmeIssuer.Issued
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
+	require.Equal(t, *acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), acmeAfterBurn)
 }
 
 func TestCreateKeyPage(t *testing.T) {
@@ -817,7 +822,7 @@ func TestAddKey(t *testing.T) {
 		op := new(protocol.AddKeyOperation)
 		op.Entry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -852,7 +857,7 @@ func TestUpdateKey(t *testing.T) {
 		op.OldEntry.KeyHash = kh[:]
 		op.NewEntry.KeyHash = nkh[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -884,7 +889,7 @@ func TestRemoveKey(t *testing.T) {
 
 		op.Entry.KeyHash = h2[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 1).
@@ -897,7 +902,7 @@ func TestRemoveKey(t *testing.T) {
 
 		op.Entry.KeyHash = h1[:]
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = op
+		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
 			WithSigner(url.MustParse("foo/book1/1"), 2).
@@ -1037,6 +1042,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
+
 	check := CheckError{NewDefaultErrorHandler(t)}
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
@@ -1205,6 +1211,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
+		body.Source = n.network.NodeUrl()
 		body.Token = n.ParseUrl("foo2/tokens")
 		body.Amount.SetUint64(123)
 
@@ -1243,13 +1250,15 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			if seen[id32] {
 				continue
 			}
-			txState, txStatus, txSigs, err := batch.Transaction(id32[:]).Get()
+			txState, err := batch.Transaction(id).GetState()
+			require.NoError(t, err)
+			txStatus, err := batch.Transaction(id).GetStatus()
 			require.NoError(t, err)
 			if seen[*(*[32]byte)(txState.Transaction.GetHash())] {
 				fmt.Printf("      TX: hash=%X\n", txState.Transaction.GetHash())
 				continue
 			}
-			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.Transaction.Body.GetType(), txState.Transaction.Header.Principal, txStatus, len(txSigs))
+			fmt.Printf("      TX: type=%v origin=%v status=%#v\n", txState.Transaction.Body.GetType(), txState.Transaction.Header.Principal, txStatus)
 			seen[id32] = true
 		}
 	}
@@ -1353,8 +1362,8 @@ func TestMultisig(t *testing.T) {
 	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
 	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
 
-	t.Log("Double signing with key 1 should complete the transaction")
-	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+	t.Log("Double signing with key 1 should not complete the transaction")
+	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithNonceVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
@@ -1364,14 +1373,14 @@ func TestMultisig(t *testing.T) {
 			WithBody(&protocol.SignPending{}).
 			Sign(protocol.SignatureTypeED25519, key1.Bytes()))
 	})
-	n.MustWaitForTxns(convertIds32(envHashes...)...)
+	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
 	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
 	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
 
 	t.Log("Signing with key 2 should complete the transaction")
-	envHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
+	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithNonceVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
@@ -1381,7 +1390,7 @@ func TestMultisig(t *testing.T) {
 			WithBody(&protocol.SignPending{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()))
 	})
-	n.MustWaitForTxns(convertIds32(envHashes...)...)
+	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
 	require.True(t, txnResp.Status.Delivered, "Transaction is was not delivered")

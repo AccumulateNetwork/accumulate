@@ -91,6 +91,27 @@ func (u *URL) URL() *url.URL {
 	return v
 }
 
+// Compare returns an integer comparing two URLs as lower case strings. The
+// result will be 0 if u == v, -1 if u < v, and +1 if u > v.
+func (u *URL) Compare(v *URL) int {
+	uStr := strings.ToLower(u.String())
+	vStr := strings.ToLower(v.String())
+	switch {
+	case uStr < vStr:
+		return -1
+	case uStr > vStr:
+		return +1
+	default:
+		return 0
+	}
+}
+
+// Copy returns a copy of the url.
+func (u *URL) Copy() *URL {
+	v := *u
+	return &v
+}
+
 // String reassembles the URL into a valid URL string. See net/url.URL.String().
 func (u *URL) String() string {
 	return u.URL().String()
@@ -169,9 +190,7 @@ func ensurePath(s string) string {
 
 // RootIdentity returns a copy of the URL with an empty path.
 func (u *URL) RootIdentity() *URL {
-	v := *u
-	v.Path = ""
-	return &v
+	return &URL{Authority: u.Authority, UserInfo: u.UserInfo}
 }
 
 // Identity returns a copy of the URL with the last section cut off the path.
@@ -182,11 +201,15 @@ func (u *URL) Identity() *URL {
 
 // Parent gets the URL's parent path, or returns the original URL and false.
 func (u *URL) Parent() (*URL, bool) {
-	v := *u
+	v := new(URL)
+	v.UserInfo = u.UserInfo
+	v.Authority = u.Authority
+	v.Path = u.Path
+
 	// Canonicalize the path
 	v.Path = strings.TrimSuffix(v.Path, "/")
 	if len(v.Path) == 0 {
-		return &v, false
+		return v, false
 	}
 	slashIdx := strings.LastIndex(v.Path, "/")
 	if slashIdx == -1 {
@@ -194,7 +217,7 @@ func (u *URL) Parent() (*URL, bool) {
 	} else {
 		v.Path = v.Path[:slashIdx]
 	}
-	return &v, true
+	return v, true
 }
 
 // IdentityAccountID constructs an account identifier from the lower case
@@ -263,9 +286,9 @@ func (u *URL) Equal(v *URL) bool {
 
 // JoinPath returns a copy of U with additional path elements.
 func (u *URL) JoinPath(s ...string) *URL {
-	v := *u
+	v := u.Copy()
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
-	return &v
+	return v
 }
 
 // MarshalJSON marshals the URL to JSON as a string.

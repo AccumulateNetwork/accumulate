@@ -60,11 +60,9 @@ func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	// Submit a synthetic deposit token TX
 	amount := new(big.Int).SetUint64(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
 	deposit := new(protocol.SyntheticDepositTokens)
-	copy(deposit.Cause[:], tx.GetTxHash())
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *amount
 	st.Submit(u, deposit)
-
 	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
 	// err = deposit.SetDeposit(protocol.ACME, amount)
 

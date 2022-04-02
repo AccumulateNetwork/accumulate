@@ -10,9 +10,11 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
@@ -65,7 +67,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		}
 
 		signer.Url = origin
-		signer.Height = 1
+		signer.Version = 1
 		signer.PrivateKey = privKey
 		return args, signer, nil
 	}
@@ -91,11 +93,12 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		signer.Url = keyInfo.KeyPage
 	}
 
-	ms, err := getRecord(signer.Url.String(), nil)
+	var page *protocol.KeyPage
+	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
-	signer.Height = ms.Height
+	signer.Version = page.Version
 
 	return args[ct:], signer, nil
 }
@@ -234,7 +237,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = sig.GetPublicKey()
-	req.KeyPage.Height = sig.GetSignerHeight()
+	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
 	req.Metadata = env.Transaction.Header.Metadata
@@ -302,15 +305,15 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 }
 
 type ActionResponse struct {
-	TransactionHash types.Bytes  `json:"transactionHash"`
-	EnvelopeHash    types.Bytes  `json:"envelopeHash"`
-	SimpleHash      types.Bytes  `json:"simpleHash"`
-	Log             types.String `json:"log"`
-	Code            types.String `json:"code"`
-	Codespace       types.String `json:"codespace"`
-	Error           types.String `json:"error"`
-	Mempool         types.String `json:"mempool"`
-	Result          interface{}  `json:"result"`
+	TransactionHash types.Bytes                 `json:"transactionHash"`
+	SignatureHashes []types.Bytes               `json:"signatureHashes"`
+	SimpleHash      types.Bytes                 `json:"simpleHash"`
+	Log             types.String                `json:"log"`
+	Code            types.String                `json:"code"`
+	Codespace       types.String                `json:"codespace"`
+	Error           types.String                `json:"error"`
+	Mempool         types.String                `json:"mempool"`
+	Result          *protocol.TransactionStatus `json:"result"`
 }
 
 type ActionDataResponse struct {
@@ -388,14 +391,13 @@ func (a *ActionDataResponse) Print() (string, error) {
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
-		EnvelopeHash:    r.EnvelopeHash,
+		SignatureHashes: make([]types.Bytes, len(r.SignatureHashes)),
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
-		Result:          r.Result,
 	}
-	if r.Code != 0 {
-		return ar
+	for i, hash := range r.SignatureHashes {
+		ar.SignatureHashes[i] = hash
 	}
 
 	result := new(protocol.TransactionStatus)
@@ -423,7 +425,9 @@ func (a *ActionResponse) Print() (string, error) {
 		out = string(b)
 	} else {
 		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
-		out += fmt.Sprintf("\tEnvelope Hash\t\t: %x\n", a.EnvelopeHash)
+		for i, hash := range a.SignatureHashes {
+			out += fmt.Sprintf("\tSignature %d Hash\t: %x\n", i, hash)
+		}
 		out += fmt.Sprintf("\tSimple Hash\t\t: %x\n", a.SimpleHash)
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t: %s\n", a.Code)
@@ -441,19 +445,16 @@ func (a *ActionResponse) Print() (string, error) {
 			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
 		}
 		if a.Result != nil {
-			r := a.Result.(map[string]interface{})
 			out += "\tResult\t\t\t: "
-			if t, ok := r["result"]; ok {
-				d, err := json.Marshal(t)
+			d, err := json.Marshal(a.Result.Result)
+			if err != nil {
+				out += fmt.Sprintf("error remarshaling result %v\n", a.Result.Result)
+			} else {
+				v, err := protocol.UnmarshalTransactionResultJSON(d)
 				if err != nil {
-					out += fmt.Sprintf("error remarshaling result %v\n", t)
+					out += fmt.Sprintf("error unmarshaling transaction result %v", err)
 				} else {
-					v, err := protocol.UnmarshalTransactionResultJSON(d)
-					if err != nil {
-						out += fmt.Sprintf("error unmarshaling transaction result %v", err)
-					} else {
-						out += outputTransactionResultForHumans(v)
-					}
+					out += outputTransactionResultForHumans(v)
 				}
 			}
 		}
@@ -518,7 +519,11 @@ func PrintJsonRpcError(err error) (string, error) {
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
-		cmd.PrintErrf("Error: %v\n", err)
+		if WantJsonOutput {
+			cmd.PrintErrf("{\"error\":%v}", err)
+		} else {
+			cmd.PrintErrf("Error: %v\n", err)
+		}
 		DidError = err
 	} else {
 		cmd.Println(out)
@@ -618,8 +623,18 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
-	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKey())
+	for _, book := range res.SignatureBooks {
+		for _, page := range book.Pages {
+			out += fmt.Sprintf("  - Signatures            :\n")
+			out += fmt.Sprintf("    - Signer              : %s (%v)\n", page.Signer.Url, page.Signer.Type)
+			for _, sig := range page.Signatures {
+				if sig.Type().IsSystem() {
+					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
+				} else {
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+				}
+			}
+		}
 	}
 	out += fmt.Sprintf("===\n")
 	return out
@@ -816,15 +831,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%d\n", protocol.CreditPrecision*ss.CreditBalance)
-		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
 			name, err := FindLabelFromPubKey(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -845,24 +860,25 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += "\n"
 		return out, nil
 	default:
-		data, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		out := fmt.Sprintf("Unknown account type %s:\n\t%s\n", res.Type, data)
-		return out, nil
+		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
 }
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
-	switch string(res.Type) {
-	case protocol.TransactionTypeSendTokens.String():
-		tx := new(api.TokenSend)
-		err := Remarshal(res.Data, &tx)
+	typStr := res.Data.(map[string]interface{})["type"].(string)
+	typ, ok := protocol.TransactionTypeByName(typStr)
+	if !ok {
+		return "", fmt.Errorf("Unknown transaction type %s", typStr)
+	}
+
+	if typ == protocol.TransactionTypeSendTokens {
+		txn := new(api.TokenSend)
+		err := Remarshal(res.Data, txn)
 		if err != nil {
 			return "", err
 		}
 
+		tx := txn
 		var out string
 		for i := range tx.To {
 			amt, err := formatAmount("acc://ACME", &tx.To[i].Amount)
@@ -875,13 +891,21 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case protocol.TransactionTypeSyntheticDepositTokens.String():
-		deposit := new(protocol.SyntheticDepositTokens)
-		err := Remarshal(res.Data, &deposit)
-		if err != nil {
-			return "", err
-		}
+	}
 
+	txn, err := protocol.NewTransactionBody(typ)
+	if err != nil {
+		return "", err
+	}
+
+	err = Remarshal(res.Data, txn)
+	if err != nil {
+		return "", err
+	}
+
+	switch txn := txn.(type) {
+	case *protocol.SyntheticDepositTokens:
+		deposit := txn
 		out := "\n"
 		amt, err := formatAmount(deposit.Token.String(), &deposit.Amount)
 		if err != nil {
@@ -891,13 +915,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case protocol.TransactionTypeSyntheticCreateChain.String():
-		scc := new(protocol.SyntheticCreateChain)
-		err := Remarshal(res.Data, &scc)
-		if err != nil {
-			return "", err
-		}
-
+	case *protocol.SyntheticCreateChain:
+		scc := txn
 		var out string
 		for _, cp := range scc.Chains {
 			c, err := protocol.UnmarshalAccount(cp.Data)
@@ -912,13 +931,8 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
 		}
 		return out, nil
-	case protocol.TransactionTypeCreateIdentity.String():
-		id := protocol.CreateIdentity{}
-		err := Remarshal(res.Data, &id)
-		if err != nil {
-			return "", err
-		}
-
+	case *protocol.CreateIdentity:
+		id := txn
 		out := "\n"
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
@@ -934,13 +948,103 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		return out, nil
 
 	default:
-		data, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
-		return out, nil
+		return printReflection("", "", reflect.ValueOf(txn)), nil
 	}
+}
+
+func printReflection(field, indent string, value reflect.Value) string {
+	typ := value.Type()
+	out := fmt.Sprintf("%s%s:", indent, field)
+	if field == "" {
+		out = ""
+	}
+
+	if typ.AssignableTo(reflect.TypeOf(new(url2.URL))) {
+		v := value.Interface().(*url2.URL)
+		return out + " " + v.String() + "\n"
+	}
+
+	if typ.AssignableTo(reflect.TypeOf(url2.URL{})) {
+		v := value.Interface().(url2.URL)
+		return out + " " + v.String() + "\n"
+	}
+
+	switch value.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if value.IsNil() {
+			return ""
+		}
+		return printReflection(field, indent, value.Elem())
+	case reflect.Slice, reflect.Array:
+		out += "\n"
+		for i, n := 0, value.Len(); i < n; i++ {
+			out += printReflection(fmt.Sprintf("%d (elem)", i), indent+"   ", value.Index(i))
+		}
+		return out
+	case reflect.Map:
+		out += "\n"
+		for iter := value.MapRange(); iter.Next(); {
+			out += printReflection(fmt.Sprintf("%s (key)", iter.Key()), indent+"   ", iter.Value())
+		}
+		return out
+	case reflect.Struct:
+		out += "\n"
+		out += fmt.Sprintf("%s   (type): %s\n", indent, natural(typ.Name()))
+
+		callee := value
+		m, ok := typ.MethodByName("Type")
+		if !ok {
+			m, ok = reflect.PtrTo(typ).MethodByName("Type")
+			callee = value.Addr()
+		}
+		if ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1 {
+			v := m.Func.Call([]reflect.Value{callee})[0]
+			if _, ok := v.Type().MethodByName("GetEnumValue"); ok {
+				out += fmt.Sprintf("%s   %s: %s\n", indent, natural(v.Type().Name()), natural(fmt.Sprint(v)))
+			}
+		}
+
+		for i, n := 0, value.NumField(); i < n; i++ {
+			f := typ.Field(i)
+			if !f.IsExported() {
+				continue
+			}
+			out += printReflection(f.Name, indent+"   ", value.Field(i))
+		}
+		return out
+	default:
+		return out + " " + fmt.Sprint(value) + "\n"
+	}
+}
+
+func natural(name string) string {
+	var splits []int
+
+	var wasLower bool
+	for i, r := range name {
+		if wasLower && unicode.IsUpper(r) {
+			splits = append(splits, i)
+		}
+		wasLower = unicode.IsLower(r)
+	}
+
+	w := new(strings.Builder)
+	w.Grow(len(name) + len(splits))
+
+	var word string
+	var split int
+	var offset int
+	for len(splits) > 0 {
+		split, splits = splits[0], splits[1:]
+		split -= offset
+		offset += split
+		word, name = name[:split], name[split:]
+		w.WriteString(word)
+		w.WriteRune(' ')
+	}
+
+	w.WriteString(name)
+	return w.String()
 }
 
 func nonceFromTimeNow() uint64 {

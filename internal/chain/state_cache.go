@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -19,7 +20,7 @@ type stateCache struct {
 	txType  protocol.TransactionType
 	txHash  types.Bytes32
 
-	blockState BlockState
+	state      ProcessTransactionState
 	batch      *database.Batch
 	operations []stateOperation
 	chains     map[[32]byte]protocol.Account
@@ -34,17 +35,11 @@ func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]b
 	c.batch = batch
 	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
-
-	_ = c.logger // Get static analsis to shut up
-
-	c.Reset()
-	return c
-}
-
-func (c *stateCache) Reset() {
 	c.operations = c.operations[:0]
 	c.chains = map[[32]byte]protocol.Account{}
 	c.indices = map[[32]byte]*writeIndex{}
+	_ = c.logger // Get static analsis to shut up
+	return c
 }
 
 func (c *stateCache) Commit() ([]protocol.Account, error) {
@@ -114,11 +109,6 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 	return env.Transaction, nil
 }
 
-// LoadSignatures loads and unmarshals a transaction's signatures
-func (c *stateCache) LoadSignatures(txid [32]byte) (*database.SignatureSet, error) {
-	return c.batch.Transaction(txid[:]).GetSignatures()
-}
-
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
 	return AddDirectoryEntry(func(u *url.URL, key ...interface{}) Value {
 		return c.RecordIndex(u, key...)
@@ -161,4 +151,11 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 	}
 
 	return mdi.Put(data)
+}
+
+// statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
+func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
+	vb, _ := v.MarshalBinary()
+	ub, _ := u.MarshalBinary()
+	return bytes.Equal(vb, ub)
 }

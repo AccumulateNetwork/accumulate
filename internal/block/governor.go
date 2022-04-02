@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"context"
@@ -15,10 +15,12 @@ import (
 )
 
 const debugSendAnchor = false
+const debugAnchorUpdates = false
 
 type governor struct {
 	ExecutorOptions
 	logger     logging.OptionalLogger
+	db         *database.Database
 	dispatcher *dispatcher
 	started    int32
 	messages   chan interface{}
@@ -28,20 +30,21 @@ type governor struct {
 
 type govStop struct{}
 
+type govPing struct{}
+
 type govDidCommit struct {
 	mirrorAdi   bool
-	blockMeta   BlockMeta
-	blockState  BlockState
-	anchor      *protocol.SyntheticAnchor
+	block       Block
 	ledger      *protocol.InternalLedger
 	synthLedger *protocol.InternalSyntheticLedger
 	rootAnchor  []byte
 	rootHeight  int64
 }
 
-func newGovernor(opts ExecutorOptions) *governor {
+func newGovernor(opts ExecutorOptions, db *database.Database) *governor {
 	g := new(governor)
 	g.ExecutorOptions = opts
+	g.db = db
 	g.messages = make(chan interface{})
 	g.done = make(chan struct{})
 	g.sent = map[[32]byte]bool{}
@@ -60,19 +63,17 @@ func (g *governor) Start() error {
 	return nil
 }
 
-func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, meta BlockMeta, state BlockState, anchor *protocol.SyntheticAnchor) error {
-	g.logger.Debug("Block event", "type", "didCommit", "height", meta.Index, "time", meta.Time)
+func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, block *Block) error {
+	g.logger.Debug("Block event", "type", "didCommit", "height", block.Index, "time", block.Time)
 
-	if !meta.IsLeader {
+	if !block.IsLeader {
 		// Nothing to do if we're not the leader
 		return nil
 	}
 
 	msg := govDidCommit{
-		mirrorAdi:  mirrorAdi,
-		blockMeta:  meta,
-		blockState: state,
-		anchor:     anchor,
+		mirrorAdi: mirrorAdi,
+		block:     *block,
 	}
 
 	ledger := batch.Account(g.Network.Ledger())
@@ -141,11 +142,11 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	// The governor must be read-only, so we must not commit the
 	// database transaction or the state cache. If the governor makes
 	// ANY changes, the system will no longer be deterministic.
-	batch := g.DB.Begin(false)
+	batch := g.db.Begin(false)
 	defer batch.Discard()
 
 	// TODO This will hit the database with a lot of queries, maybe we shouldn't do this
-	producedCount := countExceptAnchors2(msg.blockState.ProducedTxns)
+	producedCount := countExceptAnchors2(msg.block.State.ProducedTxns)
 	unsignedCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
 	unsentCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
 
@@ -160,10 +161,10 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	}
 
 	g.logger.Info("Did commit",
-		"height", msg.blockMeta.Index,
-		"time", msg.blockMeta.Time,
+		"height", msg.block.Index,
+		"time", msg.block.Time,
 		"mirror", msg.mirrorAdi,
-		"updated", len(msg.blockState.ChainUpdates),
+		"updated", len(msg.block.State.ChainUpdates.Entries),
 		"produced", producedCount,
 		"unsigned", unsignedCount,
 		"unsent", unsentCount,
@@ -203,13 +204,13 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Load it
 		tx, err := batch.Transaction(txid[:]).GetState()
 		if err != nil {
-			g.logger.Error("Failed to load pending transaction", "txid", logging.AsHex(txid), "error", err)
+			g.logger.Error("Failed to load pending transaction", "txid", logging.AsHex(txid).Slice(0, 4), "error", err)
 			continue
 		}
 
 		typ := tx.Transaction.Body.GetType()
 		if typ != protocol.TransactionTypeSyntheticAnchor {
-			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
+			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid).Slice(0, 4), "type", typ)
 		}
 
 		// Sign it
@@ -217,11 +218,11 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			SetType(protocol.SignatureTypeED25519).
 			SetPrivateKey(g.Key).
 			SetKeyPageUrl(g.Network.ValidatorBook(), 0).
-			SetHeight(1).
+			SetVersion(1).
 			SetTimestamp(1).
 			Sign(txid[:])
 		if err != nil {
-			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid), "error", err)
+			g.logger.Error("Failed to sign pending transaction", "txid", logging.AsHex(txid).Slice(0, 4), "error", err)
 			continue
 		}
 
@@ -245,15 +246,30 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 
 	// For each unsent synthetic transaction
 	for _, id := range unsent {
-		// Load it
-		pending, _, signatures, err := batch.Transaction(id[:]).Get()
+		// Load state
+		obj := batch.Transaction(id[:])
+		pending, err := obj.GetState()
 		if err != nil {
-			g.logger.Error("Failed to load pending transaction", "txid", logging.AsHex(id), "error", err)
+			g.logger.Error("Failed to load pending transaction", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
 			continue
 		}
 
+		// Load status
+		status, err := obj.GetStatus()
+		if err != nil {
+			g.logger.Error("Failed to load pending transaction status", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
+			return
+		}
+
+		// Load signatures
+		signatures, err := getAllSignatures(batch, obj, status, pending.Transaction.Header.Initiator[:])
+		if err != nil {
+			g.logger.Error("Failed to load pending transaction signatures", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
+			return
+		}
+
 		if len(signatures) == 0 {
-			g.logger.Error("Transaction has no signatures!", "txid", logging.AsHex(id))
+			g.logger.Error("Transaction has no signatures!", "txid", logging.AsHex(id).Slice(0, 4))
 			continue
 		}
 
@@ -265,17 +281,17 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 		// Marshal it
 		raw, err := env.MarshalBinary()
 		if err != nil {
-			g.logger.Error("Failed to marshal pending transaction", "txid", logging.AsHex(id), "error", err)
+			g.logger.Error("Failed to marshal pending transaction", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
 			continue
 		}
 
 		typ := env.Transaction.Type()
 		txid32 := *(*[32]byte)(env.GetTxHash())
 		if g.sent[txid32] {
-			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.blockMeta.Index)
+			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
 		} else {
 			if debugSendAnchor || typ != protocol.TransactionTypeSyntheticAnchor {
-				g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()), "type", typ, "block", msg.blockMeta.Index)
+				g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
 			}
 			g.sent[txid32] = true
 		}
@@ -283,7 +299,7 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 		// Send it
 		err = g.dispatcher.BroadcastTx(context.Background(), env.Transaction.Header.Principal, raw)
 		if err != nil {
-			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id), "error", err)
+			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
 			continue
 		}
 		body.Transactions = append(body.Transactions, id)
@@ -295,24 +311,26 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCountExceptAnchors int) {
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced
-	if len(msg.blockState.ChainUpdates) == 0 && synthCountExceptAnchors == 0 {
+	if len(msg.block.State.ChainUpdates.Entries) == 0 && synthCountExceptAnchors == 0 {
 		return
 	}
 
-	if msg.anchor == nil {
+	if msg.block.Anchor == nil {
 		panic("TODO When is it OK for the anchor to be nil?")
 	}
 
-	kv := []interface{}{"root", logging.AsHex(msg.anchor.RootAnchor)}
-	for i, c := range msg.blockState.ChainUpdates {
-		kv = append(kv, fmt.Sprintf("[%d]", i))
-		switch c.Name {
-		case "bpt":
-			kv = append(kv, "BPT")
-		case "synthetic":
-			kv = append(kv, "synthetic")
-		default:
-			kv = append(kv, fmt.Sprintf("%s#chain/%s", c.Account, c.Name))
+	kv := []interface{}{"root", logging.AsHex(msg.block.Anchor.RootAnchor).Slice(0, 4)}
+	if debugAnchorUpdates {
+		for i, c := range msg.block.State.ChainUpdates.Entries {
+			kv = append(kv, fmt.Sprintf("[%d]", i))
+			switch c.Name {
+			case "bpt":
+				kv = append(kv, "BPT")
+			case "synthetic":
+				kv = append(kv, "synthetic")
+			default:
+				kv = append(kv, fmt.Sprintf("%s#chain/%s", c.Account, c.Name))
+			}
 		}
 	}
 	g.logger.Debug("Creating anchor txn", kv...)
@@ -326,7 +344,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		for i, bvn := range bvnNames {
 			txns.Transactions[i] = protocol.SendTransaction{
 				Recipient: protocol.SubnetUrl(bvn).JoinPath(protocol.AnchorPool),
-				Payload:   msg.anchor,
+				Payload:   msg.block.Anchor,
 			}
 		}
 
@@ -334,7 +352,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit, synthCou
 		// Send anchor from BVN to DN
 		txns.Transactions = []protocol.SendTransaction{{
 			Recipient: protocol.DnUrl().JoinPath(protocol.AnchorPool),
-			Payload:   msg.anchor,
+			Payload:   msg.block.Anchor,
 		}}
 	}
 
@@ -402,11 +420,9 @@ func (g *governor) sendMirror(batch *database.Batch) {
 }
 
 func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionBody) {
-	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
-
 	// Construct the signature transaction
 	var ledgerState *protocol.InternalLedger
-	err := st.LoadUrlAs(g.Network.Ledger(), &ledgerState)
+	err := batch.Account(g.Network.Ledger()).GetStateAs(&ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -422,7 +438,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(g.Key).
 		SetUrl(g.Network.ValidatorPage(0)).
-		SetHeight(1).
+		SetVersion(1).
 		SetTimestamp(uint64(ledgerState.Index) + 1).
 		Initiate(env.Transaction)
 	if err != nil {
@@ -439,6 +455,6 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Send it
-	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()), "type", body.GetType())
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", body.GetType())
 	g.dispatcher.BroadcastTxLocal(context.TODO(), data)
 }

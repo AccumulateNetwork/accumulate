@@ -18,8 +18,9 @@ const markPower = 8
 
 // Database is an Accumulate database.
 type Database struct {
-	store  storage.KeyValueStore
-	logger log.Logger
+	store       storage.KeyValueStore
+	logger      log.Logger
+	nextBatchId int
 }
 
 // New creates a new database using the given key-value store.
@@ -92,25 +93,6 @@ func (d *Database) Close() error {
 	return d.store.Close()
 }
 
-// View runs the function with a read-only transaction.
-func (d *Database) View(fn func(*Batch) error) error {
-	batch := d.Begin(false)
-	defer batch.Discard()
-	return fn(batch)
-}
-
-// Update runs the function with a writable transaction and commits if the
-// function succeeds.
-func (d *Database) Update(fn func(*Batch) error) error {
-	batch := d.Begin(true)
-	defer batch.Discard()
-	err := fn(batch)
-	if err != nil {
-		return err
-	}
-	return batch.Commit()
-}
-
 // // BptRootHash returns the root hash of the BPT.
 // func (b *Batch) BptRootHash() []byte {
 // 	// Make a copy
@@ -138,11 +120,6 @@ func (b *Batch) AccountByID(id []byte) *Account {
 // creating snapshots from the BPT.
 func (b *Batch) AccountByKey(key storage.Key) *Account {
 	return &Account{b, accountBucket{objectBucket(key)}}
-}
-
-// Transaction returns a Transaction for the given transaction ID.
-func (b *Batch) Transaction(id []byte) *Transaction {
-	return &Transaction{b, transaction(id)}
 }
 
 // Import imports values from another database.

@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"encoding"
@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func (m *Executor) queryAccount(account *database.Account) (*query.ResponseAccount, error) {
+func (m *Executor) queryAccount(batch *database.Batch, account *database.Account, prove bool) (*query.ResponseAccount, error) {
 	resp := new(query.ResponseAccount)
 
 	state, err := account.GetState()
@@ -51,6 +51,15 @@ func (m *Executor) queryAccount(account *database.Account) (*query.ResponseAccou
 		resp.ChainState = append(resp.ChainState, state)
 	}
 
+	if !prove {
+		return resp, nil
+	}
+
+	resp.Receipt, err = m.resolveAccountStateReceipt(batch, account)
+	if err != nil {
+		resp.Receipt.Error = err.Error()
+	}
+
 	return resp, nil
 }
 
@@ -70,7 +79,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 	case u.Fragment == "":
 		// Query by account URL
-		account, err := m.queryAccount(batch.Account(u))
+		account, err := m.queryAccount(batch, batch.Account(u), prove)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to load %v: %w", u, err)
 		}
@@ -79,9 +88,65 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 	fragment := strings.Split(u.Fragment, "/")
 	switch fragment[0] {
+	case "anchor":
+		if len(fragment) < 2 {
+			return nil, nil, fmt.Errorf("invalid fragment")
+		}
+
+		entryHash, err := hex.DecodeString(fragment[1])
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid entry: %q is not a hash", fragment[1])
+		}
+
+		obj, err := batch.Account(u).GetObject()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load metadata of %q: %v", u, err)
+		}
+
+		var chainName string
+		var index int64
+		for _, chainMeta := range obj.Chains {
+			if chainMeta.Type != protocol.ChainTypeAnchor {
+				continue
+			}
+
+			chain, err := batch.Account(u).ReadChain(chainMeta.Name)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load chain %s of %q: %v", chainMeta.Name, u, err)
+			}
+
+			index, err = chain.HeightOf(entryHash)
+			if err == nil {
+				chainName = chainMeta.Name
+				break
+			}
+			if !errors.Is(err, storage.ErrNotFound) {
+				return nil, nil, err
+			}
+		}
+		if chainName == "" {
+			return nil, nil, fmt.Errorf("anchor %X %w", entryHash, storage.ErrNotFound)
+		}
+		res := new(query.ResponseChainEntry)
+		res.Type = protocol.ChainTypeAnchor
+		res.Height = index
+		res.Entry = entryHash
+
+		res.Receipt, err = m.resolveChainReceipt(batch, u, chainName, index)
+		if err != nil {
+			res.Receipt.Error = err.Error()
+		}
+
+		return []byte("chain-entry"), res, nil
+
 	case "chain":
 		if len(fragment) < 2 {
 			return nil, nil, fmt.Errorf("invalid fragment")
+		}
+
+		obj, err := batch.Account(u).GetObject()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load metadata of %q: %v", u, err)
 		}
 
 		chain, err := batch.Account(u).ReadChain(fragment[1])
@@ -97,6 +162,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 
 			res := new(query.ResponseChainRange)
+			res.Type = obj.ChainType(fragment[1])
 			res.Start = start
 			res.End = start + count
 			res.Total = chain.Height()
@@ -119,6 +185,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 
 			res := new(query.ResponseChainEntry)
+			res.Type = obj.ChainType(fragment[1])
 			res.Height = height
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
@@ -473,16 +540,10 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
 	}
 
-	signatures, err := tx.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	}
-
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
 	qr.Envelope.Transaction = txState.Transaction
 	qr.Status = status
-	qr.Envelope.Signatures = signatures.Signatures
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
 
@@ -496,18 +557,43 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = getPendingStatus(batch, &txState.Transaction.Header, status, signatures.Signatures, &qr)
-	if err != nil {
-		return nil, err
+	for _, signerUrl := range status.Signers {
+		// Load the signer (if it exists here)
+		var qset query.SignatureSet
+		signer, err := batch.Account(signerUrl).GetState()
+		switch {
+		case err == nil:
+			qset.Account = signer
+
+		case errors.Is(err, storage.ErrNotFound):
+			account := new(protocol.UnknownAccount)
+			account.Url = signerUrl
+			qset.Account = account
+
+		default:
+			return nil, err
+		}
+
+		// Load the signature set
+		sigset, err := tx.ReadSignatures(signerUrl)
+		if err != nil {
+			return nil, err
+		}
+
+		// Load all the signatures
+		for _, entryHash := range sigset.EntryHashes() {
+			state, err := batch.Transaction(entryHash[:]).GetState()
+			if err != nil {
+				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
+			}
+			qset.Signatures = append(qset.Signatures, state.Signatures...)
+		}
+
+		qr.Signers = append(qr.Signers, qset)
 	}
 
 	if !prove {
 		return &qr, nil
-	}
-
-	rootChain, err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).ReadChain(protocol.MinorRootChain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read the minor root chain: %v", err)
 	}
 
 	chainIndex, err := indexing.TransactionChain(batch, txid).Get()
@@ -517,7 +603,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	qr.Receipts = make([]*query.TxReceipt, len(chainIndex.Entries))
 	for i, entry := range chainIndex.Entries {
-		receipt, err := m.resolveTxReceipt(batch, rootChain, txid, entry)
+		receipt, err := m.resolveTxReceipt(batch, txid, entry)
 		if err != nil {
 			// If one receipt fails to build, do not cause the entire request to
 			// fail
@@ -623,10 +709,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 	return &qr, nil
 }
 
-func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
-	batch := m.DB.Begin(false)
-	defer batch.Discard()
-
+func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
 	switch q.Type {
 	case types.QueryTypeTxId:
 		txr := query.RequestByTxId{}
@@ -716,7 +799,7 @@ func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err 
 		}
 
 		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
-		account, err := m.queryAccount(batch.AccountByID(chr.ChainId[:]))
+		account, err := m.queryAccount(batch, batch.AccountByID(chr.ChainId[:]), false)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
@@ -838,7 +921,7 @@ func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) (
 	return expEntries, nil
 }
 
-func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.Chain, txid []byte, entry *indexing.TransactionChainEntry) (*query.TxReceipt, error) {
+func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *indexing.TransactionChainEntry) (*query.TxReceipt, error) {
 	receipt := new(query.TxReceipt)
 	receipt.Account = entry.Account
 	receipt.Chain = entry.Chain
@@ -857,6 +940,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.C
 	if err != nil {
 		return receipt, err
 	}
+	receipt.LocalBlock = rootIndex.BlockIndex
 
 	// Get a receipt from the account's chain
 	accountReceipt, err := m.getIndexedChainReceipt(account, entry.Chain, txid, accountIndex)
@@ -865,31 +949,119 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, rootChain *database.C
 	}
 
 	// Get a receipt from the root chain
-	rootReceipt, err := m.getReceipt(rootChain, protocol.MinorRootChain, accountIndex.Anchor, rootIndex.Source)
+	rootReceipt, err := m.getRootReceipt(batch, int64(accountIndex.Anchor), int64(rootIndex.Source))
 	if err != nil {
-		return receipt, err
+		return nil, err
 	}
 
 	// Finalize the receipt
-	r, err := combineReceipts(nil, accountReceipt, rootReceipt)
+	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
 	if err != nil {
 		return receipt, err
 	}
-
-	// TODO Include the part of the receipt from the DN
 
 	receipt.Receipt = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
-// getReceipt gets a receipt for a chain from an entry to an anchor.
-func (m *Executor) getReceipt(chain *database.Chain, name string, from, to uint64) (*managed.Receipt, error) {
-	receipt, err := chain.Receipt(int64(from), int64(to))
+func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index int64) (*query.GeneralReceipt, error) {
+	receipt := new(query.GeneralReceipt)
+
+	indexChain, err := batch.Account(account).ReadIndexChain(name, false)
 	if err != nil {
-		return nil, fmt.Errorf("unable to construct a receipt from %d to %d for the %s chain: %w", from, to, name, err)
+		return receipt, fmt.Errorf("unable to load %s index chain of %v: %w", name, account, err)
 	}
 
+	_, entry, err := indexing.SearchIndexChain(indexChain, uint64(indexChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainBySource(uint64(index)))
+	if err != nil {
+		return receipt, fmt.Errorf("unable to locate index entry for entry %d of %s chain of %v: %w", index, name, account, err)
+	}
+
+	chain, err := batch.Account(account).ReadChain(name)
+	if err != nil {
+		return receipt, fmt.Errorf("unable to load %s chain of %v: %w", name, account, err)
+	}
+
+	rootIndexChain, err := batch.Account(m.Network.Ledger()).ReadChain(protocol.MinorRootIndexChain)
+	if err != nil {
+		return receipt, fmt.Errorf("unable to load minor root index chain: %w", err)
+	}
+
+	_, rootEntry, err := indexing.SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainBySource(entry.Anchor))
+	if err != nil {
+		return receipt, fmt.Errorf("unable to locate index entry for entry %d of the minor root chain: %w", entry.Anchor, err)
+	}
+
+	// Get a receipt from the account's chain
+	accountReceipt, err := chain.Receipt(index, int64(entry.Source))
+	if err != nil {
+		return receipt, err
+	}
+
+	// Get a receipt from the root chain
+	rootReceipt, err := m.getRootReceipt(batch, int64(entry.Anchor), int64(rootEntry.Source))
+	if err != nil {
+		return receipt, err
+	}
+
+	// Finalize the receipt
+	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
+	if err != nil {
+		return receipt, err
+	}
+
+	receipt.Receipt = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
+}
+
+func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *database.Account) (*query.GeneralReceipt, error) {
+	receipt := new(query.GeneralReceipt)
+
+	// Get a receipt from the BPT
+	rState, err := account.StateReceipt()
+	if err != nil {
+		return receipt, fmt.Errorf("unable to construct a receipt for the account state: %w", err)
+	}
+
+	// Load the latest root index entry
+	ledger := batch.Account(m.Network.Ledger())
+	rootEntry, err := m.loadLatestIndexEntry(ledger, protocol.MinorRootChain, protocol.MinorRootIndexChain)
+	if err != nil {
+		return receipt, err
+	}
+	receipt.LocalBlock = rootEntry.BlockIndex
+
+	// Get the receipt for the BPT - the BPT's entry is always the last entry in
+	// a block
+	rRoot, err := m.getRootReceipt(batch, int64(rootEntry.Source), int64(rootEntry.Source))
+	if err != nil {
+		return receipt, fmt.Errorf("unable to construct a receipt for element %d of the minor root index chain: %w", rootEntry.Source, err)
+	}
+
+	// Create the full receipt
+	r, err := managed.CombineReceipts(rState, rRoot)
+	if err != nil {
+		return receipt, fmt.Errorf("unable to combine the state-BPT receipt with the BPT-root receipt: %w", err)
+	}
+
+	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	return receipt, nil
+}
+
+func (m *Executor) getRootReceipt(batch *database.Batch, from, to int64) (*managed.Receipt, error) {
+	localChain, err := batch.Account(m.Network.Ledger()).ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load local anchor chain")
+	}
+
+	local, err := localChain.Receipt(from, to)
+	if err != nil {
+		return nil, fmt.Errorf("unable to construct a receipt from %d to %d for the local root chain chain: %w", from, to, err)
+	}
+
+	// TODO Include the part of the receipt from the DN
+
+	return local, nil
 }
 
 // loadIndexEntry loads an entry from an index chain.
@@ -899,6 +1071,29 @@ func (m *Executor) loadIndexEntry(account *database.Account, chainName, indexCha
 	if err != nil {
 		return nil, fmt.Errorf("unable to load the index chain of the %s chain: %w", chainName, err)
 	}
+
+	// Load the entry
+	entry := new(protocol.IndexEntry)
+	err = chain.EntryAs(int64(index), entry)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load index entry %d for the index chain of the %s chain: %w", index, chainName, err)
+	}
+
+	return entry, nil
+}
+
+// loadLatestIndexEntry loads an entry from an index chain.
+func (m *Executor) loadLatestIndexEntry(account *database.Account, chainName, indexChain string) (*protocol.IndexEntry, error) {
+	// Load the chain
+	chain, err := account.ReadChain(indexChain)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load the index chain of the %s chain: %w", chainName, err)
+	}
+
+	if chain.Height() == 0 {
+		return nil, fmt.Errorf("index chain of the %s chain has no entries", chainName)
+	}
+	index := uint64(chain.Height()) - 1
 
 	// Load the entry
 	entry := new(protocol.IndexEntry)
@@ -926,5 +1121,10 @@ func (m *Executor) getIndexedChainReceipt(account *database.Account, name string
 	}
 
 	// Get the receipt
-	return m.getReceipt(chain, name, uint64(entryIndex), indexEntry.Source)
+	receipt, err := chain.Receipt(entryIndex, int64(indexEntry.Source))
+	if err != nil {
+		return nil, fmt.Errorf("unable to construct a receipt from %d to %d for chain %s: %w", entryIndex, indexEntry.Source, name, err)
+	}
+
+	return receipt, nil
 }

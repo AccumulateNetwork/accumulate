@@ -24,12 +24,15 @@ type Account interface {
 	GetType() AccountType
 	Type() AccountType
 	Header() *AccountHeader
+	CopyAsInterface() interface{}
 }
 
 type SignerAccount interface {
 	Account
 	KeyHolder
 	CreditHolder
+	GetSignatureThreshold() uint64
+	GetVersion() uint64
 }
 
 type TokenHolderAccount interface {
@@ -41,10 +44,12 @@ type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
 	Verify(hash []byte) bool
+	Hash() []byte
+	MetadataHash() []byte
 	InitiatorHash() ([]byte, error)
 
 	GetSigner() *url.URL
-	GetSignerHeight() uint64 // TODO Rename to GetSignerVersion
+	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion
 	GetTimestamp() uint64
 	GetPublicKey() []byte
 	GetSignature() []byte // TODO Remove once the API is improved

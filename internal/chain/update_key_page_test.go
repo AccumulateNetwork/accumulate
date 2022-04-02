@@ -44,7 +44,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			op.OldEntry.KeyHash = kh[:]
 			op.NewEntry.KeyHash = nkh[:]
 			body := new(protocol.UpdateKeyPage)
-			body.Operation = op
+			body.Operation = append(body.Operation, op)
 
 			env := acctesting.NewTransaction().
 				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
@@ -53,11 +53,10 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				WithBody(body).
 				Initiate(protocol.SignatureTypeED25519, testKey)
 
-			st, err := NewStateManager(db.Begin(true), nil, protocol.SubnetUrl(t.Name()), env)
-			require.NoError(t, err)
+			st := NewStateManagerForTest(t, db, env)
 			defer st.Discard()
 
-			_, err = UpdateKeyPage{}.Validate(st, env)
+			_, err := UpdateKeyPage{}.Validate(st, env)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {

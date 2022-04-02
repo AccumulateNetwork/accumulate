@@ -1,65 +1,12 @@
-package chain
+package block
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
-
-// addChainEntry adds an entry to a chain and records the chain update in the
-// block state.
-func addChainEntry(block *BlockState, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
-	// Check if the account exists
-	_, err := batch.Account(account).GetState()
-	if err != nil {
-		return err
-	}
-
-	// Add an entry to the chain
-	chain, err := batch.Account(account).Chain(name, typ)
-	if err != nil {
-		return err
-	}
-
-	index := chain.Height()
-	err = chain.AddEntry(entry, true)
-	if err != nil {
-		return err
-	}
-
-	// Update the ledger
-	return didAddChainEntry(block, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
-}
-
-// didAddChainEntry records a chain update in the block state.
-func didAddChainEntry(block *BlockState, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
-	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
-		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
-			Transaction: entry,
-			ChainEntry:  index,
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	var update ChainUpdate
-	update.Name = name
-	update.Type = typ
-	update.Account = u
-	update.Index = index
-	update.SourceIndex = sourceIndex
-	update.SourceBlock = sourceBlock
-	update.Entry = entry
-	block.DidUpdateChain(update)
-	return nil
-}
 
 // shouldIndexChain returns true if the given chain should be indexed.
 func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error) {
@@ -229,59 +176,6 @@ func countExceptAnchors2(txns []*protocol.Transaction) int {
 	return count
 }
 
-func getPendingStatus(batch *database.Batch, header *protocol.TransactionHeader, status *protocol.TransactionStatus, signatures []protocol.Signature, resp *query.ResponseByTxId) error {
-	// If it's not pending, don't bother
-	if !status.Pending {
-		return nil
-	}
-
-	origin, err := batch.Account(header.Principal).GetState()
-	if err != nil {
-		return err
-	}
-
-	// Find the origin's key book
-	_, ok := origin.(*protocol.KeyBook)
-	switch {
-	case ok:
-		// Key books are their own key books
-	case origin.Header().KeyBook == nil:
-		// Lite token accounts don't have key books (and thus can't do multisig)
-		return nil
-	default:
-		// Load the origin's key book
-		var keyBook *protocol.KeyBook
-		err := batch.Account(origin.Header().KeyBook).GetStateAs(&keyBook)
-		if err != nil {
-			return fmt.Errorf("failed to load key book of %q: %v", origin.Header().Url, err)
-		}
-	}
-
-	// Read the page's main chain
-	pageAcnt := batch.Account(signatures[0].GetSigner())
-	pageChain, err := pageAcnt.ReadChain(protocol.MainChain)
-	if err != nil {
-		return fmt.Errorf("failed to load main chain of %v: %v", signatures[0].GetSigner(), err)
-	}
-
-	// If height no longer matches, the transaction is invalidated
-	if signatures[0].GetSignerHeight() != uint64(pageChain.Height()) {
-		resp.Invalidated = true
-		return nil
-	}
-
-	// Load the page's state
-	var keyPage *protocol.KeyPage
-	err = pageAcnt.GetStateAs(&keyPage)
-	if err != nil {
-		return fmt.Errorf("failed to load %v: %v", signatures[0].GetSigner(), err)
-	}
-
-	// Set the threshold
-	resp.SignatureThreshold = keyPage.Threshold
-	return nil
-}
-
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)
@@ -300,22 +194,4 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 	}
 
 	return prev.Source + 1, entry.Source, entry.Anchor, nil
-}
-
-// combineReceipts combines multiple receipts and verifies the final value.
-func combineReceipts(final []byte, receipts ...*managed.Receipt) (*managed.Receipt, error) {
-	r := receipts[0]
-	var err error
-	for _, s := range receipts[1:] {
-		r, err = r.Combine(s)
-		if err != nil {
-			return nil, fmt.Errorf("failed to combine receipts: %v", err)
-		}
-	}
-
-	if final != nil && !bytes.Equal(final, r.MDRoot) {
-		return nil, fmt.Errorf("invalid receipt end: want %X, got %X", final, r.MDRoot)
-	}
-
-	return r, nil
 }

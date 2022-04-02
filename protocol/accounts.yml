@@ -15,6 +15,11 @@ AccountHeader:
     description: allows any key to sign for the main key book
     type: bool
 
+UnknownAccount:
+  union: { type: account, value: Unknown }
+  embeddings:
+  - AccountHeader
+
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }
   embeddings:
@@ -67,6 +72,8 @@ KeyPage:
     - name: CreditBalance
       type: uvarint
     - name: Threshold
+      type: uvarint
+    - name: Version
       type: uvarint
     - name: Keys
       repeatable: true

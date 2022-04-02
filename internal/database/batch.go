@@ -8,24 +8,30 @@ import (
 	encoding2 "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Batch batches database writes.
 type Batch struct {
-	done       bool
-	writable   bool
-	parent     *Batch
-	logger     logging.OptionalLogger
-	store      storage.KeyValueTxn
-	values     map[storage.Key]cachedValue
-	bptEntries map[storage.Key][32]byte
+	done        bool
+	writable    bool
+	id          int
+	nextChildId int
+	parent      *Batch
+	logger      logging.OptionalLogger
+	store       storage.KeyValueTxn
+	values      map[storage.Key]cachedValue
+	bptEntries  map[storage.Key][32]byte
 }
 
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
+	d.nextBatchId++
+
 	b := new(Batch)
+	b.id = d.nextBatchId
 	b.writable = writable
 	b.logger.L = d.logger
 	b.store = d.store.Begin(writable)
@@ -34,19 +40,72 @@ func (d *Database) Begin(writable bool) *Batch {
 	return b
 }
 
-func (b *Batch) Begin() *Batch {
+func (b *Batch) Begin(writable bool) *Batch {
+	if writable && !b.writable {
+		b.logger.Info("Attempted to create a writable batch from a read-only batch")
+	}
+
+	b.nextChildId++
+
 	c := new(Batch)
-	c.writable = b.writable
+	c.id = b.nextChildId
+	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
-	c.store = b.store.Begin()
+	c.store = b.store.Begin(c.writable)
 	c.values = map[storage.Key]cachedValue{}
 	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }
 
+// View runs the function with a read-only transaction.
+func (d *Database) View(fn func(*Batch) error) error {
+	batch := d.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
+}
+
+// Update runs the function with a writable transaction and commits if the
+// function succeeds.
+func (d *Database) Update(fn func(*Batch) error) error {
+	batch := d.Begin(true)
+	defer batch.Discard()
+	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	return batch.Commit()
+}
+
+// View runs the function with a read-only transaction.
+func (b *Batch) View(fn func(*Batch) error) error {
+	batch := b.Begin(false)
+	defer batch.Discard()
+	return fn(batch)
+}
+
+// Update runs the function with a writable transaction and commits if the
+// function succeeds.
+func (b *Batch) Update(fn func(*Batch) error) error {
+	batch := b.Begin(true)
+	defer batch.Discard()
+	err := fn(batch)
+	if err != nil {
+		return err
+	}
+	return batch.Commit()
+}
+
+func (b *Batch) idStr() string {
+	if b.parent == nil {
+		return fmt.Sprint(b.id)
+	}
+	return fmt.Sprintf("%s.%d", b.parent.idStr(), b.id)
+}
+
 type TypedValue interface {
 	encoding.BinaryMarshaler
+	CopyAsInterface() interface{}
 }
 
 type ValueUnmarshalFunc func([]byte) (TypedValue, error)
@@ -57,16 +116,11 @@ type cachedValue struct {
 }
 
 func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
-	if txn, ok := value.(*protocol.Transaction); ok {
-		if txn.Body == nil {
-			print("")
-		}
-	}
-
 	// Cache the value, preserve dirtiness
 	cv := b.values[key]
 	cv.value = value
-	if dirty {
+	if dirty && !cv.dirty {
+		b.logger.Debug("Dirtying value", "key", key, "batch", b.idStr())
 		cv.dirty = true
 	}
 	b.values[key] = cv
@@ -95,6 +149,8 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (TypedVa
 		v, err := b.parent.getValue(key, unmarshal)
 		switch {
 		case err == nil:
+			// Make a copy, otherwise values may leak
+			v := v.CopyAsInterface().(TypedValue)
 			b.cacheValue(key, v, false)
 			return v, nil
 
@@ -214,6 +270,20 @@ func (b *Batch) CommitBpt() ([]byte, error) {
 
 	b.bptEntries = nil
 	return bpt.Bpt.RootHash[:], nil
+}
+
+func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
+	if len(b.bptEntries) > 0 {
+		return nil, errors.New("cannot generate a BPT receipt when there are uncommitted BPT entries")
+	}
+
+	bpt := pmt.NewBPTManager(b.store)
+	receipt := bpt.Bpt.GetReceipt(key)
+	if receipt == nil {
+		return nil, fmt.Errorf("%v %w in BPT", key, storage.ErrNotFound)
+	}
+
+	return receipt, nil
 }
 
 // Commit commits pending writes to the key-value store or the parent batch.

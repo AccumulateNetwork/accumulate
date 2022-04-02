@@ -52,9 +52,6 @@ Transaction:
 LegacyED25519Signature:
   union: { type: signature }
   fields:
-    - name: privateKey
-      type: bytes
-      marshal-as: none
     - name: Timestamp
       type: uint
       alternative: Nonce
@@ -65,15 +62,12 @@ LegacyED25519Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
 
 RCD1Signature:
   union: { type: signature }
   fields:
-    - name: privateKey
-      type: bytes
-      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
@@ -81,7 +75,7 @@ RCD1Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
     - name: Timestamp
       type: uint
@@ -90,9 +84,6 @@ RCD1Signature:
 ED25519Signature:
   union: { type: signature }
   fields:
-    - name: privateKey
-      type: bytes
-      marshal-as: none
     - name: PublicKey
       type: bytes
     - name: Signature
@@ -100,7 +91,7 @@ ED25519Signature:
     - name: Signer
       type: url
       pointer: true
-    - name: SignerHeight # TODO Rename to SignerVersion
+    - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
     - name: Timestamp
       type: uint
@@ -110,7 +101,11 @@ ReceiptSignature:
   union: { type: signature }
   embeddings:
   - Receipt
-  fields: []
+  fields:
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
 
 SyntheticSignature:
   union: { type: signature }
@@ -321,6 +316,7 @@ UpdateKeyPage:
     - name: Operation
       type: KeyPageOperation
       marshal-as: value
+      repeatable: true
       unmarshal-with: UnmarshalKeyPageOperation
       zero-value: nil
 
@@ -381,11 +377,20 @@ SignPending:
 
 ##### Synthetic #####
 
-SyntheticCreateChain:
-  union: { type: transaction }
+SyntheticOrigin:
   fields:
+    - name: Source
+      description: is the principal of the transaction that produced this transaction
+      type: url
+      pointer: true
     - name: Cause
       type: chain
+
+SyntheticCreateChain:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
     - name: Chains
       repeatable: true
       type: ChainParams
@@ -394,18 +399,18 @@ SyntheticCreateChain:
 
 SyntheticWriteData:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Entry
       type: DataEntry
       marshal-as: reference
 
 SyntheticDepositTokens:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Token
       type: url
       pointer: true
@@ -416,7 +421,7 @@ SyntheticAnchor:
   union: { type: transaction }
   fields:
     - name: Source
-      description: is the subnet the anchor originates from
+      description: is the principal of the transaction that produced this transaction
       type: url
       pointer: true
     - name: Major
@@ -428,6 +433,10 @@ SyntheticAnchor:
     - name: RootIndex
       description: is the index of the root anchor chain anchor
       type: uvarint
+    - name: AcmeBurnt
+      description: is the amount of acme tokens burnt in the transaction
+      type: bigint
+
     - name: Block
       description: is the index of the block
       type: uvarint
@@ -441,17 +450,17 @@ SyntheticAnchor:
 
 SyntheticDepositCredits:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: uvarint
 
 SyntheticBurnTokens:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: bigint
 
@@ -463,11 +472,23 @@ SyntheticMirror:
       type: AnchoredRecord
       marshal-as: reference
 
+SyntheticReceipt:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: SynthTxHash
+      type: chain
+    - name: Status
+      type: TransactionStatus
+      marshal-as: reference
+      pointer: true
+
 SegWitDataEntry:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: EntryUrl
       type: url
       pointer: true

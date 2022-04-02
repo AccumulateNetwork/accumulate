@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type CreateKeyBook struct{}
@@ -26,10 +25,10 @@ func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	page := new(protocol.KeyPage)
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(body.Url, 0)
 	page.KeyBook = body.Url
 

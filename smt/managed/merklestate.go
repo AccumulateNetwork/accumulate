@@ -24,10 +24,10 @@ import (
 // Interestingly, the state of building such a Merkle Tree looks just like counting in binary.  And the
 // higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
 type MerkleState struct {
-	HashFunction func(data []byte) Hash // Hash function for this Merkle State
-	Count        int64                  // Count of hashes added to the Merkle tree
-	Pending      SparseHashList         // Array of hashes that represent the left edge of the Merkle tree
-	HashList     HashList               // List of Hashes in the order added to the chain
+	HashFunction HashFunc       // Hash function for this Merkle State
+	Count        int64          // Count of hashes added to the Merkle tree
+	Pending      SparseHashList // Array of hashes that represent the left edge of the Merkle tree
+	HashList     HashList       // List of Hashes in the order added to the chain
 }
 
 // String
@@ -277,4 +277,23 @@ func (m *MerkleState) PrintMR() (mr string) {
 		mr += "_"
 	}
 	return mr
+}
+
+// GetIntermediate returns the last two hashes that were combined to create the
+// local Merkle Root at the given index. The element Pending List must be fully
+// populated up to height specified.
+func (m *MerkleState) GetIntermediate(hash Hash, height int64) (left, right Hash, err error) {
+	m.PadPending()                // Pad Pending with a nil to remove corner cases
+	for i, v := range m.Pending { // Adding the hash is like incrementing a variable
+		if v == nil { //               Look for an empty slot; should not encounter one
+			return nil, nil, fmt.Errorf("should not encounter a nil at height %d", height)
+		}
+		if i+1 == int(height) { // Found the height
+			left = v.Copy()         // Get the left and right
+			right = hash.Copy()     //
+			return left, right, nil // return them
+		}
+		hash = v.Combine(m.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
+	}
+	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }
