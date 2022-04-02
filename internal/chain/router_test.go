@@ -56,6 +56,13 @@ func (r *TestRouter) Subnet(id string) *RouterExecEntry {
 	return e
 }
 
+func (r *TestRouter) QueryUrl(url *url.URL, req queryRequest, prove bool) interface{} {
+	subnet, err := routing.RouteAccount(r.Network, url)
+	require.NoError(r, err)
+	x := r.Subnet(subnet)
+	return Query(r, x.Database, x.Executor, req, prove)
+}
+
 func (r *TestRouter) WaitForGovernor() {
 	for _, subnet := range r.Network.Subnets {
 		r.Subnet(subnet.ID).Executor.WaitForGovernor()
