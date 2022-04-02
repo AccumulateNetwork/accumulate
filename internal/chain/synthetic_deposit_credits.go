@@ -18,7 +18,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *protocol.Envelope)
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), tx.Transaction.Body)
 	}
 
-	var account creditChain
+	var account protocol.SignerAccount
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin

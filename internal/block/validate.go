@@ -1,9 +1,10 @@
-package chain
+package block
 
 import (
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -129,9 +130,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Set up the state manager
-	st := NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction)
+	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
-	st.logger.L = x.logger.With("operation", "ValidateEnvelope")
 
 	// Execute the transaction
 	executor, ok := x.executors[transaction.Body.Type()]
