@@ -147,7 +147,8 @@ func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error
 	case err == nil:
 		// Ok
 
-	case errors.Is(err, db.ErrNotFound):
+	case errors.Is(err, db.ErrNotFound),
+		errors.Is(err, db.ErrNoBucket):
 		// Default to legacy ED25519
 		hash := sha256.Sum256(pubKey)
 		return protocol.SignatureTypeLegacyED25519, hash[:], nil
