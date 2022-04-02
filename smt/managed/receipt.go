@@ -110,6 +110,20 @@ func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 	return nr, nil
 }
 
+// CombineReceipts combines multiple receipts.
+func CombineReceipts(receipts ...*Receipt) (*Receipt, error) {
+	r := receipts[0]
+	var err error
+	for _, s := range receipts[1:] {
+		r, err = r.Combine(s)
+		if err != nil {
+			return nil, fmt.Errorf("failed to combine receipts: %v", err)
+		}
+	}
+
+	return r, nil
+}
+
 func NewReceipt(manager *MerkleManager) *Receipt {
 	r := new(Receipt)
 	r.manager = manager

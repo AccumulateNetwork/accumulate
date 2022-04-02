@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"crypto/sha256"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -18,31 +19,17 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		return nil
 	}
 
-	st := newStateCache(x.Network.NodeUrl(), from.Body.Type(), *(*[32]byte)(from.GetHash()), batch)
-	err := x.addSynthTxns(st, produced)
-	if err != nil {
-		return err
-	}
+	state := new(chain.ChainUpdates)
 
-	_, err = st.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// addSynthTxns prepares synthetic transactions for signing next block.
-func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction) error {
 	for _, sub := range produced {
-		tx, err := m.buildSynthTxn(st, sub.Header.Principal, sub.Body)
+		tx, err := x.buildSynthTxn(state, batch, sub.Header.Principal, sub.Body)
 		if err != nil {
 			return err
 		}
 		sub.Header = tx.Header
 
 		// Don't record txn -> produced synth txn for internal transactions
-		if st.txType.IsInternal() {
+		if from.Body.Type().IsInternal() {
 			continue
 		}
 
@@ -61,20 +48,23 @@ func (m *Executor) addSynthTxns(st *stateCache, produced []*protocol.Transaction
 		}
 
 		cause, _ := swo.GetSyntheticOrigin()
-		st.AddSyntheticTxn(cause, *(*[32]byte)(tx.GetHash()))
+		err = batch.Transaction(cause).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
+func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
 	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
 	var ledgerState *protocol.InternalLedger
-	err := st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), &ledgerState)
+	err := batch.Account(m.Network.Ledger()).GetStateAs(&ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -98,11 +88,14 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++
-	st.Update(ledgerState)
+	err = batch.Account(m.Network.Ledger()).PutState(ledgerState)
+	if err != nil {
+		return nil, err
+	}
 
 	// Store the transaction, its status, and the initiator
 	err = putSyntheticTransaction(
-		st.batch, txn,
+		batch, txn,
 		&protocol.TransactionStatus{Remote: true},
 		initSig)
 	if err != nil {
@@ -110,7 +103,7 @@ func (m *Executor) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.Tr
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
+	err = state.AddChainEntry(batch, m.Network.Ledger(), protocol.SyntheticChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
 	if err != nil {
 		return nil, err
 	}
