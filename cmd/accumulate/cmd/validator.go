@@ -52,7 +52,7 @@ func addValidator(args []string) (string, error) {
 	}
 
 	txn := new(protocol.AddValidator)
-	txn.Key = newKey
+	txn.PubKey = newKey
 	return dispatchTxAndPrintResponse("add-validator", txn, nil, principal, signer)
 }
 
@@ -68,7 +68,7 @@ func removeValidator(args []string) (string, error) {
 	}
 
 	txn := new(protocol.RemoveValidator)
-	txn.Key = oldKey
+	txn.PubKey = oldKey
 	return dispatchTxAndPrintResponse("remove-validator", txn, nil, principal, signer)
 }
 
@@ -91,7 +91,7 @@ func updateValidatorKey(args []string) (string, error) {
 	oldKeyHash := sha256.Sum256(oldKey)
 	newKeyHash := sha256.Sum256(newKey)
 	txn := new(protocol.UpdateValidatorKey)
-	txn.KeyHash = oldKeyHash[:]
-	txn.NewKeyHash = newKeyHash[:]
+	txn.PubKey = oldKeyHash[:]
+	txn.NewPubKey = newKeyHash[:]
 	return dispatchTxAndPrintResponse("update-validator-key", txn, nil, principal, signer)
 }

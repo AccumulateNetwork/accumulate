@@ -60,7 +60,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		page := protocol.NewKeyPage()
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
 		page.KeyBook = uBook
-		page.Threshold = 1
+		page.Threshold = protocol.GetValidatorsMOfN(len(opts.Validators))
 		page.Version = 1
 		records = append(records, page)
 

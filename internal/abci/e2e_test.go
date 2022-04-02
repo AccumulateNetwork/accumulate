@@ -1267,24 +1267,21 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestUpdateValidators(t *testing.T) {
-	t.Skip("AC-1200")
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
-	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	nh1 := sha256.Sum256(nodeKey1.PubKey().Bytes())
-	nh2 := sha256.Sum256(nodeKey2.PubKey().Bytes())
-	// Verify there is one validator (node key)
+	nodeKeyAdd1, nodeKeyAdd2, nodeKeyUpd := generateKey(), generateKey(), generateKey()
 
+	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 
 	// Add a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
-		body.Key = nh1[:]
+		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 1).
@@ -1292,17 +1289,15 @@ func TestUpdateValidators(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()))
 	})
 
-	nh := sha256.Sum256(n.key.PubKey().Bytes())
 	// Verify the validator was added
-	//	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey1.PubKey()})
-	require.ElementsMatch(t, n.client.Validators(), [][]byte{nh[:], nh1[:]})
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyAdd1.PubKey()})
 
 	// Update a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
 
-		body.KeyHash = nh1[:]
-		body.NewKeyHash = nh2[:]
+		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
+		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 2).
@@ -1311,12 +1306,12 @@ func TestUpdateValidators(t *testing.T) {
 	})
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey2.PubKey()})
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey()})
 
-	// Remove a validator
+	// Add a third validator, so the page threshold will become 2
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.RemoveValidator)
-		body.Key = nodeKey2.PubKey().Bytes()
+		body := new(protocol.AddValidator)
+		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 3).
@@ -1324,8 +1319,47 @@ func TestUpdateValidators(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()))
 	})
 
+	// Verify the validator was added
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+
+	// Remove a validator
+	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
+		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+
+		send(newTxn(netUrl.String()).
+			WithSigner(validators, 4).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()))
+	})
+
+	// Should not be removed yet, the tx is pending
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.UpdateKeyPage(batch, validators, func(page *protocol.KeyPage) {
+		hash := sha256.Sum256(n.key.Bytes()[32:])
+		page.CreditBalance = 1e8
+		page.Keys = append(page.Keys, &protocol.KeySpec{
+			PublicKeyHash: hash[:],
+		})
+	}))
+	require.NoError(t, batch.Commit())
+
+	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithNonceVar(&globalNonce).
+			WithSigner(validators, 4).
+			WithTxnHash(ids[0][:]).
+			WithBody(&protocol.SignPending{}).
+			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()))
+	})
+	n.MustWaitForTxns(convertIds32(envHashes...)...)
+
 	// Verify the validator was removed
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
+	pubKeys := n.client.Validators()
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey()})
+
 }
 
 func TestMultisig(t *testing.T) {

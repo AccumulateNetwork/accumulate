@@ -32,7 +32,7 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 	}
 
 	// Ensure the key does not already exist
-	keyHash := sha256.Sum256(body.Key)
+	keyHash := sha256.Sum256(body.PubKey)
 	_, _, found := page.EntryByKeyHash(keyHash[:])
 	if found {
 		return nil, fmt.Errorf("key is already a validator")
@@ -42,12 +42,15 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
 	page.Keys = append(page.Keys, key)
 
+	// Update the threshold
+	page.Threshold = protocol.GetValidatorsMOfN(len(page.Keys))
+
 	// Record the update
 	didUpdateKeyPage(page)
 	st.Update(page)
 
 	// Add the validator
-	st.AddValidator(body.Key)
+	st.AddValidator(body.PubKey)
 	return nil, nil
 }
 
@@ -60,7 +63,7 @@ func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (proto
 	}
 
 	// Find the key
-	keyHash := sha256.Sum256(body.Key)
+	keyHash := sha256.Sum256(body.PubKey)
 	index, _, found := page.EntryByKeyHash(keyHash[:])
 	if !found {
 		return nil, fmt.Errorf("key is not a validator")
@@ -75,16 +78,14 @@ func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (proto
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-	if page.Threshold > uint64(len(page.Keys)) {
-		page.Threshold = uint64(len(page.Keys))
-	}
+	page.Threshold = protocol.GetValidatorsMOfN(len(page.Keys))
 
 	// Record the update
 	didUpdateKeyPage(page)
 	st.Update(page)
 
 	// Remove the validator
-	st.DisableValidator(body.Key)
+	st.DisableValidator(body.PubKey)
 	return nil, nil
 }
 
@@ -97,14 +98,14 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 	}
 
 	// Find the old key
-	oldKeyHash := sha256.Sum256(body.KeyHash)
+	oldKeyHash := sha256.Sum256(body.PubKey)
 	_, entry, found := page.EntryByKeyHash(oldKeyHash[:])
 	if !found {
 		return nil, fmt.Errorf("old key is not a validator")
 	}
 
 	// Ensure the new key does not already exist
-	newKeyHash := sha256.Sum256(body.NewKeyHash)
+	newKeyHash := sha256.Sum256(body.NewPubKey)
 	_, _, found = page.EntryByKeyHash(newKeyHash[:])
 	if found {
 		return nil, fmt.Errorf("new key is already a validator")
@@ -118,8 +119,8 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 	st.Update(page)
 
 	// Update the validator
-	st.DisableValidator(body.KeyHash)
-	st.AddValidator(body.NewKeyHash)
+	st.DisableValidator(body.PubKey)
+	st.AddValidator(body.NewPubKey)
 	return nil, nil
 }
 
