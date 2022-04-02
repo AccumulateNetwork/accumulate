@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"encoding"
@@ -955,7 +955,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	}
 
 	// Finalize the receipt
-	r, err := combineReceipts(nil, accountReceipt, rootReceipt)
+	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
 	if err != nil {
 		return receipt, err
 	}
@@ -1005,7 +1005,7 @@ func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, 
 	}
 
 	// Finalize the receipt
-	r, err := combineReceipts(nil, accountReceipt, rootReceipt)
+	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
 	if err != nil {
 		return receipt, err
 	}
@@ -1039,7 +1039,7 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	}
 
 	// Create the full receipt
-	r, err := combineReceipts(nil, rState, rRoot)
+	r, err := managed.CombineReceipts(rState, rRoot)
 	if err != nil {
 		return receipt, fmt.Errorf("unable to combine the state-BPT receipt with the BPT-root receipt: %w", err)
 	}

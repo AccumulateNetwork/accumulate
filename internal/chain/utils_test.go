@@ -22,17 +22,3 @@ func NewStateManagerForTest(t *testing.T, db *database.Database, envelope *proto
 	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
 	return m
 }
-
-// Ping pings the governor. If runDidCommit is running, Ping will block until it
-// completes.
-func (g *governor) Ping() {
-	select {
-	case g.messages <- govPing{}:
-	case <-g.done:
-	}
-}
-
-// WaitForGovernor pings the governor, waiting until runDidCommit completes.
-func (x *Executor) WaitForGovernor() {
-	x.governor.Ping()
-}

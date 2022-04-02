@@ -121,7 +121,7 @@ func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type updateSignator struct {
@@ -173,7 +173,7 @@ func (op *updateSignator) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addDataEntry struct {
@@ -224,13 +224,13 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
 	}
 
-	err = didAddChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0, 0)
+	err = st.state.ChainUpdates.DidAddChainEntry(st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
 	// Add TX to main chain
-	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addChainEntryOp struct {
@@ -260,7 +260,7 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 }
 
 func (op *addChainEntryOp) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, addChainEntry(&st.state.ChainUpdates, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
+	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
 }
 
 type writeIndex struct {
