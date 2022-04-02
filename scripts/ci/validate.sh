@@ -189,7 +189,7 @@ wait-for cli-tx credits ${LITE} keytest/book/2 1000
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1000 ] && success || die "keytest/book/2 should have 1000 credits but has ${BALANCE}"
 
-section "Attempting to log key page 2 using itself fails"
+section "Attempting to lock key page 2 using itself fails"
 wait-for cli-tx page lock keytest/book/2 keytest-2-0 && die "Key page 2 locked itself" || success
 
 section "Lock key page 2 using page 1"
@@ -418,8 +418,8 @@ RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
-wait-for cli-tx manager set keytest/book/3 keytest-3-0 keytest/book
-RESULT=$(accumulate -j get keytest/book/3 | jq -re .data.managerKeyBook)
+wait-for cli-tx manager set keytest/tokens keytest-1-0 keytest/book
+RESULT=$(accumulate -j get keytest/tokens | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
