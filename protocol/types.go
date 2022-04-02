@@ -14,8 +14,11 @@ type ChainType uint64
 // ObjectType is the type of an object in the database.
 type ObjectType uint64
 
-// KeyPageOperationType is the operation type of an UpdateKeyPage transaction.
+// KeyPageOperationType is the operation type of an UpdateKeyPage operation.
 type KeyPageOperationType uint8
+
+// AccountAuthOperationType is the operation type of an UpdateAccountAuth operation.
+type AccountAuthOperationType uint8
 
 //go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml
 //go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
