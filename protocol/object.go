@@ -10,6 +10,26 @@ import (
 
 var enUsLower = cases.Lower(language.AmericanEnglish)
 
+func (o *Object) ChainType(name string) ChainType {
+	// Find the matching entry
+	lcName := enUsLower.String(name)
+	i := sort.Search(len(o.Chains), func(i int) bool {
+		lcEntry := enUsLower.String(o.Chains[i].Name)
+		return lcEntry >= lcName
+	})
+
+	if i >= len(o.Chains) {
+		return ChainTypeUnknown
+	}
+
+	e := o.Chains[i]
+	if lcName != enUsLower.String(e.Name) {
+		return ChainTypeUnknown
+	}
+
+	return e.Type
+}
+
 // AddChain adds a chain to the object's list of chains using a binary search to
 // ensure ordering. AddChain returns an error if there is an existing entry with
 // the same name and a different type.
