@@ -26,9 +26,8 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *protocol.Envelope) (pro
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
 	account.Scratch = body.Scratch
-	account.ManagerKeyBook = body.Manager
 
-	err := st.setKeyBook(account, body.KeyBookUrl)
+	err := st.SetAuth(account, body.KeyBookUrl, body.Manager)
 	if err != nil {
 		return nil, err
 	}

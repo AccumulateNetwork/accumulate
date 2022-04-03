@@ -26,9 +26,8 @@ func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 	token.SupplyLimit = body.SupplyLimit
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
-	token.ManagerKeyBook = body.Manager
 
-	err := st.setKeyBook(token, body.KeyBookUrl)
+	err := st.SetAuth(token, body.KeyBookUrl, body.Manager)
 	if err != nil {
 		return nil, err
 	}

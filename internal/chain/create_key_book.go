@@ -27,28 +27,34 @@ func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	scc := new(protocol.SyntheticCreateChain)
 	st.Submit(st.OriginUrl, scc)
 
+	book := new(protocol.KeyBook)
+	book.Url = body.Url
+	book.AddAuthority(body.Url)
+	book.PageCount = 1
+
+	if body.Manager != nil {
+		err := st.AddAuthority(book, body.Manager)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err := scc.Create(book)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
+	}
+
 	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(body.Url, 0)
-	page.KeyBook = body.Url
 
 	key := new(protocol.KeySpec)
 	key.PublicKeyHash = body.PublicKeyHash
 	page.Keys = []*protocol.KeySpec{key}
 
-	err := scc.Create(page)
+	err = scc.Create(page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal state for KeyPage %s: %v", page.Url, err)
-	}
-
-	book := new(protocol.KeyBook)
-	book.Url = body.Url
-	book.PageCount = 1
-	book.ManagerKeyBook = body.Manager
-
-	err = scc.Create(book)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
 	}
 
 	return nil, nil

@@ -27,9 +27,8 @@ func (CreateDataAccount) Validate(st *StateManager, tx *protocol.Envelope) (prot
 	account := new(protocol.DataAccount)
 	account.Url = body.Url
 	account.Scratch = body.Scratch
-	account.ManagerKeyBook = body.ManagerKeyBookUrl
 
-	err := st.setKeyBook(account, body.KeyBookUrl)
+	err := st.SetAuth(account, body.KeyBookUrl, body.ManagerKeyBookUrl)
 	if err != nil {
 		return nil, err
 	}

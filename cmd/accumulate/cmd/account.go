@@ -248,6 +248,17 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.KeyBookUrl = keybook
 	tac.Scratch = flagAccount.Scratch
 
+	if len(Authorities) > 1 {
+		return "", fmt.Errorf("currently adding more than one additional authority is unsupported")
+	}
+	for _, authUrlStr := range Authorities {
+		authUrl, err := url2.Parse(authUrlStr)
+		if err != nil {
+			return "", err
+		}
+		tac.Manager = authUrl
+	}
+
 	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, signer)
 	if err != nil {
 		return "", err
