@@ -258,7 +258,7 @@ func TestAnchorChain(t *testing.T) {
 	ledger = batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
-	ledgerState = protocol.NewInternalLedger()
+	ledgerState = new(protocol.InternalLedger)
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	require.Equal(t, ledgerState.ActiveOracle, expected)
 
@@ -1229,7 +1229,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	account := batch.Account(accountUrl)
 	state, err := account.GetState()
 	require.NoError(t, err)
-	fmt.Println("Dump", accountUrl, state.GetType())
+	fmt.Println("Dump", accountUrl, state.Type())
 	meta, err := account.GetObject()
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
@@ -1258,7 +1258,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 				fmt.Printf("      TX: hash=%X\n", txState.Transaction.GetHash())
 				continue
 			}
-			fmt.Printf("      TX: type=%v origin=%v status=%#v\n", txState.Transaction.Body.GetType(), txState.Transaction.Header.Principal, txStatus)
+			fmt.Printf("      TX: type=%v origin=%v status=%#v\n", txState.Transaction.Body.Type(), txState.Transaction.Header.Principal, txStatus)
 			seen[id32] = true
 		}
 	}

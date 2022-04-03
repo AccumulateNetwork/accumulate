@@ -48,17 +48,17 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uAdi := opts.Network.NodeUrl()
 		uBook := uAdi.JoinPath(protocol.ValidatorBook)
 
-		adi := protocol.NewADI()
+		adi := new(protocol.ADI)
 		adi.Url = uAdi
 		adi.KeyBook = uBook
 		records = append(records, adi)
 
-		book := protocol.NewKeyBook()
+		book := new(protocol.KeyBook)
 		book.Url = uBook
 		book.PageCount = 1
 		records = append(records, book)
 
-		page := protocol.NewKeyPage()
+		page := new(protocol.KeyPage)
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
 		page.KeyBook = uBook
 		page.Threshold = 1
@@ -88,13 +88,13 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		records = append(records, ledger)
 
 		// Create the synth ledger
-		synthLedger := protocol.NewInternalSyntheticLedger()
+		synthLedger := new(protocol.InternalSyntheticLedger)
 		synthLedger.Url = uAdi.JoinPath(protocol.SyntheticLedgerPath)
 		synthLedger.KeyBook = uBook
 		records = append(records, synthLedger)
 
 		// Create the anchor pool
-		anchors := protocol.NewAnchor()
+		anchors := new(protocol.Anchor)
 		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
 		anchors.KeyBook = uBook
 		records = append(records, anchors)
@@ -181,7 +181,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
-				lite := protocol.NewLiteTokenAccount()
+				lite := new(protocol.LiteTokenAccount)
 				lite.Url = protocol.FaucetUrl
 				lite.TokenUrl = protocol.AcmeUrl()
 				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)

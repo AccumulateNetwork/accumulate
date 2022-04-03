@@ -208,7 +208,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 			continue
 		}
 
-		typ := tx.Transaction.Body.GetType()
+		typ := tx.Transaction.Body.Type()
 		if typ != protocol.TransactionTypeSyntheticAnchor {
 			g.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid).Slice(0, 4), "type", typ)
 		}
@@ -455,6 +455,6 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Send it
-	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", body.GetType())
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", body.Type())
 	g.dispatcher.BroadcastTxLocal(context.TODO(), data)
 }
