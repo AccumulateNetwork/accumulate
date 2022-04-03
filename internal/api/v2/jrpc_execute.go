@@ -86,9 +86,9 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	txrq.Signer.Timestamp = sig.GetTimestamp()
 	txrq.Signer.PublicKey = sig.GetPublicKey()
 	txrq.Signer.Url = protocol.FaucetUrl
-	txrq.KeyPage.Version = sig.GetSignerVersion()
-	txrq.Signature = sig.GetSignature()
+	txrq.Signer.Version = sig.GetSignerVersion()
 	txrq.Signer.UseSimpleHash = true
+	txrq.Signature = sig.GetSignature()
 
 	body, err := env.Transaction.Body.MarshalBinary()
 	if err != nil {
@@ -167,12 +167,18 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 			SetType(req.Signer.SignatureType).
 			SetTimestamp(req.Signer.Timestamp).
 			SetUrl(req.Signer.Url).
-			SetVersion(req.KeyPage.Version).
 			SetSigner(txRequestSigner{req})
 		if req.Signer.UseSimpleHash {
 			sigBuilder.UseSimpleHash()
 		} else {
 			sigBuilder.UseMerkleHash()
+		}
+		if req.Signer.Version != 0 {
+			sigBuilder.SetVersion(req.Signer.Version)
+		} else if req.KeyPage.Version != 0 {
+			sigBuilder.SetVersion(req.KeyPage.Version)
+		} else {
+			return validatorError(errors.New("missing signer version"))
 		}
 
 		sig, err := sigBuilder.Initiate(env.Transaction)

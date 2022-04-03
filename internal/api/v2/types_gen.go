@@ -78,7 +78,7 @@ type GeneralQuery struct {
 }
 
 type KeyPage struct {
-	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Version uint64 `json:"version,omitempty" form:"version" query:"version"`
 }
 
 type KeyPageIndexQuery struct {
@@ -134,6 +134,7 @@ type Signer struct {
 	PublicKey     []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Version       uint64                 `json:"version,omitempty" form:"version" query:"version"`
 	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
 	// UseSimpleHash tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash.
 	UseSimpleHash bool `json:"useSimpleHash,omitempty" form:"useSimpleHash" query:"useSimpleHash"`
@@ -720,6 +721,7 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 		Timestamp     uint64                 `json:"timestamp,omitempty"`
 		Nonce         uint64                 `json:"nonce,omitempty"`
 		Url           *url.URL               `json:"url,omitempty"`
+		Version       uint64                 `json:"version,omitempty"`
 		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
 		UseSimpleHash bool                   `json:"useSimpleHash,omitempty"`
 	}{}
@@ -727,6 +729,7 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.Version = v.Version
 	u.SignatureType = v.SignatureType
 	u.UseSimpleHash = v.UseSimpleHash
 	return json.Marshal(&u)
@@ -1331,6 +1334,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		Timestamp     uint64                 `json:"timestamp,omitempty"`
 		Nonce         uint64                 `json:"nonce,omitempty"`
 		Url           *url.URL               `json:"url,omitempty"`
+		Version       uint64                 `json:"version,omitempty"`
 		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
 		UseSimpleHash bool                   `json:"useSimpleHash,omitempty"`
 	}{}
@@ -1338,6 +1342,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.Version = v.Version
 	u.SignatureType = v.SignatureType
 	u.UseSimpleHash = v.UseSimpleHash
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -1354,6 +1359,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		v.Timestamp = u.Nonce
 	}
 	v.Url = u.Url
+	v.Version = u.Version
 	v.SignatureType = u.SignatureType
 	v.UseSimpleHash = u.UseSimpleHash
 	return nil
