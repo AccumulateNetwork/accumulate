@@ -20,7 +20,7 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BurnTokens), tx.Transaction.Body)
 	}
 
-	var account protocol.TokenHolderAccount
+	var account protocol.AccountWithTokens
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin
