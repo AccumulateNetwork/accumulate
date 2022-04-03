@@ -40,6 +40,12 @@ type AcmeOracle struct {
 	Price     uint64 `json:"price,omitempty" form:"price" query:"price" validate:"required"`
 }
 
+type AddAccountAuthorityOperation struct {
+	fieldsSet []bool
+	// Authority is the authority to add.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+}
+
 type AddCredits struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
@@ -171,7 +177,7 @@ type DirectoryIndexMetadata struct {
 
 type DisableAccountAuthOperation struct {
 	fieldsSet []bool
-	// Authority is the authority (key book) to enable authorization for.
+	// Authority is the authority to enable authorization for.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 }
 
@@ -191,7 +197,7 @@ type EmptyResult struct {
 
 type EnableAccountAuthOperation struct {
 	fieldsSet []bool
-	// Authority is the authority (key book) to enable authorization for.
+	// Authority is the authority to enable authorization for.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 }
 
@@ -377,13 +383,15 @@ type ReceiptSignature struct {
 	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
 }
 
+type RemoveAccountAuthorityOperation struct {
+	fieldsSet []bool
+	// Authority is the authority to add.
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+}
+
 type RemoveKeyOperation struct {
 	fieldsSet []bool
 	Entry     KeySpecParams `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-}
-
-type RemoveManager struct {
-	fieldsSet []bool
 }
 
 type RemoveValidator struct {
@@ -606,14 +614,6 @@ type UpdateAllowedKeyPageOperation struct {
 	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny"`
 }
 
-type UpdateAllowedTransactions struct {
-	fieldsSet []bool
-	// Whitelist is reserved for future use.
-	Whitelist bool `json:"whitelist,omitempty" form:"whitelist" query:"whitelist"`
-	// Transactions is a list of allowed transaction types.
-	Transactions []TransactionType `json:"transactions,omitempty" form:"transactions" query:"transactions"`
-}
-
 type UpdateKeyOperation struct {
 	fieldsSet []bool
 	OldEntry  KeySpecParams `json:"oldEntry,omitempty" form:"oldEntry" query:"oldEntry" validate:"required"`
@@ -623,11 +623,6 @@ type UpdateKeyOperation struct {
 type UpdateKeyPage struct {
 	fieldsSet []bool
 	Operation []KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
-}
-
-type UpdateManager struct {
-	fieldsSet      []bool
-	ManagerKeyBook *url.URL `json:"managerKeyBook,omitempty" form:"managerKeyBook" query:"managerKeyBook" validate:"required"`
 }
 
 type UpdateValidatorKey struct {
@@ -728,6 +723,15 @@ func (*AcmeFaucet) Type() TransactionType { return TransactionTypeAcmeFaucet }
 
 // Deprated: use Type
 func (*AcmeFaucet) GetType() TransactionType { return TransactionTypeAcmeFaucet }
+
+func (*AddAccountAuthorityOperation) Type() AccountAuthOperationType {
+	return AccountAuthOperationTypeAddAuthority
+}
+
+// Deprated: use Type
+func (*AddAccountAuthorityOperation) GetType() AccountAuthOperationType {
+	return AccountAuthOperationTypeAddAuthority
+}
 
 func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
 
@@ -914,15 +918,19 @@ func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
 // Deprated: use Type
 func (*ReceiptSignature) GetType() SignatureType { return SignatureTypeReceipt }
 
+func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
+	return AccountAuthOperationTypeRemoveAuthority
+}
+
+// Deprated: use Type
+func (*RemoveAccountAuthorityOperation) GetType() AccountAuthOperationType {
+	return AccountAuthOperationTypeRemoveAuthority
+}
+
 func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeRemove }
 
 // Deprated: use Type
 func (*RemoveKeyOperation) GetType() KeyPageOperationType { return KeyPageOperationTypeRemove }
-
-func (*RemoveManager) Type() TransactionType { return TransactionTypeRemoveManager }
-
-// Deprated: use Type
-func (*RemoveManager) GetType() TransactionType { return TransactionTypeRemoveManager }
 
 func (*RemoveValidator) Type() TransactionType { return TransactionTypeRemoveValidator }
 
@@ -1041,11 +1049,6 @@ func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPa
 // Deprated: use Type
 func (*UpdateKeyPage) GetType() TransactionType { return TransactionTypeUpdateKeyPage }
 
-func (*UpdateManager) Type() TransactionType { return TransactionTypeUpdateManager }
-
-// Deprated: use Type
-func (*UpdateManager) GetType() TransactionType { return TransactionTypeUpdateManager }
-
 func (*UpdateValidatorKey) Type() TransactionType { return TransactionTypeUpdateValidatorKey }
 
 // Deprated: use Type
@@ -1116,6 +1119,18 @@ func (v *AcmeOracle) Copy() *AcmeOracle {
 }
 
 func (v *AcmeOracle) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddAccountAuthorityOperation) Copy() *AddAccountAuthorityOperation {
+	u := new(AddAccountAuthorityOperation)
+
+	if v.Authority != nil {
+		u.Authority = (v.Authority).Copy()
+	}
+
+	return u
+}
+
+func (v *AddAccountAuthorityOperation) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AddCredits) Copy() *AddCredits {
 	u := new(AddCredits)
@@ -1772,6 +1787,18 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 
 func (v *ReceiptSignature) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *RemoveAccountAuthorityOperation) Copy() *RemoveAccountAuthorityOperation {
+	u := new(RemoveAccountAuthorityOperation)
+
+	if v.Authority != nil {
+		u.Authority = (v.Authority).Copy()
+	}
+
+	return u
+}
+
+func (v *RemoveAccountAuthorityOperation) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *RemoveKeyOperation) Copy() *RemoveKeyOperation {
 	u := new(RemoveKeyOperation)
 
@@ -1781,14 +1808,6 @@ func (v *RemoveKeyOperation) Copy() *RemoveKeyOperation {
 }
 
 func (v *RemoveKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *RemoveManager) Copy() *RemoveManager {
-	u := new(RemoveManager)
-
-	return u
-}
-
-func (v *RemoveManager) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RemoveValidator) Copy() *RemoveValidator {
 	u := new(RemoveValidator)
@@ -2187,20 +2206,6 @@ func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
 
 func (v *UpdateAllowedKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *UpdateAllowedTransactions) Copy() *UpdateAllowedTransactions {
-	u := new(UpdateAllowedTransactions)
-
-	u.Whitelist = v.Whitelist
-	u.Transactions = make([]TransactionType, len(v.Transactions))
-	for i, v := range v.Transactions {
-		u.Transactions[i] = v
-	}
-
-	return u
-}
-
-func (v *UpdateAllowedTransactions) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *UpdateKeyOperation) Copy() *UpdateKeyOperation {
 	u := new(UpdateKeyOperation)
 
@@ -2224,18 +2229,6 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 }
 
 func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *UpdateManager) Copy() *UpdateManager {
-	u := new(UpdateManager)
-
-	if v.ManagerKeyBook != nil {
-		u.ManagerKeyBook = (v.ManagerKeyBook).Copy()
-	}
-
-	return u
-}
-
-func (v *UpdateManager) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UpdateValidatorKey) Copy() *UpdateValidatorKey {
 	u := new(UpdateValidatorKey)
@@ -2340,6 +2333,19 @@ func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
 
 func (v *AcmeOracle) Equal(u *AcmeOracle) bool {
 	if !(v.Price == u.Price) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddAccountAuthorityOperation) Equal(u *AddAccountAuthorityOperation) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
 		return false
 	}
 
@@ -3184,15 +3190,23 @@ func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 	return true
 }
 
-func (v *RemoveKeyOperation) Equal(u *RemoveKeyOperation) bool {
-	if !((&v.Entry).Equal(&u.Entry)) {
+func (v *RemoveAccountAuthorityOperation) Equal(u *RemoveAccountAuthorityOperation) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
 		return false
 	}
 
 	return true
 }
 
-func (v *RemoveManager) Equal(u *RemoveManager) bool {
+func (v *RemoveKeyOperation) Equal(u *RemoveKeyOperation) bool {
+	if !((&v.Entry).Equal(&u.Entry)) {
+		return false
+	}
 
 	return true
 }
@@ -3699,22 +3713,6 @@ func (v *UpdateAllowedKeyPageOperation) Equal(u *UpdateAllowedKeyPageOperation) 
 	return true
 }
 
-func (v *UpdateAllowedTransactions) Equal(u *UpdateAllowedTransactions) bool {
-	if !(v.Whitelist == u.Whitelist) {
-		return false
-	}
-	if len(v.Transactions) != len(u.Transactions) {
-		return false
-	}
-	for i := range v.Transactions {
-		if !(v.Transactions[i] == u.Transactions[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *UpdateKeyOperation) Equal(u *UpdateKeyOperation) bool {
 	if !((&v.OldEntry).Equal(&u.OldEntry)) {
 		return false
@@ -3734,19 +3732,6 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		if !(v.Operation[i] == u.Operation[i]) {
 			return false
 		}
-	}
-
-	return true
-}
-
-func (v *UpdateManager) Equal(u *UpdateManager) bool {
-	switch {
-	case v.ManagerKeyBook == u.ManagerKeyBook:
-		// equal
-	case v.ManagerKeyBook == nil || u.ManagerKeyBook == nil:
-		return false
-	case !((v.ManagerKeyBook).Equal(u.ManagerKeyBook)):
-		return false
 	}
 
 	return true
@@ -3961,6 +3946,43 @@ func (v *AcmeOracle) IsValid() error {
 		errs = append(errs, "field Price is missing")
 	} else if v.Price == 0 {
 		errs = append(errs, "field Price is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AddAccountAuthorityOperation = []string{
+	1: "Type",
+	2: "Authority",
+}
+
+func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, AccountAuthOperationTypeAddAuthority)
+	if !(v.Authority == nil) {
+		writer.WriteUrl(2, v.Authority)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AddAccountAuthorityOperation)
+	return buffer.Bytes(), err
+}
+
+func (v *AddAccountAuthorityOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
 	}
 
 	switch len(errs) {
@@ -6271,6 +6293,43 @@ func (v *ReceiptSignature) IsValid() error {
 	}
 }
 
+var fieldNames_RemoveAccountAuthorityOperation = []string{
+	1: "Type",
+	2: "Authority",
+}
+
+func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, AccountAuthOperationTypeRemoveAuthority)
+	if !(v.Authority == nil) {
+		writer.WriteUrl(2, v.Authority)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RemoveAccountAuthorityOperation)
+	return buffer.Bytes(), err
+}
+
+func (v *RemoveAccountAuthorityOperation) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RemoveKeyOperation = []string{
 	1: "Type",
 	2: "Entry",
@@ -6297,33 +6356,6 @@ func (v *RemoveKeyOperation) IsValid() error {
 	} else if (v.Entry).Equal(new(KeySpecParams)) {
 		errs = append(errs, "field Entry is not set")
 	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_RemoveManager = []string{
-	1: "Type",
-}
-
-func (v *RemoveManager) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, TransactionTypeRemoveManager)
-
-	_, _, err := writer.Reset(fieldNames_RemoveManager)
-	return buffer.Bytes(), err
-}
-
-func (v *RemoveManager) IsValid() error {
-	var errs []string
 
 	switch len(errs) {
 	case 0:
@@ -7791,41 +7823,6 @@ func (v *UpdateAllowedKeyPageOperation) IsValid() error {
 	}
 }
 
-var fieldNames_UpdateAllowedTransactions = []string{
-	1: "Whitelist",
-	2: "Transactions",
-}
-
-func (v *UpdateAllowedTransactions) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(!v.Whitelist) {
-		writer.WriteBool(1, v.Whitelist)
-	}
-	if !(len(v.Transactions) == 0) {
-		for _, v := range v.Transactions {
-			writer.WriteEnum(2, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_UpdateAllowedTransactions)
-	return buffer.Bytes(), err
-}
-
-func (v *UpdateAllowedTransactions) IsValid() error {
-	var errs []string
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_UpdateKeyOperation = []string{
 	1: "Type",
 	2: "OldEntry",
@@ -7899,43 +7896,6 @@ func (v *UpdateKeyPage) IsValid() error {
 		errs = append(errs, "field Operation is missing")
 	} else if len(v.Operation) == 0 {
 		errs = append(errs, "field Operation is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_UpdateManager = []string{
-	1: "Type",
-	2: "ManagerKeyBook",
-}
-
-func (v *UpdateManager) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, TransactionTypeUpdateManager)
-	if !(v.ManagerKeyBook == nil) {
-		writer.WriteUrl(2, v.ManagerKeyBook)
-	}
-
-	_, _, err := writer.Reset(fieldNames_UpdateManager)
-	return buffer.Bytes(), err
-}
-
-func (v *UpdateManager) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field ManagerKeyBook is missing")
-	} else if v.ManagerKeyBook == nil {
-		errs = append(errs, "field ManagerKeyBook is not set")
 	}
 
 	switch len(errs) {
@@ -8213,6 +8173,29 @@ func (v *AcmeOracle) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AcmeOracle)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *AddAccountAuthorityOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AddAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ AccountAuthOperationType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != AccountAuthOperationTypeAddAuthority {
+		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeAddAuthority, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Authority = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AddAccountAuthorityOperation)
 	v.fieldsSet = seen
 	return err
 }
@@ -9487,6 +9470,29 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RemoveAccountAuthorityOperation) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RemoveAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var typ AccountAuthOperationType
+	if !reader.ReadEnum(1, &typ) {
+		return fmt.Errorf("field Type: missing")
+	} else if typ != AccountAuthOperationTypeRemoveAuthority {
+		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeRemoveAuthority, typ)
+	}
+
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Authority = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RemoveAccountAuthorityOperation)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *RemoveKeyOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -9506,25 +9512,6 @@ func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoveKeyOperation)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *RemoveManager) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *RemoveManager) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeRemoveManager {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeRemoveManager, typ)
-	}
-
-	seen, err := reader.Reset(fieldNames_RemoveManager)
 	v.fieldsSet = seen
 	return err
 }
@@ -10335,29 +10322,6 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error 
 	return err
 }
 
-func (v *UpdateAllowedTransactions) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *UpdateAllowedTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadBool(1); ok {
-		v.Whitelist = x
-	}
-	for {
-		if x := new(TransactionType); reader.ReadEnum(2, x) {
-			v.Transactions = append(v.Transactions, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_UpdateAllowedTransactions)
-	v.fieldsSet = seen
-	return err
-}
-
 func (v *UpdateKeyOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10412,29 +10376,6 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateKeyPage)
-	v.fieldsSet = seen
-	return err
-}
-
-func (v *UpdateManager) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *UpdateManager) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeUpdateManager {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateManager, typ)
-	}
-
-	if x, ok := reader.ReadUrl(2); ok {
-		v.ManagerKeyBook = x
-	}
-
-	seen, err := reader.Reset(fieldNames_UpdateManager)
 	v.fieldsSet = seen
 	return err
 }
@@ -10566,6 +10507,16 @@ func (v *AcmeFaucet) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	return json.Marshal(&u)
+}
+
+func (v *AddAccountAuthorityOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
 	return json.Marshal(&u)
 }
 
@@ -11227,6 +11178,16 @@ func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RemoveAccountAuthorityOperation) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
+	return json.Marshal(&u)
+}
+
 func (v *RemoveKeyOperation) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  KeyPageOperationType `json:"type"`
@@ -11234,14 +11195,6 @@ func (v *RemoveKeyOperation) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Entry = v.Entry
-	return json.Marshal(&u)
-}
-
-func (v *RemoveManager) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
 	return json.Marshal(&u)
 }
 
@@ -11703,16 +11656,6 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *UpdateManager) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type           TransactionType `json:"type"`
-		ManagerKeyBook *url.URL        `json:"managerKeyBook,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.ManagerKeyBook = v.ManagerKeyBook
-	return json.Marshal(&u)
-}
-
 func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       TransactionType `json:"type"`
@@ -11795,6 +11738,20 @@ func (v *AcmeFaucet) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Url = u.Url
+	return nil
+}
+
+func (v *AddAccountAuthorityOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Authority = u.Authority
 	return nil
 }
 
@@ -12912,6 +12869,20 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *RemoveAccountAuthorityOperation) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      AccountAuthOperationType `json:"type"`
+		Authority *url.URL                 `json:"authority,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Authority = v.Authority
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Authority = u.Authority
+	return nil
+}
+
 func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type  KeyPageOperationType `json:"type"`
@@ -12923,17 +12894,6 @@ func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Entry = u.Entry
-	return nil
-}
-
-func (v *RemoveManager) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type TransactionType `json:"type"`
-	}{}
-	u.Type = v.Type()
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -13733,20 +13693,6 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 			v.Operation[i] = y
 		}
 	}
-	return nil
-}
-
-func (v *UpdateManager) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type           TransactionType `json:"type"`
-		ManagerKeyBook *url.URL        `json:"managerKeyBook,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.ManagerKeyBook = v.ManagerKeyBook
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.ManagerKeyBook = u.ManagerKeyBook
 	return nil
 }
 
