@@ -859,6 +859,27 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
 		return out, nil
+	case protocol.AccountTypeLiteIdentity.String():
+		li := protocol.LiteIdentity{}
+		err := Remarshal(res.Data, &li)
+		if err != nil {
+			return "", err
+		}
+		params := api2.DirectoryQuery{}
+		params.Url = li.Url
+		params.Start = uint64(0)
+		params.Count = uint64(10)
+		params.Expand = true
+
+		var adiRes api2.MultiResponse
+		if err := Client.RequestAPIv2(context.Background(), "query-directory", &params, &adiRes); err != nil {
+			ret, err := PrintJsonRpcError(err)
+			if err != nil {
+				return "", err
+			}
+			return "", fmt.Errorf("%v", ret)
+		}
+		return PrintMultiResponse(&adiRes)
 	default:
 		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
