@@ -59,6 +59,9 @@ const (
 	// MinorRootChain is the minor anchor root chain of a subnet.
 	MinorRootChain = "minor-root"
 
+	// MajorRootIndexChain is the index chain of the major anchor root chain of a subnet.
+	MajorRootIndexChain = "major-root-index"
+
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
 	MinorRootIndexChain = "minor-root-index"
 
