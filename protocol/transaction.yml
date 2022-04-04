@@ -51,6 +51,10 @@ Transaction:
 
 TransactionStatus:
   fields:
+    - name: For
+      type: hash
+      description: is the transaction this status is for
+      marshal-as: none
     - name: Remote
       type: bool
     - name: Delivered
@@ -72,6 +76,7 @@ TransactionStatus:
       pointer: true
     - name: Signers
       description: lists accounts that have signed the transaction
-      type: url
-      pointer: true
+      type: Signer
+      marshal-as: value
+      unmarshal-with: UnmarshalSigner
       repeatable: true

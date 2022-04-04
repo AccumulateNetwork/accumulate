@@ -95,7 +95,18 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		return args, signer, nil
 	}
 
-	privKey, err := resolvePrivateKey(args[0])
+	var keyName string
+	signerUrl, err := url2.Parse(args[0])
+	if err == nil && signerUrl.UserInfo != "" {
+		fmt.Printf("Using URL for signer: %v\n", signerUrl)
+		keyName = signerUrl.UserInfo
+		signerUrl.UserInfo = ""
+	} else {
+		signerUrl = nil
+		keyName = args[0]
+	}
+
+	privKey, err := resolvePrivateKey(keyName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -113,7 +124,9 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	if len(args) < 2 {
+	if signerUrl != nil {
+		signer.Url = signerUrl
+	} else if len(args) < 2 {
 		signer.Url = keyInfo.Signer
 	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
 		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
@@ -257,7 +270,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		sig, err = signer.Initiate(env.Transaction)
 		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
-		payload = new(protocol.SignPending)
+		payload = new(protocol.RemoteTransactionBody)
 		env = new(protocol.Envelope)
 		env.TxHash = txHash
 		env.Transaction = new(protocol.Transaction)
@@ -824,7 +837,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 
 		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
-		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
+		out += fmt.Sprintf("\tLast Used On\t:\t%d\n", ata.LastUsedOn)
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}

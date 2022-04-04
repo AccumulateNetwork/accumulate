@@ -87,7 +87,7 @@ function success {
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
+NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
 if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
    section "Add a new DN validator"
    declare -g TEST_NODE_WORK_DIR=~/node1
@@ -128,10 +128,10 @@ done
 accumulate account get ${LITE} 1> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE} ${LITE} 2200)
+TXID=$(cli-tx credits ${LITE} ${LITE} 2700)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 2200 ] || die "${LITE} should have at least 2200 credits but only has ${BALANCE}"
+[ "$BALANCE" -ge 2700 ] || die "${LITE} should have at least 2700 credits but only has ${BALANCE}"
 success
 
 section "Generate keys"
@@ -143,7 +143,7 @@ ensure-key keytest-2-3-orig
 ensure-key keytest-2-3-new
 ensure-key keytest-3-0
 ensure-key keytest-3-1
-ensure-key keytest-mgr
+ensure-key manager
 echo
 
 section "Create an ADI"
@@ -411,29 +411,33 @@ section "Query data entry range by URL"
 RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
-section "Create manager key book"
-wait-for cli-tx  book create keytest keytest-1-0 keytest/manager keytest-mgr || die "Failed to create manager key book"
-wait-for cli-tx credits ${LITE} keytest/manager/1 1000
-success
+section "Create another ADI (manager)"
+wait-for cli-tx adi create ${LITE} manager manager manager/book
+accumulate adi get manager 1> /dev/null && success || die "Cannot find manager"
+
+section "Add credits to manager's key page 1"
+wait-for cli-tx credits ${LITE} manager/book/1 1000
+BALANCE=$(accumulate -j page get manager/book/1 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 100000 ] && success || die "manager/book/1 should have 100000 credits but has ${BALANCE}"
 
 section "Create token account with manager"
-wait-for cli-tx account create token keytest keytest-1-0 --authority keytest/manager keytest/managed-tokens ACME || "Failed to create managed token account"
+wait-for cli-tx account create token keytest keytest-1-0 --authority manager/book keytest/managed-tokens ACME || "Failed to create managed token account"
 RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
 
 section "Remove manager from token account"
-TXID=$(cli-tx auth remove keytest/managed-tokens keytest-1-0 keytest/manager) || die "Failed to initiate txn to remove manager"
+TXID=$(cli-tx auth remove keytest/managed-tokens keytest-1-0 manager/book) || die "Failed to initiate txn to remove manager"
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-wait-for cli-tx-sig tx sign keytest/managed-tokens keytest-mgr $TXID
+wait-for cli-tx-sig tx sign keytest/managed-tokens manager@manager/book/1 $TXID
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
 RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
 success
 
 section "Add manager to token account"
-wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 keytest/manager || die "Failed to add the manager"
+wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book || die "Failed to add the manager"
 RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success

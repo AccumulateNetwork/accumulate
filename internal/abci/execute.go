@@ -6,8 +6,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -70,7 +69,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	return envelopes, results, rset, nil
 }
 
-func checkTx(exec *block.Executor, db *database.Database) executeFunc {
+func checkTx(exec *Executor, db *database.Database) executeFunc {
 	return func(envelope *protocol.Envelope) (protocol.TransactionResult, error) {
 		batch := db.Begin(false)
 		defer batch.Discard()
@@ -86,84 +85,96 @@ func checkTx(exec *block.Executor, db *database.Database) executeFunc {
 	}
 }
 
-func deliverTx(exec *block.Executor, block *block.Block) executeFunc {
+func deliverTx(exec *Executor, block *Block) executeFunc {
 	return func(envelope *protocol.Envelope) (protocol.TransactionResult, error) {
-		// Process signatures
-		batch := block.Batch.Begin(true)
-		defer batch.Discard()
-
-		sigState, err := processSignatures(exec, batch, envelope)
+		delivery, err := PrepareDelivery(block, envelope)
 		if err != nil {
 			return nil, err
 		}
-		block.State.MergeSignature(sigState)
 
-		err = batch.Commit()
+		status, err := exec.ExecuteEnvelope(block, delivery)
 		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
-		}
-
-		// Process the transaction
-		batch = block.Batch.Begin(true)
-		defer batch.Discard()
-
-		status, txnState, err := processTransaction(exec, batch, envelope)
-		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "execute transaction: %w", err)
-		}
-		block.State.MergeTransaction(txnState)
-
-		// Always commit
-		err = batch.Commit()
-		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
-		}
-
-		if status.Code != 0 {
-			return status.Result, protocol.NewError(protocol.ErrorCode(status.Code), errors.New(status.Message))
+			return nil, err
 		}
 
 		return status.Result, nil
+
+		// // Process signatures
+		// batch := block.Batch.Begin(true)
+		// defer batch.Discard()
+
+		// sigState, err := processSignatures(exec, batch, envelope)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		// block.State.MergeSignature(sigState)
+
+		// err = batch.Commit()
+		// if err != nil {
+		// 	return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+		// }
+
+		// // Process the transaction
+		// batch = block.Batch.Begin(true)
+		// defer batch.Discard()
+
+		// status, txnState, err := processTransaction(exec, batch, envelope)
+		// if err != nil {
+		// 	return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "execute transaction: %w", err)
+		// }
+		// block.State.MergeTransaction(txnState)
+
+		// // Always commit
+		// err = batch.Commit()
+		// if err != nil {
+		// 	return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+		// }
+
+		// if status.Code != 0 {
+		// 	return status.Result, protocol.NewError(protocol.ErrorCode(status.Code), errors.New(status.Message))
+		// }
+
+		// return status.Result, nil
 	}
 }
 
-func processSignatures(exec *block.Executor, batch *database.Batch, envelope *protocol.Envelope) (*block.ProcessSignatureState, error) {
-	// Load the transaction
-	transaction, err := exec.LoadTransaction(batch, envelope)
-	if err != nil {
-		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
-	}
+// func processSignatures(exec *block.Executor, batch *database.Batch, envelope *protocol.Envelope) (*block.ProcessSignatureState, error) {
+// 	// Load the transaction
+// 	transaction, err := exec.LoadTransaction(batch, envelope)
+// 	if err != nil {
+// 		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+// 	}
 
-	// Process each signature
-	state := new(block.ProcessSignatureState)
-	for _, signature := range envelope.Signatures {
-		s, err := exec.ProcessSignature(batch, transaction, signature)
-		if err != nil {
-			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
-		}
-		state.Merge(s)
-	}
+// 	// Process each signature
+// 	state := new(block.ProcessSignatureState)
+// 	for _, signature := range envelope.Signatures {
+// 		s, err := exec.ProcessSignature(batch, transaction, signature)
+// 		if err != nil {
+// 			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+// 		}
+// 		state.Merge(s)
+// 	}
 
-	return state, nil
-}
+// 	return state, nil
+// }
 
-func processTransaction(exec *block.Executor, batch *database.Batch, envelope *protocol.Envelope) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
-	transaction, err := exec.LoadTransaction(batch, envelope)
-	if err != nil {
-		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
-	}
+// func processTransaction(exec *block.Executor, batch *database.Batch, envelope *protocol.Envelope) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+// 	transaction, err := exec.LoadTransaction(batch, envelope)
+// 	if err != nil {
+// 		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+// 	}
 
-	// Process the transaction
-	status, state, err := exec.ProcessTransaction(batch, transaction)
-	if err != nil {
-		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
-	}
+// 	// Process the transaction
+// 	status, state, err := exec.ProcessTransaction(batch, transaction)
+// 	if err != nil {
+// 		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+// 	}
 
-	// Process synthetic transactions generated by the validator
-	err = exec.ProduceSynthetic(batch, transaction, state.ProducedTxns)
-	if err != nil {
-		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
-	}
+// 	// Process synthetic transactions generated by the validator
+// 	err = exec.ProduceSynthetic(batch, transaction, state.ProducedTxns)
+// 	if err != nil {
+// 		return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+// 	}
 
-	return status, state, nil
-}
+// 	return status, state, nil
+// }

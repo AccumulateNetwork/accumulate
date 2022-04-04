@@ -22,7 +22,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
 	txnType := envelope.Type()
-	if txnType != protocol.TransactionTypeSignPending {
+	if txnType != protocol.TransactionTypeRemote {
 		txnType = envelope.Transaction.Body.Type()
 		_, ok := x.executors[txnType]
 		if !ok {
@@ -31,14 +31,14 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Load the transaction
-	transaction, err := x.LoadTransaction(batch, envelope)
+	transaction, err := loadTransaction(batch, envelope)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check that the signatures are valid
 	for i, signature := range envelope.Signatures {
-		isInitiator := i == 0 && txnType != protocol.TransactionTypeSignPending
+		isInitiator := i == 0 && txnType != protocol.TransactionTypeRemote
 		if isInitiator {
 			// Verify that the initiator signature matches the transaction
 			err = validateInitialSignature(transaction, signature)
@@ -73,7 +73,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 
 	switch {
 	case txnType.IsUser():
-		err = validateUserEnvelope(batch, envelope, txnType)
+		// The envelope is validated by loadTransaction
+		err = nil
 	case txnType.IsSynthetic():
 		err = validateSyntheticEnvelope(&x.Network, batch, envelope)
 	case txnType.IsInternal():
@@ -88,7 +89,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Only validate the transaction when we first receive it
-	if envelope.Type() == protocol.TransactionTypeSignPending {
+	if envelope.Type() == protocol.TransactionTypeRemote {
 		return new(protocol.EmptyResult), nil
 	}
 
@@ -179,26 +180,4 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	}
 
 	return nil
-}
-
-func validateUserEnvelope(batch *database.Batch, envelope *protocol.Envelope, txnType protocol.TransactionType) (err error) {
-	// Load previous transaction state
-	_, err = batch.Transaction(envelope.GetTxHash()).GetState()
-	switch {
-	case err == nil:
-		// The transaction already exists in the database
-		return nil
-
-	case !errors.Is(err, storage.ErrNotFound):
-		// An unknown error occurred
-		return fmt.Errorf("load transaction: %v", err)
-
-	case txnType == protocol.TransactionTypeSignPending:
-		// We can't sign a pending transaction if we can't find it
-		return err
-
-	default:
-		// This is a new transaction
-		return nil
-	}
 }

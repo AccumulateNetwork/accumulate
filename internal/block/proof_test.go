@@ -28,8 +28,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 		WithTimestamp(faucet.Timestamp()).
 		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 		Faucet()
-	sim.ExecuteBlock(env)
-	sim.WaitForGovernor()
+	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransaction(env.GetTxHash())
 
 	// Get a proof of the account state
@@ -39,10 +38,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	localReceipt := acctResp.Receipt.Receipt
 
 	// Execute enough blocks to ensure the block is anchored
-	for i := 0; i < 10; i++ {
-		sim.ExecuteBlock()
-		sim.WaitForGovernor()
-	}
+	sim.ExecuteBlocks(5)
 
 	// Get a proof of the BVN anchor
 	req = new(query.RequestByUrl)

@@ -53,6 +53,9 @@ const AccountTypeDataAccount AccountType = 11
 // AccountTypeLiteDataAccount is a Lite Data Account.
 const AccountTypeLiteDataAccount AccountType = 12
 
+// AccountTypeUnknownSigner represents an unknown signer account.
+const AccountTypeUnknownSigner AccountType = 13
+
 // AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
 const AccountTypeInternalLedger AccountType = 14
 
@@ -233,6 +236,9 @@ const SignatureTypeSynthetic SignatureType = 5
 // SignatureTypeInternal is used when executing transactions internally.
 const SignatureTypeInternal SignatureType = 6
 
+// SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
+const SignatureTypeForwarded SignatureType = 7
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
 
@@ -302,8 +308,8 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
 
-// TransactionTypeSignPending is used to sign a pending transaction.
-const TransactionTypeSignPending TransactionType = 48
+// TransactionTypeRemote is used to sign a remote transaction.
+const TransactionTypeRemote TransactionType = 48
 
 // TransactionTypeSyntheticCreateChain creates or updates chains.
 const TransactionTypeSyntheticCreateChain TransactionType = 49
@@ -322,6 +328,9 @@ const TransactionTypeSyntheticDepositCredits TransactionType = 53
 
 // TransactionTypeSyntheticBurnTokens returns tokens to a token issuer's pool of issuable tokens.
 const TransactionTypeSyntheticBurnTokens TransactionType = 54
+
+// TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
+const TransactionTypeSyntheticForwardTransaction TransactionType = 55
 
 // TransactionTypeSyntheticMirror mirrors records from one network to another.
 const TransactionTypeSyntheticMirror TransactionType = 56
@@ -435,7 +444,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -466,6 +475,8 @@ func (v AccountType) String() string {
 		return "dataAccount"
 	case AccountTypeLiteDataAccount:
 		return "liteDataAccount"
+	case AccountTypeUnknownSigner:
+		return "unknownSigner"
 	case AccountTypeInternalLedger:
 		return "internalLedger"
 	case AccountTypeLiteIdentity:
@@ -502,6 +513,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeDataAccount, true
 	case "liteDataAccount":
 		return AccountTypeLiteDataAccount, true
+	case "unknownSigner":
+		return AccountTypeUnknownSigner, true
 	case "internalLedger":
 		return AccountTypeInternalLedger, true
 	case "liteIdentity":
@@ -1001,7 +1014,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded:
 		*v = u
 		return true
 	default:
@@ -1026,6 +1039,8 @@ func (v SignatureType) String() string {
 		return "synthetic"
 	case SignatureTypeInternal:
 		return "internal"
+	case SignatureTypeForwarded:
+		return "forwarded"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -1048,6 +1063,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeSynthetic, true
 	case "internal":
 		return SignatureTypeInternal, true
+	case "forwarded":
+		return SignatureTypeForwarded, true
 	default:
 		return 0, false
 	}
@@ -1145,7 +1162,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
 		*v = u
 		return true
 	default:
@@ -1196,8 +1213,8 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
-	case TransactionTypeSignPending:
-		return "signPending"
+	case TransactionTypeRemote:
+		return "remote"
 	case TransactionTypeSyntheticCreateChain:
 		return "syntheticCreateChain"
 	case TransactionTypeSyntheticWriteData:
@@ -1210,6 +1227,8 @@ func (v TransactionType) String() string {
 		return "syntheticDepositCredits"
 	case TransactionTypeSyntheticBurnTokens:
 		return "syntheticBurnTokens"
+	case TransactionTypeSyntheticForwardTransaction:
+		return "syntheticForwardTransaction"
 	case TransactionTypeSyntheticMirror:
 		return "syntheticMirror"
 	case TransactionTypeSegWitDataEntry:
@@ -1272,8 +1291,10 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updateKey":
 		return TransactionTypeUpdateKey, true
+	case "remote":
+		return TransactionTypeRemote, true
 	case "signPending":
-		return TransactionTypeSignPending, true
+		return TransactionTypeRemote, true
 	case "syntheticCreateChain":
 		return TransactionTypeSyntheticCreateChain, true
 	case "syntheticWriteData":
@@ -1286,6 +1307,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticDepositCredits, true
 	case "syntheticBurnTokens":
 		return TransactionTypeSyntheticBurnTokens, true
+	case "syntheticForwardTransaction":
+		return TransactionTypeSyntheticForwardTransaction, true
 	case "syntheticMirror":
 		return TransactionTypeSyntheticMirror, true
 	case "segWitDataEntry":
