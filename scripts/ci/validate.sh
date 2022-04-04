@@ -106,7 +106,7 @@ fi
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL0" ]; then
     wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}'
-    wait-for cli-tx tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
+    wait-for cli-tx-sig tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
 
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
