@@ -273,7 +273,7 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 //
 // Otherwise, the fee is the base signature fee + signature data surcharge.
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
-	// Don't charge a fees for internal administrative functions
+	// Don't charge fees for internal administrative functions
 	signer := signature.GetSigner()
 	_, isBvn := protocol.ParseBvnUrl(signer)
 	if isBvn || protocol.IsDnUrl(signer) {
