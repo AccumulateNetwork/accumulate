@@ -54,10 +54,10 @@ function cli-tx {
     echo "$JSON" | jq -re .transactionHash
 }
 
-# cli-tx-env <args...> - Execute a CLI command and extract the envelope hash from the result
-function cli-tx-env {
+# cli-tx-sig <args...> - Execute a CLI command and extract the first signature hash from the result
+function cli-tx-sig {
     JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -re .envelopeHash
+    echo "$JSON" | jq -re .signatureHashes[0]
 }
 
 # api-v2 <payload> - Send a JSON-RPC message to the API
@@ -83,7 +83,24 @@ function success {
     echo
 }
 
+
 NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+
+#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
+NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
+if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+   section "Add a new DN validator"
+   declare -g TEST_NODE_WORK_DIR=~/node1
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
+   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
+   declare -g ACCPID=$!
+   # Get Keys
+   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
+   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+   # Register new validator
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
+fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
@@ -172,7 +189,7 @@ wait-for cli-tx credits ${LITE} keytest/book/2 1000
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1000 ] && success || die "keytest/book/2 should have 1000 credits but has ${BALANCE}"
 
-section "Attempting to log key page 2 using itself fails"
+section "Attempting to lock key page 2 using itself fails"
 wait-for cli-tx page lock keytest/book/2 keytest-2-0 && die "Key page 2 locked itself" || success
 
 section "Lock key page 2 using page 1"
@@ -224,7 +241,7 @@ accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Trans
 success
 
 section "Signing the transaction with the same key does not deliver it"
-wait-for cli-tx-env tx sign keytest/tokens keytest-2-0 $TXID
+wait-for cli-tx-sig tx sign keytest/tokens keytest-2-0 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
 wait-for-tx $TXID
@@ -253,14 +270,14 @@ success
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
-wait-for cli-tx-env tx sign keytest/tokens keytest-2-1 $TXID
+wait-for cli-tx-sig tx sign keytest/tokens keytest-2-1 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
 wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-cli-tx-env tx sign keytest/tokens keytest-2-2 $TXID && die "Signed the transaction after it was delivered" || success
+cli-tx-sig tx sign keytest/tokens keytest-2-2 $TXID && die "Signed the transaction after it was delivered" || success
 
 # section "Bug AC-551"
 # api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null
@@ -401,8 +418,8 @@ RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
-wait-for cli-tx manager set keytest/book/3 keytest-3-0 keytest/book
-RESULT=$(accumulate -j get keytest/book/3 | jq -re .data.managerKeyBook)
+wait-for cli-tx manager set keytest/tokens keytest-1-0 keytest/book
+RESULT=$(accumulate -j get keytest/tokens | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"
@@ -448,4 +465,11 @@ if [ -f "$NODE_PRIV_VAL" ]; then
     [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
 else
     echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
+fi
+
+if [ ! -z "${ACCPID}" ]; then
+    section "Shutdown dynamic validator"
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+    kill -9 $ACCPID
+    rm -rf $TEST_NODE_WORK_DIR
 fi

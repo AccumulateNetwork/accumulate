@@ -11,14 +11,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 type Signer struct {
 	Type       protocol.SignatureType
 	Url        *url.URL
 	PrivateKey []byte
-	Height     uint64
+	Version    uint64
 	Timestamp  uint64
 }
 
@@ -42,8 +41,8 @@ func (s *Signer) SetPrivateKey(privKey []byte) *Signer {
 	return s
 }
 
-func (s *Signer) SetHeight(height uint64) *Signer {
-	s.Height = height
+func (s *Signer) SetVersion(version uint64) *Signer {
+	s.Version = version
 	return s
 }
 
@@ -70,8 +69,8 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 	if len(s.PrivateKey) == 0 {
 		errs = append(errs, "missing private key")
 	}
-	if init && s.Height == 0 {
-		errs = append(errs, "missing height")
+	if init && s.Version == 0 {
+		errs = append(errs, "missing version")
 	}
 	if init && s.Timestamp == 0 {
 		errs = append(errs, "missing timestamp")
@@ -104,7 +103,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.LegacyED25519Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerVersion = s.Height
+		sig.SignerVersion = s.Version
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -112,7 +111,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.ED25519Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerVersion = s.Height
+		sig.SignerVersion = s.Version
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -120,7 +119,7 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 		sig := new(protocol.RCD1Signature)
 		sig.PublicKey = s.PrivateKey[32:]
 		sig.Signer = s.Url
-		sig.SignerVersion = s.Height
+		sig.SignerVersion = s.Version
 		sig.Timestamp = s.Timestamp
 		return sig, nil
 
@@ -132,14 +131,13 @@ func (s *Signer) prepare(init bool) (protocol.Signature, error) {
 func (s *Signer) sign(sig protocol.Signature, message []byte) {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
-		withNonce := append(common.Uint64Bytes(s.Timestamp), message...)
-		sig.Signature = ed25519.Sign(s.PrivateKey, withNonce)
+		protocol.SignLegacyED25519(sig, s.PrivateKey, message)
 
 	case *protocol.ED25519Signature:
-		sig.Signature = ed25519.Sign(s.PrivateKey, message)
+		protocol.SignED25519(sig, s.PrivateKey, message)
 
 	case *protocol.RCD1Signature:
-		sig.Signature = ed25519.Sign(s.PrivateKey, message)
+		protocol.SignRCD1(sig, s.PrivateKey, message)
 
 	default:
 		panic("unreachable")
@@ -177,8 +175,8 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 	if s.Url == nil {
 		errs = append(errs, "missing signer")
 	}
-	if s.Height == 0 {
-		errs = append(errs, "missing timestamp")
+	if s.Version == 0 {
+		errs = append(errs, "missing version")
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
@@ -192,7 +190,7 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = s.Url
 	initSig.DestinationNetwork = protocol.SubnetUrl(destSubnet)
-	initSig.SequenceNumber = s.Height
+	initSig.SequenceNumber = s.Version
 
 	initHash, err := initSig.InitiatorHash()
 	if err != nil {
@@ -206,18 +204,5 @@ func (s *Signer) InitiateSynthetic(txn *protocol.Transaction, router routing.Rou
 
 func Faucet(txn *protocol.Transaction) (protocol.Signature, error) {
 	fs := protocol.Faucet.Signer()
-	sig := new(protocol.LegacyED25519Signature)
-	sig.Signer = protocol.FaucetUrl
-	sig.SignerVersion = 1
-	sig.Timestamp = fs.Timestamp()
-	sig.PublicKey = fs.PublicKey()
-
-	init, err := sig.InitiatorHash()
-	if err != nil {
-		return nil, err
-	}
-
-	txn.Header.Initiator = *(*[32]byte)(init)
-	sig.Signature = fs.Sign(txn.GetHash())
-	return sig, nil
+	return fs.Initiate(txn), nil
 }

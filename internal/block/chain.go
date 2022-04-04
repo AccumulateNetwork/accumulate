@@ -1,10 +1,11 @@
-package chain
+package block
 
 import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -16,6 +17,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		return newExecutor(opts, db,
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
+			SyntheticReceipt{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
@@ -27,6 +29,11 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			// for ACME
 			IssueTokens{},
 			SyntheticBurnTokens{},
+
+			// DN validator set management
+			AddValidator{},
+			RemoveValidator{},
+			UpdateValidatorKey{},
 		)
 
 	case config.BlockValidator:
@@ -46,10 +53,14 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			WriteDataTo{},
 			UpdateManager{},
 			RemoveManager{},
+			UpdateAccountAuth{},
+
+			// BVN validator management
 			AddValidator{},
 			RemoveValidator{},
 			UpdateValidatorKey{},
 
+			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
 			SyntheticCreateChain{},
@@ -57,6 +68,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
 			SyntheticWriteData{},
+			SyntheticReceipt{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
@@ -81,21 +93,11 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network config
 	}, db)
 }
 
-// TxExecutor executes a specific type of transaction.
-type TxExecutor interface {
+// TransactionExecutor executes a specific type of transaction.
+type TransactionExecutor interface {
 	// Type is the transaction type the executor can execute.
 	Type() protocol.TransactionType
 
 	// Validate fully validates and executes the transaction.
 	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
 }
-
-// creditChain = protocol.SignerAccount
-//
-// Deprecated: use protocol.SignerAccount
-type creditChain = protocol.SignerAccount
-
-// tokenChain = protocol.TokenHolderAccount
-//
-// Deprecated: use protocol.TokenHolderAccount
-type tokenChain = protocol.TokenHolderAccount

@@ -1,4 +1,4 @@
-package chain
+package block
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -25,7 +26,7 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors map[protocol.TransactionType]TxExecutor
+	executors map[protocol.TransactionType]TransactionExecutor
 	governor  *governor
 	logger    logging.OptionalLogger
 
@@ -41,10 +42,10 @@ type ExecutorOptions struct {
 	isGenesis bool
 }
 
-func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TxExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts
-	m.executors = map[protocol.TransactionType]TxExecutor{}
+	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -105,7 +106,7 @@ func (m *Executor) Stop() error {
 	return m.governor.Stop()
 }
 
-func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) error {
+func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) error) error {
 	var err error
 
 	if !m.isGenesis {
@@ -116,14 +117,13 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.InternalGenesis)
 
-	st := NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn)
-	st.logger = m.logger
+	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
-	err = block.Batch.Transaction(txn.GetHash()).Put(
-		&protocol.Envelope{Transaction: txn},
+	err = putSyntheticTransaction(
+		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		[]protocol.Signature{&protocol.InternalSignature{Network: m.Network.NodeUrl()}})
+		&protocol.InternalSignature{Network: m.Network.NodeUrl()})
 	if err != nil {
 		return err
 	}
@@ -138,14 +138,14 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 		return err
 	}
 
-	err = st.Commit()
+	state, err := st.Commit()
 	if err != nil {
 		return err
 	}
 
-	block.State.Merge(&st.blockState)
+	block.State.MergeTransaction(state)
 
-	err = m.ProduceSynthetic(block.Batch, txn, st.blockState.ProducedTxns)
+	err = m.ProduceSynthetic(block.Batch, txn, state.ProducedTxns)
 	if err != nil {
 		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
@@ -318,9 +318,8 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), signerUrl, signer, nil, txn)
+	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), signerUrl, signer, nil, txn, m.logger)
 	defer st.Discard()
-	st.logger.L = m.logger
 
 	var da *protocol.DataAccount
 	va := block.Batch.Account(dataAccountUrl)
@@ -331,15 +330,15 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 
 	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
 
-	err = block.Batch.Transaction(txn.GetHash()).Put(
-		&protocol.Envelope{Transaction: txn},
+	err = putSyntheticTransaction(
+		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		[]protocol.Signature{&protocol.InternalSignature{Network: signerUrl}})
+		&protocol.InternalSignature{Network: signerUrl})
 	if err != nil {
 		return err
 	}
 
-	err = st.Commit()
+	_, err = st.Commit()
 	return err
 }
 
@@ -361,7 +360,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		"delivered", block.State.Delivered,
 		"signed", block.State.SynthSigned,
 		"sent", block.State.SynthSent,
-		"updated", len(block.State.ChainUpdates),
+		"updated", len(block.State.ChainUpdates.Entries),
 		"submitted", len(block.State.ProducedTxns))
 	t := time.Now()
 
@@ -428,11 +427,11 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		indexing.TransactionChainEntry
 		Txid []byte
 	}
-	txChainEntries := make([]*txChainIndexEntry, 0, len(block.State.ChainUpdates))
+	txChainEntries := make([]*txChainIndexEntry, 0, len(block.State.ChainUpdates.Entries))
 
 	// Process chain updates
 	accountSeen := map[string]bool{}
-	for _, u := range block.State.ChainUpdates {
+	for _, u := range block.State.ChainUpdates.Entries {
 		// Do not create root chain or BPT entries for the ledger
 		if ledgerUrl.Equal(u.Account) {
 			continue
@@ -450,7 +449,7 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		s := strings.ToLower(u.Account.String())
 		if !accountSeen[s] {
 			accountSeen[s] = true
-			err = m.updateAccountBPT(account)
+			err = account.PutBpt()
 			if err != nil {
 				return err
 			}
@@ -479,7 +478,9 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 
 	// Add the synthetic transaction chain to the root chain
 	var synthIndexIndex uint64
+	var synthAnchorIndex uint64
 	if len(block.State.ProducedTxns) > 0 {
+		synthAnchorIndex = uint64(rootChain.Height())
 		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, ledgerState, rootChain)
 		if err != nil {
 			return err
@@ -529,6 +530,14 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		}
 	}
 
+	// Build synthetic receipts on Directory nodes
+	if m.Network.Type == config.Directory {
+		err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = m.buildSynthReceipts(block, rootChain.Anchor(), int64(synthIndexIndex), int64(rootIndexIndex))
 	if err != nil {
 		return err
@@ -537,16 +546,43 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	return m.buildAnchorTxn(block, ledgerState, rootChain)
 }
 
-// updateAccountBPT updates the BPT entry of an account.
-func (m *Executor) updateAccountBPT(account *database.Account) (err error) {
-	// Load the state
-	entry, err := account.StateHash()
+func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
+	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
 	if err != nil {
 		return err
 	}
 
-	account.PutBpt(*(*[32]byte)(entry))
+	synthChain, err := block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
+	if err != nil {
+		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
+	}
 
+	height := synthChain.Height()
+	offset := height - int64(len(block.State.ProducedTxns))
+	for i, txn := range block.State.ProducedTxns {
+		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
+			// Do not generate a receipt for the anchor
+			continue
+		}
+
+		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
+		if err != nil {
+			return err
+		}
+
+		receipt, err := synthReceipt.Combine(rootReceipt)
+		if err != nil {
+			return err
+		}
+
+		// This should be the second signature (SyntheticSignature should be first)
+		sig := new(protocol.ReceiptSignature)
+		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -557,7 +593,7 @@ func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledg
 		return 0, err
 	}
 
-	block.State.DidUpdateChain(ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(chain.ChainUpdate{
 		Name:    protocol.SyntheticChain,
 		Type:    protocol.ChainTypeTransaction,
 		Account: ledgerUrl,
@@ -574,7 +610,8 @@ func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger,
 		return err
 	}
 
-	block.State.DidUpdateChain(ChainUpdate{
+	m.logger.Debug("Anchoring BPT", "root", logging.AsHex(root).Slice(0, 4))
+	block.State.ChainUpdates.DidUpdateChain(chain.ChainUpdate{
 		Name:    "bpt",
 		Account: m.Network.NodeUrl(),
 		Index:   uint64(block.Index - 1),
@@ -612,7 +649,9 @@ func (m *Executor) buildSynthReceipts(block *Block, rootAnchor []byte, synthInde
 		entry.SynthIndex = uint64(offset) + uint64(i)
 		entry.RootIndexIndex = uint64(rootIndexIndex)
 		entry.SynthIndexIndex = uint64(synthIndexIndex)
-		entry.NeedsReceipt = true
+		if m.Network.Type != config.Directory {
+			entry.NeedsReceipt = true
+		}
 		ledgerState.Pending = append(ledgerState.Pending, entry)
 		m.logDebug("Adding synthetic transaction to the ledger", "hash", logging.AsHex(txn.GetHash()), "type", txn.Type(), "anchor", logging.AsHex(rootAnchor), "module", "synthetic")
 	}
@@ -644,7 +683,7 @@ func (m *Executor) buildAnchorTxn(block *Block, ledger *protocol.InternalLedger,
 
 	anchorUrl := m.Network.NodeUrl(protocol.AnchorPool)
 	anchor := block.Batch.Account(anchorUrl)
-	for _, update := range block.State.ChainUpdates {
+	for _, update := range block.State.ChainUpdates.Entries {
 		// Is it an anchor chain?
 		if update.Type != protocol.ChainTypeAnchor {
 			continue

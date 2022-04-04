@@ -86,7 +86,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, err
 		}
 
-		return packStateResponse(resp.Account, resp.ChainState)
+		return packStateResponse(resp.Account, resp.ChainState, resp.Receipt)
 
 	case "tx":
 		res := new(query.ResponseByTxId)
@@ -102,15 +102,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			ms.Roots = res.ChainState
 		}
 
-		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, res.Envelope, res.Status)
-		if err != nil {
-			return nil, err
-		}
-		packed.Invalidated = res.Invalidated
-		packed.SignatureThreshold = res.SignatureThreshold
-
-		packed.Receipts = res.Receipts
-		return packed, nil
+		return packTxResponse(res, ms, res.Envelope, res.Status)
 
 	case "tx-history":
 		txh := new(query.ResponseTxHistory)
@@ -126,12 +118,10 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
+			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
 			if err != nil {
 				return nil, err
 			}
-			queryRes.Invalidated = tx.Invalidated
-			queryRes.SignatureThreshold = tx.SignatureThreshold
 
 			res.Items[i] = queryRes
 		}
@@ -145,19 +135,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, fmt.Errorf("invalid response: %v", err)
 		}
 
-		mr := new(MultiResponse)
-		mr.Type = "chainEntrySet"
-		mr.Start = uint64(res.Start)
-		mr.Count = uint64(res.End - res.Start)
-		mr.Total = uint64(res.Total)
-		mr.Items = make([]interface{}, len(res.Entries))
-		for i, entry := range res.Entries {
-			qr := new(ChainQueryResponse)
-			mr.Items[i] = qr
-			qr.Type = "hex"
-			qr.Data = hex.EncodeToString(entry)
-		}
-		return mr, nil
+		return packChainValues(res), nil
 
 	case "chain-entry":
 		res := new(query.ResponseChainEntry)
@@ -166,13 +144,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 			return nil, fmt.Errorf("invalid response: %v", err)
 		}
 
-		qr := new(ChainQueryResponse)
-		qr.Type = "chainEntry"
-		qr.Data = res
-		qr.MainChain = new(MerkleState)
-		qr.MainChain.Height = uint64(res.Height)
-		qr.MainChain.Roots = res.State
-		return qr, nil
+		return packChainValue(res), nil
 
 	case "data-entry":
 		res := new(query.ResponseDataEntry)
@@ -255,7 +227,7 @@ func responseDirFromProto(src *query.DirectoryQueryResult, pagination QueryPagin
 
 	dst.OtherItems = make([]interface{}, len(src.ExpandedEntries))
 	for i, entry := range src.ExpandedEntries {
-		response, err := packStateResponse(entry, nil)
+		response, err := packStateResponse(entry, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +257,7 @@ func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
 		return nil, err
 	}
 
-	return packStateResponse(resp.Account, resp.ChainState)
+	return packStateResponse(resp.Account, resp.ChainState, nil)
 }
 
 func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
@@ -337,15 +309,7 @@ query:
 		return nil, fmt.Errorf("invalid TX response: %v", err)
 	}
 
-	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, res.Envelope, res.Status)
-	if err != nil {
-		return nil, err
-	}
-	packed.Invalidated = res.Invalidated
-	packed.SignatureThreshold = res.SignatureThreshold
-
-	packed.Receipts = res.Receipts
-	return packed, nil
+	return packTxResponse(res, nil, res.Envelope, res.Status)
 }
 
 func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
@@ -387,13 +351,10 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		queryRes, err := packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, tx.Envelope, tx.Status)
+		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
 		if err != nil {
 			return nil, err
 		}
-		queryRes.Invalidated = tx.Invalidated
-		queryRes.SignatureThreshold = tx.SignatureThreshold
-
 		res.Items[i] = queryRes
 	}
 

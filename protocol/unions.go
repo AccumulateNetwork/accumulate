@@ -32,6 +32,7 @@ type SignerAccount interface {
 	KeyHolder
 	CreditHolder
 	GetSignatureThreshold() uint64
+	GetVersion() uint64
 }
 
 type TokenHolderAccount interface {
@@ -43,6 +44,8 @@ type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
 	Verify(hash []byte) bool
+	Hash() []byte
+	MetadataHash() []byte
 	InitiatorHash() ([]byte, error)
 
 	GetSigner() *url.URL
@@ -66,5 +69,10 @@ type TransactionResult interface {
 
 type KeyPageOperation interface {
 	Type() KeyPageOperationType
+	encoding.BinaryValue
+}
+
+type AccountAuthOperation interface {
+	Type() AccountAuthOperationType
 	encoding.BinaryValue
 }

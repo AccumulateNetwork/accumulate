@@ -31,6 +31,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["remove-manager"] = m.ExecuteRemoveManager
 	m.methods["remove-validator"] = m.ExecuteRemoveValidator
 	m.methods["send-tokens"] = m.ExecuteSendTokens
+	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["update-manager"] = m.ExecuteUpdateManager
 	m.methods["update-validator-key"] = m.ExecuteUpdateValidatorKey
@@ -147,6 +148,10 @@ func (m *JrpcMethods) ExecuteRemoveValidator(ctx context.Context, params json.Ra
 // ExecuteSendTokens submits a SendTokens transaction.
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
+}
+
+func (m *JrpcMethods) ExecuteUpdateAccountAuth(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.UpdateAccountAuth))
 }
 
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.

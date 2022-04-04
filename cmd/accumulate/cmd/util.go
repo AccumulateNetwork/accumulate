@@ -67,7 +67,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		}
 
 		signer.Url = origin
-		signer.Height = 1
+		signer.Version = 1
 		signer.PrivateKey = privKey
 		return args, signer, nil
 	}
@@ -93,11 +93,12 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		signer.Url = keyInfo.KeyPage
 	}
 
-	ms, err := getRecord(signer.Url.String(), nil)
+	var page *protocol.KeyPage
+	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
-	signer.Height = ms.Height
+	signer.Version = page.Version
 
 	return args[ct:], signer, nil
 }
@@ -164,6 +165,20 @@ func GetUrl(url string) (*QueryResponse, error) {
 	}
 
 	return &res, nil
+}
+
+func getAccount(url string) (protocol.Account, error) {
+	qr, err := GetUrl(url)
+	if err != nil {
+		return nil, err
+	}
+
+	json, err := json.Marshal(qr.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	return protocol.UnmarshalAccountJSON(json)
 }
 
 func queryAs(method string, input, output interface{}) error {
@@ -291,7 +306,7 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 
 type ActionResponse struct {
 	TransactionHash types.Bytes                 `json:"transactionHash"`
-	EnvelopeHash    types.Bytes                 `json:"envelopeHash"`
+	SignatureHashes []types.Bytes               `json:"signatureHashes"`
 	SimpleHash      types.Bytes                 `json:"simpleHash"`
 	Log             types.String                `json:"log"`
 	Code            types.String                `json:"code"`
@@ -376,10 +391,13 @@ func (a *ActionDataResponse) Print() (string, error) {
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
-		EnvelopeHash:    r.EnvelopeHash,
+		SignatureHashes: make([]types.Bytes, len(r.SignatureHashes)),
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+	}
+	for i, hash := range r.SignatureHashes {
+		ar.SignatureHashes[i] = hash
 	}
 
 	result := new(protocol.TransactionStatus)
@@ -407,7 +425,9 @@ func (a *ActionResponse) Print() (string, error) {
 		out = string(b)
 	} else {
 		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
-		out += fmt.Sprintf("\tEnvelope Hash\t\t: %x\n", a.EnvelopeHash)
+		for i, hash := range a.SignatureHashes {
+			out += fmt.Sprintf("\tSignature %d Hash\t: %x\n", i, hash)
+		}
 		out += fmt.Sprintf("\tSimple Hash\t\t: %x\n", a.SimpleHash)
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t: %s\n", a.Code)
@@ -499,7 +519,11 @@ func PrintJsonRpcError(err error) (string, error) {
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
-		cmd.PrintErrf("Error: %v\n", err)
+		if WantJsonOutput {
+			cmd.PrintErrf("{\"error\":%v}", err)
+		} else {
+			cmd.PrintErrf("Error: %v\n", err)
+		}
 		DidError = err
 	} else {
 		cmd.Println(out)
@@ -599,15 +623,18 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
-	for _, sig := range res.Signatures {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					out += fmt.Sprintf("  -                       : no signatures\n")
+	for _, book := range res.SignatureBooks {
+		for _, page := range book.Pages {
+			out += fmt.Sprintf("  - Signatures            :\n")
+			out += fmt.Sprintf("    - Signer              : %s (%v)\n", page.Signer.Url, page.Signer.Type)
+			for _, sig := range page.Signatures {
+				if sig.Type().IsSystem() {
+					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
+				} else {
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
 				}
-			}()
-			out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKey())
-		}()
+			}
+		}
 	}
 	out += fmt.Sprintf("===\n")
 	return out
@@ -835,15 +862,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%d\n", protocol.CreditPrecision*ss.CreditBalance)
-		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
 			name, err := FindLabelFromPubKey(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -961,6 +988,16 @@ func printReflection(field, indent string, value reflect.Value) string {
 	out := fmt.Sprintf("%s%s:", indent, field)
 	if field == "" {
 		out = ""
+	}
+
+	if typ.AssignableTo(reflect.TypeOf(new(url2.URL))) {
+		v := value.Interface().(*url2.URL)
+		return out + " " + v.String() + "\n"
+	}
+
+	if typ.AssignableTo(reflect.TypeOf(url2.URL{})) {
+		v := value.Interface().(url2.URL)
+		return out + " " + v.String() + "\n"
 	}
 
 	switch value.Kind() {
