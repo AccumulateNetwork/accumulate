@@ -181,7 +181,12 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 			return validatorError(errors.New("missing signer version"))
 		}
 
-		sig, err := sigBuilder.Initiate(env.Transaction)
+		var sig protocol.Signature
+		if env.Type() == protocol.TransactionTypeSignPending {
+			sig, err = sigBuilder.Sign(env.GetTxHash())
+		} else {
+			sig, err = sigBuilder.Initiate(env.Transaction)
+		}
 		if err != nil {
 			return validatorError(err)
 		}
@@ -191,7 +196,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 			return validatorError(errors.New("invalid transaction hash"))
 		}
 
-		if !sig.Verify(env.Transaction.GetHash()) {
+		if !sig.Verify(env.GetTxHash()) {
 			return validatorError(errors.New("invalid signature"))
 		}
 	}
