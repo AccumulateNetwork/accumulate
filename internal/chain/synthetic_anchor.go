@@ -18,6 +18,10 @@ func (SyntheticAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticAnchor
 }
 
+func (SyntheticAnchor) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticAnchor{}).Validate(st, tx)
+}
+
 func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)

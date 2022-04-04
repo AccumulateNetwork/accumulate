@@ -10,6 +10,10 @@ type RemoveManager struct{}
 
 func (RemoveManager) Type() protocol.TransactionType { return protocol.TransactionTypeRemoveManager }
 
+func (RemoveManager) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (RemoveManager{}).Validate(st, tx)
+}
+
 func (RemoveManager) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	_, ok := tx.Transaction.Body.(*protocol.RemoveManager)
 	if !ok {

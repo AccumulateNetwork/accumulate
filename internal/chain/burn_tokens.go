@@ -10,6 +10,10 @@ type BurnTokens struct{}
 
 func (BurnTokens) Type() protocol.TransactionType { return protocol.TransactionTypeBurnTokens }
 
+func (BurnTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (BurnTokens{}).Validate(st, tx)
+}
+
 func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.BurnTokens)
 	if !ok {

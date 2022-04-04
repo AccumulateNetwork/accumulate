@@ -10,6 +10,10 @@ type UpdateManager struct{}
 
 func (UpdateManager) Type() protocol.TransactionType { return protocol.TransactionTypeUpdateManager }
 
+func (UpdateManager) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (UpdateManager{}).Validate(st, tx)
+}
+
 func (UpdateManager) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateManager)
 	if !ok {

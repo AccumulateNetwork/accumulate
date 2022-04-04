@@ -12,6 +12,10 @@ func (InternalSendTransactions) Type() protocol.TransactionType {
 	return protocol.TransactionTypeInternalSendTransactions
 }
 
+func (InternalSendTransactions) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (InternalSendTransactions{}).Validate(st, tx)
+}
+
 func (InternalSendTransactions) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalSendTransactions)
 	if !ok {

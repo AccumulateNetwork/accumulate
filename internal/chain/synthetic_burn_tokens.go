@@ -12,6 +12,10 @@ func (SyntheticBurnTokens) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticBurnTokens
 }
 
+func (SyntheticBurnTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticBurnTokens{}).Validate(st, tx)
+}
+
 func (SyntheticBurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticBurnTokens)
 	if !ok {

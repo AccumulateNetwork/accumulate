@@ -15,6 +15,10 @@ type AddCredits struct{}
 
 func (AddCredits) Type() protocol.TransactionType { return protocol.TransactionTypeAddCredits }
 
+func (AddCredits) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (AddCredits{}).Validate(st, tx)
+}
+
 func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
 	if !ok {

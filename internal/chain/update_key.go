@@ -1,10 +1,9 @@
 package chain
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -14,66 +13,80 @@ func (UpdateKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKey
 }
 
-func (UpdateKey) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKey) validate(st *StateManager, tx *protocol.Envelope) (*protocol.UpdateKey, *protocol.KeyPage, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKey)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
+		return nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
+	}
+	if len(body.NewKeyHash) != 32 {
+		return nil, nil, errors.New("key hash is not a valid length for a SHA-256 hash")
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.GetType())
+		return nil, nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.GetType())
 	}
 
-	if page.KeyBook == nil {
-		return nil, fmt.Errorf("invalid origin record: page %s does not have a KeyBook", page.Url)
-	}
+	return body, page, nil
+}
 
-	// We're changing the height of the key page, so reset all the nonces
-	for _, key := range page.Keys {
-		key.Nonce = 0
-	}
+func (UpdateKey) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	_, _, err := UpdateKey{}.validate(st, tx)
+	return nil, err
+}
 
-	// Find the old key.  Also go ahead and check cases where we must have the
-	// old key, can't have the old key, and don't care about the old key.
-	var bodyKey *protocol.KeySpec
-	indexKey := -1
-
-	for i, key := range page.Keys { // Look for the old key
-		if bytes.Equal(key.PublicKey, tx.Signatures[0].GetPublicKey()) { // User must supply an exact match of the key as is on the key page
-			bodyKey, indexKey = key, i
-			break
-		}
-	}
-
-	book := new(protocol.KeyBook)
-	err := st.LoadUrlAs(page.KeyBook, book)
+func (UpdateKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	body, page, err := UpdateKey{}.validate(st, tx)
 	if err != nil {
-		return nil, fmt.Errorf("invalid key book: %v", err)
+		return nil, err
 	}
 
-	priority := getPriority(st, book)
-	if priority < 0 {
-		return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
+	// Do not update the key page version. Do not reset LastUsedOn.
+
+	// Find the first signature
+	txObj := st.batch.Transaction(tx.GetTxHash())
+	status, err := txObj.GetStatus()
+	if err != nil {
+		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
-	// 0 is the highest priority, followed by 1, etc
-	if tx.Transaction.KeyPageIndex > uint64(priority) {
-		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
+	if status.Initiator == nil {
+		// This should be impossible
+		return nil, fmt.Errorf("transaction does not have an initiator")
 	}
 
-	// check that the Key to update is on the key Page, and the new Key
-	// is not already on the Key Page
-	if indexKey < 0 { // The Key to update is on key page
-		return nil, fmt.Errorf("key to be updated not found on the key page")
+	sigs, err := txObj.ReadSignatures(status.Initiator)
+	if err != nil {
+		return nil, fmt.Errorf("load signatures for %v: %w", status.Initiator, err)
 	}
 
-	bodyKey.PublicKey = body.Key
-
-	if len(body.Key) == ed25519.PubKeySize && st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
-		st.DisableValidator(body.Key)
-		st.AddValidator(body.Key)
+	if sigs.Count() == 0 {
+		// This should never happen, because this transaction is not multisig.
+		// But it's possible (maybe) for the initiator to be invalidated by the
+		// key page version changing.
+		return nil, fmt.Errorf("no valid signatures found for %v", status.Initiator)
 	}
+
+	sigHash := sigs.EntryHashes()[0][:]
+	sigEnv, err := st.batch.Transaction(sigHash).GetState()
+	if err != nil {
+		return nil, fmt.Errorf("load first signature from %v: %w", status.Initiator, err)
+	}
+	if len(sigEnv.Signatures) == 0 {
+		// This should be impossible
+		return nil, fmt.Errorf("invalid signature state")
+	}
+
+	_, entry, ok := page.EntryByKey(sigEnv.Signatures[0].GetPublicKey())
+	if !ok {
+		return nil, fmt.Errorf("the signing key does not exist on %v", st.OriginUrl)
+	}
+	keySpec, ok := entry.(*protocol.KeySpec)
+	if !ok {
+		// This should be impossible
+		return nil, errors.New("key page entry is not a key spec")
+	}
+	keySpec.PublicKeyHash = body.NewKeyHash
 
 	st.Update(page)
 	return nil, nil

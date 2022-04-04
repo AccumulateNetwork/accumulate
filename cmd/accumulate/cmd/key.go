@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +21,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
+
+func init() {
+	keyCmd.AddCommand(keyUpdateCmd)
+}
 
 var keyCmd = &cobra.Command{
 	Use:   "key",
@@ -90,6 +95,13 @@ var keyCmd = &cobra.Command{
 		}
 		printOutput(cmd, out, err)
 	},
+}
+
+var keyUpdateCmd = &cobra.Command{
+	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
+	Short: "Self-update a key",
+	Args:  cobra.RangeArgs(3, 5),
+	Run:   runCmdFunc(UpdateKey),
 }
 
 type KeyResponse struct {
@@ -580,4 +592,26 @@ func ExportMnemonic() (string, error) {
 	} else {
 		return fmt.Sprintf("mnemonic phrase: %s\n", string(phrase)), nil
 	}
+}
+
+func UpdateKey(args []string) (string, error) {
+	principal, err := url.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return "", err
+	}
+
+	newPubKey, err := resolvePublicKey(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	newPubKeyHash := sha256.Sum256(newPubKey)
+	txn := new(protocol.UpdateKey)
+	txn.NewKeyHash = newPubKeyHash[:]
+	return dispatchTxAndPrintResponse("update-key", txn, nil, principal, signer)
 }

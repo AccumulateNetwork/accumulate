@@ -12,6 +12,10 @@ func (SyntheticDepositCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositCredits
 }
 
+func (SyntheticDepositCredits) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticDepositCredits{}).Validate(st, tx)
+}
+
 func (SyntheticDepositCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositCredits)
 	if !ok {

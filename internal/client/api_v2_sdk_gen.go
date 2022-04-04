@@ -211,6 +211,18 @@ func (c *Client) ExecuteUpdateAccountAuth(ctx context.Context, req *api.TxReques
 	return &resp, nil
 }
 
+// ExecuteUpdateKey submits an UpdateKey transaction.
+func (c *Client) ExecuteUpdateKey(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "update-key", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.
 func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
