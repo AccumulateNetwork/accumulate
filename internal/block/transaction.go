@@ -19,7 +19,7 @@ func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envel
 	}
 
 	// The transaction hash must be specified for signature transactions
-	if len(envelope.TxHash) == 0 && envelope.Type() == protocol.TransactionTypeSignPending {
+	if len(envelope.TxHash) == 0 && envelope.Type() == protocol.TransactionTypeRemote {
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "cannot sign pending transaction: missing transaction hash")
 	}
 
@@ -57,24 +57,40 @@ func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envel
 
 	// Load previous transaction state
 	txState, err := batch.Transaction(envelope.GetTxHash()).GetState()
-	switch {
-	case err == nil:
-		// Load existing the transaction from the database
+	if err == nil {
+		// Loaded existing the transaction from the database
 		return txState.Transaction, nil
-
-	case !errors.Is(err, storage.ErrNotFound):
+	} else if !errors.Is(err, storage.ErrNotFound) {
 		// Unknown error
 		return nil, fmt.Errorf("load transaction: %v", err)
+	}
 
-	case envelope.Type() == protocol.TransactionTypeSignPending:
-		// If the envelope does not include the transaction, it must exist
-		// in the database
+	// If the envelope does not include a transaction, the transaction must
+	// exist locally
+	if envelope.Transaction == nil {
 		return nil, fmt.Errorf("load transaction: %v", err)
+	}
 
-	default:
+	if envelope.Transaction.Body.Type() != protocol.TransactionTypeRemote {
 		// Transaction is new
 		return envelope.Transaction, nil
 	}
+
+	// If any signature is local or forwarded, the transaction must exist
+	// locally
+	principal := envelope.Transaction.Header.Principal
+	for _, signature := range envelope.Signatures {
+		if signature.Type() == protocol.SignatureTypeForwarded || signature.GetSigner().LocalTo(principal) {
+			return nil, fmt.Errorf("load transaction: %v", err)
+		}
+	}
+
+	// Set the return value of GetHash
+	err = envelope.Transaction.SetHash(envelope.TxHash)
+	if err != nil {
+		return nil, err
+	}
+	return envelope.Transaction, nil
 }
 
 // ProcessTransaction processes a transaction. It will not return an error if
@@ -351,8 +367,11 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 
 	// But only if the paid paid is larger than the max failure paid
 	paid, err := protocol.ComputeTransactionFee(transaction)
-	if err != nil || paid <= protocol.FeeFailedMaximum {
+	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
+	}
+	if paid <= protocol.FeeFailedMaximum {
+		return status, state, nil
 	}
 
 	refund := paid - protocol.FeeFailedMaximum

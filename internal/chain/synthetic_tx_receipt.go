@@ -37,7 +37,8 @@ func NeedsReceipt(txt protocol.TransactionType) bool {
 		protocol.TransactionTypeSyntheticAnchor,
 		protocol.TransactionTypeSyntheticMirror,
 		protocol.TransactionTypeSegWitDataEntry,
-		protocol.TransactionTypeSignPending:
+		protocol.TransactionTypeSyntheticForwardTransaction,
+		protocol.TransactionTypeRemote:
 		return false
 	}
 	return txt.IsSynthetic()

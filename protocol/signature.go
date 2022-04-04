@@ -386,3 +386,18 @@ func (s *InternalSignature) GetVote() VoteType {
 func (s *InternalSignature) Verify(hash []byte) bool {
 	return true
 }
+
+/*
+ * Forwarded Signature
+ */
+
+func (s *ForwardedSignature) GetVote() VoteType              { return s.Signature.GetVote() }
+func (s *ForwardedSignature) GetSigner() *url.URL            { return s.Signature.GetSigner() }
+func (s *ForwardedSignature) GetSignerVersion() uint64       { return s.Signature.GetSignerVersion() }
+func (s *ForwardedSignature) GetTimestamp() uint64           { return s.Signature.GetTimestamp() }
+func (s *ForwardedSignature) GetPublicKey() []byte           { return s.Signature.GetPublicKey() }
+func (s *ForwardedSignature) GetSignature() []byte           { return s.Signature.GetSignature() }
+func (s *ForwardedSignature) Hash() []byte                   { return s.Signature.Hash() }
+func (s *ForwardedSignature) MetadataHash() []byte           { return s.Signature.MetadataHash() }
+func (s *ForwardedSignature) InitiatorHash() ([]byte, error) { return s.Signature.InitiatorHash() }
+func (s *ForwardedSignature) Verify(hash []byte) bool        { return s.Signature.Verify(hash) }

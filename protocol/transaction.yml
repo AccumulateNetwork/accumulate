@@ -51,6 +51,10 @@ Transaction:
 
 TransactionStatus:
   fields:
+    - name: For
+      type: hash
+      description: is the transaction this status is for
+      marshal-as: none
     - name: Remote
       type: bool
     - name: Delivered

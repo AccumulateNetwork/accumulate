@@ -17,9 +17,10 @@ type ValidatorUpdate struct {
 }
 
 type ProcessTransactionState struct {
-	ValidatorsUpdates []ValidatorUpdate
-	ProducedTxns      []*protocol.Transaction
-	ChainUpdates      ChainUpdates
+	ValidatorsUpdates      []ValidatorUpdate
+	ProducedTxns           []*protocol.Transaction
+	AdditionalTransactions []*protocol.Envelope
+	ChainUpdates           ChainUpdates
 }
 
 // DidProduceTxn records a produced transaction.
@@ -30,9 +31,14 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	s.ProducedTxns = append(s.ProducedTxns, txn)
 }
 
+func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *protocol.Envelope) {
+	s.AdditionalTransactions = append(s.AdditionalTransactions, txn)
+}
+
 func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
+	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 }
 

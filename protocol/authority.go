@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
@@ -18,6 +19,34 @@ type Signer interface {
 	GetSignatureThreshold() uint64
 	EntryByKey(key []byte) (int, KeyEntry, bool)
 	EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)
+}
+
+func UnmarshalSigner(data []byte) (Signer, error) {
+	account, err := UnmarshalAccount(data)
+	if err != nil {
+		return nil, err
+	}
+
+	signer, ok := account.(Signer)
+	if !ok {
+		return nil, fmt.Errorf("account type %v is not a signer", account.Type())
+	}
+
+	return signer, nil
+}
+
+func UnmarshalSignerJSON(data []byte) (Signer, error) {
+	account, err := UnmarshalAccountJSON(data)
+	if err != nil {
+		return nil, err
+	}
+
+	signer, ok := account.(Signer)
+	if !ok {
+		return nil, fmt.Errorf("account type %v is not a signer", account.Type())
+	}
+
+	return signer, nil
 }
 
 /* ***** Lite account auth ***** */

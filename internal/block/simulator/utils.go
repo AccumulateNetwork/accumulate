@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"encoding"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -113,57 +113,25 @@ func CheckTx(t testing.TB, db *database.Database, exec *Executor, envelope *prot
 func DeliverTx(t testing.TB, exec *Executor, block *Block, envelope *protocol.Envelope) *protocol.TransactionStatus {
 	t.Helper()
 
-	// Process signatures
-	batch := block.Batch.Begin(true)
-	defer batch.Discard()
-
-	transaction, err := exec.LoadTransaction(batch, envelope)
-	if err != nil {
-		perr := protocol.NewError(protocol.ErrorCodeUnknownError, err)
-		return &protocol.TransactionStatus{
-			Code:    perr.Code.GetEnumValue(),
-			Message: perr.Error(),
-		}
-	}
-	// require.NoError(t, err)
-
-	for _, signature := range envelope.Signatures {
-		s, err := exec.ProcessSignature(batch, transaction, signature)
-		require.NoError(t, err) // Signatures must be valid
-		block.State.MergeSignature(s)
+	status, err := exec.ExecuteEnvelope(block, envelope)
+	if err == nil {
+		return status
 	}
 
-	require.NoError(t, batch.Commit())
-
-	// Process the transaction
-	batch = block.Batch.Begin(true)
-	defer batch.Discard()
-
-	transaction, err = exec.LoadTransaction(batch, envelope)
-	require.NoError(t, err)
-
-	status, txnState, err := exec.ProcessTransaction(batch, transaction)
-	require.NoError(t, err)
-
-	if !envelope.Type().IsInternal() && envelope.Type() != protocol.TransactionTypeSyntheticAnchor {
-		exec.Logger.Info("Transaction delivered",
-			"module", "simulator",
-			"block", block.Index,
-			"type", envelope.Type(),
-			"txn-hash", logging.AsHex(envelope.GetTxHash()).Slice(0, 4),
-			"env-hash", logging.AsHex(envelope.EnvHash()).Slice(0, 4),
-			"code", status.Code,
-			"message", status.Message,
-			"principal", envelope.Transaction.Header.Principal)
+	var perr *protocol.Error
+	if !errors.As(err, &perr) {
+		require.NoError(t, err)
 	}
 
-	err = exec.ProduceSynthetic(batch, transaction, txnState.ProducedTxns)
-	require.NoError(t, err)
-	block.State.MergeTransaction(txnState)
+	if perr.Code != protocol.ErrorCodeAlreadyDelivered {
+		require.NoError(t, err)
+	}
 
-	require.NoError(t, batch.Commit())
-
-	return status
+	return &protocol.TransactionStatus{
+		Delivered: true,
+		Code:      perr.Code.GetEnumValue(),
+		Message:   perr.Error(),
+	}
 }
 
 func RequireSuccess(t testing.TB, results ...*protocol.TransactionStatus) {

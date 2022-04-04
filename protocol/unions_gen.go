@@ -161,14 +161,14 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(InternalTransactionsSigned), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
+	case TransactionTypeRemote:
+		return new(RemoteTransactionBody), nil
 	case TransactionTypeRemoveValidator:
 		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
-	case TransactionTypeSignPending:
-		return new(SignPending), nil
 	case TransactionTypeSyntheticAnchor:
 		return new(SyntheticAnchor), nil
 	case TransactionTypeSyntheticBurnTokens:
@@ -179,6 +179,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositCredits), nil
 	case TransactionTypeSyntheticDepositTokens:
 		return new(SyntheticDepositTokens), nil
+	case TransactionTypeSyntheticForwardTransaction:
+		return new(SyntheticForwardTransaction), nil
 	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
 	case TransactionTypeSyntheticReceipt:
@@ -488,6 +490,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
+	case SignatureTypeForwarded:
+		return new(ForwardedSignature), nil
 	case SignatureTypeInternal:
 		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:

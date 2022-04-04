@@ -18,6 +18,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
 			SyntheticReceipt{},
+			SyntheticForwardTransaction{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
@@ -67,6 +68,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticMirror{},
 			SyntheticWriteData{},
 			SyntheticReceipt{},
+			SyntheticForwardTransaction{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},

@@ -22,7 +22,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
 	txnType := envelope.Type()
-	if txnType != protocol.TransactionTypeSignPending {
+	if txnType != protocol.TransactionTypeRemote {
 		txnType = envelope.Transaction.Body.Type()
 		_, ok := x.executors[txnType]
 		if !ok {
@@ -38,7 +38,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 
 	// Check that the signatures are valid
 	for i, signature := range envelope.Signatures {
-		isInitiator := i == 0 && txnType != protocol.TransactionTypeSignPending
+		isInitiator := i == 0 && txnType != protocol.TransactionTypeRemote
 		if isInitiator {
 			// Verify that the initiator signature matches the transaction
 			err = validateInitialSignature(transaction, signature)
@@ -88,7 +88,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Only validate the transaction when we first receive it
-	if envelope.Type() == protocol.TransactionTypeSignPending {
+	if envelope.Type() == protocol.TransactionTypeRemote {
 		return new(protocol.EmptyResult), nil
 	}
 
@@ -193,7 +193,7 @@ func validateUserEnvelope(batch *database.Batch, envelope *protocol.Envelope, tx
 		// An unknown error occurred
 		return fmt.Errorf("load transaction: %v", err)
 
-	case txnType == protocol.TransactionTypeSignPending:
+	case txnType == protocol.TransactionTypeRemote:
 		// We can't sign a pending transaction if we can't find it
 		return err
 

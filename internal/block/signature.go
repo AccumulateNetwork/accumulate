@@ -11,16 +11,28 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*ProcessSignatureState, error) {
+func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
+	// Always assume remote transactions have been initiated
+	if transaction.Body.Type() == protocol.TransactionTypeRemote {
+		return true, nil
+	}
+
 	// Load the transaction status
 	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
-		return nil, fmt.Errorf("load object metadata: %w", err)
+		return false, fmt.Errorf("load object metadata: %w", err)
 	}
 
+	return status.Initiator != nil, nil
+}
+
+func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*ProcessSignatureState, error) {
 	// Is this the initial signature?
-	isInitiator := status.Initiator == nil
-	if isInitiator {
+	initiated, err := hasBeenInitiated(batch, transaction)
+	if err != nil {
+		return nil, err
+	}
+	if !initiated {
 		// Verify that the initiator signature matches the transaction
 		err = validateInitialSignature(transaction, signature)
 		if err != nil {
@@ -36,28 +48,32 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 	// Stateful validation (mostly for synthetic transactions)
 	switch signature := signature.(type) {
 	case *protocol.SyntheticSignature:
-		err = verifySyntheticSignature(&x.Network, batch, transaction, signature, isInitiator)
+		err = verifySyntheticSignature(&x.Network, batch, transaction, signature, !initiated)
 
 	case *protocol.ReceiptSignature:
-		err = verifyReceiptSignature(&x.Network, batch, transaction, signature, isInitiator)
+		err = verifyReceiptSignature(&x.Network, batch, transaction, signature, !initiated)
 
 	case *protocol.InternalSignature:
-		err = validateInternalSignature(&x.Network, batch, transaction, signature, isInitiator)
+		err = validateInternalSignature(&x.Network, batch, transaction, signature, !initiated)
 
 	default:
-		err = processNormalSignature(batch, transaction, signature, isInitiator)
+		err = processNormalSignature(batch, transaction, signature, !initiated)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	// Store the transaction state (without signatures)
-	stateEnv := new(protocol.Envelope)
-	stateEnv.Transaction = transaction
-	db := batch.Transaction(transaction.GetHash())
-	err = db.PutState(stateEnv)
-	if err != nil {
-		return nil, fmt.Errorf("store transaction: %w", err)
+	// Store the transaction state (without signatures) if its local and being
+	// initiated - synthetic transactions are always treated as local
+	remote := transaction.Body.Type().IsUser() && !transaction.Header.Principal.LocalTo(signature.GetSigner())
+	if !initiated && !remote {
+		stateEnv := new(protocol.Envelope)
+		stateEnv.Transaction = transaction
+		db := batch.Transaction(transaction.GetHash())
+		err = db.PutState(stateEnv)
+		if err != nil {
+			return nil, fmt.Errorf("store transaction: %w", err)
+		}
 	}
 
 	// Hash the signature
@@ -88,14 +104,16 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		}
 	}
 
-	// Add the signature to the principal's chain
-	chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
-	if err != nil {
-		return nil, fmt.Errorf("load chain: %w", err)
-	}
-	err = chain.AddEntry(sigHash[:], true)
-	if err != nil {
-		return nil, fmt.Errorf("store chain: %w", err)
+	// Add the signature to the principal's chain if it's local
+	if !remote {
+		chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+		if err != nil {
+			return nil, fmt.Errorf("load chain: %w", err)
+		}
+		err = chain.AddEntry(sigHash[:], true)
+		if err != nil {
+			return nil, fmt.Errorf("store chain: %w", err)
+		}
 	}
 
 	// Add the signature to the transaction's signature set
@@ -104,7 +122,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		return nil, fmt.Errorf("store signatures: %w", err)
 	}
 
-	return &ProcessSignatureState{}, nil
+	return &ProcessSignatureState{Remote: remote}, nil
 }
 
 // validateInitialSignature verifies that the signature is a valid initial
@@ -134,11 +152,9 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 // validateSignature verifies that the signature matches the signer state and
 // that the signer is authorized to sign for the principal.
 func validateSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (protocol.Signer, protocol.KeyEntry, error) {
-	// TODO Support remote signers
+	// Is the signer local?
 	signerUrl := signature.GetSigner()
-	if !transaction.Header.Principal.RootIdentity().Equal(signerUrl.RootIdentity()) {
-		return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "remote signers are not supported")
-	}
+	remote := !transaction.Header.Principal.LocalTo(signerUrl)
 
 	// Load the signer
 	account, err := batch.Account(signerUrl).GetState()
@@ -155,10 +171,18 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	switch account := account.(type) {
 	case *protocol.LiteTokenAccount:
 		signer = account
-		err = validateLiteSignature(transaction, account)
+		if remote {
+			err = validateRemoteLiteSignature(transaction, account)
+		} else {
+			err = validateLocalLiteSignature(transaction, account)
+		}
 	case *protocol.KeyPage:
 		signer = account
-		err = validatePageSignature(batch, transaction, account)
+		if remote {
+			err = validateRemotePageSignature(batch, transaction, account)
+		} else {
+			err = validateLocalPageSignature(batch, transaction, account)
+		}
 	default:
 		return nil, nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "invalid signer: %v cannot sign transactions", account.Type())
 	}
@@ -187,20 +211,26 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	return signer, entry, nil
 }
 
-// validateLiteSignature verifies that the lite token account is authorized to
+// validateLocalLiteSignature verifies that the lite token account is authorized to
 // sign for the principal.
-func validateLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
+func validateLocalLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
 	// A lite token account is only allowed to sign for itself
 	if !signer.Url.Equal(transaction.Header.Principal) {
-		return fmt.Errorf("%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
+		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
 	}
 
 	return nil
 }
 
-// validatePageSignature verifies that the key page is authorized to sign for
+// validateRemoteLiteSignature verifies that the lite token account is
+// authorized to sign for the principal.
+func validateRemoteLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
+	return protocol.NewError(protocol.ErrorCodeUnauthorized, errors.New("remote signatures are not supported for lite accounts"))
+}
+
+// validateLocalPageSignature verifies that the key page is authorized to sign for
 // the principal.
-func validatePageSignature(batch *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
+func validateLocalPageSignature(batch *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	if err != nil {
@@ -241,6 +271,18 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		// Transaction type forces authorization => unauthorized
 		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.GetUrl())
 	}
+}
+
+// validateRemotePageSignature verifies that the key page is authorized to sign for
+// the principal.
+func validateRemotePageSignature(_ *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
+	// Verify that the key page is allowed to sign the transaction
+	bit, ok := transaction.Body.Type().AllowedTransactionBit()
+	if ok && signer.TransactionBlacklist.IsSet(bit) {
+		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
+	}
+
+	return nil
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.

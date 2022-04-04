@@ -42,17 +42,14 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *protocol.Envelope) (prot
 			entry.Disabled = true
 
 		case *protocol.AddAccountAuthorityOperation:
-			if account.GetUrl().RootIdentity().Equal(op.Authority.RootIdentity()) {
+			if account.GetUrl().LocalTo(op.Authority) {
 				// If the authority is local, make sure it exists
 				_, err := st.batch.Account(op.Authority).GetState()
 				if err != nil {
 					return nil, err
 				}
-
-			} else {
-				// TODO Support remote authorities
-				return nil, errors.New("remote authorities are not supported")
 			}
+			// TODO Require a proof of the existence of the remote authority
 
 			auth.AddAuthority(op.Authority)
 

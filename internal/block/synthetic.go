@@ -41,10 +41,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 
 		swo, ok := sub.Body.(protocol.SynthTxnWithOrigin)
 		if !ok {
-			// This should not happen. Other than InternalSendTransactions, a
-			// transaction should never produce a synthetic transaction that
-			// does not have an origin.
-			return fmt.Errorf("transaction type %v does not have a synthetic origin", sub.Body.Type())
+			continue
 		}
 
 		cause, _ := swo.GetSyntheticOrigin()

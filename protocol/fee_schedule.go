@@ -105,7 +105,7 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeUpdateKeyPage, nil
 	case TransactionTypeUpdateAccountAuth:
 		return FeeUpdateAccountAuth, nil
-	case TransactionTypeSignPending:
+	case TransactionTypeRemote:
 		return FeeSignature, nil
 	default:
 		// All user transactions must have a defined fee amount, even if it's zero

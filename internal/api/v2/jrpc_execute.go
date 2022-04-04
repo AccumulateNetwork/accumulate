@@ -182,7 +182,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		}
 
 		var sig protocol.Signature
-		if env.Type() == protocol.TransactionTypeSignPending {
+		if env.Type() == protocol.TransactionTypeRemote {
 			sig, err = sigBuilder.Sign(env.GetTxHash())
 		} else {
 			sig, err = sigBuilder.Initiate(env.Transaction)

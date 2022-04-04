@@ -247,7 +247,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		sig, err = signer.Initiate(env.Transaction)
 		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
-		payload = new(protocol.SignPending)
+		payload = new(protocol.RemoteTransactionBody)
 		env = new(protocol.Envelope)
 		env.TxHash = txHash
 		env.Transaction = new(protocol.Transaction)
