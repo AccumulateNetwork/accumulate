@@ -1,6 +1,8 @@
-package chain
+package block
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -11,15 +13,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*BlockState, error) {
-	// Load the existing signature set
-	sigSet, err := batch.Transaction(transaction.GetHash()).GetSignatures()
+func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*ProcessSignatureState, error) {
+	// Load the transaction status
+	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
 	if err != nil {
-		return nil, fmt.Errorf("load signatures: %w", err)
+		return nil, fmt.Errorf("load object metadata: %w", err)
 	}
 
 	// Is this the initial signature?
-	isInitiator := sigSet.Count() == 0
+	isInitiator := status.Initiator == nil
 	if isInitiator {
 		// Verify that the initiator signature matches the transaction
 		err = validateInitialSignature(transaction, signature)
@@ -60,48 +62,51 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}
 
-	// Add the signature to the transaction's signature set
-	sigSet.Add(signature)
-	err = batch.Transaction(transaction.GetHash()).PutSignatures(sigSet)
+	// Hash the signature
+	sigData, err := signature.MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("store signatures: %w", err)
+		return nil, fmt.Errorf("marshal signature: %w", err)
 	}
-
-	// For non-user transactions, do not append to the signature chain
-	if !transaction.Body.Type().IsUser() {
-		return &BlockState{Signed: 1}, nil
-	}
+	sigHash := sha256.Sum256(sigData)
 
 	// Store the signature as an envelope
 	env := new(protocol.Envelope)
 	env.TxHash = transaction.GetHash()
 	env.Signatures = []protocol.Signature{signature}
-	err = batch.Transaction(env.EnvHash()).PutState(env)
+	err = batch.Transaction(sigHash[:]).PutState(env)
 	if err != nil {
 		return nil, fmt.Errorf("store envelope: %w", err)
 	}
 
-	// Add the signature to the signer's chain
-	chain, err := batch.Account(signature.GetSigner()).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
-	if err != nil {
-		return nil, fmt.Errorf("load chain: %w", err)
-	}
-	err = chain.AddEntry(env.EnvHash(), true)
-	if err != nil {
-		return nil, fmt.Errorf("store chain: %w", err)
+	// Add the signature to the signer's chain (if it's a user transaction)
+	if transaction.Body.Type().IsUser() {
+		chain, err := batch.Account(signature.GetSigner()).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+		if err != nil {
+			return nil, fmt.Errorf("load chain: %w", err)
+		}
+		err = chain.AddEntry(sigHash[:], true)
+		if err != nil {
+			return nil, fmt.Errorf("store chain: %w", err)
+		}
 	}
 
 	// Add the signature to the principal's chain
-	chain, err = batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+	chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return nil, fmt.Errorf("load chain: %w", err)
 	}
-	err = chain.AddEntry(env.EnvHash(), true)
+	err = chain.AddEntry(sigHash[:], true)
 	if err != nil {
 		return nil, fmt.Errorf("store chain: %w", err)
 	}
 
-	return &BlockState{Signed: 1}, nil
+	// Add the signature to the transaction's signature set
+	_, err = batch.Transaction(transaction.GetHash()).AddSignature(signature)
+	if err != nil {
+		return nil, fmt.Errorf("store signatures: %w", err)
+	}
+
+	return &ProcessSignatureState{}, nil
 }
 
 // validateInitialSignature verifies that the signature is a valid initial
@@ -164,16 +169,9 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 		return nil, nil, err
 	}
 
-	// Check the height, except for lite accounts
-	if signer.Type() != protocol.AccountTypeLiteTokenAccount {
-		chain, err := batch.Account(signerUrl).ReadChain(protocol.MainChain)
-		if err != nil {
-			return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "read %v main chain: %v", signerUrl, err)
-		}
-
-		if signature.GetSignerVersion() != uint64(chain.Height()) {
-			return nil, nil, protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", chain.Height(), signature.GetSignerVersion())
-		}
+	// Check the height
+	if signature.GetSignerVersion() != signer.GetVersion() {
+		return nil, nil, protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
 	}
 
 	// Find the key entry
@@ -212,23 +210,31 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		return fmt.Errorf("load principal: %w", err)
 	}
 
-	// Get the key book URL
-	pageBook, _, ok := protocol.ParseKeyPageUrl(signer.Url)
-	if !ok {
-		// If this happens, the database has bad data
-		return fmt.Errorf("invalid key page URL: %v", signer.Url)
-	}
-
-	// Verify that the key page is authorized to sign transactions for the book
+	// Determine the principal's key book URL
 	var principalBookUrl *url.URL
 	switch principal := principal.(type) {
 	case *protocol.KeyBook:
+		// Principal is a key book
 		principalBookUrl = principal.Url
+
+	case *protocol.KeyPage:
+		// Principal is a key page => get the book URL from the page URL
+		var ok bool
+		principalBookUrl, _, ok = protocol.ParseKeyPageUrl(signer.Url)
+		if !ok {
+			// If this happens, the database has bad data
+			return fmt.Errorf("invalid key page URL: %v", signer.Url)
+		}
+
 	default:
+		// Principal is something else => get the book URL from the header
 		principalBookUrl = principal.Header().KeyBook
 	}
-	if !principalBookUrl.Equal(pageBook) {
-		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.Header().Url)
+
+	// Verify the principal's key book exists
+	_, err = batch.Account(principalBookUrl).GetState()
+	if err != nil {
+		return fmt.Errorf("invalid key book URL: %v, %v", principalBookUrl, err)
 	}
 
 	// Verify that the key page is allowed to sign the transaction
@@ -237,7 +243,27 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
 	}
 
-	return nil
+	// Get the signer book URL
+	signerBook, _, ok := protocol.ParseKeyPageUrl(signer.Url)
+	if !ok {
+		// If this happens, the database has bad data
+		return fmt.Errorf("invalid key page URL: %v", signer.Url)
+	}
+
+	switch {
+	case principalBookUrl.Equal(signerBook):
+		// Page belongs to book => authorized
+		return nil
+
+	case principal.Header().AuthDisabled && !transaction.Body.Type().RequireAuthorization():
+		// Authorization is disabled and the transaction type does not force authorization => authorized
+		return nil
+
+	default:
+		// Authorization is enabled => unauthorized
+		// Transaction type forces authorization => unauthorized
+		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.Header().Url)
+	}
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.
@@ -400,4 +426,38 @@ func validateInternalSignature(net *config.Network, _ *database.Batch, transacti
 
 	// TODO Check something?
 	return nil
+}
+
+func getAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
+	signatures := make([]protocol.Signature, 1)
+
+	for _, signerUrl := range status.Signers {
+		// Load the signature set
+		sigset, err := transaction.ReadSignatures(signerUrl)
+		if err != nil {
+			return nil, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
+		}
+
+		for _, entryHash := range sigset.EntryHashes() {
+			state, err := batch.Transaction(entryHash[:]).GetState()
+			if err != nil {
+				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
+			}
+
+			for _, sig := range state.Signatures {
+				sigInitHash, err := sig.InitiatorHash()
+				if err == nil && bytes.Equal(sigInitHash, txnInitHash) {
+					signatures[0] = sig
+				} else {
+					signatures = append(signatures, sig)
+				}
+			}
+		}
+	}
+
+	if signatures[0] == nil {
+		signatures = signatures[1:]
+	}
+
+	return signatures, nil
 }

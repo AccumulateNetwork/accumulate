@@ -16,7 +16,7 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BurnTokens), tx.Transaction.Body)
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin
@@ -36,7 +36,6 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	}
 
 	burn := new(protocol.SyntheticBurnTokens)
-	copy(burn.Cause[:], tx.GetTxHash())
 	burn.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burn)
 

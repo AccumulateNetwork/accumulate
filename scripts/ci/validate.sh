@@ -54,10 +54,10 @@ function cli-tx {
     echo "$JSON" | jq -re .transactionHash
 }
 
-# cli-tx-env <args...> - Execute a CLI command and extract the envelope hash from the result
-function cli-tx-env {
+# cli-tx-sig <args...> - Execute a CLI command and extract the first signature hash from the result
+function cli-tx-sig {
     JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -re .envelopeHash
+    echo "$JSON" | jq -re .signatureHashes[0]
 }
 
 # api-v2 <payload> - Send a JSON-RPC message to the API
@@ -189,7 +189,7 @@ wait-for cli-tx credits ${LITE} keytest/book/2 1000
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1000 ] && success || die "keytest/book/2 should have 1000 credits but has ${BALANCE}"
 
-section "Attempting to log key page 2 using itself fails"
+section "Attempting to lock key page 2 using itself fails"
 wait-for cli-tx page lock keytest/book/2 keytest-2-0 && die "Key page 2 locked itself" || success
 
 section "Lock key page 2 using page 1"
@@ -241,7 +241,7 @@ accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Trans
 success
 
 section "Signing the transaction with the same key does not deliver it"
-wait-for cli-tx-env tx sign keytest/tokens keytest-2-0 $TXID
+wait-for cli-tx-sig tx sign keytest/tokens keytest-2-0 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
 wait-for-tx $TXID
@@ -270,14 +270,14 @@ success
 
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
-wait-for cli-tx-env tx sign keytest/tokens keytest-2-1 $TXID
+wait-for cli-tx-sig tx sign keytest/tokens keytest-2-1 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
 wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-cli-tx-env tx sign keytest/tokens keytest-2-2 $TXID && die "Signed the transaction after it was delivered" || success
+cli-tx-sig tx sign keytest/tokens keytest-2-2 $TXID && die "Signed the transaction after it was delivered" || success
 
 # section "Bug AC-551"
 # api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null
@@ -418,8 +418,8 @@ RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Update manager to keypage"
-wait-for cli-tx manager set keytest/book/3 keytest-3-0 keytest/book
-RESULT=$(accumulate -j get keytest/book/3 | jq -re .data.managerKeyBook)
+wait-for cli-tx manager set keytest/tokens keytest-1-0 keytest/book
+RESULT=$(accumulate -j get keytest/tokens | jq -re .data.managerKeyBook)
 [ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
 
 section "Remove manager from keypage"

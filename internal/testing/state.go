@@ -19,6 +19,8 @@ import (
 
 type DB = *database.Batch
 
+var FakeBvn = MustParseUrl("acc://bvn0")
+
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
@@ -258,6 +260,7 @@ func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) er
 
 	page := new(protocol.KeyPage)
 	page.KeyBook = bookUrl
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
 	if len(publicKey) == 1 {
@@ -282,6 +285,19 @@ func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
 
 	fn(page)
 	return db.Account(account).PutState(page)
+}
+
+func UpdateAccountAuth(db DB, account string, enable bool) error {
+	u, err := url.Parse(account)
+	if err != nil {
+		return err
+	}
+	state, err := db.Account(u).GetState()
+	if err != nil {
+		return err
+	}
+	state.Header().AuthDisabled = !enable
+	return db.Account(u).PutState(state)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
