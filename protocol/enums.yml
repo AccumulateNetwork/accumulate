@@ -256,7 +256,6 @@ AllowedTransactionBit:
     value: 1
     description: is the offset of the UpdateKeyPage bit
 
-
 VoteType:
   Accept:
     value: 0x0
