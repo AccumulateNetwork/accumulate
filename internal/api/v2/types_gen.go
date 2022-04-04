@@ -181,16 +181,17 @@ type TxHistoryQuery struct {
 }
 
 type TxRequest struct {
-	CheckOnly  bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
-	IsEnvelope bool        `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
-	Origin     *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	Signer     Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Signature  []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
-	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
-	Memo       string      `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata   []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	CheckOnly  bool     `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	IsEnvelope bool     `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
+	Origin     *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	Signer     Signer   `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature  []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	// KeyPage is deprecated.
+	KeyPage  KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash   []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Payload  interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Memo     string      `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TxResponse struct {
