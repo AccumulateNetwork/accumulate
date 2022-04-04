@@ -109,6 +109,8 @@ if [ -f "$NODE_PRIV_VAL0" ]; then
     TXID=$(cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}')
     wait-for-tx $TXID
     wait-for cli-tx tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
+    sleep 10
+    accumulate tx get -j ${TXID}
 
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
