@@ -19,6 +19,9 @@ type TransactionType uint64
 // TransactionMax defines the max point for transaction types.
 type TransactionMax uint64
 
+// VoteType specifies how the user wants to vote on a proposal (e.g. transaction, initiative, etc)
+type VoteType uint64
+
 type Account interface {
 	encoding.BinaryValue
 	GetType() AccountType
@@ -47,6 +50,7 @@ type Signature interface {
 	Hash() []byte
 	MetadataHash() []byte
 	InitiatorHash() ([]byte, error)
+	GetVote() VoteType
 
 	GetSigner() *url.URL
 	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion

@@ -338,6 +338,18 @@ const TransactionTypeInternalTransactionsSigned TransactionType = 98
 // TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
 const TransactionTypeInternalTransactionsSent TransactionType = 99
 
+// VoteTypeAccept vote yea in favor of proposal.
+const VoteTypeAccept VoteType = 0
+
+// VoteTypeReject vote nay against a proposal.
+const VoteTypeReject VoteType = 1
+
+// VoteTypeAbstain chose not to vote on a proposal.
+const VoteTypeAbstain VoteType = 2
+
+// VoteTypeSuggest put forth a proposal.
+const VoteTypeSuggest VoteType = 3
+
 // GetEnumValue returns the value of the Account Auth Operation Type
 func (v AccountAuthOperationType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -1296,6 +1308,74 @@ func (v *TransactionType) UnmarshalJSON(data []byte) error {
 	*v, ok = TransactionTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Transaction Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Vote Type
+func (v VoteType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *VoteType) SetEnumValue(id uint64) bool {
+	u := VoteType(id)
+	switch u {
+	case VoteTypeAccept, VoteTypeReject, VoteTypeAbstain, VoteTypeSuggest:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Vote Type
+func (v VoteType) String() string {
+	switch v {
+	case VoteTypeAccept:
+		return "accept"
+	case VoteTypeReject:
+		return "reject"
+	case VoteTypeAbstain:
+		return "abstain"
+	case VoteTypeSuggest:
+		return "suggest"
+	default:
+		return fmt.Sprintf("VoteType:%d", v)
+	}
+}
+
+// VoteTypeByName returns the named Vote Type.
+func VoteTypeByName(name string) (VoteType, bool) {
+	switch name {
+	case "accept":
+		return VoteTypeAccept, true
+	case "reject":
+		return VoteTypeReject, true
+	case "abstain":
+		return VoteTypeAbstain, true
+	case "suggest":
+		return VoteTypeSuggest, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Vote Type to JSON as a string.
+func (v VoteType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Vote Type from JSON as a string.
+func (v *VoteType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = VoteTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Vote Type %q", s)
 	}
 	return nil
 }
