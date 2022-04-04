@@ -1336,16 +1336,6 @@ func TestUpdateValidators(t *testing.T) {
 	// Should not be removed yet, the tx is pending
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
 
-	batch := n.db.Begin(true)
-	require.NoError(t, acctesting.UpdateKeyPage(batch, validators, func(page *protocol.KeyPage) {
-		hash := sha256.Sum256(n.key.Bytes()[32:])
-		page.CreditBalance = 1e8
-		page.Keys = append(page.Keys, &protocol.KeySpec{
-			PublicKeyHash: hash[:],
-		})
-	}))
-	require.NoError(t, batch.Commit())
-
 	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithNonceVar(&globalNonce).
