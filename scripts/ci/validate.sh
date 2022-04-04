@@ -84,11 +84,12 @@ function success {
 }
 
 
-NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+NODE_PRIV_VAL1="/nodes/dn/Node1/config/priv_validator_key.json"
 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
 NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
-if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
    section "Add a new DN validator"
    declare -g TEST_NODE_WORK_DIR=~/node1
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
@@ -99,12 +100,14 @@ if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; t
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
    # Register new validator
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" $hexPubKey
 fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
+if [ -f "$NODE_PRIV_VAL0" ]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}'
+    wait-for cli-tx-env tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
+
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
     [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
@@ -449,11 +452,11 @@ MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Fai
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Query votes chain"
-if [ -f "$NODE_PRIV_VAL" ]; then
+if [ -f "$NODE_PRIV_VAL0" ]; then
     #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
     RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
     #convert the node address to search for to base64
-    NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
+    NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL0 | xxd -r -p | base64 )
     VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
     FOUND=0
     for ((i = 0; i < $VOTE_COUNT; i++)); do
@@ -469,7 +472,7 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
     section "Shutdown dynamic validator"
-    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
+    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL0" $hexPubKey
     kill -9 $ACCPID
     rm -rf $TEST_NODE_WORK_DIR
 fi
