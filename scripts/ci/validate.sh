@@ -2,7 +2,6 @@
 
 # Stop immediately on error
 set -e
-set -x
 
 # section <name> - Print a section header
 function section {
@@ -112,7 +111,6 @@ if [ -f "$NODE_PRIV_VAL0" ]; then
     wait-for cli-tx-sig tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
     accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
-    wait-for-tx $TXID
 
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
