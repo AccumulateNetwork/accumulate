@@ -85,8 +85,8 @@ function success {
 }
 
 
-NODE_PRIV_VAL0="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-NODE_PRIV_VAL1="/nodes/dn/Node1/config/priv_validator_key.json"
+NODE_PRIV_VAL0="${NODE_ROOT0:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
+NODE_PRIV_VAL1="${NODE_ROOT1:-~/.accumulate/dn/Node1}/config/priv_validator_key.json"
 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
 NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
@@ -110,7 +110,6 @@ if [ -f "$NODE_PRIV_VAL0" ]; then
     wait-for-tx $TXID
 
     wait-for cli-tx-sig tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
-    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
     accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
     wait-for-tx $TXID
 
