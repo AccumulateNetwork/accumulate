@@ -73,7 +73,6 @@ func AddCredits(db DB, account *url.URL, credits float64) error {
 	return db.Account(account).PutState(state)
 }
 
-
 func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, credits float64) error {
 	url := AcmeLiteAddressTmPriv(key)
 	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
