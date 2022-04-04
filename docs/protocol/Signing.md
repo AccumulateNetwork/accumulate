@@ -48,6 +48,8 @@ actual signed hash
 - Key pages and lite token accounts are signers.
 - A transaction's signatures are grouped into signature books and pages by
   authority and signer, respectively.
+- Each key of a signer can respond at most once. Additional responses
+  (signatures) from the same public key are ignored.
 - A transaction is ready to execute once all of the enabled authorities of the
   transaction's principal account are satisified.
 - An authority is satisfied once any of its signers are satisfied.
