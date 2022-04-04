@@ -2,6 +2,7 @@ package chain_test
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 
@@ -33,26 +34,29 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
+	bookUrl := url.MustParse("foo/book")
+
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
+			op := new(protocol.UpdateKeyOperation)
+			kh := sha256.Sum256(testKey.PubKey().Bytes())
+			nkh := sha256.Sum256(newKey.PubKey().Bytes())
+			op.OldEntry.KeyHash = kh[:]
+			op.NewEntry.KeyHash = nkh[:]
 			body := new(protocol.UpdateKeyPage)
-			body.Operation = protocol.KeyPageOperationUpdate
-			body.Key = testKey.PubKey().Bytes()
-			body.NewKey = newKey.PubKey().Bytes()
-
-			u, err := url.Parse("foo/book/2")
-			require.NoError(t, err)
+			body.Operation = append(body.Operation, op)
 
 			env := acctesting.NewTransaction().
-				WithOrigin(u).
-				WithKeyPage(idx, 1).
+				WithPrincipal(protocol.FormatKeyPageUrl(bookUrl, 1)).
+				WithSigner(protocol.FormatKeyPageUrl(bookUrl, idx), 1).
+				WithTimestamp(1).
 				WithBody(body).
-				SignLegacyED25519(testKey)
+				Initiate(protocol.SignatureTypeED25519, testKey)
 
-			st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
-			require.NoError(t, err)
+			st := NewStateManagerForTest(t, db, env)
+			defer st.Discard()
 
-			_, err = UpdateKeyPage{}.Validate(st, env)
+			_, err := UpdateKeyPage{}.Validate(st, env)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {

@@ -89,6 +89,11 @@ func (c *Chain) State(height int64) (*managed.MerkleState, error) {
 	return c.merkle.GetAnyState(height)
 }
 
+// CurrentState returns the current state of the chain.
+func (c *Chain) CurrentState() *managed.MerkleState {
+	return c.merkle.MS
+}
+
 // HeightOf returns the height of the given entry in the chain.
 func (c *Chain) HeightOf(hash []byte) (int64, error) {
 	return c.merkle.GetElementIndex(hash)
@@ -97,6 +102,15 @@ func (c *Chain) HeightOf(hash []byte) (int64, error) {
 // Anchor calculates the anchor of the current Merkle state.
 func (c *Chain) Anchor() []byte {
 	return c.merkle.MS.GetMDRoot()
+}
+
+// AnchorAt calculates the anchor of the chain at the given height.
+func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
+	ms, err := c.State(int64(height))
+	if err != nil {
+		return nil, err
+	}
+	return ms.GetMDRoot(), nil
 }
 
 // Pending returns the pending roots of the current Merkle state.
@@ -108,6 +122,10 @@ func (c *Chain) Pending() []managed.Hash {
 func (c *Chain) AddEntry(entry []byte, unique bool) error {
 	if !c.writable {
 		return fmt.Errorf("chain opened as read-only")
+	}
+
+	if entry == nil {
+		panic("attempted to add a nil entry to a chain")
 	}
 
 	return c.merkle.AddHash(entry, unique)

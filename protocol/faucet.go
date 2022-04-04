@@ -8,25 +8,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-const AcmeFaucetAmount = 2000
+const AcmeFaucetAmount = 2_000_000
 
-var FaucetUrl *url.URL
-var Faucet faucet
+const AcmeFaucetBalance = "314159265358979323846264338327950288419716939937510582097494459"
 
 var faucetSeed = sha256.Sum256([]byte("faucet"))
 var faucetKey = ed25519.NewKeyFromSeed(faucetSeed[:])
 
+var Faucet faucet
+var FaucetUrl = liteTokenAddress(Faucet.PublicKey(), AcmeUrl())
+
 // TODO Set the balance to 0 and/or use a bogus URL for the faucet. Otherwise, a
 // bad actor could generate the faucet private key using the same method we do,
 // then sign arbitrary transactions using the faucet.
-
-func init() {
-	var err error
-	FaucetUrl, err = LiteTokenAddress(Faucet.PublicKey(), AcmeUrl().String())
-	if err != nil {
-		panic(err)
-	}
-}
 
 type faucet struct{}
 
@@ -44,7 +38,7 @@ func (faucet) Signer() faucetSigner {
 
 type faucetSigner uint64
 
-func (s faucetSigner) Nonce() uint64 {
+func (s faucetSigner) Timestamp() uint64 {
 	return uint64(s)
 }
 
@@ -52,12 +46,26 @@ func (s faucetSigner) PublicKey() []byte {
 	return faucetKey[32:]
 }
 
-func SignWithFaucet(nonce uint64, message []byte) (Signature, error) {
+func (s faucetSigner) Sign(message []byte) *LegacyED25519Signature {
 	sig := new(LegacyED25519Signature)
-	err := sig.Sign(nonce, faucetKey, message)
-	return sig, err
+	sig.Timestamp = s.Timestamp()
+	sig.PublicKey = s.PublicKey()
+	sig.Signer = FaucetUrl
+	sig.SignerVersion = 1
+	SignLegacyED25519(sig, faucetKey, message)
+	return sig
 }
 
-func (s faucetSigner) Sign(message []byte) (Signature, error) {
-	return SignWithFaucet(uint64(s), message)
+func (s faucetSigner) Initiate(txn *Transaction) *LegacyED25519Signature {
+	sig := new(LegacyED25519Signature)
+	sig.Timestamp = s.Timestamp()
+	sig.PublicKey = s.PublicKey()
+	sig.Signer = FaucetUrl
+	sig.SignerVersion = 1
+
+	init, _ := sig.InitiatorHash()
+	txn.Header.Initiator = *(*[32]byte)(init)
+
+	SignLegacyED25519(sig, faucetKey, txn.GetHash())
+	return sig
 }

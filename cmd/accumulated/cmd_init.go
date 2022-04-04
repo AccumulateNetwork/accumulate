@@ -49,6 +49,13 @@ var cmdListNamedNetworkConfig = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
+var cmdInitDualNode = &cobra.Command{
+	Use:   "dual <url|ip> <dn base port> <bvn base port>",
+	Short: "Initialize a dual run from seed IP, DN base port, and BVN base port",
+	Run:   initDualNode,
+	Args:  cobra.ExactArgs(2),
+}
+
 var cmdInitNode = &cobra.Command{
 	Use:   "node <network-name|url>",
 	Short: "Initialize a node",
@@ -86,6 +93,12 @@ var flagInitNode struct {
 	SkipVersionCheck bool
 }
 
+var flagInitNodeFromSeed struct {
+	GenesisDoc       string
+	Follower         bool
+	SkipVersionCheck bool
+}
+
 var flagInitDevnet struct {
 	Name          string
 	NumBvns       int
@@ -94,28 +107,28 @@ var flagInitDevnet struct {
 	BasePort      int
 	IPs           []string
 	Docker        bool
-	DockerTag     string
+	DockerImage   string
 	UseVolumes    bool
 	Compose       bool
 	DnsSuffix     string
 }
 
 var flagInitNetwork struct {
-	GenesisDoc string
-	Docker     bool
-	DockerTag  string
-	UseVolumes bool
-	Compose    bool
-	DnsSuffix  string
+	GenesisDoc  string
+	Docker      bool
+	DockerImage string
+	UseVolumes  bool
+	Compose     bool
+	DnsSuffix   string
 }
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdListNamedNetworkConfig)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdListNamedNetworkConfig, cmdInitDualNode)
 
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
-	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DockerTag, "tag", "latest", "Tag to use on the docker images")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DockerImage, "image", "registry.gitlab.com/accumulatenetwork/accumulate", "Docker image name (and tag)")
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
@@ -134,6 +147,10 @@ func init() {
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	_ = cmdInitNode.MarkFlagRequired("listen")
 
+	cmdInitDualNode.Flags().BoolVarP(&flagInitNodeFromSeed.Follower, "follow", "f", false, "Do not participate in voting")
+	cmdInitDualNode.Flags().StringVar(&flagInitNodeFromSeed.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitDualNode.Flags().BoolVar(&flagInitNodeFromSeed.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
+
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per subnet to configure")
@@ -141,7 +158,7 @@ func init() {
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringSliceVar(&flagInitDevnet.IPs, "ip", []string{"127.0.1.1"}, "IP addresses to use or base IP - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
-	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerTag, "tag", "latest", "Tag to use on the docker images")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerImage, "image", "registry.gitlab.com/accumulatenetwork/accumulate", "Docker image name (and tag)")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
@@ -327,10 +344,16 @@ func initNode(cmd *cobra.Command, args []string) {
 					}
 					if netAddr != nodeHost {
 						tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", nodeHost, netPort+networks.TmRpcPortOffset))
-						warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+						if err != nil {
+							warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
+							continue
+						}
 
 						status, err := tmClient.Status(context.Background())
-						warnf("failed to get status of %s with error %v", n.Address, err)
+						if err != nil {
+							warnf("failed to get status of %s with error %v", n.Address, err)
+							continue
+						}
 
 						peers := config.P2P.PersistentPeers
 						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
@@ -363,6 +386,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	check(node.Init(node.InitOptions{
+		Version:    1,
 		WorkDir:    flagMain.WorkDir,
 		Port:       nodePort,
 		GenesisDoc: genDoc,
@@ -559,10 +583,10 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:" + flagInitDevnet.DockerTag
+	svc.Image = flagInitDevnet.DockerImage
 	svc.Environment = map[string]*string{"ACC_API": &api}
 
-	svc.Command = dc.ShellCommand{"accumulated", "init", "devnet", "-w", "/nodes", "--docker"}
+	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
 		switch flag.Name {
 		case "work-dir", "docker", "compose", "reset":
@@ -645,7 +669,7 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 	var svc dc.ServiceConfig
 	svc.Name = name
 	svc.ContainerName = "devnet-" + name
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:" + flagInitDevnet.DockerTag
+	svc.Image = flagInitDevnet.DockerImage
 	svc.DependsOn = []string{"tools"}
 
 	if flagInitDevnet.UseVolumes {

@@ -27,8 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
-const debugTX = true
-
 // FakeTendermint is a test harness that facilitates testing the ABCI
 // application without creating an actual Tendermint node.
 type FakeTendermint struct {
@@ -114,7 +112,7 @@ func (c *FakeTendermint) App() abci.Application {
 	return c.app
 }
 
-func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
+func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx, check bool) *txStatus {
 	st := c.didSubmit(tx, sha256.Sum256(tx))
 	if st == nil {
 		return nil
@@ -122,6 +120,15 @@ func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
 
 	c.stopped.Add(1)
 	defer c.stopped.Done()
+
+	if check {
+		cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx})
+		st.CheckResult = &cr
+		if cr.Code != 0 {
+			c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
+			return st
+		}
+	}
 
 	select {
 	case <-c.stop:
@@ -135,9 +142,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	envelopes, err := transactions.UnmarshalAll(tx)
 	if err != nil {
 		c.onError(err)
-		if debugTX {
-			c.logger.Error("Rejecting invalid transaction", "error", err)
-		}
+		c.logger.Error("Rejecting invalid transaction", "error", err)
 		return nil
 	}
 
@@ -178,8 +183,8 @@ func (c *FakeTendermint) getSynthHeight() int64 {
 
 	// Load the ledger state
 	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return 0
@@ -201,8 +206,8 @@ func (c *FakeTendermint) addSynthTxns(blockIndex, lastHeight int64) (int64, bool
 
 	// Load the ledger state
 	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	var ledgerState *protocol.InternalLedger
+	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		c.onError(err)
 		return 0, false
@@ -370,9 +375,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		// Clear the queue (reuse the memory)
 		queue = queue[:0]
 
-		if debugTX {
-			c.logger.Info("Completed block", "height", height, "tx-pending", c.txActive+len(c.txPend))
-		}
+		c.logger.Info("Completed block", "height", height, "tx-pending", c.txActive+len(c.txPend))
 	}
 }
 
@@ -432,38 +435,36 @@ func (c *FakeTendermint) CheckTx(ctx context.Context, tx types.Tx) (*ctypes.Resu
 
 func (c *FakeTendermint) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
 	// Wait for nothing
-	c.SubmitTx(ctx, tx)
+	c.SubmitTx(ctx, tx, false)
 	return &ctypes.ResultBroadcastTx{}, nil
 }
 
 func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
-	cr := c.app.CheckTx(abci.RequestCheckTx{Tx: tx})
-	if cr.Code != 0 {
-		c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
-	} else {
-		c.SubmitTx(ctx, tx)
+	st := c.SubmitTx(ctx, tx, true)
+	if st == nil {
+		h := sha256.Sum256(tx)
+		return &ctypes.ResultBroadcastTx{
+			Code: uint32(protocol.ErrorCodeUnknownError),
+			Log:  "An unknown error occured",
+			Hash: h[:],
+		}, nil
 	}
 
-	hash := sha256.Sum256(tx)
 	return &ctypes.ResultBroadcastTx{
-		Code:         cr.Code,
-		Data:         cr.Data,
-		Log:          cr.Log,
-		Codespace:    cr.Codespace,
-		MempoolError: cr.MempoolError,
-		Hash:         hash[:],
+		Code:         st.CheckResult.Code,
+		Data:         st.CheckResult.Data,
+		Log:          st.CheckResult.Log,
+		Codespace:    st.CheckResult.Codespace,
+		MempoolError: st.CheckResult.MempoolError,
+		Hash:         st.Hash[:],
 	}, nil
 }
 
 func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
-	if !debugTX {
-		return
-	}
-
 	for _, env := range env {
-		txt := env.Transaction.Type()
-		if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor {
-			c.logger.Debug(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
+		txnType := env.Type()
+		if !txnType.IsInternal() && txnType != protocol.TransactionTypeSyntheticAnchor {
+			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.GetTxHash()).Slice(0, 4), "env", logging.AsHex(env.EnvHash()).Slice(0, 4))
 		}
 	}
 }

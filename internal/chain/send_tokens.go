@@ -23,7 +23,7 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		recipients[i] = to.Url
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	switch origin := st.Origin.(type) {
 	case *protocol.TokenAccount:
 		account = origin
@@ -41,22 +41,17 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		total.Add(total.AsBigInt(), &to.Amount)
 	}
 
-	if !account.CanDebitTokens(&total.Int) {
+	if !account.DebitTokens(&total.Int) {
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
 	}
+	st.Update(account)
 
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
-		copy(deposit.Cause[:], tx.GetTxHash())
 		deposit.Token = account.GetTokenUrl()
 		deposit.Amount = body.To[i].Amount
 		st.Submit(u, deposit)
 	}
-
-	if !account.DebitTokens(&total.Int) {
-		return nil, fmt.Errorf("%q balance is insufficient", st.OriginUrl)
-	}
-	st.Update(account)
 
 	return nil, nil
 }

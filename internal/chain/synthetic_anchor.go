@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type SyntheticAnchor struct {
@@ -46,14 +47,27 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 			return nil, fmt.Errorf("attempting to set oracle price to 0")
 		}
 
-		ledgerState := protocol.NewInternalLedger()
-		err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), ledgerState)
+		var ledgerState *protocol.InternalLedger
+		err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
-
 		ledgerState.PendingOracle = body.AcmeOraclePrice
 		st.Update(ledgerState)
+	} else {
+		//Add the burnt acme tokens back to the supply
+		var issuerState *protocol.TokenIssuer
+		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load acme ledger")
+		}
+		var ledgerState *protocol.InternalLedger
+		err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load main ledger: %w", err)
+		}
+		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
+		st.Update(issuerState)
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name
@@ -83,8 +97,8 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 		anchors[*(*[32]byte)(receipt.Start)] = &body.Receipts[i]
 	}
 
-	synthLedgerState := new(protocol.InternalSyntheticLedger)
-	err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), synthLedgerState)
+	var synthLedgerState *protocol.InternalSyntheticLedger
+	err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), &synthLedgerState)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load synthetic transaction ledger: %w", err)
 	}
@@ -151,12 +165,13 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 
 		// Combine all of the receipts, from the txn to the synth anchor to the
 		// root anchor to the directory anchor
-		receipt, err := combineReceipts(nil, synthReceipt, rootReceipt, dirReceipt.Convert())
+		receipt, err := managed.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.Convert())
 		if err != nil {
 			return nil, err
 		}
 
 		sig := new(protocol.ReceiptSignature)
+		sig.SourceNetwork = st.nodeUrl
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
 		st.SignTransaction(synth.TransactionHash[:], sig)
 		synth.NeedsReceipt = false

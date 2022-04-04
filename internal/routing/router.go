@@ -18,7 +18,8 @@ import (
 //
 // TODO Route and Send should probably be handled separately.
 type Router interface {
-	Route(account *url.URL) (string, error)
+	RouteAccount(*url.URL) (string, error)
+	Route(...*protocol.Envelope) (string, error)
 	Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
 	Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*ResponseSubmit, error)
 }
@@ -127,9 +128,47 @@ type RouterInstance struct {
 
 var _ Router = (*RouterInstance)(nil)
 
+func RouteAccount(net *config.Network, account *url.URL) (string, error) {
+	return routeModulo(net, account)
+}
+
+func RouteEnvelopes(net *config.Network, envs ...*protocol.Envelope) (string, error) {
+	if len(envs) == 0 {
+		return "", errors.New("nothing to route")
+	}
+
+	var route string
+	for _, env := range envs {
+		if len(env.Signatures) == 0 {
+			return "", errors.New("cannot route envelope: no signatures")
+		}
+		for _, sig := range env.Signatures {
+			sigRoute, err := RouteAccount(net, sig.GetSigner())
+			if err != nil {
+				return "", err
+			}
+
+			if route == "" {
+				route = sigRoute
+				continue
+			}
+
+			if route != sigRoute {
+				return "", errors.New("cannot route envelope(s): conflicting routes")
+			}
+		}
+	}
+
+	return route, nil
+}
+
+func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
+	return RouteAccount(r.Network, account)
+}
+
 // Route routes the account using modulo routing.
-func (r *RouterInstance) Route(account *url.URL) (string, error) {
-	return routeModulo(r.Network, account)
+func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
+	return RouteEnvelopes(r.Network, envs...)
 }
 
 // Query queries the specified subnet. If the subnet matches this

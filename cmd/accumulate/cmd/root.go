@@ -20,7 +20,7 @@ var (
 	Db             db.DB
 	WantJsonOutput = false
 	TxPretend      = false
-	TxProve        = false
+	Prove          = false
 	Memo           string
 	Metadata       string
 )
@@ -46,7 +46,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	serverAddr := os.Getenv("ACC_API")
 	if serverAddr == "" {
-		serverAddr = "https://testnet.accumulatenetwork.io/v2"
+		serverAddr = "https://bvn0.testnet.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
@@ -55,7 +55,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVarP(&ClientDebug, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
-	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
+	flags.BoolVar(&Prove, "prove", false, "Request a receipt proving the transaction or account")
 	flags.BoolVar(&TxNoWait, "no-wait", false, "Don't wait for the transaction to complete")
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")
@@ -75,11 +75,12 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(tokenCmd)
 	cmd.AddCommand(managerCmd)
 	cmd.AddCommand(oracleCmd)
+	cmd.AddCommand(validatorCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
 
-	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+	cmd.PersistentPreRunE = func(*cobra.Command, []string) error {
 		switch serverAddr {
 		case "local":
 			serverAddr = "http://127.0.1.1:26660/v2"
@@ -133,7 +134,7 @@ var (
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {
 	var ret db.DB
-	if memDb == true {
+	if memDb {
 		ret = new(db.MemoryDB)
 	} else {
 		err := os.MkdirAll(defaultWorkDir, 0700)

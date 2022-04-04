@@ -46,6 +46,75 @@ type TransactionChainIndex struct {
 	Entries   []*TransactionChainEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 }
 
+func (v *BlockStateIndex) Copy() *BlockStateIndex {
+	u := new(BlockStateIndex)
+
+	u.ProducedSynthTxns = make([]*BlockStateSynthTxnEntry, len(v.ProducedSynthTxns))
+	for i, v := range v.ProducedSynthTxns {
+		if v != nil {
+			u.ProducedSynthTxns[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockStateIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
+	u := new(BlockStateSynthTxnEntry)
+
+	u.Transaction = encoding.BytesCopy(v.Transaction)
+	u.ChainEntry = v.ChainEntry
+
+	return u
+}
+
+func (v *BlockStateSynthTxnEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PendingTransactionsIndex) Copy() *PendingTransactionsIndex {
+	u := new(PendingTransactionsIndex)
+
+	u.Transactions = make([][32]byte, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = v
+	}
+
+	return u
+}
+
+func (v *PendingTransactionsIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
+	u := new(TransactionChainEntry)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Chain = v.Chain
+	u.ChainIndex = v.ChainIndex
+	u.AnchorIndex = v.AnchorIndex
+
+	return u
+}
+
+func (v *TransactionChainEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionChainIndex) Copy() *TransactionChainIndex {
+	u := new(TransactionChainIndex)
+
+	u.Entries = make([]*TransactionChainEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *TransactionChainIndex) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *BlockStateIndex) Equal(u *BlockStateIndex) bool {
 	if len(v.ProducedSynthTxns) != len(u.ProducedSynthTxns) {
 		return false
@@ -84,7 +153,12 @@ func (v *PendingTransactionsIndex) Equal(u *PendingTransactionsIndex) bool {
 }
 
 func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
-	if !((v.Account).Equal(u.Account)) {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 	if !(v.Chain == u.Chain) {

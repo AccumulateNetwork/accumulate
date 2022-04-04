@@ -6,10 +6,10 @@ import (
 )
 
 // Fee is the unit cost of a transaction.
-type Fee int
+type Fee uint64
 
-func (n Fee) AsInt() int {
-	return int(n)
+func (n Fee) AsUInt64() uint64 {
+	return uint64(n)
 }
 
 // Fee Schedule
@@ -56,11 +56,10 @@ const (
 	// FeeAddCredits conversion of ACME tokens to credits a "free" transaction
 	FeeAddCredits Fee = 0
 
-	// FeeUpdateKeyPage $0.03
-	FeeUpdateKeyPage Fee = 300
-
-	// FeeUpdateKeyPage $0.03
-	FeeUpdateKey Fee = 300
+	// FeeUpdateAuth $0.03 is the fee for operations that update authentication
+	// and authorization, including UpdateKey, UpdateKeyPage, and
+	// UpdateAccountAuth.
+	FeeUpdateAuth Fee = 300
 
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
@@ -101,13 +100,12 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeCreateKeyBook, nil
 	case TransactionTypeAddCredits:
 		return FeeAddCredits, nil
-	case TransactionTypeUpdateKeyPage:
-		return FeeUpdateKeyPage, nil
-	case TransactionTypeUpdateKey:
-		return FeeUpdateKey, nil
-	case TransactionTypeUpdateManager, TransactionTypeRemoveManager:
-		// TODO Fee schedule for these transactions
-		return 0, nil
+	case TransactionTypeUpdateKeyPage,
+		TransactionTypeUpdateKey,
+		TransactionTypeUpdateAccountAuth,
+		TransactionTypeUpdateManager,
+		TransactionTypeRemoveManager:
+		return FeeUpdateAuth, nil
 	case TransactionTypeSignPending:
 		return FeeSignature, nil
 	default:
@@ -147,27 +145,27 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 	return FeeSignature * Fee(count), nil
 }
 
-func ComputeTransactionFee(tx *Envelope) (Fee, error) {
+func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	// Do not charge fees for the DN or BVNs
-	if IsDnUrl(tx.Transaction.Origin) {
+	if IsDnUrl(tx.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
+	if _, ok := ParseBvnUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
 
 	// Don't charge for synthetic and internal transactions
-	if !tx.Transaction.Type().IsUser() {
+	if !tx.Type().IsUser() {
 		return 0, nil
 	}
 
-	fee, err := BaseTransactionFee(tx.Transaction.Type())
+	fee, err := BaseTransactionFee(tx.Type())
 	if err != nil {
 		return 0, err
 	}
 
 	// Check the transaction size
-	count, size, err := dataCount(tx.Transaction)
+	count, size, err := dataCount(tx)
 	if err != nil {
 		return 0, err
 	}

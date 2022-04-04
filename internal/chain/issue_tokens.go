@@ -21,13 +21,13 @@ func (IssueTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
 	}
 
-	if issuer.Supply.Cmp(&body.Amount) < 0 && issuer.HasSupplyLimit {
-		return nil, fmt.Errorf("can't issue more than the limited supply")
+	issuer.Issued.Add(&issuer.Issued, &body.Amount)
+
+	if issuer.SupplyLimit != nil && issuer.Issued.Cmp(issuer.SupplyLimit) > 0 {
+		return nil, fmt.Errorf("cannot exceed supply limit")
 	}
-	issuer.Supply.Sub(&issuer.Supply, &body.Amount)
 
 	deposit := new(protocol.SyntheticDepositTokens)
-	copy(deposit.Cause[:], tx.GetTxHash())
 	deposit.Token = issuer.Header().Url
 	deposit.Amount = body.Amount
 	st.Submit(body.Recipient, deposit)

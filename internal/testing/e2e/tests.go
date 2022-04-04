@@ -24,19 +24,27 @@ func (s *Suite) TestCreateLiteAccount() {
 	senderUrl, err := protocol.LiteTokenAddress(sender.PubKey().Bytes(), protocol.ACME)
 	s.Require().NoError(err)
 
-	tx, err := acctesting.CreateFakeSyntheticDepositTx(sender)
-	s.Require().NoError(err)
-	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.GetTxHash())
+	env := acctesting.NewTransaction().
+		WithPrincipal(protocol.FaucetUrl).
+		WithBody(&protocol.AcmeFaucet{Url: senderUrl}).
+		Faucet()
+	s.dut.SubmitTxn(env)
+	s.dut.WaitForTxns(env.GetTxHash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(acctesting.TestTokenAmount*acctesting.TokenMx), account.Balance.Int64())
+	s.Require().Equal(int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), account.Balance.Int64())
 
 	var nonce uint64 = 1
-	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl, Amount: 1e8})
-	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.GetTxHash())
+	amtAcmeToBuyCredits := int64(10 * protocol.AcmePrecision)
+	env = acctesting.NewTransaction().
+		WithPrincipal(senderUrl).
+		WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
+		WithTimestamp(nonce).
+		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: *big.NewInt(amtAcmeToBuyCredits)}).
+		Initiate(protocol.SignatureTypeLegacyED25519, sender)
+	s.dut.SubmitTxn(env)
+	s.dut.WaitForTxns(env.GetTxHash())
 
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
@@ -64,14 +72,20 @@ func (s *Suite) TestCreateLiteAccount() {
 		}
 
 		nonce++
-		tx := s.newTx(senderUrl, sender, nonce, exch)
+		tx := acctesting.NewTransaction().
+			WithPrincipal(senderUrl).
+			WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
+			WithTimestamp(nonce).
+			WithBody(exch).
+			Initiate(protocol.SignatureTypeLegacyED25519, sender)
 		s.dut.SubmitTxn(tx)
 		txids = append(txids, tx.GetTxHash())
 	}
+	total += amtAcmeToBuyCredits
 
 	s.dut.WaitForTxns(txids...)
 
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(3e5*acctesting.TokenMx-total), account.Balance.Int64())
+	s.Require().Equal(int64(3e5*protocol.AcmePrecision-total), account.Balance.Int64())
 }

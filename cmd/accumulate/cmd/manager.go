@@ -40,7 +40,7 @@ func SetManager(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
@@ -52,7 +52,7 @@ func SetManager(origin string, args []string) (string, error) {
 
 	req := protocol.UpdateManager{}
 	req.ManagerKeyBook = managerKeyBookUrl
-	res, err := dispatchTxRequest("update-manager", &req, nil, u, si, privKey)
+	res, err := dispatchTxRequest("update-manager", &req, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -66,13 +66,13 @@ func RemoveManager(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	_, signer, err := prepareSigner(u, args)
 	if err != nil {
 		return "", err
 	}
 
 	req := protocol.RemoveManager{}
-	res, err := dispatchTxRequest("remove-manager", &req, nil, u, si, privKey)
+	res, err := dispatchTxRequest("remove-manager", &req, nil, u, signer)
 	if err != nil {
 		return "", err
 	}

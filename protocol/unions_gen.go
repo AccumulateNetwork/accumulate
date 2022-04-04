@@ -38,8 +38,10 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
+	case AccountTypeUnknown:
+		return new(UnknownAccount), nil
 	default:
-		return nil, fmt.Errorf("unknown account type %v", typ)
+		return nil, fmt.Errorf("unknown account %v", typ)
 	}
 }
 
@@ -133,6 +135,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AcmeFaucet), nil
 	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
+	case TransactionTypeAddValidator:
+		return new(AddValidator), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -159,6 +163,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeRemoveManager:
 		return new(RemoveManager), nil
+	case TransactionTypeRemoveValidator:
+		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
@@ -177,20 +183,26 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
+	case TransactionTypeSyntheticReceipt:
+		return new(SyntheticReceipt), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeUpdateAccountAuth:
+		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
 		return new(UpdateKey), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
 	case TransactionTypeUpdateManager:
 		return new(UpdateManager), nil
+	case TransactionTypeUpdateValidatorKey:
+		return new(UpdateValidatorKey), nil
 	case TransactionTypeWriteData:
 		return new(WriteData), nil
 	case TransactionTypeWriteDataTo:
 		return new(WriteDataTo), nil
 	default:
-		return nil, fmt.Errorf("unknown transaction type %v", typ)
+		return nil, fmt.Errorf("unknown transaction %v", typ)
 	}
 }
 
@@ -277,19 +289,219 @@ func UnmarshalTransactionBodyJSON(data []byte) (TransactionBody, error) {
 	return acnt, nil
 }
 
+// NewKeyPageOperation creates a new KeyPageOperation for the specified KeyPageOperationType.
+func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
+	switch typ {
+	case KeyPageOperationTypeAdd:
+		return new(AddKeyOperation), nil
+	case KeyPageOperationTypeRemove:
+		return new(RemoveKeyOperation), nil
+	case KeyPageOperationTypeSetThreshold:
+		return new(SetThresholdKeyPageOperation), nil
+	case KeyPageOperationTypeUpdateAllowed:
+		return new(UpdateAllowedKeyPageOperation), nil
+	case KeyPageOperationTypeUpdate:
+		return new(UpdateKeyOperation), nil
+	default:
+		return nil, fmt.Errorf("unknown key page operation %v", typ)
+	}
+}
+
+// UnmarshalKeyPageOperationType unmarshals the KeyPageOperationType from the start of a KeyPageOperation.
+func UnmarshalKeyPageOperationType(r io.Reader) (KeyPageOperationType, error) {
+	var typ KeyPageOperationType
+	err := encoding.UnmarshalEnumType(r, &typ)
+	return typ, err
+}
+
+// UnmarshalKeyPageOperation unmarshals a KeyPageOperation.
+func UnmarshalKeyPageOperation(data []byte) (KeyPageOperation, error) {
+	typ, err := UnmarshalKeyPageOperationType(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := NewKeyPageOperation(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	err = v.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalKeyPageOperationFrom unmarshals a KeyPageOperation.
+func UnmarshalKeyPageOperationFrom(rd io.ReadSeeker) (KeyPageOperation, error) {
+	// Get the reader's current position
+	pos, err := rd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the type code
+	typ, err := UnmarshalKeyPageOperationType(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset the reader's position
+	_, err = rd.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new transaction result
+	v, err := NewKeyPageOperation(KeyPageOperationType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the result
+	err = v.UnmarshalBinaryFrom(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalKeyPageOperationJson unmarshals a KeyPageOperation.
+func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
+	var typ struct{ Type KeyPageOperationType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	acnt, err := NewKeyPageOperation(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
+// NewAccountAuthOperation creates a new AccountAuthOperation for the specified AccountAuthOperationType.
+func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation, error) {
+	switch typ {
+	case AccountAuthOperationTypeDisable:
+		return new(DisableAccountAuthOperation), nil
+	case AccountAuthOperationTypeEnable:
+		return new(EnableAccountAuthOperation), nil
+	default:
+		return nil, fmt.Errorf("unknown account auth operation %v", typ)
+	}
+}
+
+// UnmarshalAccountAuthOperationType unmarshals the AccountAuthOperationType from the start of a AccountAuthOperation.
+func UnmarshalAccountAuthOperationType(r io.Reader) (AccountAuthOperationType, error) {
+	var typ AccountAuthOperationType
+	err := encoding.UnmarshalEnumType(r, &typ)
+	return typ, err
+}
+
+// UnmarshalAccountAuthOperation unmarshals a AccountAuthOperation.
+func UnmarshalAccountAuthOperation(data []byte) (AccountAuthOperation, error) {
+	typ, err := UnmarshalAccountAuthOperationType(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := NewAccountAuthOperation(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	err = v.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalAccountAuthOperationFrom unmarshals a AccountAuthOperation.
+func UnmarshalAccountAuthOperationFrom(rd io.ReadSeeker) (AccountAuthOperation, error) {
+	// Get the reader's current position
+	pos, err := rd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the type code
+	typ, err := UnmarshalAccountAuthOperationType(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset the reader's position
+	_, err = rd.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new transaction result
+	v, err := NewAccountAuthOperation(AccountAuthOperationType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the result
+	err = v.UnmarshalBinaryFrom(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalAccountAuthOperationJson unmarshals a AccountAuthOperation.
+func UnmarshalAccountAuthOperationJSON(data []byte) (AccountAuthOperation, error) {
+	var typ struct{ Type AccountAuthOperationType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	acnt, err := NewAccountAuthOperation(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
 // NewSignature creates a new Signature for the specified SignatureType.
 func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
+	case SignatureTypeInternal:
+		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
 		return new(RCD1Signature), nil
 	case SignatureTypeReceipt:
 		return new(ReceiptSignature), nil
+	case SignatureTypeSynthetic:
+		return new(SyntheticSignature), nil
 	default:
-		return nil, fmt.Errorf("unknown signature type %v", typ)
+		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
 }
 

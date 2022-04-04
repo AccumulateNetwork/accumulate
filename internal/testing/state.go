@@ -19,13 +19,15 @@ import (
 
 type DB = *database.Batch
 
-// Token multiplier
-const TokenMx = protocol.AcmePrecision
-const TestTokenAmount = 5e5
+var FakeBvn = MustParseUrl("acc://bvn0")
 
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
+}
+
+func GenerateTmKey(seed ...interface{}) tmed25519.PrivKey {
+	return tmed25519.PrivKey(GenerateKey(seed...))
 }
 
 func MustParseUrl(s string) *url.URL {
@@ -34,33 +36,6 @@ func MustParseUrl(s string) *url.URL {
 		panic(err)
 	}
 	return u
-}
-
-func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*protocol.Envelope, error) {
-	recipientAdi := AcmeLiteAddressTmPriv(recipient)
-
-	//create a fake synthetic deposit for faucet.
-	deposit := new(protocol.SyntheticDepositTokens)
-	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.AcmeUrl()
-	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
-
-	tx := new(protocol.Envelope)
-	tx.Transaction = new(protocol.Transaction)
-	tx.Transaction.Body = deposit
-	tx.Transaction.Origin = recipientAdi
-	tx.Transaction.KeyPageHeight = 1
-
-	ed := new(protocol.LegacyED25519Signature)
-	tx.Transaction.Nonce = 1
-	ed.PublicKey = recipient.PubKey().Bytes()
-	err := ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
-	if err != nil {
-		return nil, err
-	}
-
-	tx.Signatures = append(tx.Signatures, ed)
-	return tx, nil
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*protocol.Envelope, error) {
@@ -75,55 +50,12 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	send := protocol.SendTokens{}
 	send.AddRecipient(u, big.NewInt(int64(amount)))
 
-	gtx := new(protocol.Envelope)
-	gtx.Transaction = new(protocol.Transaction)
-	gtx.Transaction.Body = &send
-	gtx.Transaction.Origin = from
-
-	ed := new(protocol.LegacyED25519Signature)
-	gtx.Transaction.Nonce = 1
-	ed.PublicKey = sponsor[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign TX: %v", err)
-	}
-
-	gtx.Signatures = append(gtx.Signatures, ed)
-
-	return gtx, nil
-}
-
-func BuildTestSynthDepositGenTx() (string, ed25519.PrivateKey, *protocol.Envelope, error) {
-	_, privateKey, _ := ed25519.GenerateKey(nil)
-	//set destination url address
-	destAddress := AcmeLiteAddressStdPriv(privateKey)
-
-	//create a fake synthetic deposit for faucet.
-	deposit := new(protocol.SyntheticDepositTokens)
-	deposit.Cause = sha256.Sum256([]byte("fake txid"))
-	deposit.Token = protocol.AcmeUrl()
-	deposit.Amount = *new(big.Int).SetUint64(TestTokenAmount * protocol.AcmePrecision)
-	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
-	// amtToDeposit := int64(50000)                             //deposit 50k tokens
-	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
-	// deposit.TokenUrl = tokenUrl
-
-	gtx := new(protocol.Envelope)
-	gtx.Transaction = new(protocol.Transaction)
-	gtx.Transaction.Body = deposit
-	gtx.Transaction.Origin = destAddress
-
-	ed := new(protocol.LegacyED25519Signature)
-	gtx.Transaction.Nonce = 1
-	ed.PublicKey = privateKey[32:]
-	err := ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
-	if err != nil {
-		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
-	}
-
-	gtx.Signatures = append(gtx.Signatures, ed)
-
-	return destAddress.String(), privateKey, gtx, nil
+	return NewTransaction().
+		WithPrincipal(from).
+		WithSigner(from, 1).
+		WithTimestamp(1).
+		WithBody(&send).
+		Initiate(protocol.SignatureTypeLegacyED25519, sponsor), nil
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
@@ -181,8 +113,8 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
-	//keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
-	keyHash := key.PubKey().Bytes()
+	keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
+
 	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -191,12 +123,13 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	bookUrl := identityUrl.JoinPath("book0")
 
 	ss := new(protocol.KeySpec)
-	ss.PublicKey = keyHash[:]
+	ss.PublicKeyHash = keyHash[:]
 
-	mss := protocol.NewKeyPage()
-	mss.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-	mss.Keys = append(mss.Keys, ss)
-	mss.Threshold = 1
+	page := protocol.NewKeyPage()
+	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
+	page.Keys = append(page.Keys, ss)
+	page.Threshold = 1
+	page.Version = 1
 
 	book := protocol.NewKeyBook()
 	book.Url = bookUrl
@@ -206,7 +139,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	adi.Url = identityUrl
 	adi.KeyBook = bookUrl
 
-	return WriteStates(db, adi, book, mss)
+	return WriteStates(db, adi, book, page)
 }
 
 func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
@@ -256,21 +189,21 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account := new(protocol.LiteTokenAccount)
 		account.Url = u
 		account.TokenUrl = tu
-		account.Balance.SetInt64(int64(tokens * TokenMx))
+		account.Balance.SetInt64(int64(tokens * protocol.AcmePrecision))
 		chain = account
 	} else {
 		account := protocol.NewTokenAccount()
 		account.Url = u
 		account.TokenUrl = tu
 		account.KeyBook = u.Identity().JoinPath("book0")
-		account.Balance.SetInt64(int64(tokens * TokenMx))
+		account.Balance.SetInt64(int64(tokens * protocol.AcmePrecision))
 		chain = account
 	}
 
 	return db.Account(u).PutState(chain)
 }
 
-func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
+func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLimit *big.Int) error {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return err
@@ -281,6 +214,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
 	issuer.KeyBook = u.Identity().JoinPath("book0")
 	issuer.Symbol = symbol
 	issuer.Precision = precision
+	issuer.SupplyLimit = supplyLimit
 
 	return db.Account(u).PutState(issuer)
 }
@@ -304,15 +238,17 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	page.Threshold = 1
 	page.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
+		hash := sha256.Sum256(key.Bytes())
+
 		page.Keys[i] = &protocol.KeySpec{
-			PublicKey: key,
+			PublicKeyHash: hash[:],
 		}
 	}
 	book.PageCount++
 	return WriteStates(db, page, book)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey) error {
+func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) error {
 	bookUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -324,18 +260,44 @@ func CreateKeyBook(db DB, urlStr types.String, publicKeyHash ...tmed25519.PubKey
 
 	page := new(protocol.KeyPage)
 	page.KeyBook = bookUrl
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
-	if len(publicKeyHash) == 1 {
+	if len(publicKey) == 1 {
 		key := new(protocol.KeySpec)
-		key.PublicKey = publicKeyHash[0]
+		hash := sha256.Sum256(publicKey[0])
+		key.PublicKeyHash = hash[:]
 		page.Keys = []*protocol.KeySpec{key}
-	} else if len(publicKeyHash) > 1 {
+	} else if len(publicKey) > 1 {
 		return errors.New("CreateKeyBook only supports one page key at the moment") // TOOO do we need to suport this? (Also in create_book.go)
 	}
 
 	accounts := []protocol.Account{book, page}
 	return WriteStates(db, accounts...)
+}
+
+func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
+	var page *protocol.KeyPage
+	err := db.Account(account).GetStateAs(&page)
+	if err != nil {
+		return err
+	}
+
+	fn(page)
+	return db.Account(account).PutState(page)
+}
+
+func UpdateAccountAuth(db DB, account string, enable bool) error {
+	u, err := url.Parse(account)
+	if err != nil {
+		return err
+	}
+	state, err := db.Account(u).GetState()
+	if err != nil {
+		return err
+	}
+	state.Header().AuthDisabled = !enable
+	return db.Account(u).PutState(state)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING

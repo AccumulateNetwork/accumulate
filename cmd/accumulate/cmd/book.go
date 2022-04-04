@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -37,6 +38,13 @@ var bookCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintKeyBook()
 				}
+			case "auth":
+				if len(args) > 3 {
+					out, err = UpdateKeyBookAuth(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintUpdateKeyBookAuth()
+				}
 			default:
 				PrintKeyBook()
 			}
@@ -54,6 +62,13 @@ func PrintKeyBookGet() {
 func PrintKeyBookCreate() {
 	fmt.Println("  accumulate book create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1] Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.")
 	fmt.Println("\t\t example usage: accumulate book create acc://RedWagon redKey5 acc://RedWagon/RedBook")
+}
+
+func PrintUpdateKeyBookAuth() {
+	fmt.Println("  accumulate book auth [origin adi url] [signing key name] [key index (optional)] [key height (optional)] enable  Enable keybook authentication.")
+	fmt.Println("  accumulate book auth [origin adi url] [signing key name] [key index (optional)] [key height (optional)] disable  Disable keybook authentication.")
+	fmt.Println("\t\t example usage: accumulate book auth acc://RedWagon redKey5 enable")
+	fmt.Println("\t\t example usage: accumulate book auth acc://RedWagon redKey5 disable")
 }
 
 func PrintKeyBook() {
@@ -96,7 +111,7 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 	originKeyName := args[0]
 
-	args, si, privKey, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
 	}
@@ -105,6 +120,9 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	}
 
 	newUrl, err := url2.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
 	if newUrl.Authority != originUrl.Authority {
 		return "", fmt.Errorf("the authority of book url to create (%s) doesn't match the origin adi's authority (%s)", newUrl.Authority, originUrl.Authority)
 	}
@@ -118,13 +136,64 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	} else {
 		keyName = originKeyName
 	}
-	publicKeyHash, err := resolvePublicKey(keyName)
+	pbkey, err := resolvePublicKey(keyName)
 	if err != nil {
 		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
 	}
-	keyBook.PublicKeyHash = publicKeyHash
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, si, privKey)
+	ph := sha256.Sum256(pbkey)
+	publicKeyHash := ph[:]
+	keyBook.PublicKeyHash = publicKeyHash
+	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
+	if err != nil {
+		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
+	return ActionResponseFrom(res).Print()
+}
+
+// UpdateKeyBookAuth update keybook for auth
+func UpdateKeyBookAuth(origin string, args []string) (string, error) {
+	originUrl, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(originUrl, args)
+	if err != nil {
+		return "", err
+	}
+	if len(args) > 1 {
+		return "", fmt.Errorf("invalid number of arguments")
+	}
+
+	account, err := getAccount(origin)
+	if err != nil {
+		return "", err
+	}
+
+	var operation protocol.AccountAuthOperation
+	switch args[0] {
+	case "enable":
+		operation = &protocol.EnableAccountAuthOperation{Authority: account.Header().KeyBook}
+	case "disable":
+		operation = &protocol.DisableAccountAuthOperation{Authority: account.Header().KeyBook}
+	default:
+		return "", fmt.Errorf("invalid value passed in command")
+	}
+
+	txn := protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{operation}}
+	res, err := dispatchTxRequest("update-keybook-auth", &txn, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}

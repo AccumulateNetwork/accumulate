@@ -1,0 +1,93 @@
+package block
+
+import (
+	"time"
+
+	"github.com/tendermint/tendermint/abci/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+// BeginBlockRequest is the input parameter to Chain.BeginBlock.
+type BeginBlockRequest struct {
+	IsLeader   bool
+	Height     int64
+	Time       time.Time
+	CommitInfo *types.LastCommitInfo
+	Evidence   []types.Evidence
+}
+
+// BeginBlockResponse is the return value of Chain.BeginBlock.
+type BeginBlockResponse struct{}
+
+// SynthTxnReference is a reference to a produced synthetic transaction.
+type SynthTxnReference struct {
+	Type  uint64   `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Hash  [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Url   string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	TxRef [32]byte `json:"txRef,omitempty" form:"txRef" query:"txRef" validate:"required"`
+}
+
+// EndBlockRequest is the input parameter to Chain.EndBlock
+type EndBlockRequest struct{}
+
+type EndBlockResponse struct {
+	ValidatorsUpdates []chain.ValidatorUpdate
+}
+
+type Block struct {
+	BlockMeta
+	State  BlockState
+	Anchor *protocol.SyntheticAnchor
+	Batch  *database.Batch
+}
+
+// BlockMeta is metadata about a block.
+type BlockMeta struct {
+	IsLeader   bool
+	Index      int64
+	Time       time.Time
+	CommitInfo *types.LastCommitInfo
+	Evidence   []types.Evidence
+}
+
+// BlockState tracks various metrics of a block of transactions as they are
+// executed.
+type BlockState struct {
+	Delivered         uint64
+	Signed            uint64
+	SynthSigned       uint64
+	SynthSent         uint64
+	ValidatorsUpdates []chain.ValidatorUpdate
+	ProducedTxns      []*protocol.Transaction
+	ChainUpdates      chain.ChainUpdates
+}
+
+// Empty returns true if nothing happened during the block.
+func (s *BlockState) Empty() bool {
+	return s.Delivered == 0 &&
+		s.Signed == 0 &&
+		s.SynthSigned == 0 &&
+		s.SynthSent == 0 &&
+		len(s.ValidatorsUpdates) == 0 &&
+		len(s.ProducedTxns) == 0 &&
+		len(s.ChainUpdates.Entries) == 0
+}
+
+type ProcessSignatureState struct {
+}
+
+func (s *ProcessSignatureState) Merge(r *ProcessSignatureState) {
+}
+
+func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
+	s.Signed++
+}
+
+func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
+	s.Delivered++
+	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
+	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
+	s.ChainUpdates.Merge(&r.ChainUpdates)
+}

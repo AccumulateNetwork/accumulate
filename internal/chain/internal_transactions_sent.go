@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,13 +38,14 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope
 			ledger.Synthetic.Unsent = append(ledger.Synthetic.Unsent, id)
 			continue
 		}
+		st.logger.Debug("Did send transaction", "txid", logging.AsHex(id).Slice(0, 4), "module", "governor")
 	}
 
 	st.Update(ledger)
 
 	// Update the synth ledger
-	synthLedger := new(protocol.InternalSyntheticLedger)
-	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), synthLedger)
+	var synthLedger *protocol.InternalSyntheticLedger
+	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.SyntheticLedgerPath), &synthLedger)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load synthetic transaction ledger: %w", err)
 	}

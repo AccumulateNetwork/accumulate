@@ -26,11 +26,14 @@ const LogConsole = true
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
 	// SetModule("accumulate", "debug").
-	// SetModule("executor", "debug").
+	// SetModule("executor", "info").
 	// SetModule("governor", "debug").
 	// SetModule("synthetic", "debug").
+	// SetModule("storage", "debug").
+	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
-	// SetModule("fake-tendermint", "debug").
+	// SetModule("fake-tendermint", "info").
+	SetModule("test-router", "debug").
 	String()
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {

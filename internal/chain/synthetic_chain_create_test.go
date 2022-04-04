@@ -28,21 +28,36 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
-	body.Cause[0] = 1
+	cause := [32]byte{1}
+	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithOriginStr("foo").
-		WithKeyPage(0, 1).
-		WithNonce(1).
+		WithPrincipal(url.MustParse("foo")).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
+		WithTimestamp(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
+	st := NewStateManagerForTest(t, db, env)
+	defer st.Discard()
+
+	scc := SyntheticCreateChain{}
+	result, err := scc.Validate(st, env)
+	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
+
+	status := &protocol.TransactionStatus{Delivered: true, Result: result}
+	_, receiptBody := CreateSynthReceipt(env.Transaction, status)
+	principalUrl := env.Transaction.Header.Principal
+	env = acctesting.NewTransaction().
+		WithPrincipal(principalUrl).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
+		WithCurrentTimestamp().
+		WithBody(receiptBody).
+		Initiate(protocol.SignatureTypeED25519, fooKey)
+	_, err = SyntheticReceipt{}.Validate(st, env)
 	require.NoError(t, err)
 
-	_, err = SyntheticCreateChain{}.Validate(st, env)
-	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
 }
 
 func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
@@ -63,18 +78,19 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	account.TokenUrl = protocol.AcmeUrl()
 	account.KeyBook = book
 	body := new(protocol.SyntheticCreateChain)
-	body.Cause[0] = 1
+	cause := [32]byte{1}
+	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
 	require.NoError(t, body.Create(account))
 
 	env := acctesting.NewTransaction().
-		WithOriginStr("foo").
-		WithKeyPage(0, 1).
-		WithNonce(1).
+		WithPrincipal(url.MustParse("foo")).
+		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
+		WithTimestamp(1).
 		WithBody(body).
-		SignLegacyED25519(fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey)
 
-	st, err := NewStateManager(db.Begin(true), protocol.BvnUrl(t.Name()), env)
-	require.NoError(t, err)
+	st := NewStateManagerForTest(t, db, env)
+	defer st.Discard()
 
 	_, err = SyntheticCreateChain{}.Validate(st, env)
 	require.NoError(t, err) // We created ADI acc://foo not acc://foo/bar

@@ -46,6 +46,17 @@ func (c *Client) ExecuteAddCredits(ctx context.Context, req *api.TxRequest) (*ap
 	return &resp, nil
 }
 
+func (c *Client) ExecuteAddValidator(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "add-validator", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ExecuteBurnTokens submits a BurnTokens transaction.
 func (c *Client) ExecuteBurnTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
@@ -166,11 +177,33 @@ func (c *Client) ExecuteRemoveManager(ctx context.Context, req *api.TxRequest) (
 	return &resp, nil
 }
 
+func (c *Client) ExecuteRemoveValidator(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "remove-validator", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ExecuteSendTokens submits a SendTokens transaction.
 func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 
 	err := c.RequestAPIv2(ctx, "send-tokens", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func (c *Client) ExecuteUpdateAccountAuth(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "update-account-auth", req, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +228,17 @@ func (c *Client) ExecuteUpdateManager(ctx context.Context, req *api.TxRequest) (
 	var resp api.TxResponse
 
 	err := c.RequestAPIv2(ctx, "update-manager", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+func (c *Client) ExecuteUpdateValidatorKey(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "update-validator-key", req, &resp)
 	if err != nil {
 		return nil, err
 	}

@@ -199,6 +199,11 @@ func (w *Writer) WriteDuration(n uint, v time.Duration) {
 
 // WriteBigInt writes the value as a big-endian byte slice.
 func (w *Writer) WriteBigInt(n uint, v *big.Int) {
+	if v.Sign() < 0 {
+		w.last = n
+		w.err = fmt.Errorf("negative big int values are not supported")
+		return
+	}
 	w.WriteBytes(n, v.Bytes())
 }
 
@@ -215,6 +220,6 @@ func (w *Writer) WriteValue(n uint, v encoding.BinaryMarshaler) {
 }
 
 // WriteEnum writes the value as a varint-encoded unsigned integer.
-func (w *Writer) WriteEnum(n uint, v interface{ ID() uint64 }) {
-	w.WriteUint(n, v.ID())
+func (w *Writer) WriteEnum(n uint, v EnumValueGetter) {
+	w.WriteUint(n, v.GetEnumValue())
 }

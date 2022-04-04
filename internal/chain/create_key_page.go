@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type CreateKeyPage struct{}
@@ -30,10 +29,10 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	page := protocol.NewKeyPage()
+	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
 	page.KeyBook = book.Url
 	page.Threshold = 1 // Require one signature from the Key Page
@@ -47,7 +46,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
-		ss.PublicKey = sig.PublicKey
+		ss.PublicKeyHash = sig.KeyHash
 		page.Keys = append(page.Keys, ss)
 	}
 

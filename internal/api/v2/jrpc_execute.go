@@ -1,12 +1,12 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
@@ -66,28 +66,25 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	faucet := protocol.Faucet.Signer()
-	tx := new(protocol.Envelope)
-	tx.Transaction = new(protocol.Transaction)
-	tx.Transaction.Origin = protocol.FaucetUrl
-	tx.Transaction.Nonce = faucet.Nonce()
-	tx.Transaction.KeyPageHeight = 1
-	tx.Transaction.Body = req
-
-	ed, err := faucet.Sign(tx.GetTxHash())
+	env := new(protocol.Envelope)
+	env.Transaction = new(protocol.Transaction)
+	env.Transaction.Header.Principal = protocol.FaucetUrl
+	env.Transaction.Body = req
+	sig, err := signing.Faucet(env.Transaction)
 	if err != nil {
 		return accumulateError(err)
 	}
-	tx.Signatures = append(tx.Signatures, ed)
+	env.Signatures = append(env.Signatures, sig)
 
 	txrq := new(TxRequest)
-	txrq.Origin = tx.Transaction.Origin
-	txrq.Signer.Nonce = tx.Transaction.Nonce
-	txrq.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
-	txrq.KeyPage.Height = tx.Transaction.KeyPageHeight
-	txrq.Signature = tx.Signatures[0].GetSignature()
+	txrq.Origin = env.Transaction.Header.Principal
+	txrq.Signer.Timestamp = env.Signatures[0].GetTimestamp()
+	txrq.Signer.PublicKey = env.Signatures[0].GetPublicKey()
+	txrq.Signer.Url = protocol.FaucetUrl
+	txrq.KeyPage.Version = env.Signatures[0].GetSignerVersion()
+	txrq.Signature = env.Signatures[0].GetSignature()
 
-	body, err := tx.Transaction.Body.MarshalBinary()
+	body, err := env.Transaction.Body.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -96,13 +93,8 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	// Route the request
-	subnet, err := m.Router.Route(req.Origin)
-	if err != nil {
-		return validatorError(err)
-	}
-
 	var envs []*protocol.Envelope
+	var err error
 	if req.IsEnvelope {
 		// Unmarshal all the envelopes
 		envs, err = transactions.UnmarshalAll(payload)
@@ -114,25 +106,66 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		if err != nil {
 			return accumulateError(err)
 		}
+		env := new(protocol.Envelope)
+		var initHash []byte
+		// Build the initiator
+		switch req.Signer.SignatureType {
+		case protocol.SignatureTypeED25519:
+			initSig := new(protocol.ED25519Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerVersion = req.KeyPage.Version
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		case protocol.SignatureTypeRCD1:
+			initSig := new(protocol.RCD1Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerVersion = req.KeyPage.Version
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		default:
+			initSig := new(protocol.LegacyED25519Signature)
+			initSig.Timestamp = req.Signer.Timestamp
+			initSig.PublicKey = req.Signer.PublicKey
+			initSig.Signer = req.Signer.Url
+			initSig.SignerVersion = req.KeyPage.Version
+			initSig.Signature = req.Signature
+
+			initHash, err = initSig.InitiatorHash()
+			if err != nil {
+				return validatorError(err)
+			}
+			env.Signatures = append(env.Signatures, initSig)
+		}
 
 		// Build the envelope
-		env := new(protocol.Envelope)
 		env.TxHash = req.TxHash
 		env.Transaction = new(protocol.Transaction)
 		env.Transaction.Body = body
-		env.Transaction.Origin = req.Origin
-		env.Transaction.Nonce = req.Signer.Nonce
-		env.Transaction.KeyPageHeight = req.KeyPage.Height
-		env.Transaction.KeyPageIndex = req.KeyPage.Index
-		env.Transaction.Memo = req.Memo
-		env.Transaction.Metadata = req.Metadata
+		env.Transaction.Header.Principal = req.Origin
+		env.Transaction.Header.Initiator = *(*[32]byte)(initHash)
+		env.Transaction.Header.Memo = req.Memo
+		env.Transaction.Header.Metadata = req.Metadata
 		envs = append(envs, env)
+	}
 
-		ed := new(protocol.LegacyED25519Signature)
-		ed.Nonce = req.Signer.Nonce
-		ed.PublicKey = req.Signer.PublicKey
-		ed.Signature = req.Signature
-		env.Signatures = append(env.Signatures, ed)
+	// Route the request
+	subnet, err := m.Router.Route(envs...)
+	if err != nil {
+		return validatorError(err)
 	}
 
 	// Marshal the envelope(s)
@@ -156,26 +189,24 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	res := new(TxResponse)
 	res.Code = uint64(resp.Code)
 	res.TransactionHash = envs[0].GetTxHash()
-	res.EnvelopeHash = envs[0].EnvHash()
+	res.SignatureHashes = make([][]byte, len(envs[0].Signatures))
 	res.SimpleHash = simpleHash[:]
 
-	// Parse the results
-	var results []*protocol.TransactionStatus
-	rd := bytes.NewReader(resp.Data)
-	for rd.Len() > 0 {
-		status := new(protocol.TransactionStatus)
-		err := status.UnmarshalBinaryFrom(rd)
-		if err != nil {
-			m.logError("Failed to decode transaction results", "error", err)
-			break
-		}
-		results = append(results, status)
+	for i, sig := range envs[0].Signatures {
+		res.SignatureHashes[i] = sig.Hash()
 	}
 
-	if len(results) == 1 {
-		res.Result = results[0]
-	} else if len(results) > 0 {
-		res.Result = results
+	// Parse the results
+	results := new(protocol.TransactionResultSet)
+	err = results.UnmarshalBinary(resp.Data)
+	if err != nil {
+		m.logError("Failed to decode transaction results", "error", err)
+	}
+
+	if len(results.Results) == 1 {
+		res.Result = results.Results[0]
+	} else if len(results.Results) > 0 {
+		res.Result = results.Results
 	}
 
 	// Check for errors

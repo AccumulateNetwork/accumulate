@@ -22,8 +22,8 @@ func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 
 	// Check the recipient
 	u := body.Url
-	account := new(protocol.LiteTokenAccount)
-	err := st.LoadUrlAs(u, account)
+	var account *protocol.LiteTokenAccount
+	err := st.LoadUrlAs(u, &account)
 	switch {
 	case err == nil:
 		// If the recipient exists, it must be an ACME lite token account
@@ -48,8 +48,8 @@ func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	}
 
 	// Load the faucet state
-	faucet := new(protocol.LiteTokenAccount)
-	err = st.LoadUrlAs(protocol.FaucetUrl, faucet)
+	var faucet *protocol.LiteTokenAccount
+	err = st.LoadUrlAs(protocol.FaucetUrl, &faucet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load faucet: %v", err)
 	}
@@ -60,11 +60,9 @@ func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	// Submit a synthetic deposit token TX
 	amount := new(big.Int).SetUint64(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
 	deposit := new(protocol.SyntheticDepositTokens)
-	copy(deposit.Cause[:], tx.GetTxHash())
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *amount
 	st.Submit(u, deposit)
-
 	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
 	// err = deposit.SetDeposit(protocol.ACME, amount)
 

@@ -42,8 +42,14 @@ SignatureType:
   Receipt:
     value: 4
     description: represents a Merkle tree receipt
+  Synthetic:
+    value: 5
+    description: is used when sending synthetic transactions
+  Internal:
+    value: 6
+    description: is used when executing transactions internally
 
-KeyPageOperation:
+KeyPageOperationType:
   Unknown:
     value: 0
     description: is used when the key page operation is not known
@@ -59,19 +65,34 @@ KeyPageOperation:
   SetThreshold:
     value: 4
     description: sets the signing threshold (the M of "M of N" signatures required)
+  UpdateAllowed:
+    value: 5
+    description: updates the transactions the key page is allowed to execute
+
+AccountAuthOperationType:
+  Unknown:
+    value: 0
+    description: is used when the authorization operation is not known
+  Enable:
+    value: 1
+    description: enables authorization checks for a key book
+  Disable:
+    value: 2
+    description: disables authorization checks for a key book
 
 TransactionMax:
   User:
-    value: 0x2F
+    value: 0x30
     description: is the highest number reserved for user transactions
   Synthetic:
     value: 0x5F
-    description:  is the highest number reserved for synthetic transactions
+    description: is the highest number reserved for synthetic transactions
   Internal:
     value: 0xFF
     description: is the highest number reserved for internal transactions
 
 TransactionType:
+  ##### USER TRANSACTIONS #####
   Unknown:
     value: 0
     description: represents an unknown transaction type
@@ -123,12 +144,26 @@ TransactionType:
   RemoveManager:
     value: 0x11
     description: remove manager from existing chain
-  UpdateKey:
+  AddValidator:
     value: 0x12
+    description: add a validator
+  RemoveValidator:
+    value: 0x13
+    description: remove a validator
+  UpdateValidatorKey:
+    value: 0x14
+    description: update a validator key
+  UpdateAccountAuth:
+    value: 0x15
+    description: updates authorization for an account
+  UpdateKey:
+    value: 0x16
     description: update key for existing keys
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
+
+  ##### SYNTHETIC TRANSACTIONS #####
   SyntheticCreateChain:
     value: 0x31
     description: creates or updates chains
@@ -153,6 +188,11 @@ TransactionType:
   SegWitDataEntry:
     value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
+  SyntheticReceipt:
+    value: 0x40
+    description: notifies the sender of synthetic transactions when a transaction has failed.
+
+  ##### INTERNAL TRANSACTIONS #####
   InternalGenesis:
     value: 0x60
     description: initializes system chains
@@ -213,3 +253,8 @@ AccountType:
   InternalSyntheticLedger:
     value: 16
     description: is a ledger that tracks the status of unsent synthetic transactions
+
+AllowedTransactionBit:
+  UpdateKeyPage:
+    value: 1
+    description: is the offset of the UpdateKeyPage bit

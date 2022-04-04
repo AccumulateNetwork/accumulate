@@ -6,9 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
+
+// AccountAuthOperationTypeUnknown is used when the authorization operation is not known.
+const AccountAuthOperationTypeUnknown AccountAuthOperationType = 0
+
+// AccountAuthOperationTypeEnable enables authorization checks for a key book.
+const AccountAuthOperationTypeEnable AccountAuthOperationType = 1
+
+// AccountAuthOperationTypeDisable disables authorization checks for a key book.
+const AccountAuthOperationTypeDisable AccountAuthOperationType = 2
 
 // AccountTypeUnknown represents an unknown account type.
 const AccountTypeUnknown AccountType = 0
@@ -49,6 +56,9 @@ const AccountTypeLiteIdentity AccountType = 15
 // AccountTypeInternalSyntheticLedger is a ledger that tracks the status of unsent synthetic transactions.
 const AccountTypeInternalSyntheticLedger AccountType = 16
 
+// AllowedTransactionBitUpdateKeyPage is the offset of the UpdateKeyPage bit.
+const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
+
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
 
@@ -67,7 +77,7 @@ const ChainTypeIndex ChainType = 4
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
-// ErrorCodeEncodingError indicates the request could not be decoded.
+// ErrorCodeEncodingError indicates something could not be decoded or encoded.
 const ErrorCodeEncodingError ErrorCode = 1
 
 // ErrorCodeBadNonce indicates the transaction nonce was rejected.
@@ -145,20 +155,44 @@ const ErrorCodeDataEntryHashError ErrorCode = 25
 // ErrorCodeTxnQueryError is returned when txn is not found.
 const ErrorCodeTxnQueryError ErrorCode = 26
 
-// KeyPageOperationUnknown is used when the key page operation is not known.
-const KeyPageOperationUnknown KeyPageOperation = 0
+// ErrorCodeInvalidRequest indicates the request was invalid.
+const ErrorCodeInvalidRequest ErrorCode = 27
 
-// KeyPageOperationUpdate replaces a key in the page with a new key.
-const KeyPageOperationUpdate KeyPageOperation = 1
+// ErrorCodeInvalidSignature indicates an envelope signature was invalid.
+const ErrorCodeInvalidSignature ErrorCode = 28
 
-// KeyPageOperationRemove removes a key from the page.
-const KeyPageOperationRemove KeyPageOperation = 2
+// ErrorCodeInsufficientCredits indicates the signer does not have sufficient credits to execute the transaction.
+const ErrorCodeInsufficientCredits ErrorCode = 29
 
-// KeyPageOperationAdd adds a key to the page.
-const KeyPageOperationAdd KeyPageOperation = 3
+// ErrorCodeBadVersion indicates the signature refers to an out of date version of the signer.
+const ErrorCodeBadVersion ErrorCode = 30
 
-// KeyPageOperationSetThreshold sets the signing threshold (the M of "M of N" signatures required).
-const KeyPageOperationSetThreshold KeyPageOperation = 4
+// ErrorCodeInternal indicates an internal error.
+const ErrorCodeInternal ErrorCode = 31
+
+// ErrorCodeAlreadyDelivered indicates the transaction has already been delivered.
+const ErrorCodeAlreadyDelivered ErrorCode = 32
+
+// ErrorCodeUnauthorized indicates the signer is not authorized to sign a transaction.
+const ErrorCodeUnauthorized ErrorCode = 33
+
+// KeyPageOperationTypeUnknown is used when the key page operation is not known.
+const KeyPageOperationTypeUnknown KeyPageOperationType = 0
+
+// KeyPageOperationTypeUpdate replaces a key in the page with a new key.
+const KeyPageOperationTypeUpdate KeyPageOperationType = 1
+
+// KeyPageOperationTypeRemove removes a key from the page.
+const KeyPageOperationTypeRemove KeyPageOperationType = 2
+
+// KeyPageOperationTypeAdd adds a key to the page.
+const KeyPageOperationTypeAdd KeyPageOperationType = 3
+
+// KeyPageOperationTypeSetThreshold sets the signing threshold (the M of "M of N" signatures required).
+const KeyPageOperationTypeSetThreshold KeyPageOperationType = 4
+
+// KeyPageOperationTypeUpdateAllowed updates the transactions the key page is allowed to execute.
+const KeyPageOperationTypeUpdateAllowed KeyPageOperationType = 5
 
 // ObjectTypeUnknown is used when the object type is not known.
 const ObjectTypeUnknown ObjectType = 0
@@ -184,8 +218,14 @@ const SignatureTypeRCD1 SignatureType = 3
 // SignatureTypeReceipt represents a Merkle tree receipt.
 const SignatureTypeReceipt SignatureType = 4
 
+// SignatureTypeSynthetic is used when sending synthetic transactions.
+const SignatureTypeSynthetic SignatureType = 5
+
+// SignatureTypeInternal is used when executing transactions internally.
+const SignatureTypeInternal SignatureType = 6
+
 // TransactionMaxUser is the highest number reserved for user transactions.
-const TransactionMaxUser TransactionMax = 47
+const TransactionMaxUser TransactionMax = 48
 
 // TransactionMaxSynthetic is the highest number reserved for synthetic transactions.
 const TransactionMaxSynthetic TransactionMax = 95
@@ -244,8 +284,20 @@ const TransactionTypeUpdateManager TransactionType = 16
 // TransactionTypeRemoveManager remove manager from existing chain.
 const TransactionTypeRemoveManager TransactionType = 17
 
+// TransactionTypeAddValidator add a validator.
+const TransactionTypeAddValidator TransactionType = 18
+
+// TransactionTypeRemoveValidator remove a validator.
+const TransactionTypeRemoveValidator TransactionType = 19
+
+// TransactionTypeUpdateValidatorKey update a validator key.
+const TransactionTypeUpdateValidatorKey TransactionType = 20
+
+// TransactionTypeUpdateAccountAuth updates authorization for an account.
+const TransactionTypeUpdateAccountAuth TransactionType = 21
+
 // TransactionTypeUpdateKey update key for existing keys.
-const TransactionTypeUpdateKey TransactionType = 18
+const TransactionTypeUpdateKey TransactionType = 22
 
 // TransactionTypeSignPending is used to sign a pending transaction.
 const TransactionTypeSignPending TransactionType = 48
@@ -274,6 +326,9 @@ const TransactionTypeSyntheticMirror TransactionType = 56
 // TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
 const TransactionTypeSegWitDataEntry TransactionType = 57
 
+// TransactionTypeSyntheticReceipt notifies the sender of synthetic transactions when a transaction has failed..
+const TransactionTypeSyntheticReceipt TransactionType = 64
+
 // TransactionTypeInternalGenesis initializes system chains.
 const TransactionTypeInternalGenesis TransactionType = 96
 
@@ -286,11 +341,75 @@ const TransactionTypeInternalTransactionsSigned TransactionType = 98
 // TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
 const TransactionTypeInternalTransactionsSent TransactionType = 99
 
-// ID returns the ID of the Account Type
-func (v AccountType) ID() uint64 { return uint64(v) }
+// GetEnumValue returns the value of the Account Auth Operation Type
+func (v AccountAuthOperationType) GetEnumValue() uint64 { return uint64(v) }
 
-// Set sets the value. Set returns false if the value is invalid.
-func (v *AccountType) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *AccountAuthOperationType) SetEnumValue(id uint64) bool {
+	u := AccountAuthOperationType(id)
+	switch u {
+	case AccountAuthOperationTypeUnknown, AccountAuthOperationTypeEnable, AccountAuthOperationTypeDisable:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Account Auth Operation Type
+func (v AccountAuthOperationType) String() string {
+	switch v {
+	case AccountAuthOperationTypeUnknown:
+		return "unknown"
+	case AccountAuthOperationTypeEnable:
+		return "enable"
+	case AccountAuthOperationTypeDisable:
+		return "disable"
+	default:
+		return fmt.Sprintf("AccountAuthOperationType:%d", v)
+	}
+}
+
+// AccountAuthOperationTypeByName returns the named Account Auth Operation Type.
+func AccountAuthOperationTypeByName(name string) (AccountAuthOperationType, bool) {
+	switch name {
+	case "unknown":
+		return AccountAuthOperationTypeUnknown, true
+	case "enable":
+		return AccountAuthOperationTypeEnable, true
+	case "disable":
+		return AccountAuthOperationTypeDisable, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Account Auth Operation Type to JSON as a string.
+func (v AccountAuthOperationType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Account Auth Operation Type from JSON as a string.
+func (v *AccountAuthOperationType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = AccountAuthOperationTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Account Auth Operation Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Account Type
+func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
 	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
@@ -392,32 +511,67 @@ func (v *AccountType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Account Type.
-func (v AccountType) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
+// GetEnumValue returns the value of the Allowed Transaction Bit
+func (v AllowedTransactionBit) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
+	u := AllowedTransactionBit(id)
+	switch u {
+	case AllowedTransactionBitUpdateKeyPage:
+		*v = u
+		return true
+	default:
+		return false
+	}
 }
 
-// MarshalBinary marshals the Account Type to bytes as a unsigned varint.
-func (v AccountType) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
+// String returns the name of the Allowed Transaction Bit
+func (v AllowedTransactionBit) String() string {
+	switch v {
+	case AllowedTransactionBitUpdateKeyPage:
+		return "updateKeyPage"
+	default:
+		return fmt.Sprintf("AllowedTransactionBit:%d", v)
+	}
 }
 
-// UnmarshalBinary unmarshals the Account Type from bytes as a unsigned varint.
-func (v *AccountType) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
+// AllowedTransactionBitByName returns the named Allowed Transaction Bit.
+func AllowedTransactionBitByName(name string) (AllowedTransactionBit, bool) {
+	switch name {
+	case "updateKeyPage":
+		return AllowedTransactionBitUpdateKeyPage, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Allowed Transaction Bit to JSON as a string.
+func (v AllowedTransactionBit) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Allowed Transaction Bit from JSON as a string.
+func (v *AllowedTransactionBit) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}
 
-	*v = AccountType(u)
+	var ok bool
+	*v, ok = AllowedTransactionBitByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Allowed Transaction Bit %q", s)
+	}
 	return nil
 }
 
-// ID returns the ID of the Chain Type
-func (v ChainType) ID() uint64 { return uint64(v) }
+// GetEnumValue returns the value of the Chain Type
+func (v ChainType) GetEnumValue() uint64 { return uint64(v) }
 
-// Set sets the value. Set returns false if the value is invalid.
-func (v *ChainType) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ChainType) SetEnumValue(id uint64) bool {
 	u := ChainType(id)
 	switch u {
 	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData, ChainTypeIndex:
@@ -485,35 +639,14 @@ func (v *ChainType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Chain Type.
-func (v ChainType) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
+// GetEnumValue returns the value of the Error Code
+func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 
-// MarshalBinary marshals the Chain Type to bytes as a unsigned varint.
-func (v ChainType) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Chain Type from bytes as a unsigned varint.
-func (v *ChainType) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = ChainType(u)
-	return nil
-}
-
-// ID returns the ID of the Error Code
-func (v ErrorCode) ID() uint64 { return uint64(v) }
-
-// Set sets the value. Set returns false if the value is invalid.
-func (v *ErrorCode) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized:
 		*v = u
 		return true
 	default:
@@ -578,6 +711,20 @@ func (v ErrorCode) String() string {
 		return "dataEntryHashError"
 	case ErrorCodeTxnQueryError:
 		return "txnQueryError"
+	case ErrorCodeInvalidRequest:
+		return "invalidRequest"
+	case ErrorCodeInvalidSignature:
+		return "invalidSignature"
+	case ErrorCodeInsufficientCredits:
+		return "insufficientCredits"
+	case ErrorCodeBadVersion:
+		return "badVersion"
+	case ErrorCodeInternal:
+		return "internal"
+	case ErrorCodeAlreadyDelivered:
+		return "alreadyDelivered"
+	case ErrorCodeUnauthorized:
+		return "unauthorized"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -640,6 +787,20 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeDataEntryHashError, true
 	case "txnQueryError":
 		return ErrorCodeTxnQueryError, true
+	case "invalidRequest":
+		return ErrorCodeInvalidRequest, true
+	case "invalidSignature":
+		return ErrorCodeInvalidSignature, true
+	case "insufficientCredits":
+		return ErrorCodeInsufficientCredits, true
+	case "badVersion":
+		return ErrorCodeBadVersion, true
+	case "internal":
+		return ErrorCodeInternal, true
+	case "alreadyDelivered":
+		return ErrorCodeAlreadyDelivered, true
+	case "unauthorized":
+		return ErrorCodeUnauthorized, true
 	default:
 		return 0, false
 	}
@@ -666,35 +827,14 @@ func (v *ErrorCode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Error Code.
-func (v ErrorCode) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
+// GetEnumValue returns the value of the Key Page Operation Type
+func (v KeyPageOperationType) GetEnumValue() uint64 { return uint64(v) }
 
-// MarshalBinary marshals the Error Code to bytes as a unsigned varint.
-func (v ErrorCode) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Error Code from bytes as a unsigned varint.
-func (v *ErrorCode) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = ErrorCode(u)
-	return nil
-}
-
-// ID returns the ID of the Key PageOpe ration
-func (v KeyPageOperation) ID() uint64 { return uint64(v) }
-
-// Set sets the value. Set returns false if the value is invalid.
-func (v *KeyPageOperation) Set(id uint64) bool {
-	u := KeyPageOperation(id)
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
+	u := KeyPageOperationType(id)
 	switch u {
-	case KeyPageOperationUnknown, KeyPageOperationUpdate, KeyPageOperationRemove, KeyPageOperationAdd, KeyPageOperationSetThreshold:
+	case KeyPageOperationTypeUnknown, KeyPageOperationTypeUpdate, KeyPageOperationTypeRemove, KeyPageOperationTypeAdd, KeyPageOperationTypeSetThreshold, KeyPageOperationTypeUpdateAllowed:
 		*v = u
 		return true
 	default:
@@ -702,49 +842,53 @@ func (v *KeyPageOperation) Set(id uint64) bool {
 	}
 }
 
-// String returns the name of the Key PageOpe ration
-func (v KeyPageOperation) String() string {
+// String returns the name of the Key Page Operation Type
+func (v KeyPageOperationType) String() string {
 	switch v {
-	case KeyPageOperationUnknown:
+	case KeyPageOperationTypeUnknown:
 		return "unknown"
-	case KeyPageOperationUpdate:
+	case KeyPageOperationTypeUpdate:
 		return "update"
-	case KeyPageOperationRemove:
+	case KeyPageOperationTypeRemove:
 		return "remove"
-	case KeyPageOperationAdd:
+	case KeyPageOperationTypeAdd:
 		return "add"
-	case KeyPageOperationSetThreshold:
+	case KeyPageOperationTypeSetThreshold:
 		return "setThreshold"
+	case KeyPageOperationTypeUpdateAllowed:
+		return "updateAllowed"
 	default:
-		return fmt.Sprintf("KeyPageOperation:%d", v)
+		return fmt.Sprintf("KeyPageOperationType:%d", v)
 	}
 }
 
-// KeyPageOperationByName returns the named Key PageOpe ration.
-func KeyPageOperationByName(name string) (KeyPageOperation, bool) {
+// KeyPageOperationTypeByName returns the named Key Page Operation Type.
+func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
 	switch name {
 	case "unknown":
-		return KeyPageOperationUnknown, true
+		return KeyPageOperationTypeUnknown, true
 	case "update":
-		return KeyPageOperationUpdate, true
+		return KeyPageOperationTypeUpdate, true
 	case "remove":
-		return KeyPageOperationRemove, true
+		return KeyPageOperationTypeRemove, true
 	case "add":
-		return KeyPageOperationAdd, true
+		return KeyPageOperationTypeAdd, true
 	case "setThreshold":
-		return KeyPageOperationSetThreshold, true
+		return KeyPageOperationTypeSetThreshold, true
+	case "updateAllowed":
+		return KeyPageOperationTypeUpdateAllowed, true
 	default:
 		return 0, false
 	}
 }
 
-// MarshalJSON marshals the Key PageOpe ration to JSON as a string.
-func (v KeyPageOperation) MarshalJSON() ([]byte, error) {
+// MarshalJSON marshals the Key Page Operation Type to JSON as a string.
+func (v KeyPageOperationType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.String())
 }
 
-// UnmarshalJSON unmarshals the Key PageOpe ration from JSON as a string.
-func (v *KeyPageOperation) UnmarshalJSON(data []byte) error {
+// UnmarshalJSON unmarshals the Key Page Operation Type from JSON as a string.
+func (v *KeyPageOperationType) UnmarshalJSON(data []byte) error {
 	var s string
 	err := json.Unmarshal(data, &s)
 	if err != nil {
@@ -752,39 +896,18 @@ func (v *KeyPageOperation) UnmarshalJSON(data []byte) error {
 	}
 
 	var ok bool
-	*v, ok = KeyPageOperationByName(s)
+	*v, ok = KeyPageOperationTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
-		return fmt.Errorf("invalid Key PageOpe ration %q", s)
+		return fmt.Errorf("invalid Key Page Operation Type %q", s)
 	}
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Key PageOpe ration.
-func (v KeyPageOperation) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
+// GetEnumValue returns the value of the Object Type
+func (v ObjectType) GetEnumValue() uint64 { return uint64(v) }
 
-// MarshalBinary marshals the Key PageOpe ration to bytes as a unsigned varint.
-func (v KeyPageOperation) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Key PageOpe ration from bytes as a unsigned varint.
-func (v *KeyPageOperation) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = KeyPageOperation(u)
-	return nil
-}
-
-// ID returns the ID of the Object Type
-func (v ObjectType) ID() uint64 { return uint64(v) }
-
-// Set sets the value. Set returns false if the value is invalid.
-func (v *ObjectType) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *ObjectType) SetEnumValue(id uint64) bool {
 	u := ObjectType(id)
 	switch u {
 	case ObjectTypeUnknown, ObjectTypeAccount, ObjectTypeTransaction:
@@ -844,35 +967,14 @@ func (v *ObjectType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Object Type.
-func (v ObjectType) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
+// GetEnumValue returns the value of the Signature Type
+func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 
-// MarshalBinary marshals the Object Type to bytes as a unsigned varint.
-func (v ObjectType) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Object Type from bytes as a unsigned varint.
-func (v *ObjectType) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = ObjectType(u)
-	return nil
-}
-
-// ID returns the ID of the Signature Type
-func (v SignatureType) ID() uint64 { return uint64(v) }
-
-// Set sets the value. Set returns false if the value is invalid.
-func (v *SignatureType) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal:
 		*v = u
 		return true
 	default:
@@ -893,6 +995,10 @@ func (v SignatureType) String() string {
 		return "rCD1"
 	case SignatureTypeReceipt:
 		return "receipt"
+	case SignatureTypeSynthetic:
+		return "synthetic"
+	case SignatureTypeInternal:
+		return "internal"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -911,6 +1017,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeRCD1, true
 	case "receipt":
 		return SignatureTypeReceipt, true
+	case "synthetic":
+		return SignatureTypeSynthetic, true
+	case "internal":
+		return SignatureTypeInternal, true
 	default:
 		return 0, false
 	}
@@ -937,32 +1047,11 @@ func (v *SignatureType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Signature Type.
-func (v SignatureType) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
+// GetEnumValue returns the value of the Transaction Max
+func (v TransactionMax) GetEnumValue() uint64 { return uint64(v) }
 
-// MarshalBinary marshals the Signature Type to bytes as a unsigned varint.
-func (v SignatureType) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Signature Type from bytes as a unsigned varint.
-func (v *SignatureType) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = SignatureType(u)
-	return nil
-}
-
-// ID returns the ID of the Transaction Max
-func (v TransactionMax) ID() uint64 { return uint64(v) }
-
-// Set sets the value. Set returns false if the value is invalid.
-func (v *TransactionMax) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *TransactionMax) SetEnumValue(id uint64) bool {
 	u := TransactionMax(id)
 	switch u {
 	case TransactionMaxUser, TransactionMaxSynthetic, TransactionMaxInternal:
@@ -1022,35 +1111,14 @@ func (v *TransactionMax) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// BinarySize returns the number of bytes required to binary marshal the Transaction Max.
-func (v TransactionMax) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
+// GetEnumValue returns the value of the Transaction Type
+func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 
-// MarshalBinary marshals the Transaction Max to bytes as a unsigned varint.
-func (v TransactionMax) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Transaction Max from bytes as a unsigned varint.
-func (v *TransactionMax) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = TransactionMax(u)
-	return nil
-}
-
-// ID returns the ID of the Transaction Type
-func (v TransactionType) ID() uint64 { return uint64(v) }
-
-// Set sets the value. Set returns false if the value is invalid.
-func (v *TransactionType) Set(id uint64) bool {
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeUpdateKey, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
 		*v = u
 		return true
 	default:
@@ -1095,6 +1163,14 @@ func (v TransactionType) String() string {
 		return "updateManager"
 	case TransactionTypeRemoveManager:
 		return "removeManager"
+	case TransactionTypeAddValidator:
+		return "addValidator"
+	case TransactionTypeRemoveValidator:
+		return "removeValidator"
+	case TransactionTypeUpdateValidatorKey:
+		return "updateValidatorKey"
+	case TransactionTypeUpdateAccountAuth:
+		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
 	case TransactionTypeSignPending:
@@ -1115,6 +1191,8 @@ func (v TransactionType) String() string {
 		return "syntheticMirror"
 	case TransactionTypeSegWitDataEntry:
 		return "segWitDataEntry"
+	case TransactionTypeSyntheticReceipt:
+		return "syntheticReceipt"
 	case TransactionTypeInternalGenesis:
 		return "internalGenesis"
 	case TransactionTypeInternalSendTransactions:
@@ -1165,6 +1243,14 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateManager, true
 	case "removeManager":
 		return TransactionTypeRemoveManager, true
+	case "addValidator":
+		return TransactionTypeAddValidator, true
+	case "removeValidator":
+		return TransactionTypeRemoveValidator, true
+	case "updateValidatorKey":
+		return TransactionTypeUpdateValidatorKey, true
+	case "updateAccountAuth":
+		return TransactionTypeUpdateAccountAuth, true
 	case "updateKey":
 		return TransactionTypeUpdateKey, true
 	case "signPending":
@@ -1185,6 +1271,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticMirror, true
 	case "segWitDataEntry":
 		return TransactionTypeSegWitDataEntry, true
+	case "syntheticReceipt":
+		return TransactionTypeSyntheticReceipt, true
 	case "internalGenesis":
 		return TransactionTypeInternalGenesis, true
 	case "internalSendTransactions":
@@ -1216,26 +1304,5 @@ func (v *TransactionType) UnmarshalJSON(data []byte) error {
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Transaction Type %q", s)
 	}
-	return nil
-}
-
-// BinarySize returns the number of bytes required to binary marshal the Transaction Type.
-func (v TransactionType) BinarySize() int {
-	return encoding.UvarintBinarySize(v.ID())
-}
-
-// MarshalBinary marshals the Transaction Type to bytes as a unsigned varint.
-func (v TransactionType) MarshalBinary() ([]byte, error) {
-	return encoding.UvarintMarshalBinary(v.ID()), nil
-}
-
-// UnmarshalBinary unmarshals the Transaction Type from bytes as a unsigned varint.
-func (v *TransactionType) UnmarshalBinary(data []byte) error {
-	u, err := encoding.UvarintUnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	*v = TransactionType(u)
 	return nil
 }

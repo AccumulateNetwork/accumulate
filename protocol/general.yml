@@ -2,20 +2,12 @@
 
 Object:
   fields:
-  - name: Entry
-    type: bytes
-  - name: Height
-    type: uvarint
-  - name: Roots
-    repeatable: true
-    type: bytes
-
-ObjectMetadata:
-  fields:
     - name: Type
+      description: is the object's type
       type: ObjectType
       marshal-as: enum
     - name: Chains
+      description: lists the object's chains
       repeatable: true
       type: ChainMetadata
       marshal-as: reference
@@ -68,13 +60,9 @@ IndexEntry:
 
 DataEntry:
   fields:
-    - name: ExtIds
-      optional: true
+    - name: Data
       repeatable: true
       type: bytes
-    - name: Data
-      type: bytes
-      optional: true
 
 DirectoryIndexMetadata:
   fields:
@@ -95,10 +83,18 @@ TransactionStatus:
       type: string
     - name: Result
       type: TransactionResult
-      optional: true
       marshal-as: value
       zero-value: nil
       unmarshal-with: UnmarshalTransactionResult
+    - name: Initiator
+      description: is the signer that initiated the transaction
+      type: url
+      pointer: true
+    - name: Signers
+      description: lists accounts that have signed the transaction
+      type: url
+      pointer: true
+      repeatable: true
 
 Receipt:
   fields:
@@ -117,3 +113,9 @@ ReceiptEntry:
       type: bool
     - name: Hash
       type: bytes
+
+HashSet:
+  fields:
+    - name: Hashes
+      type: hash
+      repeatable: true
