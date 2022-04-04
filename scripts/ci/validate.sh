@@ -110,7 +110,8 @@ if [ -f "$NODE_PRIV_VAL0" ]; then
     wait-for-tx $TXID
 
     wait-for cli-tx-sig tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
-    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
+    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
     wait-for-tx $TXID
 
     RESULT=$(accumulate -j data get dn/oracle)
