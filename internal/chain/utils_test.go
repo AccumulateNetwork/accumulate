@@ -1,5 +1,7 @@
 package chain
 
+// Whitebox testing utilities
+
 import (
 	"testing"
 

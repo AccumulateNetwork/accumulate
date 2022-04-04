@@ -102,8 +102,9 @@ func Get(urlStr string) (string, error) {
 		return "", err
 	}
 
-	params := api2.UrlQuery{}
-	params.Url = u
+	req := new(api2.GeneralQuery)
+	req.Url = u
+	req.Prove = Prove
 
 	method := "query"
 	if GetDirect {
@@ -111,7 +112,7 @@ func Get(urlStr string) (string, error) {
 	}
 
 	var res json.RawMessage
-	err = queryAs(method, &params, &res)
+	err = queryAs(method, &req, &res)
 	if err != nil {
 		return "", err
 	}

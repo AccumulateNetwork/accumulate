@@ -101,7 +101,11 @@ ReceiptSignature:
   union: { type: signature }
   embeddings:
   - Receipt
-  fields: []
+  fields:
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
 
 SyntheticSignature:
   union: { type: signature }
@@ -316,6 +320,16 @@ UpdateKeyPage:
       unmarshal-with: UnmarshalKeyPageOperation
       zero-value: nil
 
+UpdateAccountAuth:
+  union: { type: transaction }
+  fields:
+    - name: Operations
+      type: AccountAuthOperation
+      marshal-as: value
+      unmarshal-with: UnmarshalAccountAuthOperation
+      zero-value: nil
+      repeatable: true
+
 UpdateManager:
   union: { type: transaction }
   fields:
@@ -363,11 +377,20 @@ SignPending:
 
 ##### Synthetic #####
 
-SyntheticCreateChain:
-  union: { type: transaction }
+SyntheticOrigin:
   fields:
+    - name: Source
+      description: is the principal of the transaction that produced this transaction
+      type: url
+      pointer: true
     - name: Cause
       type: chain
+
+SyntheticCreateChain:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
     - name: Chains
       repeatable: true
       type: ChainParams
@@ -376,18 +399,18 @@ SyntheticCreateChain:
 
 SyntheticWriteData:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Entry
       type: DataEntry
       marshal-as: reference
 
 SyntheticDepositTokens:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Token
       type: url
       pointer: true
@@ -398,7 +421,7 @@ SyntheticAnchor:
   union: { type: transaction }
   fields:
     - name: Source
-      description: is the subnet the anchor originates from
+      description: is the principal of the transaction that produced this transaction
       type: url
       pointer: true
     - name: Major
@@ -427,17 +450,17 @@ SyntheticAnchor:
 
 SyntheticDepositCredits:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: uvarint
 
 SyntheticBurnTokens:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: Amount
       type: bigint
 
@@ -449,11 +472,23 @@ SyntheticMirror:
       type: AnchoredRecord
       marshal-as: reference
 
+SyntheticReceipt:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: SynthTxHash
+      type: chain
+    - name: Status
+      type: TransactionStatus
+      marshal-as: reference
+      pointer: true
+
 SegWitDataEntry:
   union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
   fields:
-    - name: Cause
-      type: chain
     - name: EntryUrl
       type: url
       pointer: true
@@ -506,6 +541,23 @@ UpdateAllowedKeyPageOperation:
       marshal-as: enum
       optional: true
 
+##### Authorization Operations #####
+
+EnableAccountAuthOperation:
+  union: { type: accountAuthOperation }
+  fields:
+  - name: Authority
+    description: is the authority (key book) to enable authorization for
+    type: url
+    pointer: true
+
+DisableAccountAuthOperation:
+  union: { type: accountAuthOperation }
+  fields:
+  - name: Authority
+    description: is the authority (key book) to enable authorization for
+    type: url
+    pointer: true
 
 ##### Result Types #####
 

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -190,26 +189,24 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	res := new(TxResponse)
 	res.Code = uint64(resp.Code)
 	res.TransactionHash = envs[0].GetTxHash()
-	res.EnvelopeHash = envs[0].EnvHash()
+	res.SignatureHashes = make([][]byte, len(envs[0].Signatures))
 	res.SimpleHash = simpleHash[:]
 
-	// Parse the results
-	var results []*protocol.TransactionStatus
-	rd := bytes.NewReader(resp.Data)
-	for rd.Len() > 0 {
-		status := new(protocol.TransactionStatus)
-		err := status.UnmarshalBinaryFrom(rd)
-		if err != nil {
-			m.logError("Failed to decode transaction results", "error", err)
-			break
-		}
-		results = append(results, status)
+	for i, sig := range envs[0].Signatures {
+		res.SignatureHashes[i] = sig.Hash()
 	}
 
-	if len(results) == 1 {
-		res.Result = results[0]
-	} else if len(results) > 0 {
-		res.Result = results
+	// Parse the results
+	results := new(protocol.TransactionResultSet)
+	err = results.UnmarshalBinary(resp.Data)
+	if err != nil {
+		m.logError("Failed to decode transaction results", "error", err)
+	}
+
+	if len(results.Results) == 1 {
+		res.Result = results.Results[0]
+	} else if len(results.Results) > 0 {
+		res.Result = results.Results
 	}
 
 	// Check for errors

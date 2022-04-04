@@ -1,14 +1,11 @@
-package chain
+package block
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -32,16 +29,11 @@ type SynthTxnReference struct {
 	TxRef [32]byte `json:"txRef,omitempty" form:"txRef" query:"txRef" validate:"required"`
 }
 
-type ValidatorUpdate struct {
-	PubKey  ed25519.PubKey
-	Enabled bool
-}
-
 // EndBlockRequest is the input parameter to Chain.EndBlock
 type EndBlockRequest struct{}
 
 type EndBlockResponse struct {
-	ValidatorsUpdates []ValidatorUpdate
+	ValidatorsUpdates []chain.ValidatorUpdate
 }
 
 type Block struct {
@@ -60,29 +52,16 @@ type BlockMeta struct {
 	Evidence   []types.Evidence
 }
 
-// ChainUpdate records an update to a chain of an account.
-type ChainUpdate struct {
-	Account     *url.URL
-	Name        string
-	Type        protocol.ChainType
-	Index       uint64
-	SourceIndex uint64
-	SourceBlock uint64
-	Entry       []byte
-}
-
 // BlockState tracks various metrics of a block of transactions as they are
 // executed.
 type BlockState struct {
-	chains map[string]*ChainUpdate
-
 	Delivered         uint64
 	Signed            uint64
 	SynthSigned       uint64
 	SynthSent         uint64
-	ValidatorsUpdates []ValidatorUpdate
+	ValidatorsUpdates []chain.ValidatorUpdate
 	ProducedTxns      []*protocol.Transaction
-	ChainUpdates      []ChainUpdate
+	ChainUpdates      chain.ChainUpdates
 }
 
 // Empty returns true if nothing happened during the block.
@@ -93,45 +72,22 @@ func (s *BlockState) Empty() bool {
 		s.SynthSent == 0 &&
 		len(s.ValidatorsUpdates) == 0 &&
 		len(s.ProducedTxns) == 0 &&
-		len(s.ChainUpdates) == 0
+		len(s.ChainUpdates.Entries) == 0
 }
 
-// Merge merges pending block changes into the block state.
-func (s *BlockState) Merge(r *BlockState) {
-	s.Delivered += r.Delivered
-	s.Signed += r.Signed
-	s.SynthSigned += r.SynthSigned
-	s.SynthSent += r.SynthSent
+type ProcessSignatureState struct {
+}
+
+func (s *ProcessSignatureState) Merge(r *ProcessSignatureState) {
+}
+
+func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
+	s.Signed++
+}
+
+func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
+	s.Delivered++
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
-
-	for _, u := range r.ChainUpdates {
-		s.DidUpdateChain(u)
-	}
-}
-
-// DidUpdateChain records a chain update.
-func (s *BlockState) DidUpdateChain(update ChainUpdate) {
-	if s.chains == nil {
-		s.chains = map[string]*ChainUpdate{}
-	}
-
-	str := strings.ToLower(fmt.Sprintf("%s#chain/%s", update.Account, update.Name))
-	ptr, ok := s.chains[str]
-	if ok {
-		*ptr = update
-		return
-	}
-
-	i := len(s.ChainUpdates)
-	s.ChainUpdates = append(s.ChainUpdates, update)
-	s.chains[str] = &s.ChainUpdates[i]
-}
-
-// DidProduceTxn records a produced transaction.
-func (s *BlockState) DidProduceTxn(url *url.URL, body protocol.TransactionBody) {
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = url
-	txn.Body = body
-	s.ProducedTxns = append(s.ProducedTxns, txn)
+	s.ChainUpdates.Merge(&r.ChainUpdates)
 }

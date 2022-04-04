@@ -20,6 +20,10 @@ func (InternalSendTransactions) Validate(st *StateManager, tx *protocol.Envelope
 
 	for _, tx := range body.Transactions {
 		st.Submit(tx.Recipient, tx.Payload)
+		st.logger.Debug("Submitting transaction",
+			"principal", tx.Recipient,
+			"type", tx.Payload.Type(),
+			"module", "governor")
 	}
 
 	return nil, nil
