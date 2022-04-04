@@ -60,8 +60,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		}
 	}
 
-	page.Version += 1
-
 	didUpdateKeyPage(page)
 	st.Update(page)
 	return nil, nil
