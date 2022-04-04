@@ -684,23 +684,22 @@ func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 
 func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type               string                      `json:"type,omitempty"`
-		MainChain          *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState        *MerkleState                `json:"merkleState,omitempty"`
-		Data               interface{}                 `json:"data,omitempty"`
-		Origin             *url.URL                    `json:"origin,omitempty"`
-		Sponsor            *url.URL                    `json:"sponsor,omitempty"`
-		TransactionHash    *string                     `json:"transactionHash,omitempty"`
-		Txid               *string                     `json:"txid,omitempty"`
-		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
-		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
-		Receipts           []*query.TxReceipt          `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
-		BlockIndex         uint64                      `json:"blockIndex,omitempty"`
-		BlockTime          *time.Time                  `json:"blockTime,omitempty"`
+		Type            string                      `json:"type,omitempty"`
+		MainChain       *MerkleState                `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
+		Data            interface{}                 `json:"data,omitempty"`
+		Origin          *url.URL                    `json:"origin,omitempty"`
+		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
+		TransactionHash *string                     `json:"transactionHash,omitempty"`
+		Txid            *string                     `json:"txid,omitempty"`
+		Transaction     *protocol.Transaction       `json:"transaction,omitempty"`
+		Signatures      []json.RawMessage           `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
+		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
+		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
+		BlockIndex      uint64                      `json:"blockIndex,omitempty"`
+		BlockTime       *time.Time                  `json:"blockTime,omitempty"`
 	}{}
 	u.Type = v.TransactionQueryResponse.Type
 	u.MainChain = v.TransactionQueryResponse.MainChain
@@ -725,8 +724,7 @@ func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
 	}
 	u.Receipts = v.TransactionQueryResponse.Receipts
-	u.SignatureThreshold = v.TransactionQueryResponse.SignatureThreshold
-	u.Invalidated = v.TransactionQueryResponse.Invalidated
+	u.SignatureBooks = v.TransactionQueryResponse.SignatureBooks
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	return json.Marshal(&u)
@@ -1316,23 +1314,22 @@ func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 
 func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type               string                      `json:"type,omitempty"`
-		MainChain          *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState        *MerkleState                `json:"merkleState,omitempty"`
-		Data               interface{}                 `json:"data,omitempty"`
-		Origin             *url.URL                    `json:"origin,omitempty"`
-		Sponsor            *url.URL                    `json:"sponsor,omitempty"`
-		TransactionHash    *string                     `json:"transactionHash,omitempty"`
-		Txid               *string                     `json:"txid,omitempty"`
-		Transaction        *protocol.Transaction       `json:"transaction,omitempty"`
-		Signatures         []json.RawMessage           `json:"signatures,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids     []string                    `json:"syntheticTxids,omitempty"`
-		Receipts           []*query.TxReceipt          `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
-		BlockIndex         uint64                      `json:"blockIndex,omitempty"`
-		BlockTime          *time.Time                  `json:"blockTime,omitempty"`
+		Type            string                      `json:"type,omitempty"`
+		MainChain       *MerkleState                `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
+		Data            interface{}                 `json:"data,omitempty"`
+		Origin          *url.URL                    `json:"origin,omitempty"`
+		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
+		TransactionHash *string                     `json:"transactionHash,omitempty"`
+		Txid            *string                     `json:"txid,omitempty"`
+		Transaction     *protocol.Transaction       `json:"transaction,omitempty"`
+		Signatures      []json.RawMessage           `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
+		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
+		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
+		BlockIndex      uint64                      `json:"blockIndex,omitempty"`
+		BlockTime       *time.Time                  `json:"blockTime,omitempty"`
 	}{}
 	u.Type = v.TransactionQueryResponse.Type
 	u.MainChain = v.TransactionQueryResponse.MainChain
@@ -1357,8 +1354,7 @@ func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
 	}
 	u.Receipts = v.TransactionQueryResponse.Receipts
-	u.SignatureThreshold = v.TransactionQueryResponse.SignatureThreshold
-	u.Invalidated = v.TransactionQueryResponse.Invalidated
+	u.SignatureBooks = v.TransactionQueryResponse.SignatureBooks
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -1412,8 +1408,7 @@ func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.TransactionQueryResponse.Receipts = u.Receipts
-	v.TransactionQueryResponse.SignatureThreshold = u.SignatureThreshold
-	v.TransactionQueryResponse.Invalidated = u.Invalidated
+	v.TransactionQueryResponse.SignatureBooks = u.SignatureBooks
 	v.BlockIndex = u.BlockIndex
 	v.BlockTime = u.BlockTime
 	return nil

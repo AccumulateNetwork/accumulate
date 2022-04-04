@@ -4,7 +4,6 @@ import (
 	"encoding"
 	"encoding/hex"
 	"fmt"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -114,20 +113,19 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 	return res, nil
 }
 
-func packMinorQueryResponse(blockIndex uint64, blockTime *time.Time, txid [32]byte, synth []byte, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*MinorQueryResponse, error) {
+func packMinorQueryResponse(entry *query.ResponseMinorEntry) (*MinorQueryResponse, error) {
 	var err error
 	resp := new(MinorQueryResponse)
-	resp.BlockIndex = blockIndex
-	resp.BlockTime = blockTime
-	if envelope != nil {
+	resp.BlockIndex = entry.BlockIndex
+	resp.BlockTime = entry.BlockTime
+	if entry.Envelope != nil {
 		var txQryResp *TransactionQueryResponse
-		txQryResp, err = packTxResponse(txid, synth, ms, envelope, status)
+		txQryResp, err = packTxResponse(&entry.ResponseByTxId, nil, entry.Envelope, entry.Status)
 		resp.TransactionQueryResponse = *txQryResp
 	}
-	resp.TransactionHash = txid[:]
+	resp.TransactionHash = entry.TxId[:]
 	return resp, err
 }
-
 
 func packChainValue(qr *query.ResponseChainEntry) *ChainQueryResponse {
 	resp := new(ChainQueryResponse)

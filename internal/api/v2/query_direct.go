@@ -502,12 +502,10 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (
 	mres.Count = pagination.Count
 	mres.Total = res.Total
 	for i, entry := range res.Entries {
-		queryRes, err := packMinorQueryResponse(entry.BlockIndex, entry.BlockTime, entry.TxId, entry.TxSynthTxIds, nil, entry.Envelope, entry.Status)
+		queryRes, err := packMinorQueryResponse(entry)
 		if err != nil {
 			return nil, err
 		}
-		queryRes.Invalidated = entry.Invalidated
-		queryRes.SignatureThreshold = entry.SignatureThreshold
 
 		mres.Items[i] = queryRes
 	}

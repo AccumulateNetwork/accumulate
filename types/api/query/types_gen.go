@@ -269,6 +269,20 @@ func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 
 func (v *RequestKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
+	u := new(RequestMinorBlocks)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Start = v.Start
+	u.Limit = v.Limit
+
+	return u
+}
+
+func (v *RequestMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *RequestTxHistory) Copy() *RequestTxHistory {
 	u := new(RequestTxHistory)
 
@@ -408,6 +422,39 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 }
 
 func (v *ResponseKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseMinorBlocks) Copy() *ResponseMinorBlocks {
+	u := new(ResponseMinorBlocks)
+
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = make([]*ResponseMinorEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ResponseMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseMinorEntry) Copy() *ResponseMinorEntry {
+	u := new(ResponseMinorEntry)
+
+	u.ResponseByTxId = *v.ResponseByTxId.Copy()
+	u.BlockIndex = v.BlockIndex
+	if v.BlockTime != nil {
+		u.BlockTime = new(time.Time)
+		*u.BlockTime = *v.BlockTime
+	}
+
+	return u
+}
+
+func (v *ResponseMinorEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ResponsePending) Copy() *ResponsePending {
 	u := new(ResponsePending)
@@ -2859,17 +2906,16 @@ func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId               string                      `json:"txId,omitempty"`
-		Envelope           *protocol.Envelope          `json:"envelope,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds       *string                     `json:"txSynthTxIds,omitempty"`
-		Height             int64                       `json:"height"`
-		ChainState         []*string                   `json:"chainState,omitempty"`
-		Receipts           []*TxReceipt                `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
-		BlockIndex         uint64                      `json:"blockIndex,omitempty"`
-		BlockTime          *time.Time                  `json:"blockTime,omitempty"`
+		TxId         string                      `json:"txId,omitempty"`
+		Envelope     *protocol.Envelope          `json:"envelope,omitempty"`
+		Status       *protocol.TransactionStatus `json:"status,omitempty"`
+		TxSynthTxIds *string                     `json:"txSynthTxIds,omitempty"`
+		Height       int64                       `json:"height"`
+		ChainState   []*string                   `json:"chainState,omitempty"`
+		Receipts     []*TxReceipt                `json:"receipts,omitempty"`
+		Signers      []SignatureSet              `json:"signers,omitempty"`
+		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.ResponseByTxId.TxId)
 	u.Envelope = v.ResponseByTxId.Envelope
@@ -2881,8 +2927,7 @@ func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
 		u.ChainState[i] = encoding.BytesToJSON(x)
 	}
 	u.Receipts = v.ResponseByTxId.Receipts
-	u.SignatureThreshold = v.ResponseByTxId.SignatureThreshold
-	u.Invalidated = v.ResponseByTxId.Invalidated
+	u.Signers = v.ResponseByTxId.Signers
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	return json.Marshal(&u)
@@ -3216,17 +3261,16 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId               string                      `json:"txId,omitempty"`
-		Envelope           *protocol.Envelope          `json:"envelope,omitempty"`
-		Status             *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds       *string                     `json:"txSynthTxIds,omitempty"`
-		Height             int64                       `json:"height"`
-		ChainState         []*string                   `json:"chainState,omitempty"`
-		Receipts           []*TxReceipt                `json:"receipts,omitempty"`
-		SignatureThreshold uint64                      `json:"signatureThreshold,omitempty"`
-		Invalidated        bool                        `json:"invalidated,omitempty"`
-		BlockIndex         uint64                      `json:"blockIndex,omitempty"`
-		BlockTime          *time.Time                  `json:"blockTime,omitempty"`
+		TxId         string                      `json:"txId,omitempty"`
+		Envelope     *protocol.Envelope          `json:"envelope,omitempty"`
+		Status       *protocol.TransactionStatus `json:"status,omitempty"`
+		TxSynthTxIds *string                     `json:"txSynthTxIds,omitempty"`
+		Height       int64                       `json:"height"`
+		ChainState   []*string                   `json:"chainState,omitempty"`
+		Receipts     []*TxReceipt                `json:"receipts,omitempty"`
+		Signers      []SignatureSet              `json:"signers,omitempty"`
+		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.ResponseByTxId.TxId)
 	u.Envelope = v.ResponseByTxId.Envelope
@@ -3238,8 +3282,7 @@ func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 		u.ChainState[i] = encoding.BytesToJSON(x)
 	}
 	u.Receipts = v.ResponseByTxId.Receipts
-	u.SignatureThreshold = v.ResponseByTxId.SignatureThreshold
-	u.Invalidated = v.ResponseByTxId.Invalidated
+	u.Signers = v.ResponseByTxId.Signers
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -3267,8 +3310,7 @@ func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.ResponseByTxId.Receipts = u.Receipts
-	v.ResponseByTxId.SignatureThreshold = u.SignatureThreshold
-	v.ResponseByTxId.Invalidated = u.Invalidated
+	v.ResponseByTxId.Signers = u.Signers
 	v.BlockIndex = u.BlockIndex
 	v.BlockTime = u.BlockTime
 	return nil
