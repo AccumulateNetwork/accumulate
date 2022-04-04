@@ -461,9 +461,15 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 			e.Txid = u.Entry
 			e.Account = u.Account
 			e.Chain = u.Name
-			e.ChainIndex = uint64(indexIndex)
+			e.ChainIndex = indexIndex
 			txChainEntries = append(txChainEntries, e)
 		}
+	}
+
+	// Create a BlockChainUpdates Index
+	err = indexing.BlockChainUpdates(block.Batch, block.Index).Set(block.State.ChainUpdates.Entries)
+	if err != nil {
+		return err
 	}
 
 	// If dn/oracle was updated, update the ledger's oracle value, but only if
@@ -593,7 +599,7 @@ func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledg
 		return 0, err
 	}
 
-	block.State.ChainUpdates.DidUpdateChain(chain.ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(indexing.ChainUpdate{
 		Name:    protocol.SyntheticChain,
 		Type:    protocol.ChainTypeTransaction,
 		Account: ledgerUrl,
@@ -611,7 +617,7 @@ func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger,
 	}
 
 	m.logger.Debug("Anchoring BPT", "root", logging.AsHex(root).Slice(0, 4))
-	block.State.ChainUpdates.DidUpdateChain(chain.ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(indexing.ChainUpdate{
 		Name:    "bpt",
 		Account: m.Network.NodeUrl(),
 		Index:   uint64(block.Index - 1),

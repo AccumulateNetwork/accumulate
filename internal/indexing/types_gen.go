@@ -12,7 +12,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type BlockChainUpdatesIndex struct {
+	fieldsSet []bool
+	Entries   []*ChainUpdate `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+}
 
 type BlockStateIndex struct {
 	fieldsSet         []bool
@@ -23,6 +29,17 @@ type BlockStateSynthTxnEntry struct {
 	fieldsSet   []bool
 	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	ChainEntry  uint64 `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
+}
+
+type ChainUpdate struct {
+	fieldsSet   []bool
+	Account     *url.URL           `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Name        string             `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type        protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Index       uint64             `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	SourceIndex uint64             `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	SourceBlock uint64             `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
+	Entry       []byte             `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 type PendingTransactionsIndex struct {
@@ -45,6 +62,21 @@ type TransactionChainIndex struct {
 	fieldsSet []bool
 	Entries   []*TransactionChainEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 }
+
+func (v *BlockChainUpdatesIndex) Copy() *BlockChainUpdatesIndex {
+	u := new(BlockChainUpdatesIndex)
+
+	u.Entries = make([]*ChainUpdate, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockChainUpdatesIndex) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockStateIndex) Copy() *BlockStateIndex {
 	u := new(BlockStateIndex)
@@ -71,6 +103,24 @@ func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
 }
 
 func (v *BlockStateSynthTxnEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ChainUpdate) Copy() *ChainUpdate {
+	u := new(ChainUpdate)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Name = v.Name
+	u.Type = v.Type
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesCopy(v.Entry)
+
+	return u
+}
+
+func (v *ChainUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PendingTransactionsIndex) Copy() *PendingTransactionsIndex {
 	u := new(PendingTransactionsIndex)
@@ -115,6 +165,19 @@ func (v *TransactionChainIndex) Copy() *TransactionChainIndex {
 
 func (v *TransactionChainIndex) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *BlockChainUpdatesIndex) Equal(u *BlockChainUpdatesIndex) bool {
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *BlockStateIndex) Equal(u *BlockStateIndex) bool {
 	if len(v.ProducedSynthTxns) != len(u.ProducedSynthTxns) {
 		return false
@@ -133,6 +196,37 @@ func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 		return false
 	}
 	if !(v.ChainEntry == u.ChainEntry) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ChainUpdate) Equal(u *ChainUpdate) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Type == u.Type) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !(v.SourceIndex == u.SourceIndex) {
+		return false
+	}
+	if !(v.SourceBlock == u.SourceBlock) {
+		return false
+	}
+	if !(bytes.Equal(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -185,6 +279,43 @@ func (v *TransactionChainIndex) Equal(u *TransactionChainIndex) bool {
 	}
 
 	return true
+}
+
+var fieldNames_BlockChainUpdatesIndex = []string{
+	1: "Entries",
+}
+
+func (v *BlockChainUpdatesIndex) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(1, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockChainUpdatesIndex)
+	return buffer.Bytes(), err
+}
+
+func (v *BlockChainUpdatesIndex) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_BlockStateIndex = []string{
@@ -256,6 +387,95 @@ func (v *BlockStateSynthTxnEntry) IsValid() error {
 		errs = append(errs, "field ChainEntry is missing")
 	} else if v.ChainEntry == 0 {
 		errs = append(errs, "field ChainEntry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ChainUpdate = []string{
+	1: "Account",
+	2: "Name",
+	3: "Type",
+	4: "Index",
+	5: "SourceIndex",
+	6: "SourceBlock",
+	7: "Entry",
+}
+
+func (v *ChainUpdate) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(len(v.Name) == 0) {
+		writer.WriteString(2, v.Name)
+	}
+	if !(v.Type == 0) {
+		writer.WriteEnum(3, v.Type)
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(4, v.Index)
+	}
+	if !(v.SourceIndex == 0) {
+		writer.WriteUint(5, v.SourceIndex)
+	}
+	if !(v.SourceBlock == 0) {
+		writer.WriteUint(6, v.SourceBlock)
+	}
+	if !(len(v.Entry) == 0) {
+		writer.WriteBytes(7, v.Entry)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ChainUpdate)
+	return buffer.Bytes(), err
+}
+
+func (v *ChainUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Name is missing")
+	} else if len(v.Name) == 0 {
+		errs = append(errs, "field Name is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SourceIndex is missing")
+	} else if v.SourceIndex == 0 {
+		errs = append(errs, "field SourceIndex is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field SourceBlock is missing")
+	} else if v.SourceBlock == 0 {
+		errs = append(errs, "field SourceBlock is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Entry is missing")
+	} else if len(v.Entry) == 0 {
+		errs = append(errs, "field Entry is not set")
 	}
 
 	switch len(errs) {
@@ -404,6 +624,26 @@ func (v *TransactionChainIndex) IsValid() error {
 	}
 }
 
+func (v *BlockChainUpdatesIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockChainUpdatesIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(ChainUpdate); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockChainUpdatesIndex)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *BlockStateIndex) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -439,6 +679,40 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockStateSynthTxnEntry)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *ChainUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ChainUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Name = x
+	}
+	if x := new(protocol.ChainType); reader.ReadEnum(3, x) {
+		v.Type = *x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SourceIndex = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.SourceBlock = x
+	}
+	if x, ok := reader.ReadBytes(7); ok {
+		v.Entry = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ChainUpdate)
 	v.fieldsSet = seen
 	return err
 }
@@ -518,6 +792,26 @@ func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ChainUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Account     *url.URL           `json:"account,omitempty"`
+		Name        string             `json:"name,omitempty"`
+		Type        protocol.ChainType `json:"type,omitempty"`
+		Index       uint64             `json:"index,omitempty"`
+		SourceIndex uint64             `json:"sourceIndex,omitempty"`
+		SourceBlock uint64             `json:"sourceBlock,omitempty"`
+		Entry       *string            `json:"entry,omitempty"`
+	}{}
+	u.Account = v.Account
+	u.Name = v.Name
+	u.Type = v.Type
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	return json.Marshal(&u)
+}
+
 func (v *PendingTransactionsIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transactions []string `json:"transactions,omitempty"`
@@ -545,6 +839,40 @@ func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 		v.Transaction = x
 	}
 	v.ChainEntry = u.ChainEntry
+	return nil
+}
+
+func (v *ChainUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Account     *url.URL           `json:"account,omitempty"`
+		Name        string             `json:"name,omitempty"`
+		Type        protocol.ChainType `json:"type,omitempty"`
+		Index       uint64             `json:"index,omitempty"`
+		SourceIndex uint64             `json:"sourceIndex,omitempty"`
+		SourceBlock uint64             `json:"sourceBlock,omitempty"`
+		Entry       *string            `json:"entry,omitempty"`
+	}{}
+	u.Account = v.Account
+	u.Name = v.Name
+	u.Type = v.Type
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Account = u.Account
+	v.Name = u.Name
+	v.Type = u.Type
+	v.Index = u.Index
+	v.SourceIndex = u.SourceIndex
+	v.SourceBlock = u.SourceBlock
+	if x, err := encoding.BytesFromJSON(u.Entry); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
 	return nil
 }
 
