@@ -39,7 +39,7 @@ func chk(t *testing.T, entry Entry) bool {
 func TestBPT_receipt(t *testing.T) {
 	numberEntries := 50000 //               A pretty reasonable sized BPT
 
-	bpt := NewBPT()                      //     Build a BPT
+	bpt := NewBPTManager(nil).Bpt                     //     Build a BPT
 	var keys, values common.RandHash     //     use the default sequence for keys
 	values.SetSeed([]byte{1, 2, 3})      //     use a different sequence for values
 	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT

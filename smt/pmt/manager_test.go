@@ -291,7 +291,7 @@ func TestBptGet(t *testing.T) {
 	numberTests := 50000
 	var keys, values common.RandHash
 	values.SetSeed([]byte{1, 3, 4}) // Let keys default the seed, make values different
-	bpt := NewBPT()
+	bpt := NewBPTManager(nil).Bpt
 	for i := 0; i < numberTests; i++ {
 		k := keys.NextAList()
 		v := values.NextA()

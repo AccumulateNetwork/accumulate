@@ -334,8 +334,9 @@ func (b *BPT) EnsureRootHash() {
 // New BPT
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.
-func NewBPT() *BPT {
+func NewBPT(manager *Manager) *BPT {
 	b := new(BPT)                                 // Get a Binary Patrica Tree
+	b.manager = manager                           // Point the BPT to the manager
 	b.power = 8                                   // using 4 bits to persist BPTs to disk
 	b.mask = b.power - 1                          // Take the bits to the power of 2 -1
 	b.Root = new(BptNode)                         // Allocate summary node (contributes nothing to BPT summary Hash

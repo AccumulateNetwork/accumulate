@@ -2,6 +2,7 @@ package pmt
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 var kBpt = storage.MakeKey("BPT")
@@ -17,9 +18,13 @@ type Manager struct {
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
 func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPTManager
+	if dbManager == nil { //                       If no dbManager is provided,
+		store := new(memory.DB)       //           Create a memory one
+		dbManager = store.Begin(true) //
+	}
 	manager := new(Manager)            //          Allocate the struct
 	manager.DBManager = dbManager      //          populate with pointer to the database manager
-	manager.Bpt = NewBPT()             //          Allocate a new BPT
+	manager.Bpt = NewBPT(manager)      //          Allocate a new BPT
 	manager.Bpt.manager = manager      //          Allow the Bpt to call back to the manager for db access
 	data, e := dbManager.Get(kBptRoot) //          Get the BPT settings from disk
 	if e == nil {                      //          If nothing is found, well this is a fresh instance
