@@ -22,7 +22,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	book, err := url.Parse("foo/book0")
 	require.NoError(t, err)
 
-	account := protocol.NewTokenAccount()
+	account := new(protocol.TokenAccount)
 	account.Url, err = url.Parse("foo/bar/baz")
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
@@ -72,7 +72,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	book, err := url.Parse("foo/book0")
 	require.NoError(t, err)
 
-	account := protocol.NewTokenAccount()
+	account := new(protocol.TokenAccount)
 	account.Url, err = url.Parse("foo/bar/baz")
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
