@@ -11,11 +11,17 @@ import (
 // AccountAuthOperationTypeUnknown is used when the authorization operation is not known.
 const AccountAuthOperationTypeUnknown AccountAuthOperationType = 0
 
-// AccountAuthOperationTypeEnable enables authorization checks for a key book.
+// AccountAuthOperationTypeEnable enables authorization checks for an authority.
 const AccountAuthOperationTypeEnable AccountAuthOperationType = 1
 
-// AccountAuthOperationTypeDisable disables authorization checks for a key book.
+// AccountAuthOperationTypeDisable disables authorization checks for an authority.
 const AccountAuthOperationTypeDisable AccountAuthOperationType = 2
+
+// AccountAuthOperationTypeAddAuthority adds an authority.
+const AccountAuthOperationTypeAddAuthority AccountAuthOperationType = 3
+
+// AccountAuthOperationTypeRemoveAuthority removes an authority.
+const AccountAuthOperationTypeRemoveAuthority AccountAuthOperationType = 4
 
 // AccountTypeUnknown represents an unknown account type.
 const AccountTypeUnknown AccountType = 0
@@ -58,6 +64,9 @@ const AccountTypeInternalSyntheticLedger AccountType = 16
 
 // AllowedTransactionBitUpdateKeyPage is the offset of the UpdateKeyPage bit.
 const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
+
+// AllowedTransactionBitUpdateAccountAuth is the offset of the UpdateAccountAuth bit.
+const AllowedTransactionBitUpdateAccountAuth AllowedTransactionBit = 2
 
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
@@ -278,12 +287,6 @@ const TransactionTypeAddCredits TransactionType = 14
 // TransactionTypeUpdateKeyPage adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction.
 const TransactionTypeUpdateKeyPage TransactionType = 15
 
-// TransactionTypeUpdateManager updates manager for the existing chain.
-const TransactionTypeUpdateManager TransactionType = 16
-
-// TransactionTypeRemoveManager remove manager from existing chain.
-const TransactionTypeRemoveManager TransactionType = 17
-
 // TransactionTypeAddValidator add a validator.
 const TransactionTypeAddValidator TransactionType = 18
 
@@ -357,7 +360,7 @@ func (v AccountAuthOperationType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountAuthOperationType) SetEnumValue(id uint64) bool {
 	u := AccountAuthOperationType(id)
 	switch u {
-	case AccountAuthOperationTypeUnknown, AccountAuthOperationTypeEnable, AccountAuthOperationTypeDisable:
+	case AccountAuthOperationTypeUnknown, AccountAuthOperationTypeEnable, AccountAuthOperationTypeDisable, AccountAuthOperationTypeAddAuthority, AccountAuthOperationTypeRemoveAuthority:
 		*v = u
 		return true
 	default:
@@ -374,6 +377,10 @@ func (v AccountAuthOperationType) String() string {
 		return "enable"
 	case AccountAuthOperationTypeDisable:
 		return "disable"
+	case AccountAuthOperationTypeAddAuthority:
+		return "addAuthority"
+	case AccountAuthOperationTypeRemoveAuthority:
+		return "removeAuthority"
 	default:
 		return fmt.Sprintf("AccountAuthOperationType:%d", v)
 	}
@@ -388,6 +395,10 @@ func AccountAuthOperationTypeByName(name string) (AccountAuthOperationType, bool
 		return AccountAuthOperationTypeEnable, true
 	case "disable":
 		return AccountAuthOperationTypeDisable, true
+	case "addAuthority":
+		return AccountAuthOperationTypeAddAuthority, true
+	case "removeAuthority":
+		return AccountAuthOperationTypeRemoveAuthority, true
 	default:
 		return 0, false
 	}
@@ -527,7 +538,7 @@ func (v AllowedTransactionBit) GetEnumValue() uint64 { return uint64(v) }
 func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
 	u := AllowedTransactionBit(id)
 	switch u {
-	case AllowedTransactionBitUpdateKeyPage:
+	case AllowedTransactionBitUpdateKeyPage, AllowedTransactionBitUpdateAccountAuth:
 		*v = u
 		return true
 	default:
@@ -540,6 +551,8 @@ func (v AllowedTransactionBit) String() string {
 	switch v {
 	case AllowedTransactionBitUpdateKeyPage:
 		return "updateKeyPage"
+	case AllowedTransactionBitUpdateAccountAuth:
+		return "updateAccountAuth"
 	default:
 		return fmt.Sprintf("AllowedTransactionBit:%d", v)
 	}
@@ -550,6 +563,8 @@ func AllowedTransactionBitByName(name string) (AllowedTransactionBit, bool) {
 	switch name {
 	case "updateKeyPage":
 		return AllowedTransactionBitUpdateKeyPage, true
+	case "updateAccountAuth":
+		return AllowedTransactionBitUpdateAccountAuth, true
 	default:
 		return 0, false
 	}
@@ -1127,7 +1142,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
 		*v = u
 		return true
 	default:
@@ -1168,10 +1183,6 @@ func (v TransactionType) String() string {
 		return "addCredits"
 	case TransactionTypeUpdateKeyPage:
 		return "updateKeyPage"
-	case TransactionTypeUpdateManager:
-		return "updateManager"
-	case TransactionTypeRemoveManager:
-		return "removeManager"
 	case TransactionTypeAddValidator:
 		return "addValidator"
 	case TransactionTypeRemoveValidator:
@@ -1246,10 +1257,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeAddCredits, true
 	case "updateKeyPage":
 		return TransactionTypeUpdateKeyPage, true
-	case "updateManager":
-		return TransactionTypeUpdateManager, true
-	case "removeManager":
-		return TransactionTypeRemoveManager, true
 	case "addValidator":
 		return TransactionTypeAddValidator, true
 	case "removeValidator":

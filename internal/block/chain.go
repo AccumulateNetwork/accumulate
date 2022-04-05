@@ -51,8 +51,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			UpdateKeyPage{},
 			WriteData{},
 			WriteDataTo{},
-			UpdateManager{},
-			RemoveManager{},
 			UpdateAccountAuth{},
 
 			// BVN validator management
