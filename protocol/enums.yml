@@ -75,10 +75,16 @@ AccountAuthOperationType:
     description: is used when the authorization operation is not known
   Enable:
     value: 1
-    description: enables authorization checks for a key book
+    description: enables authorization checks for an authority
   Disable:
     value: 2
-    description: disables authorization checks for a key book
+    description: disables authorization checks for an authority
+  AddAuthority:
+    value: 3
+    description: adds an authority
+  RemoveAuthority:
+    value: 4
+    description: removes an authority
 
 TransactionMax:
   User:
@@ -138,14 +144,6 @@ TransactionType:
   UpdateKeyPage:
     value: 0x0F
     description: adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction
-  UpdateManager:
-    value: 0x10
-    description: updates manager for the existing chain
-  RemoveManager:
-    value: 0x11
-    description: remove manager from existing chain
-
-  ##### SYNTHETIC TRANSACTIONS #####
   AddValidator:
     value: 0x12
     description: add a validator
@@ -161,6 +159,8 @@ TransactionType:
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
+
+  ##### SYNTHETIC TRANSACTIONS #####
   SyntheticCreateChain:
     value: 0x31
     description: creates or updates chains
@@ -223,12 +223,6 @@ AccountType:
   LiteTokenAccount:
     value: 5
     description: is a Lite Token Account
-  # Transaction:
-  #   value: 7
-  #   description: is a completed transaction
-  # PendingTransaction:
-  #   value: 8
-  #   description: is a pending transaction
   KeyPage:
     value: 9
     description: is a Key Page account
@@ -255,6 +249,9 @@ AllowedTransactionBit:
   UpdateKeyPage:
     value: 1
     description: is the offset of the UpdateKeyPage bit
+  UpdateAccountAuth:
+    value: 2
+    description: is the offset of the UpdateAccountAuth bit
 
 VoteType:
   Accept:

@@ -32,6 +32,24 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *protocol.Envelope) (prot
 			}
 			st.Origin.Header().AuthDisabled = true
 
+		case *protocol.AddAccountAuthorityOperation:
+			if st.Origin.Header().ManagerKeyBook != nil {
+				return nil, fmt.Errorf("manager keybook already assigned")
+			}
+
+			chain := st.Origin
+			chain.Header().ManagerKeyBook = op.Authority
+			st.Update(chain)
+
+		case *protocol.RemoveAccountAuthorityOperation:
+			if st.Origin.Header().ManagerKeyBook == nil {
+				return nil, fmt.Errorf("manager keybook not assigned")
+			}
+
+			chain := st.Origin
+			chain.Header().ManagerKeyBook = nil
+			st.Update(chain)
+
 		default:
 			return nil, fmt.Errorf("invalid operation: %v", op.Type())
 		}
