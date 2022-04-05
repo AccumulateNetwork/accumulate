@@ -78,7 +78,7 @@ type GeneralQuery struct {
 }
 
 type KeyPage struct {
-	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Version uint64 `json:"version,omitempty" form:"version" query:"version"`
 }
 
 type KeyPageIndexQuery struct {
@@ -134,7 +134,10 @@ type Signer struct {
 	PublicKey     []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	Url           *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Version       uint64                 `json:"version,omitempty" form:"version" query:"version"`
 	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
+	// UseSimpleHash tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash.
+	UseSimpleHash bool `json:"useSimpleHash,omitempty" form:"useSimpleHash" query:"useSimpleHash"`
 }
 
 type SignerMetadata struct {
@@ -178,16 +181,17 @@ type TxHistoryQuery struct {
 }
 
 type TxRequest struct {
-	CheckOnly  bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
-	IsEnvelope bool        `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
-	Origin     *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	Signer     Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Signature  []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
-	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
-	Memo       string      `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata   []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	CheckOnly  bool     `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	IsEnvelope bool     `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
+	Origin     *url.URL `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	Signer     Signer   `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature  []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	// KeyPage is deprecated.
+	KeyPage  KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash   []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Payload  interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Memo     string      `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
 }
 
 type TxResponse struct {
@@ -718,13 +722,17 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 		Timestamp     uint64                 `json:"timestamp,omitempty"`
 		Nonce         uint64                 `json:"nonce,omitempty"`
 		Url           *url.URL               `json:"url,omitempty"`
+		Version       uint64                 `json:"version,omitempty"`
 		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
+		UseSimpleHash bool                   `json:"useSimpleHash,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.Version = v.Version
 	u.SignatureType = v.SignatureType
+	u.UseSimpleHash = v.UseSimpleHash
 	return json.Marshal(&u)
 }
 
@@ -1327,13 +1335,17 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		Timestamp     uint64                 `json:"timestamp,omitempty"`
 		Nonce         uint64                 `json:"nonce,omitempty"`
 		Url           *url.URL               `json:"url,omitempty"`
+		Version       uint64                 `json:"version,omitempty"`
 		SignatureType protocol.SignatureType `json:"signatureType,omitempty"`
+		UseSimpleHash bool                   `json:"useSimpleHash,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Timestamp = v.Timestamp
 	u.Nonce = v.Timestamp
 	u.Url = v.Url
+	u.Version = v.Version
 	u.SignatureType = v.SignatureType
+	u.UseSimpleHash = v.UseSimpleHash
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1348,7 +1360,9 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 		v.Timestamp = u.Nonce
 	}
 	v.Url = u.Url
+	v.Version = u.Version
 	v.SignatureType = u.SignatureType
+	v.UseSimpleHash = u.UseSimpleHash
 	return nil
 }
 

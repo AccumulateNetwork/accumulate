@@ -149,6 +149,7 @@ KeyPage:
     - name: Version
       type: uvarint
       alternative: Height
+      optional: true
 
 Signer:
   non-binary: true
@@ -162,8 +163,15 @@ Signer:
   - name: Url
     type: url
     pointer: true
+  - name: Version
+    type: uint
+    optional: true
   - name: SignatureType
     type: protocol.SignatureType
+    optional: true
+  - name: UseSimpleHash
+    description: tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash
+    type: bool
     optional: true
 
 
@@ -311,6 +319,7 @@ TxRequest:
   - name: Signature
     type: bytes
   - name: KeyPage
+    description: is deprecated
     type: KeyPage
     marshal-as: reference
   - name: TxHash
