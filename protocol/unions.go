@@ -5,7 +5,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-//go:generate go run ../tools/cmd/gen-types --language go-union --out unions_gen.go accounts.yml general.yml internal.yml query.yml transactions.yml
+//go:generate go run ../tools/cmd/gen-types --language go-union --out unions_gen.go account_auth_operations.yml accounts.yml general.yml internal.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 
 // AccountType is the type of an account.
 type AccountType uint64
