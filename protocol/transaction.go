@@ -55,6 +55,20 @@ func (s *TransactionStatus) AddSigner(signer Signer) {
 	s.Signers[i] = signer
 }
 
+func (s *TransactionStatus) GetSigner(entry *url.URL) (Signer, bool) {
+	// Find the matching entry
+	i := sort.Search(len(s.Signers), func(i int) bool {
+		return s.Signers[i].GetUrl().Compare(entry) >= 0
+	})
+
+	// No match
+	if i > len(s.Signers) || !s.Signers[i].GetUrl().Equal(entry) {
+		return nil, false
+	}
+
+	return s.Signers[i], true
+}
+
 func (s *TransactionStatus) FindSigners(authority *url.URL) []Signer {
 	// Find the first signer for the given authority. This depends on the fact
 	// that signers are always children of authorities. Or in the case of lite
