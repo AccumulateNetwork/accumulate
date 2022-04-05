@@ -16,9 +16,9 @@ func (WriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tra
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
-	if st.Origin.GetType() != protocol.AccountTypeDataAccount {
+	if st.Origin.Type() != protocol.AccountTypeDataAccount {
 		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
-			protocol.AccountTypeDataAccount, st.Origin.GetType())
+			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
 	//check will return error if there is too much data or no data for the entry
