@@ -58,7 +58,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 }
 
 func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
-	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
+	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.Type())
 
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.

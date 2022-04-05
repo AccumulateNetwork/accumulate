@@ -24,7 +24,6 @@ type VoteType uint64
 
 type Account interface {
 	encoding.BinaryValue
-	GetType() AccountType
 	Type() AccountType
 	Header() *AccountHeader
 	CopyAsInterface() interface{}
@@ -61,12 +60,10 @@ type Signature interface {
 
 type TransactionBody interface {
 	encoding.BinaryValue
-	GetType() TransactionType
 	Type() TransactionType
 }
 
 type TransactionResult interface {
-	GetType() TransactionType
 	Type() TransactionType
 	encoding.BinaryValue
 }

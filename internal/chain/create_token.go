@@ -20,7 +20,7 @@ func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 		return nil, fmt.Errorf("precision must be in range 0 to 18")
 	}
 
-	token := protocol.NewTokenIssuer()
+	token := new(protocol.TokenIssuer)
 	token.Url = body.Url
 	token.Precision = body.Precision
 	token.SupplyLimit = body.SupplyLimit

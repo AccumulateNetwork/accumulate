@@ -12,23 +12,121 @@ import (
 
 var PackagePath string
 
+// convert converts typegen.Types to local Types.
+func convert(types typegen.Types, pkgName, pkgPath string) (*Types, error) {
+	// Initialize
+	ttypes := new(Types)
+	ttypes.Package = pkgName
+	PackagePath = pkgPath
+	ttypes.Types = make([]*Type, len(types))
+	lup := map[string]*Type{}
+	unions := map[string]*UnionSpec{}
+
+	// Convert types
+	for i, typ := range types {
+		// Initialize
+		ttyp := new(Type)
+		ttyp.Type = *typ
+		ttypes.Types[i] = ttyp
+		lup[typ.Name] = ttyp
+		ttyp.Fields = make([]*Field, 0, len(typ.Fields)+len(typ.Embeddings))
+
+		// If the type is a union
+		if typ.Union.Type == "" {
+			continue
+		}
+
+		// Look up or define the union spec
+		union, ok := unions[typ.Union.Type]
+		if !ok {
+			union = new(UnionSpec)
+			union.Type = typ.Union.Type
+			ttypes.Unions = append(ttypes.Unions, union)
+			unions[typ.Union.Type] = union
+		}
+
+		// Set the union spec, add the type
+		ttyp.UnionSpec = union
+		union.Members = append(union.Members, ttyp)
+	}
+
+	for i, typ := range types {
+		ttyp := ttypes.Types[i]
+		var num uint = 1
+
+		// Unions have a virtual field for the discriminator
+		if ttyp.IsUnion() {
+			field := new(Field)
+			field.Number = num
+			field.Name = "Type"
+			field.Type = ttyp.UnionSpec.Enumeration()
+			field.MarshalAs = "enum"
+			field.KeepEmpty = true
+			field.Virtual = true
+			ttyp.Fields = append(ttyp.Fields, field)
+			num++
+		}
+
+		// Resolve embedded types
+		for _, name := range typ.Embeddings {
+			etyp, ok := lup[name]
+			if !ok {
+				return nil, fmt.Errorf("unknown embedded type %s", name)
+			}
+			field := new(Field)
+			field.Type = name
+			field.TypeRef = etyp
+			if field.IsMarshalled() {
+				field.Number = num
+				num++
+			}
+			ttyp.Fields = append(ttyp.Fields, field)
+		}
+
+		// Convert fields
+		for _, field := range typ.Fields {
+			tfield := new(Field)
+			tfield.Field = *field
+			if field.MarshalAs != "" {
+				tfield.TypeRef = lup[tfield.Type]
+			}
+			if tfield.IsMarshalled() {
+				tfield.Number = num
+				num++
+			}
+			ttyp.Fields = append(ttyp.Fields, tfield)
+		}
+	}
+
+	return ttypes, nil
+}
+
 type Types struct {
 	Package string
 	Types   []*Type
 	Unions  []*UnionSpec
 }
 
-type Type struct {
-	typegen.DataType
-	Embeddings []Embedding
-	Fields     []*Field
-	UnionSpec  *UnionSpec
+type UnionSpec struct {
+	Type    string
+	Members []*Type
 }
 
-func (t *Type) IsAccount() bool       { return t.Union.Type == "account" }
-func (t *Type) IsBinary() bool        { return !t.NonBinary }
-func (t *Type) IsComparable() bool    { return !t.Incomparable }
-func (t *Type) MakeConstructor() bool { return !t.OmitNewFunc }
+type Type struct {
+	typegen.Type
+	Fields    []*Field
+	UnionSpec *UnionSpec
+}
+
+type Field struct {
+	typegen.Field
+	TypeRef *Type
+	Number  uint
+}
+
+func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
+func (t *Type) IsBinary() bool     { return !t.NonBinary }
+func (t *Type) IsComparable() bool { return !t.Incomparable }
 
 // Deprecated: use Union
 func (t *Type) Kind() string {
@@ -59,11 +157,6 @@ func (t *Type) UnionValue() string {
 	return t.Union.Value
 }
 
-type UnionSpec struct {
-	Type    string
-	Members []*Type
-}
-
 func (u *UnionSpec) Interface() string {
 	switch u.Type {
 	case "transaction":
@@ -84,16 +177,7 @@ func (u *UnionSpec) Enumeration() string {
 	return strings.Title(u.Type) + "Type"
 }
 
-type Embedding struct {
-	*Type
-	Number uint
-}
-
-type Field struct {
-	typegen.Field
-	Number uint
-}
-
+func (f *Field) IsEmbedded() bool        { return f.Name == "" }
 func (f *Field) AlternativeName() string { return f.Alternative }
 func (f *Field) IsPointer() bool         { return f.Pointer }
 func (f *Field) IsMarshalled() bool      { return f.MarshalAs != "none" }
@@ -103,73 +187,6 @@ func (f *Field) AsEnum() bool            { return f.MarshalAs == "enum" }
 func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
-
-func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
-	ttypes := new(Types)
-	ttypes.Package = pkgName
-	PackagePath = pkgPath
-	ttypes.Types = make([]*Type, len(types))
-	lup := map[string]*Type{}
-	unions := map[string]*UnionSpec{}
-
-	for i, typ := range types {
-		ttyp := new(Type)
-		ttyp.DataType = *typ
-		ttypes.Types[i] = ttyp
-		lup[typ.Name] = ttyp
-		ttyp.Fields = make([]*Field, len(typ.Fields))
-		for i, field := range typ.Fields {
-			ttyp.Fields[i] = &Field{Field: *field}
-		}
-
-		if typ.Union.Type == "" {
-			continue
-		}
-
-		union, ok := unions[typ.Union.Type]
-		if !ok {
-			union = new(UnionSpec)
-			union.Type = typ.Union.Type
-			ttypes.Unions = append(ttypes.Unions, union)
-			unions[typ.Union.Type] = union
-		}
-
-		ttyp.UnionSpec = union
-		union.Members = append(union.Members, ttyp)
-	}
-
-	for i, typ := range types {
-		ttyp := ttypes.Types[i]
-		ttyp.Embeddings = make([]Embedding, len(typ.Embeddings))
-		for i, name := range typ.Embeddings {
-			etyp, ok := lup[name]
-			if !ok {
-				return nil, fmt.Errorf("unknown embedded type %s", name)
-			}
-			ttyp.Embeddings[i].Type = etyp
-		}
-	}
-
-	for _, typ := range ttypes.Types {
-		var num uint = 1
-		if typ.IsUnion() {
-			num += 1
-		}
-		for i := range typ.Embeddings {
-			typ.Embeddings[i].Number = num
-			num++
-		}
-		for _, field := range typ.Fields {
-			if !field.IsMarshalled() {
-				continue
-			}
-			field.Number = num
-			num++
-		}
-	}
-
-	return ttypes, nil
-}
 
 func lcName(s string) string {
 	if s == "" {
@@ -221,4 +238,5 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":  lcName,
 	"map":     makeMap,
 	"natural": natural,
+	"debug":   fmt.Printf,
 })

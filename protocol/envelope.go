@@ -110,7 +110,7 @@ func (e *Envelope) Type() TransactionType {
 
 // Type decodes the transaction type from the body.
 func (t *Transaction) Type() TransactionType {
-	return t.Body.GetType()
+	return t.Body.Type()
 }
 
 // Verify verifies that the signatures are valid.
