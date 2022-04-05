@@ -11,7 +11,7 @@ import (
 
 func packStateResponse(account protocol.Account, chains []query.ChainState, receipt *query.GeneralReceipt) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = account.GetType().String()
+	res.Type = account.Type().String()
 	res.Data = account
 	res.Chains = chains
 	res.ChainId = account.Header().Url.AccountID()
@@ -31,7 +31,7 @@ func packStateResponse(account protocol.Account, chains []query.ChainState, rece
 
 func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
-	res.Type = envelope.Transaction.Body.GetType().String()
+	res.Type = envelope.Transaction.Body.Type().String()
 	res.Data = envelope.Transaction.Body
 	res.TransactionHash = qrResp.TxId[:]
 	res.MainChain = ms
