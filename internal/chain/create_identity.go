@@ -30,7 +30,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 		return nil, err
 	}
 
-	identity := protocol.NewADI()
+	identity := new(protocol.ADI)
 	identity.Url = body.Url
 	identity.KeyBook = bookUrl
 	identity.ManagerKeyBook = body.Manager
@@ -53,7 +53,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 		if len(body.KeyHash) != 32 {
 			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
 		}
-		page := protocol.NewKeyPage()
+		page := new(protocol.KeyPage)
 		page.KeyBook = bookUrl
 		page.Version = 1
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
@@ -87,7 +87,7 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) erro
 			}
 		}
 	default:
-		return fmt.Errorf("account type %d cannot be the origininator of ADIs", origin.GetType())
+		return fmt.Errorf("account type %d cannot be the origininator of ADIs", origin.Type())
 	}
 
 	return nil
