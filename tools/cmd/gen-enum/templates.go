@@ -23,7 +23,7 @@ type Type struct {
 
 type TypeValue struct {
 	Name string
-	typegen.TypeValue
+	typegen.EnumValue
 }
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
@@ -31,7 +31,7 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"natural": natural,
 })
 
-func convert(types map[string]typegen.Type, pkgName string) *Types {
+func convert(types map[string]typegen.Enum, pkgName string) *Types {
 	ttypes := make([]*Type, 0, len(types))
 
 	for name, typ := range types {
@@ -43,7 +43,7 @@ func convert(types map[string]typegen.Type, pkgName string) *Types {
 			tval := new(TypeValue)
 			ttyp.Values = append(ttyp.Values, tval)
 			tval.Name = name
-			tval.TypeValue = *val
+			tval.EnumValue = *val
 		}
 		sort.Slice(ttyp.Values, func(i, j int) bool {
 			v1, ok1 := ttyp.Values[i].Value.(int)

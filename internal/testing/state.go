@@ -125,17 +125,17 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	ss := new(protocol.KeySpec)
 	ss.PublicKeyHash = keyHash[:]
 
-	page := protocol.NewKeyPage()
+	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 	page.Keys = append(page.Keys, ss)
 	page.Threshold = 1
 	page.Version = 1
 
-	book := protocol.NewKeyBook()
+	book := new(protocol.KeyBook)
 	book.Url = bookUrl
 	book.PageCount = 1
 
-	adi := protocol.NewADI()
+	adi := new(protocol.ADI)
 	adi.Url = identityUrl
 	adi.KeyBook = bookUrl
 
@@ -152,7 +152,7 @@ func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
 		return err
 	}
 
-	adi := protocol.NewADI()
+	adi := new(protocol.ADI)
 	adi.Url = identityUrl
 	adi.KeyBook = originUrl.JoinPath("book0")
 
@@ -192,7 +192,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account.Balance.SetInt64(int64(tokens * protocol.AcmePrecision))
 		chain = account
 	} else {
-		account := protocol.NewTokenAccount()
+		account := new(protocol.TokenAccount)
 		account.Url = u
 		account.TokenUrl = tu
 		account.KeyBook = u.Identity().JoinPath("book0")
@@ -232,7 +232,7 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	}
 	book := state.(*protocol.KeyBook)
 
-	page := protocol.NewKeyPage()
+	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 	page.KeyBook = bookUrl
 	page.Threshold = 1
@@ -254,7 +254,7 @@ func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) er
 		return err
 	}
 
-	book := protocol.NewKeyBook()
+	book := new(protocol.KeyBook)
 	book.Url = bookUrl
 	book.PageCount = 1
 
