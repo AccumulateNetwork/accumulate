@@ -160,7 +160,6 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 	}
 
 	// Update the status
-	status.AddSigner(signature.GetSigner())
 	err = obj.PutStatus(status)
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)

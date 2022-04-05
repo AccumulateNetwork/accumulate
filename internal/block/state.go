@@ -5,16 +5,8 @@ import (
 
 	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-type Block struct {
-	BlockMeta
-	State  BlockState
-	Anchor *protocol.SyntheticAnchor
-	Batch  *database.Batch
-}
 
 // BlockMeta is metadata about a block.
 type BlockMeta struct {

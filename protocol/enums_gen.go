@@ -53,6 +53,9 @@ const AccountTypeDataAccount AccountType = 11
 // AccountTypeLiteDataAccount is a Lite Data Account.
 const AccountTypeLiteDataAccount AccountType = 12
 
+// AccountTypeUnknownSigner represents an unknown signer account.
+const AccountTypeUnknownSigner AccountType = 13
+
 // AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
 const AccountTypeInternalLedger AccountType = 14
 
@@ -438,7 +441,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -469,6 +472,8 @@ func (v AccountType) String() string {
 		return "dataAccount"
 	case AccountTypeLiteDataAccount:
 		return "liteDataAccount"
+	case AccountTypeUnknownSigner:
+		return "unknownSigner"
 	case AccountTypeInternalLedger:
 		return "internalLedger"
 	case AccountTypeLiteIdentity:
@@ -505,6 +510,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeDataAccount, true
 	case "liteDataAccount":
 		return AccountTypeLiteDataAccount, true
+	case "unknownSigner":
+		return AccountTypeUnknownSigner, true
 	case "internalLedger":
 		return AccountTypeInternalLedger, true
 	case "liteIdentity":

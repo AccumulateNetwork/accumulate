@@ -620,14 +620,20 @@ type TransactionStatus struct {
 	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	// Initiator is the signer that initiated the transaction.
-	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
+	Initiator Signer `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// Signers lists accounts that have signed the transaction.
-	Signers []*url.URL `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	Signers []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
 }
 
 type UnknownAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+}
+
+type UnknownSigner struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Version   uint64   `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 }
 
 type UpdateAccountAuth struct {
@@ -807,6 +813,8 @@ func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
 
 func (*UnknownAccount) Type() AccountType { return AccountTypeUnknown }
+
+func (*UnknownSigner) Type() AccountType { return AccountTypeUnknownSigner }
 
 func (*UpdateAccountAuth) Type() TransactionType { return TransactionTypeUpdateAccountAuth }
 
@@ -1975,14 +1983,10 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Result = v.Result
-	if v.Initiator != nil {
-		u.Initiator = (v.Initiator).Copy()
-	}
-	u.Signers = make([]*url.URL, len(v.Signers))
+	u.Initiator = v.Initiator
+	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
-		if v != nil {
-			u.Signers[i] = (v).Copy()
-		}
+		u.Signers[i] = v
 	}
 
 	return u
@@ -2001,6 +2005,19 @@ func (v *UnknownAccount) Copy() *UnknownAccount {
 }
 
 func (v *UnknownAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UnknownSigner) Copy() *UnknownSigner {
+	u := new(UnknownSigner)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Version = v.Version
+
+	return u
+}
+
+func (v *UnknownSigner) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 	u := new(UpdateAccountAuth)
@@ -3593,19 +3610,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	if !(v.Result == u.Result) {
 		return false
 	}
-	switch {
-	case v.Initiator == u.Initiator:
-		// equal
-	case v.Initiator == nil || u.Initiator == nil:
-		return false
-	case !((v.Initiator).Equal(u.Initiator)):
+	if !(v.Initiator == u.Initiator) {
 		return false
 	}
 	if len(v.Signers) != len(u.Signers) {
 		return false
 	}
 	for i := range v.Signers {
-		if !((v.Signers[i]).Equal(u.Signers[i])) {
+		if !(v.Signers[i] == u.Signers[i]) {
 			return false
 		}
 	}
@@ -3620,6 +3632,22 @@ func (v *UnknownAccount) Equal(u *UnknownAccount) bool {
 	case v.Url == nil || u.Url == nil:
 		return false
 	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+
+	return true
+}
+
+func (v *UnknownSigner) Equal(u *UnknownSigner) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Version == u.Version) {
 		return false
 	}
 
@@ -7963,12 +7991,12 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(v.Result == (nil)) {
 		writer.WriteValue(6, v.Result)
 	}
-	if !(v.Initiator == nil) {
-		writer.WriteUrl(7, v.Initiator)
+	if !(v.Initiator == (nil)) {
+		writer.WriteValue(7, v.Initiator)
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteUrl(8, v)
+			writer.WriteValue(8, v)
 		}
 	}
 
@@ -8011,7 +8039,7 @@ func (v *TransactionStatus) IsValid() error {
 	}
 	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Initiator is missing")
-	} else if v.Initiator == nil {
+	} else if v.Initiator == (nil) {
 		errs = append(errs, "field Initiator is not set")
 	}
 	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
@@ -8058,6 +8086,55 @@ func (v *UnknownAccount) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_UnknownSigner = []string{
+	1: "Type",
+	2: "Url",
+	3: "Version",
+}
+
+func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	if !(v.Version == 0) {
+		writer.WriteUint(3, v.Version)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UnknownSigner)
+	return buffer.Bytes(), err
+}
+
+func (v *UnknownSigner) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
 	}
 
 	switch len(errs) {
@@ -10667,13 +10744,22 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-	if x, ok := reader.ReadUrl(7); ok {
-		v.Initiator = x
-	}
+	reader.ReadValue(7, func(b []byte) error {
+		x, err := UnmarshalSigner(b)
+		if err == nil {
+			v.Initiator = x
+		}
+		return err
+	})
 	for {
-		if x, ok := reader.ReadUrl(8); ok {
-			v.Signers = append(v.Signers, x)
-		} else {
+		ok := reader.ReadValue(8, func(b []byte) error {
+			x, err := UnmarshalSigner(b)
+			if err == nil {
+				v.Signers = append(v.Signers, x)
+			}
+			return err
+		})
+		if !ok {
 			break
 		}
 	}
@@ -10702,6 +10788,32 @@ func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UnknownAccount)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *UnknownSigner) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UnknownSigner) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Version = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UnknownSigner)
 	v.fieldsSet = seen
 	return err
 }
@@ -12008,14 +12120,14 @@ func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Remote    bool            `json:"remote,omitempty"`
-		Delivered bool            `json:"delivered,omitempty"`
-		Pending   bool            `json:"pending,omitempty"`
-		Code      uint64          `json:"code,omitempty"`
-		Message   string          `json:"message,omitempty"`
-		Result    json.RawMessage `json:"result,omitempty"`
-		Initiator *url.URL        `json:"initiator,omitempty"`
-		Signers   []*url.URL      `json:"signers,omitempty"`
+		Remote    bool              `json:"remote,omitempty"`
+		Delivered bool              `json:"delivered,omitempty"`
+		Pending   bool              `json:"pending,omitempty"`
+		Code      uint64            `json:"code,omitempty"`
+		Message   string            `json:"message,omitempty"`
+		Result    json.RawMessage   `json:"result,omitempty"`
+		Initiator json.RawMessage   `json:"initiator,omitempty"`
+		Signers   []json.RawMessage `json:"signers,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
@@ -12027,8 +12139,19 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	} else {
 		u.Result = x
 	}
-	u.Initiator = v.Initiator
-	u.Signers = v.Signers
+	if x, err := json.Marshal(v.Initiator); err != nil {
+		return nil, fmt.Errorf("error encoding Initiator: %w", err)
+	} else {
+		u.Initiator = x
+	}
+	u.Signers = make([]json.RawMessage, len(v.Signers))
+	for i, x := range v.Signers {
+		if y, err := json.Marshal(x); err != nil {
+			return nil, fmt.Errorf("error encoding Signers: %w", err)
+		} else {
+			u.Signers[i] = y
+		}
+	}
 	return json.Marshal(&u)
 }
 
@@ -12039,6 +12162,18 @@ func (v *UnknownAccount) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	return json.Marshal(&u)
+}
+
+func (v *UnknownSigner) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    AccountType `json:"type"`
+		Url     *url.URL    `json:"url,omitempty"`
+		Version uint64      `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Version = v.Version
 	return json.Marshal(&u)
 }
 
@@ -14152,14 +14287,14 @@ func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Remote    bool            `json:"remote,omitempty"`
-		Delivered bool            `json:"delivered,omitempty"`
-		Pending   bool            `json:"pending,omitempty"`
-		Code      uint64          `json:"code,omitempty"`
-		Message   string          `json:"message,omitempty"`
-		Result    json.RawMessage `json:"result,omitempty"`
-		Initiator *url.URL        `json:"initiator,omitempty"`
-		Signers   []*url.URL      `json:"signers,omitempty"`
+		Remote    bool              `json:"remote,omitempty"`
+		Delivered bool              `json:"delivered,omitempty"`
+		Pending   bool              `json:"pending,omitempty"`
+		Code      uint64            `json:"code,omitempty"`
+		Message   string            `json:"message,omitempty"`
+		Result    json.RawMessage   `json:"result,omitempty"`
+		Initiator json.RawMessage   `json:"initiator,omitempty"`
+		Signers   []json.RawMessage `json:"signers,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
@@ -14171,8 +14306,19 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	} else {
 		u.Result = x
 	}
-	u.Initiator = v.Initiator
-	u.Signers = v.Signers
+	if x, err := json.Marshal(v.Initiator); err != nil {
+		return fmt.Errorf("error encoding Initiator: %w", err)
+	} else {
+		u.Initiator = x
+	}
+	u.Signers = make([]json.RawMessage, len(v.Signers))
+	for i, x := range v.Signers {
+		if y, err := json.Marshal(x); err != nil {
+			return fmt.Errorf("error encoding Signers: %w", err)
+		} else {
+			u.Signers[i] = y
+		}
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14187,8 +14333,20 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		v.Result = x
 	}
 
-	v.Initiator = u.Initiator
-	v.Signers = u.Signers
+	if x, err := UnmarshalSignerJSON(u.Initiator); err != nil {
+		return fmt.Errorf("error decoding Initiator: %w", err)
+	} else {
+		v.Initiator = x
+	}
+
+	v.Signers = make([]Signer, len(u.Signers))
+	for i, x := range u.Signers {
+		if y, err := UnmarshalSignerJSON(x); err != nil {
+			return fmt.Errorf("error decoding Signers: %w", err)
+		} else {
+			v.Signers[i] = y
+		}
+	}
 	return nil
 }
 
@@ -14206,6 +14364,26 @@ func (v *UnknownAccount) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	return nil
+}
+
+func (v *UnknownSigner) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    AccountType `json:"type"`
+		Url     *url.URL    `json:"url,omitempty"`
+		Version uint64      `json:"version,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Version = v.Version
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Version = u.Version
 	return nil
 }
 

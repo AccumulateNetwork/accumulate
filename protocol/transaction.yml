@@ -72,10 +72,13 @@ TransactionStatus:
       unmarshal-with: UnmarshalTransactionResult
     - name: Initiator
       description: is the signer that initiated the transaction
-      type: url
-      pointer: true
+      type: Signer
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: UnmarshalSigner
     - name: Signers
       description: lists accounts that have signed the transaction
-      type: url
-      pointer: true
+      type: Signer
+      marshal-as: value
+      unmarshal-with: UnmarshalSigner
       repeatable: true

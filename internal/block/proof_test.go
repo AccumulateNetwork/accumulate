@@ -28,7 +28,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 		WithTimestamp(faucet.Timestamp()).
 		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 		Faucet()
-	sim.MustExecuteBlock(env)
+	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransaction(env.GetTxHash())
 
 	// Get a proof of the account state

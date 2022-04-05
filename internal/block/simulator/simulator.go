@@ -161,15 +161,8 @@ func (s *Simulator) InitChain() {
 // is provided, statuses will be sent to the channel as transactions are
 // executed. Once the block is complete, the status channel will be closed (if
 // provided).
-func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus, envelopes ...*protocol.Envelope) {
+func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) {
 	s.Helper()
-
-	for _, envelope := range envelopes {
-		subnet, err := s.Router().Route(envelope)
-		require.NoError(s, err)
-		x := s.Subnet(subnet)
-		x.Submit(envelope)
-	}
 
 	wg := new(sync.WaitGroup)
 	wg.Add(len(s.Subnets))
@@ -212,9 +205,25 @@ func (s *Simulator) ExecuteBlocks(n int) {
 	}
 }
 
-// MustExecuteBlock executes a block with the envelopes and fails the test if
+func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelope, error) {
+	s.Helper()
+
+	for _, envelope := range envelopes {
+		// Route
+		subnet, err := s.Router().Route(envelope)
+		require.NoError(s, err)
+		x := s.Subnet(subnet)
+
+		// Enqueue
+		x.Submit(envelope)
+	}
+
+	return envelopes, nil
+}
+
+// MustSubmitAndExecuteBlock executes a block with the envelopes and fails the test if
 // any envelope fails.
-func (s *Simulator) MustExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
+func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
 	s.Helper()
 
 	ch := make(chan *protocol.TransactionStatus)
@@ -223,7 +232,10 @@ func (s *Simulator) MustExecuteBlock(envelopes ...*protocol.Envelope) []*protoco
 		ids[*(*[32]byte)(env.GetTxHash())] = true
 	}
 
-	go s.ExecuteBlock(ch, envelopes...)
+	_, err := s.Submit(envelopes...)
+	require.NoError(s, err)
+
+	go s.ExecuteBlock(ch)
 
 	var didFail bool
 	for status := range ch {

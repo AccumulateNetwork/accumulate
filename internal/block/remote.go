@@ -21,9 +21,17 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, transaction *protocol.T
 			return nil, err
 		}
 
+		switch acct := signer.(type) {
+		case *protocol.KeyPage:
+			// Make a copy of the key page with no keys
+			acct = acct.Copy()
+			acct.Keys = nil
+			signer = acct
+		}
+
 		body.Signatures[i] = protocol.ForwardedSignature{
 			Signature: signature,
-			Signer:    signer,
+			Signer:    protocol.MakeLiteSigner(signer),
 		}
 	}
 

@@ -20,17 +20,19 @@ func (t *Transaction) SetHash(hash []byte) error {
 
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
-func (s *TransactionStatus) AddSigner(signer *url.URL) {
+func (s *TransactionStatus) AddSigner(signer Signer) {
+	signer = MakeLiteSigner(signer)
+
 	// Initial signer
 	if len(s.Signers) == 0 {
 		s.Initiator = signer
-		s.Signers = []*url.URL{signer}
+		s.Signers = []Signer{signer}
 		return
 	}
 
 	// Find the matching entry
 	i := sort.Search(len(s.Signers), func(i int) bool {
-		return s.Signers[i].Compare(signer) >= 0
+		return s.Signers[i].GetUrl().Compare(signer.GetUrl()) >= 0
 	})
 
 	// Append to the list
@@ -39,8 +41,11 @@ func (s *TransactionStatus) AddSigner(signer *url.URL) {
 		return
 	}
 
-	// A matching entry exists
-	if signer.Equal(s.Signers[i]) {
+	// Update the existing entry
+	if s.Signers[i].GetUrl().Equal(signer.GetUrl()) {
+		if signer.GetVersion() > s.Signers[i].GetVersion() {
+			s.Signers[i] = signer
+		}
 		return
 	}
 
@@ -50,12 +55,12 @@ func (s *TransactionStatus) AddSigner(signer *url.URL) {
 	s.Signers[i] = signer
 }
 
-func (s *TransactionStatus) FindSigners(authority *url.URL) []*url.URL {
+func (s *TransactionStatus) FindSigners(authority *url.URL) []Signer {
 	// Find the first signer for the given authority. This depends on the fact
 	// that signers are always children of authorities. Or in the case of lite
 	// token accounts, equal to (for now).
 	i := sort.Search(len(s.Signers), func(i int) bool {
-		return s.Signers[i].Compare(authority) >= 0
+		return s.Signers[i].GetUrl().Compare(authority) >= 0
 	})
 
 	// Past the end of the list, no match
@@ -64,12 +69,12 @@ func (s *TransactionStatus) FindSigners(authority *url.URL) []*url.URL {
 	}
 
 	// Entry matches (lite token account)
-	if s.Signers[i].Equal(authority) {
-		return []*url.URL{authority}
+	if s.Signers[i].GetUrl().Equal(authority) {
+		return []Signer{s.Signers[i]}
 	}
 
 	// Authority is not the parent of the entry, no match
-	if !authority.ParentOf(s.Signers[i]) {
+	if !authority.ParentOf(s.Signers[i].GetUrl()) {
 		return nil
 	}
 
@@ -81,10 +86,10 @@ func (s *TransactionStatus) FindSigners(authority *url.URL) []*url.URL {
 		// return false. If the entry is not a child and sorts after, return
 		// true. That will return the end of the range of entries that are
 		// children of the signer.
-		if s.Signers[i].Compare(authority) < 0 {
+		if s.Signers[i].GetUrl().Compare(authority) < 0 {
 			return false
 		}
-		return !authority.ParentOf(s.Signers[i])
+		return !authority.ParentOf(s.Signers[i].GetUrl())
 	})
 	return s.Signers[i:j]
 }

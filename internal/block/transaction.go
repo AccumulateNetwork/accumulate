@@ -12,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
+func loadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
 	// An envelope with no signatures is invalid
 	if len(envelope.Signatures) == 0 {
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has no signatures")
@@ -107,9 +107,10 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
-	// Load the initiator
+	// Load the initiator - do not use status.Initiator directly because that
+	// may be a modified version of the account
 	var signer protocol.Signer
-	err = batch.Account(status.Initiator).GetStateAs(&signer)
+	err = batch.Account(status.Initiator.GetUrl()).GetStateAs(&signer)
 	if err != nil {
 		err = fmt.Errorf("load initiator: %w", err)
 		return recordFailedTransaction(batch, transaction, nil, err)
@@ -214,23 +215,11 @@ outer:
 		}
 
 		// Check if any signer has reached its threshold
-		for _, signerUrl := range status.FindSigners(entry.Url) {
-			// TODO Enable remote signers
-			if !principal.GetUrl().RootIdentity().Equal(signerUrl.RootIdentity()) {
-				continue
-			}
-
-			// Load the signer
-			var signer protocol.Signer
-			err := batch.Account(signerUrl).GetStateAs(&signer)
-			if err != nil {
-				return false, fmt.Errorf("load signer %v: %w", signerUrl, err)
-			}
-
+		for _, signer := range status.FindSigners(entry.Url) {
 			// Load the signature set
-			signatures, err := txnObj.ReadSignatures(signerUrl)
+			signatures, err := txnObj.ReadSignaturesForSigner(signer)
 			if err != nil {
-				return false, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
+				return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 			}
 
 			// Check if the threshold has been reached

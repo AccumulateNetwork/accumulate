@@ -40,7 +40,7 @@ func TestRemoteSignatures(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	// Create the ADIs
-	envs := sim.MustExecuteBlock(
+	envs := sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(aliceUrl).
 			WithSigner(aliceUrl, 1).
@@ -67,7 +67,7 @@ func TestRemoteSignatures(t *testing.T) {
 	sim.WaitForTransactions(envs...)
 
 	// Add credits to the key pages
-	envs = sim.MustExecuteBlock(
+	envs = sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(aliceUrl).
 			WithSigner(aliceUrl, 1).
@@ -94,7 +94,7 @@ func TestRemoteSignatures(t *testing.T) {
 	sim.WaitForTransactions(envs...)
 
 	// Create the data account
-	envs = sim.MustExecuteBlock(
+	envs = sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl).
 			WithSigner(bobUrl.JoinPath("book", "1"), 1).
@@ -108,7 +108,7 @@ func TestRemoteSignatures(t *testing.T) {
 	sim.WaitForTransactions(envs...)
 
 	// Add the second authority
-	envs = sim.MustExecuteBlock(
+	envs = sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithSigner(bobUrl.JoinPath("book", "1"), 1).
@@ -140,7 +140,7 @@ func TestRemoteSignatures(t *testing.T) {
 		WithTimestamp(0).
 		Sign(SignatureTypeED25519, charlieKey).
 		Build()
-	envs = sim.MustExecuteBlock(env, sig)
+	envs = sim.MustSubmitAndExecuteBlock(env, sig)
 	sim.WaitForTransactions(envs...)
 
 	batch = sim.SubnetFor(bobUrl).Database.Begin(true)

@@ -26,50 +26,59 @@ func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) 
 	return status.Initiator != nil, nil
 }
 
-func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (*ProcessSignatureState, error) {
+func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
 	// Is this the initial signature?
-	initiated, err := hasBeenInitiated(batch, transaction)
+	initiated, err := hasBeenInitiated(batch, delivery.Transaction)
 	if err != nil {
 		return nil, err
 	}
 	if !initiated {
 		// Verify that the initiator signature matches the transaction
-		err = validateInitialSignature(transaction, signature)
+		err = validateInitialSignature(delivery.Transaction, signature)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	// Basic validation
-	if !signature.Verify(transaction.GetHash()) {
+	if !signature.Verify(delivery.Transaction.GetHash()) {
 		return nil, errors.New("invalid")
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
 	switch signature := signature.(type) {
 	case *protocol.SyntheticSignature:
-		err = verifySyntheticSignature(&x.Network, batch, transaction, signature, !initiated)
+		err = verifySyntheticSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
 
 	case *protocol.ReceiptSignature:
-		err = verifyReceiptSignature(&x.Network, batch, transaction, signature, !initiated)
+		err = verifyReceiptSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
 
 	case *protocol.InternalSignature:
-		err = validateInternalSignature(&x.Network, batch, transaction, signature, !initiated)
+		err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
+
+	case *protocol.ForwardedSignature:
+		err = processForwardedSignature(batch, delivery, signature, !initiated)
 
 	default:
-		err = processNormalSignature(batch, transaction, signature, !initiated)
+		err = processNormalSignature(batch, delivery.Transaction, signature, !initiated)
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	// Store the transaction state (without signatures) if its local and being
-	// initiated - synthetic transactions are always treated as local
-	remote := transaction.Body.Type().IsUser() && !transaction.Header.Principal.LocalTo(signature.GetSigner())
-	if !initiated && !remote {
+	fwdSig, forwarded := signature.(*protocol.ForwardedSignature)
+	if forwarded {
+		signature = fwdSig.Signature
+	}
+
+	// Store the transaction state (without signatures) if its local or
+	// forwarded and being initiated - synthetic transactions are always treated
+	// as local
+	remote := delivery.Transaction.Body.Type().IsUser() && !delivery.Transaction.Header.Principal.LocalTo(signature.GetSigner())
+	if !initiated && (!remote || forwarded) {
 		stateEnv := new(protocol.Envelope)
-		stateEnv.Transaction = transaction
-		db := batch.Transaction(transaction.GetHash())
+		stateEnv.Transaction = delivery.Transaction
+		db := batch.Transaction(delivery.Transaction.GetHash())
 		err = db.PutState(stateEnv)
 		if err != nil {
 			return nil, fmt.Errorf("store transaction: %w", err)
@@ -85,7 +94,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 
 	// Store the signature as an envelope
 	env := new(protocol.Envelope)
-	env.TxHash = transaction.GetHash()
+	env.TxHash = delivery.Transaction.GetHash()
 	env.Signatures = []protocol.Signature{signature}
 	err = batch.Transaction(sigHash[:]).PutState(env)
 	if err != nil {
@@ -93,7 +102,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 	}
 
 	// Add the signature to the signer's chain (if it's a user transaction)
-	if transaction.Body.Type().IsUser() {
+	if !forwarded && delivery.Transaction.Body.Type().IsUser() {
 		chain, err := batch.Account(signature.GetSigner()).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
@@ -105,8 +114,8 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 	}
 
 	// Add the signature to the principal's chain if it's local
-	if !remote {
-		chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+	if !remote || forwarded {
+		chain, err := batch.Account(delivery.Transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
 		}
@@ -117,12 +126,21 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 	}
 
 	// Add the signature to the transaction's signature set
-	_, err = batch.Transaction(transaction.GetHash()).AddSignature(signature)
+	var sigSet *database.SignatureSet
+	if forwarded {
+		sigSet, err = batch.Transaction(delivery.Transaction.GetHash()).SignaturesForSigner(fwdSig.Signer)
+	} else {
+		sigSet, err = batch.Transaction(delivery.Transaction.GetHash()).Signatures(signature.GetSigner())
+	}
 	if err != nil {
-		return nil, fmt.Errorf("store signatures: %w", err)
+		return nil, fmt.Errorf("load signatures: %w", err)
+	}
+	_, err = sigSet.Add(signature)
+	if err != nil {
+		return nil, fmt.Errorf("store signature: %w", err)
 	}
 
-	return &ProcessSignatureState{Remote: remote}, nil
+	return &ProcessSignatureState{Remote: remote && !forwarded}, nil
 }
 
 // validateInitialSignature verifies that the signature is a valid initial
@@ -152,14 +170,22 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 // validateSignature verifies that the signature matches the signer state and
 // that the signer is authorized to sign for the principal.
 func validateSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (protocol.Signer, protocol.KeyEntry, error) {
-	// Is the signer local?
 	signerUrl := signature.GetSigner()
 	remote := !transaction.Header.Principal.LocalTo(signerUrl)
+	forwarded := signature.Type() == protocol.SignatureTypeForwarded
 
-	// Load the signer
-	account, err := batch.Account(signerUrl).GetState()
-	if err != nil {
-		return nil, nil, fmt.Errorf("load signer: %w", err)
+	var account protocol.Account
+	var err error
+	switch signature := signature.(type) {
+	case *protocol.ForwardedSignature:
+		account = signature.Signer
+
+	default:
+		// Load the signer
+		account, err = batch.Account(signerUrl).GetState()
+		if err != nil {
+			return nil, nil, fmt.Errorf("load signer: %w", err)
+		}
 	}
 	if !account.GetUrl().Equal(signerUrl) {
 		// Sanity check
@@ -171,14 +197,14 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	switch account := account.(type) {
 	case *protocol.LiteTokenAccount:
 		signer = account
-		if remote {
+		if remote && !forwarded {
 			err = validateRemoteLiteSignature(transaction, account)
 		} else {
 			err = validateLocalLiteSignature(transaction, account)
 		}
 	case *protocol.KeyPage:
 		signer = account
-		if remote {
+		if remote && !forwarded {
 			err = validateRemotePageSignature(batch, transaction, account)
 		} else {
 			err = validateLocalPageSignature(batch, transaction, account)
@@ -339,6 +365,28 @@ func validateNormalSignature(batch *database.Batch, transaction *protocol.Transa
 	return nil
 }
 
+// processForwardedSignature validates a forwarded private key signature.
+func processForwardedSignature(batch *database.Batch, delivery *Delivery, signature *protocol.ForwardedSignature, _ bool) error {
+	// TODO If the forwarded signature paid the full fee unnecessarily, refund
+	// it
+
+	// Forwarded signatures are only legal within a synthetic forwarded
+	// transaction
+	if !delivery.IsForwarded() {
+		return fmt.Errorf("invalid forwarded signature")
+	}
+
+	// Validate type-specific rules
+	switch account := signature.Signer.(type) {
+	case *protocol.LiteTokenAccount:
+		return validateLocalLiteSignature(delivery.Transaction, account)
+	case *protocol.KeyPage:
+		return validateLocalPageSignature(batch, delivery.Transaction, account)
+	default:
+		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "invalid signer: %v cannot sign transactions", account.Type())
+	}
+}
+
 // processNormalSignature validates a private key signature and updates the
 // signer.
 func processNormalSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) error {
@@ -450,11 +498,11 @@ func validateInternalSignature(net *config.Network, _ *database.Batch, transacti
 func getAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
 	signatures := make([]protocol.Signature, 1)
 
-	for _, signerUrl := range status.Signers {
+	for _, signer := range status.Signers {
 		// Load the signature set
-		sigset, err := transaction.ReadSignatures(signerUrl)
+		sigset, err := transaction.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
+			return nil, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 		}
 
 		for _, entryHash := range sigset.EntryHashes() {

@@ -68,7 +68,7 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 		block.Time = ledger.Timestamp.Add(time.Second)
 	}
 
-	_, err := exec.BeginBlock(block)
+	err := exec.BeginBlock(block)
 	require.NoError(t, err)
 
 	results := make([]*protocol.TransactionStatus, len(envelopes))
@@ -113,25 +113,27 @@ func CheckTx(t testing.TB, db *database.Database, exec *Executor, envelope *prot
 func DeliverTx(t testing.TB, exec *Executor, block *Block, envelope *protocol.Envelope) *protocol.TransactionStatus {
 	t.Helper()
 
-	status, err := exec.ExecuteEnvelope(block, envelope)
-	if err == nil {
-		return status
+	delivery, err := PrepareDelivery(block, envelope)
+	if err != nil {
+		var perr *protocol.Error
+		if !errors.As(err, &perr) {
+			require.NoError(t, err)
+		}
+
+		if perr.Code != protocol.ErrorCodeAlreadyDelivered {
+			require.NoError(t, err)
+		}
+
+		return &protocol.TransactionStatus{
+			Delivered: true,
+			Code:      perr.Code.GetEnumValue(),
+			Message:   perr.Error(),
+		}
 	}
 
-	var perr *protocol.Error
-	if !errors.As(err, &perr) {
-		require.NoError(t, err)
-	}
-
-	if perr.Code != protocol.ErrorCodeAlreadyDelivered {
-		require.NoError(t, err)
-	}
-
-	return &protocol.TransactionStatus{
-		Delivered: true,
-		Code:      perr.Code.GetEnumValue(),
-		Message:   perr.Error(),
-	}
+	status, err := exec.ExecuteEnvelope(block, delivery)
+	require.NoError(t, err)
+	return status
 }
 
 func RequireSuccess(t testing.TB, results ...*protocol.TransactionStatus) {

@@ -40,6 +40,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(TokenIssuer), nil
 	case AccountTypeUnknown:
 		return new(UnknownAccount), nil
+	case AccountTypeUnknownSigner:
+		return new(UnknownSigner), nil
 	default:
 		return nil, fmt.Errorf("unknown account %v", typ)
 	}

@@ -1,55 +1,70 @@
 package block
 
 import (
-	"time"
-
-	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// BeginBlockRequest is the input parameter to Chain.BeginBlock.
-type BeginBlockRequest struct {
-	IsLeader   bool
-	Height     int64
-	Time       time.Time
-	CommitInfo *types.LastCommitInfo
-	Evidence   []types.Evidence
+type Block struct {
+	BlockMeta
+	State  BlockState
+	Anchor *protocol.SyntheticAnchor
+	Batch  *database.Batch
 }
 
-// BeginBlockResponse is the return value of Chain.BeginBlock.
-type BeginBlockResponse struct{}
-
-// EndBlockRequest is the input parameter to Chain.EndBlock
-type EndBlockRequest struct{}
-
-type EndBlockResponse struct {
-	ValidatorsUpdates []chain.ValidatorUpdate
+type Delivery struct {
+	parent      *Delivery
+	Signatures  []protocol.Signature
+	Transaction *protocol.Transaction
+	Remote      []protocol.Signature
+	State       chain.ProcessTransactionState
 }
 
-func (x *Executor) ExecuteEnvelope(block *Block, envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
+// IsForwarded returns true if the transaction was delivered within a
+// SyntheticForwardedTransaction.
+func (d *Delivery) IsForwarded() bool {
+	if d.parent == nil {
+		return false
+	}
+	return d.parent.Transaction.Body.Type() == protocol.TransactionTypeSyntheticForwardTransaction
+}
+
+func (d *Delivery) prepare(block *Block, envelope *protocol.Envelope) (*Delivery, error) {
 	// Load the transaction using the block batch
-	transaction, err := x.LoadTransaction(block.Batch, envelope)
+	transaction, err := loadTransaction(block.Batch, envelope)
 	if err != nil {
 		return nil, err
 	}
 
+	e := new(Delivery)
+	e.parent = d
+	e.Signatures = envelope.Signatures
+	e.Transaction = transaction
+	return e, nil
+}
+
+func PrepareDelivery(block *Block, envelope *protocol.Envelope) (*Delivery, error) {
+	return (*Delivery)(nil).prepare(block, envelope)
+}
+
+func (x *Executor) ExecuteEnvelope(block *Block, delivery *Delivery) (*protocol.TransactionStatus, error) {
 	// Process signatures
-	var remote []protocol.Signature
+	var err error
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
-		for _, signature := range envelope.Signatures {
-			s, err := x.ProcessSignature(batch, transaction, signature)
+		for _, signature := range delivery.Signatures {
+			s, err := x.ProcessSignature(batch, delivery, signature)
 			if err != nil {
 				return nil, err
 			}
 
 			block.State.MergeSignature(s)
 			if s.Remote {
-				remote = append(remote, signature)
+				delivery.Remote = append(delivery.Remote, signature)
 			}
 		}
 
@@ -60,17 +75,16 @@ func (x *Executor) ExecuteEnvelope(block *Block, envelope *protocol.Envelope) (*
 	}
 
 	// Process remote signatures
-	txnState := new(chain.ProcessTransactionState)
-	if len(remote) > 0 {
-		fwdTxn, err := x.ProcessRemoteSignatures(block, transaction, remote)
+	if len(delivery.Remote) > 0 {
+		fwdTxn, err := x.ProcessRemoteSignatures(block, delivery.Transaction, delivery.Remote)
 		if err != nil {
 			return nil, err
 		}
-		txnState.DidProduceTxn(transaction.Header.Principal, fwdTxn)
+		delivery.State.DidProduceTxn(delivery.Transaction.Header.Principal, fwdTxn)
 	}
 
 	var status *protocol.TransactionStatus
-	if len(remote) == len(envelope.Signatures) {
+	if len(delivery.Remote) == len(delivery.Signatures) {
 		// All signatures are remote
 		status = &protocol.TransactionStatus{Remote: true}
 
@@ -80,7 +94,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, envelope *protocol.Envelope) (*
 		defer batch.Discard()
 
 		var state *chain.ProcessTransactionState
-		status, state, err = x.ProcessTransaction(batch, transaction)
+		status, state, err = x.ProcessTransaction(batch, delivery.Transaction)
 		if err != nil {
 			return nil, err
 		}
@@ -90,32 +104,31 @@ func (x *Executor) ExecuteEnvelope(block *Block, envelope *protocol.Envelope) (*
 			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
 		}
 
-		txnState.Merge(state)
+		delivery.State.Merge(state)
 
-		if !envelope.Type().IsInternal() && envelope.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if !delivery.Transaction.Type().IsInternal() && delivery.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
 			x.Logger.Info("Transaction delivered",
 				"module", "simulator",
 				"block", block.Index,
-				"type", envelope.Type(),
+				"type", delivery.Transaction.Type(),
 				"pending", status.Pending,
 				"delivered", status.Delivered,
 				"remote", status.Remote,
-				"txn-hash", logging.AsHex(envelope.GetTxHash()).Slice(0, 4),
-				"env-hash", logging.AsHex(envelope.EnvHash()).Slice(0, 4),
+				"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 				"code", status.Code,
 				"message", status.Message,
-				"principal", envelope.Transaction.Header.Principal)
+				"principal", delivery.Transaction.Header.Principal)
 		}
 	}
 
-	block.State.MergeTransaction(txnState)
+	block.State.MergeTransaction(&delivery.State)
 
 	// Process synthetic transactions generated by the validator
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
-		err = x.ProduceSynthetic(batch, transaction, txnState.ProducedTxns)
+		err = x.ProduceSynthetic(batch, delivery.Transaction, delivery.State.ProducedTxns)
 		if err != nil {
 			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 		}
@@ -127,9 +140,14 @@ func (x *Executor) ExecuteEnvelope(block *Block, envelope *protocol.Envelope) (*
 	}
 
 	// Process additional transactions
-	for _, envelope := range txnState.AdditionalTransactions {
+	for _, envelope := range delivery.State.AdditionalTransactions {
+		delivery, err := delivery.prepare(block, envelope)
+		if err != nil {
+			return nil, err
+		}
+
 		// Discard the status of additional transactions
-		_, err := x.ExecuteEnvelope(block, envelope)
+		_, err = x.ExecuteEnvelope(block, delivery)
 		if err != nil {
 			return nil, err
 		}
