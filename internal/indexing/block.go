@@ -13,7 +13,7 @@ type BlockChainUpdatesIndexer struct {
 }
 
 // BlockChainUpdates returns a block updates indexer.
-func BlockChainUpdates(batch *database.Batch, blockIndex int64) *BlockChainUpdatesIndexer {
+func BlockChainUpdates(batch *database.Batch, blockIndex uint64) *BlockChainUpdatesIndexer {
 	return &BlockChainUpdatesIndexer{batch.BlockChainUpdatesIndex(blockIndex).Index()}
 }
 

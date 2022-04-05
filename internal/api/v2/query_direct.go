@@ -497,17 +497,18 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (
 
 	mres := new(MultiResponse)
 	mres.Type = "minorBlock"
-	mres.Items = make([]interface{}, len(res.Entries))
+	mres.Items = make([]interface{}, 0)
 	mres.Start = pagination.Start
 	mres.Count = pagination.Count
 	mres.Total = res.Total
-	for i, entry := range res.Entries {
+	for _, entry := range res.Entries {
 		queryRes, err := packMinorQueryResponse(entry)
 		if err != nil {
 			return nil, err
 		}
-
-		mres.Items[i] = queryRes
+		if queryRes.Data != nil { // TODO Blocks without Data (genesis) will crash the CLI. Omitting for now but maybe these need to be skipped on the CLI side?
+			mres.Items = append(mres.Items, queryRes)
+		}
 	}
 
 	return mres, nil

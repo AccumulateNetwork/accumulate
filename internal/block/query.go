@@ -915,15 +915,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
 		}
-		chain, err := ledger.ReadChain(protocol.MinorRootChain)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
-		}
-		anchorChain, err := ledger.ReadChain(protocol.AnchorChain(m.Network.LocalSubnetID))
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
-		}
-		fmt.Println(anchorChain.Pending())
+
 		resp := query.ResponseMinorBlocks{}
 		for _, idxData := range idxEntries {
 			minorEntry := new(query.ResponseMinorEntry)
@@ -938,24 +930,19 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			minorEntry.BlockTime = idxEntry.BlockTime
 
 			if idxEntry.BlockIndex > 0 {
-				txids, err := chain.Entries(int64(idxEntry.BlockIndex), int64(idxEntry.BlockIndex+1))
-				if err == nil && len(txids) > 0 {
-					qr, err := m.queryByTxId(batch, txids[0], false)
-					if err == nil {
-						minorEntry.ResponseByTxId = *qr
-					} else {
-						minorEntry.TxId = *(*[32]byte)(txids[0])
-					}
+				chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, idxEntry.BlockIndex).Get()
+				if err != nil {
+					return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
 				}
-			}
+				for _, updIdx := range chainUpdatesIndex.Entries {
+					minorEntry.TxId = *(*[32]byte)(updIdx.Entry)
 
-			if idxEntry.Anchor > 0 {
-				atxids, err := anchorChain.Entries(int64(idxEntry.Anchor), int64(idxEntry.Anchor+1))
-				if err == nil {
-					aqr, err := m.queryByTxId(batch, atxids[0], false)
+					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
-						fmt.Println(*aqr)
-						//					minorEntry.ResponseByTxId = *qr
+						txt := qr.Envelope.Type()
+						if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor { // TODO Allow internal?
+							minorEntry.ResponseByTxId = *qr
+						}
 					}
 				}
 			}

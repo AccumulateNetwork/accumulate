@@ -11,7 +11,7 @@ type BlockChainUpdatesIndex struct {
 }
 
 // BlockChainUpdatesIndex returns a BlockChainUpdatesIndex for the given block index
-func (b *Batch) BlockChainUpdatesIndex(blockIndex int64) *BlockChainUpdatesIndex {
+func (b *Batch) BlockChainUpdatesIndex(blockIndex uint64) *BlockChainUpdatesIndex {
 	return &BlockChainUpdatesIndex{b, blockUpdatesIndex(blockIndex)}
 }
 

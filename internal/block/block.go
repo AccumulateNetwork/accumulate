@@ -46,7 +46,7 @@ type Block struct {
 // BlockMeta is metadata about a block.
 type BlockMeta struct {
 	IsLeader   bool
-	Index      int64
+	Index      int64 // TODO shouldn't this be uint64?
 	Time       time.Time
 	CommitInfo *types.LastCommitInfo
 	Evidence   []types.Evidence

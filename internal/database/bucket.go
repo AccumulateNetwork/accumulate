@@ -84,6 +84,6 @@ func (b *transactionBucket) Synthetic() storage.Key {
 type blockIndexBucket struct{ objectBucket }
 
 // blockUpdatesIndex returns a transactionBucket for the transaction with the given ID.
-func blockUpdatesIndex(blockIndex int64) blockIndexBucket {
+func blockUpdatesIndex(blockIndex uint64) blockIndexBucket {
 	return blockIndexBucket{object("Block", blockIndex)}
 }
