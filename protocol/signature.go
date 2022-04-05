@@ -88,6 +88,11 @@ func (s *LegacyED25519Signature) InitiatorHash() ([]byte, error) {
 	return hasher.MerkleHash(), nil
 }
 
+// GetVote returns how the signer votes on a particular transaction
+func (s *LegacyED25519Signature) GetVote() VoteType {
+	return s.Vote
+}
+
 // Verify returns true if this signature is a valid legacy ED25519 signature of
 // the hash.
 func (e *LegacyED25519Signature) Verify(txnHash []byte) bool {
@@ -149,6 +154,11 @@ func (s *ED25519Signature) InitiatorHash() ([]byte, error) {
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
 	return hasher.MerkleHash(), nil
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *ED25519Signature) GetVote() VoteType {
+	return s.Vote
 }
 
 // Verify returns true if this signature is a valid ED25519 signature of the
@@ -231,6 +241,11 @@ func (s *RCD1Signature) InitiatorHash() ([]byte, error) {
 	return hasher.MerkleHash(), nil
 }
 
+// GetVote returns how the signer votes on a particular transaction
+func (s *RCD1Signature) GetVote() VoteType {
+	return s.Vote
+}
+
 /*
  * Receipt Signature
  */
@@ -262,6 +277,11 @@ func (s *ReceiptSignature) MetadataHash() []byte { return s.Hash() }
 // InitiatorHash returns an error.
 func (s *ReceiptSignature) InitiatorHash() ([]byte, error) {
 	return nil, fmt.Errorf("a receipt signature cannot initiate a transaction")
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *ReceiptSignature) GetVote() VoteType {
+	return VoteTypeAccept
 }
 
 // Verify returns true if this receipt is a valid receipt of the hash.
@@ -307,6 +327,11 @@ func (s *SyntheticSignature) InitiatorHash() ([]byte, error) {
 	return hasher.MerkleHash(), nil
 }
 
+// GetVote returns how the signer votes on a particular transaction
+func (s *SyntheticSignature) GetVote() VoteType {
+	return VoteTypeAccept
+}
+
 // Verify returns true.
 func (s *SyntheticSignature) Verify(hash []byte) bool {
 	return true
@@ -344,6 +369,11 @@ func (s *InternalSignature) InitiatorHash() ([]byte, error) {
 	}
 
 	return s.Network.AccountID(), nil
+}
+
+// GetVote returns how the signer votes on a particular transaction
+func (s *InternalSignature) GetVote() VoteType {
+	return VoteTypeAccept
 }
 
 // Verify returns true.
