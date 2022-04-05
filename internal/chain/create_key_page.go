@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type CreateKeyPage struct{}
@@ -17,7 +16,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	case *protocol.KeyBook:
 		book = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.Type())
 	}
 
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)
@@ -30,10 +29,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.GetTxHash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
-	page := protocol.NewKeyPage()
+	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
 	page.KeyBook = book.Url

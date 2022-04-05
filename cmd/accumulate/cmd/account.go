@@ -54,7 +54,7 @@ var accountGetCmd = &cobra.Command{
 	Short: "Get an account by URL",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := GetAccount(args[0])
+		out, err := GetTokenAccount(args[0])
 		printOutput(cmd, out, err)
 	},
 }
@@ -159,7 +159,7 @@ var accountRestoreCmd = &cobra.Command{
 	},
 }
 
-func GetAccount(url string) (string, error) {
+func GetTokenAccount(url string) (string, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return "", err

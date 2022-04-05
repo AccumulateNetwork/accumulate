@@ -21,7 +21,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	if st.Origin != nil {
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
@@ -29,7 +29,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		case *protocol.TokenAccount:
 			account = origin
 		default:
-			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.GetType())
+			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 		}
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)
@@ -39,7 +39,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	} else {
 		// Address is lite and the account doesn't exist, so create one
-		lite := protocol.NewLiteTokenAccount()
+		lite := new(protocol.LiteTokenAccount)
 		lite.Url = tx.Transaction.Header.Principal
 		lite.TokenUrl = body.Token
 		account = lite

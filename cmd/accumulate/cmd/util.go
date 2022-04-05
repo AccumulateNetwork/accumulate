@@ -50,13 +50,13 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, error) {
+func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder, error) {
 	ct := 0
 	if len(args) == 0 {
 		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	signer := new(signing.Signer)
+	signer := new(signing.Builder)
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
@@ -71,8 +71,8 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		}
 		signer.Type = sigType
 		signer.Url = origin
-		signer.Height = 1
-		signer.PrivateKey = privKey
+		signer.Version = 1
+		signer.SetPrivateKey(privKey)
 		return args, signer, nil
 	}
 
@@ -80,7 +80,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 	if err != nil {
 		return nil, nil, err
 	}
-	signer.PrivateKey = privKey
+	signer.SetPrivateKey(privKey)
 	ct++
 
 	sigType, keyHash, err := resolveKeyTypeAndHash(privKey[32:])
@@ -103,16 +103,17 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		signer.Url = keyInfo.KeyPage
 	}
 
-	ms, err := getRecord(signer.Url.String(), nil)
+	var page *protocol.KeyPage
+	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
-	signer.Height = ms.Height
+	signer.Version = page.Version
 
 	return args[ct:], signer, nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Signer, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Builder, error) {
 	principal, err := url2.Parse(args[0])
 	if err != nil {
 		return nil, nil, nil, err
@@ -176,6 +177,20 @@ func GetUrl(url string) (*QueryResponse, error) {
 	return &res, nil
 }
 
+func getAccount(url string) (protocol.Account, error) {
+	qr, err := GetUrl(url)
+	if err != nil {
+		return nil, err
+	}
+
+	json, err := json.Marshal(qr.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	return protocol.UnmarshalAccountJSON(json)
+}
+
 func queryAs(method string, input, output interface{}) error {
 	err := Client.RequestAPIv2(context.Background(), method, input, output)
 	if err == nil {
@@ -190,7 +205,7 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (string, error) {
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
 	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
 	if err != nil {
 		return "", err
@@ -199,7 +214,7 @@ func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody,
 	return ActionResponseFrom(res).Print()
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
 	var env *protocol.Envelope
 	var sig protocol.Signature
 	var err error
@@ -210,6 +225,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 			return nil, err
 		}
 		sig, err = signer.Initiate(env.Transaction)
+		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
 		payload = new(protocol.SignPending)
 		env = new(protocol.Envelope)
@@ -231,6 +247,8 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
+	req.Signer.PublicKey = sig.GetPublicKeyHash()
+	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
@@ -313,7 +331,7 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 
 type ActionResponse struct {
 	TransactionHash types.Bytes                 `json:"transactionHash"`
-	EnvelopeHash    types.Bytes                 `json:"envelopeHash"`
+	SignatureHashes []types.Bytes               `json:"signatureHashes"`
 	SimpleHash      types.Bytes                 `json:"simpleHash"`
 	Log             types.String                `json:"log"`
 	Code            types.String                `json:"code"`
@@ -398,10 +416,13 @@ func (a *ActionDataResponse) Print() (string, error) {
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
-		EnvelopeHash:    r.EnvelopeHash,
+		SignatureHashes: make([]types.Bytes, len(r.SignatureHashes)),
 		SimpleHash:      r.SimpleHash,
 		Error:           types.String(r.Message),
 		Code:            types.String(fmt.Sprint(r.Code)),
+	}
+	for i, hash := range r.SignatureHashes {
+		ar.SignatureHashes[i] = hash
 	}
 
 	result := new(protocol.TransactionStatus)
@@ -429,7 +450,9 @@ func (a *ActionResponse) Print() (string, error) {
 		out = string(b)
 	} else {
 		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
-		out += fmt.Sprintf("\tEnvelope Hash\t\t: %x\n", a.EnvelopeHash)
+		for i, hash := range a.SignatureHashes {
+			out += fmt.Sprintf("\tSignature %d Hash\t: %x\n", i, hash)
+		}
 		out += fmt.Sprintf("\tSimple Hash\t\t: %x\n", a.SimpleHash)
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t: %s\n", a.Code)
@@ -625,8 +648,18 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
-	for _, sig := range res.Signatures {
-		out += fmt.Sprintf("  -                       : %s / %x (sig) / %x (key)\n", sig.GetSigner(), sig.GetSignature(), sig.GetPublicKeyHash())
+	for _, book := range res.SignatureBooks {
+		for _, page := range book.Pages {
+			out += fmt.Sprintf("  - Signatures            :\n")
+			out += fmt.Sprintf("    - Signer              : %s (%v)\n", page.Signer.Url, page.Signer.Type)
+			for _, sig := range page.Signatures {
+				if sig.Type().IsSystem() {
+					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
+				} else {
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
+				}
+			}
+		}
 	}
 	out += fmt.Sprintf("===\n")
 	return out
@@ -717,9 +750,9 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 				return "", err
 			}
 
-			chainDesc := account.GetType().String()
+			chainDesc := account.Type().String()
 			if err == nil {
-				if v, ok := ApiToString[account.GetType()]; ok {
+				if v, ok := ApiToString[account.Type()]; ok {
 					chainDesc = v
 				}
 			}
@@ -851,6 +884,27 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
 		return out, nil
+	case protocol.AccountTypeLiteIdentity.String():
+		li := protocol.LiteIdentity{}
+		err := Remarshal(res.Data, &li)
+		if err != nil {
+			return "", err
+		}
+		params := api2.DirectoryQuery{}
+		params.Url = li.Url
+		params.Start = uint64(0)
+		params.Count = uint64(10)
+		params.Expand = true
+
+		var adiRes api2.MultiResponse
+		if err := Client.RequestAPIv2(context.Background(), "query-directory", &params, &adiRes); err != nil {
+			ret, err := PrintJsonRpcError(err)
+			if err != nil {
+				return "", err
+			}
+			return "", fmt.Errorf("%v", ret)
+		}
+		return PrintMultiResponse(&adiRes)
 	default:
 		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
@@ -920,7 +974,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:
@@ -949,6 +1003,16 @@ func printReflection(field, indent string, value reflect.Value) string {
 	out := fmt.Sprintf("%s%s:", indent, field)
 	if field == "" {
 		out = ""
+	}
+
+	if typ.AssignableTo(reflect.TypeOf(new(url2.URL))) {
+		v := value.Interface().(*url2.URL)
+		return out + " " + v.String() + "\n"
+	}
+
+	if typ.AssignableTo(reflect.TypeOf(url2.URL{})) {
+		v := value.Interface().(url2.URL)
+		return out + " " + v.String() + "\n"
 	}
 
 	switch value.Kind() {

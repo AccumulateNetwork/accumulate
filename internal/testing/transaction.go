@@ -11,7 +11,7 @@ import (
 
 type TransactionBuilder struct {
 	*protocol.Envelope
-	signer signing.Signer
+	signer signing.Builder
 }
 
 func NewTransaction() TransactionBuilder {
@@ -44,7 +44,7 @@ func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
 
 func (tb TransactionBuilder) WithSigner(signer *url.URL, height uint64) TransactionBuilder {
 	tb.signer.SetUrl(signer)
-	tb.signer.SetHeight(height)
+	tb.signer.SetVersion(height)
 	return tb
 }
 
@@ -87,7 +87,7 @@ func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte)
 		panic("cannot sign a transaction before setting the initiator")
 	}
 
-	tb.signer.PrivateKey = privateKey
+	tb.signer.SetPrivateKey(privateKey)
 	sig, err := tb.signer.Sign(tb.GetTxHash())
 	if err != nil {
 		panic(err)
@@ -106,7 +106,7 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 	}
 
 	tb.signer.Type = typ
-	tb.signer.PrivateKey = privateKey
+	tb.signer.SetPrivateKey(privateKey)
 	sig, err := tb.signer.Initiate(tb.Transaction)
 	if err != nil {
 		panic(err)
@@ -126,14 +126,14 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 	if tb.signer.Url == nil {
 		panic("missing signer")
 	}
-	if tb.signer.Height == 0 {
-		panic("missing timestamp")
+	if tb.signer.Version == 0 {
+		panic("missing version")
 	}
 
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = tb.signer.Url
 	initSig.DestinationNetwork = destSubnetUrl
-	initSig.SequenceNumber = tb.signer.Height
+	initSig.SequenceNumber = tb.signer.Version
 
 	initHash, err := initSig.InitiatorHash()
 	if err != nil {
@@ -147,7 +147,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 }
 
 func (tb TransactionBuilder) Faucet() *protocol.Envelope {
-	sig, err := signing.Faucet(tb.Transaction)
+	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.Transaction)
 	if err != nil {
 		panic(err)
 	}

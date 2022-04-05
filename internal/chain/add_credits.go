@@ -66,7 +66,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		case *protocol.LiteTokenAccount, *protocol.KeyPage:
 			// OK
 		default:
-			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.GetType())
+			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.Type())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if body.Recipient.Routing() == tx.Transaction.Header.Principal.Routing() {
@@ -79,7 +79,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("failed to load recipient: %v", err)
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin
@@ -102,10 +102,11 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	copy(sdc.Cause[:], tx.GetTxHash())
 	sdc.Amount = credits.Uint64()
 	st.Submit(body.Recipient, sdc)
-	//Add the burnt acme to the internal ledger and send it with the anchor transaction
+
+	// Add the burnt acme to the internal ledger and send it with the anchor
+	// transaction
 	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
 	st.Update(ledgerState)
 

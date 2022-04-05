@@ -38,6 +38,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
+	case AccountTypeUnknown:
+		return new(UnknownAccount), nil
 	default:
 		return nil, fmt.Errorf("unknown account %v", typ)
 	}
@@ -159,8 +161,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(InternalTransactionsSigned), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
-	case TransactionTypeRemoveManager:
-		return new(RemoveManager), nil
 	case TransactionTypeRemoveValidator:
 		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:
@@ -181,12 +181,14 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
+	case TransactionTypeSyntheticReceipt:
+		return new(SyntheticReceipt), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeUpdateAccountAuth:
+		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
-	case TransactionTypeUpdateManager:
-		return new(UpdateManager), nil
 	case TransactionTypeUpdateValidatorKey:
 		return new(UpdateValidatorKey), nil
 	case TransactionTypeWriteData:
@@ -269,6 +271,105 @@ func UnmarshalTransactionBodyJSON(data []byte) (TransactionBody, error) {
 	}
 
 	acnt, err := NewTransactionBody(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
+// NewAccountAuthOperation creates a new AccountAuthOperation for the specified AccountAuthOperationType.
+func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation, error) {
+	switch typ {
+	case AccountAuthOperationTypeAddAuthority:
+		return new(AddAccountAuthorityOperation), nil
+	case AccountAuthOperationTypeDisable:
+		return new(DisableAccountAuthOperation), nil
+	case AccountAuthOperationTypeEnable:
+		return new(EnableAccountAuthOperation), nil
+	case AccountAuthOperationTypeRemoveAuthority:
+		return new(RemoveAccountAuthorityOperation), nil
+	default:
+		return nil, fmt.Errorf("unknown account auth operation %v", typ)
+	}
+}
+
+// UnmarshalAccountAuthOperationType unmarshals the AccountAuthOperationType from the start of a AccountAuthOperation.
+func UnmarshalAccountAuthOperationType(r io.Reader) (AccountAuthOperationType, error) {
+	var typ AccountAuthOperationType
+	err := encoding.UnmarshalEnumType(r, &typ)
+	return typ, err
+}
+
+// UnmarshalAccountAuthOperation unmarshals a AccountAuthOperation.
+func UnmarshalAccountAuthOperation(data []byte) (AccountAuthOperation, error) {
+	typ, err := UnmarshalAccountAuthOperationType(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := NewAccountAuthOperation(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	err = v.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalAccountAuthOperationFrom unmarshals a AccountAuthOperation.
+func UnmarshalAccountAuthOperationFrom(rd io.ReadSeeker) (AccountAuthOperation, error) {
+	// Get the reader's current position
+	pos, err := rd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the type code
+	typ, err := UnmarshalAccountAuthOperationType(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset the reader's position
+	_, err = rd.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new transaction result
+	v, err := NewAccountAuthOperation(AccountAuthOperationType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the result
+	err = v.UnmarshalBinaryFrom(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalAccountAuthOperationJson unmarshals a AccountAuthOperation.
+func UnmarshalAccountAuthOperationJSON(data []byte) (AccountAuthOperation, error) {
+	var typ struct{ Type AccountAuthOperationType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	acnt, err := NewAccountAuthOperation(typ.Type)
 	if err != nil {
 		return nil, err
 	}

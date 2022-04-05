@@ -46,7 +46,7 @@ var keyCmd = &cobra.Command{
 					case "private":
 						out, err = ImportKey(args[2], args[3])
 					case "factoid":
-						out, err = ImportFactoidKey(args[2], args[3])
+						out, err = ImportFactoidKey(args[2])
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -128,7 +128,7 @@ func PrintKeyGenerate() {
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
 	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
-	fmt.Println("  accumulate key import factoid [factoid key hex] [key name]      Import a factoid key and give it a name in the wallet")
+	fmt.Println("  accumulate key import factoid [factoid private address]  Import a factoid private address")
 
 	fmt.Println("  accumulate key import lite [private key hex]       Import a key as a lite address")
 }
@@ -644,16 +644,14 @@ func ExportMnemonic() (string, error) {
 	}
 }
 
-func ImportFactoidKey(factoidkey string, label string) (out string, err error) {
+func ImportFactoidKey(factoidkey string) (out string, err error) {
 
 	if strings.Contains(factoidkey, "Fs") {
-		fa, rcdhash, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
+		label, rcdhash, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
 		if err != nil {
 			return "", err
 		}
-		if label == "" {
-			label = fa
-		}
+
 		label, _ = LabelForLiteTokenAccount(label)
 		_, err = LookupByLabel(label)
 		if err == nil {

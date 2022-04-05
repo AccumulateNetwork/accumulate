@@ -46,6 +46,7 @@ func (c *Client) ExecuteAddCredits(ctx context.Context, req *api.TxRequest) (*ap
 	return &resp, nil
 }
 
+// ExecuteAddValidator submits an AddValidator transaction.
 func (c *Client) ExecuteAddValidator(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 
@@ -165,18 +166,7 @@ func (c *Client) ExecuteIssueTokens(ctx context.Context, req *api.TxRequest) (*a
 	return &resp, nil
 }
 
-// ExecuteRemoveManager submits a RemoveManager transaction.
-func (c *Client) ExecuteRemoveManager(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
-	var resp api.TxResponse
-
-	err := c.RequestAPIv2(ctx, "remove-manager", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
+// ExecuteRemoveValidator submits a RemoveValidator transaction.
 func (c *Client) ExecuteRemoveValidator(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 
@@ -200,6 +190,18 @@ func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*ap
 	return &resp, nil
 }
 
+// ExecuteUpdateAccountAuth submits an UpdateAccountAuth transaction.
+func (c *Client) ExecuteUpdateAccountAuth(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "update-account-auth", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.
 func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
@@ -212,18 +214,7 @@ func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (
 	return &resp, nil
 }
 
-// ExecuteUpdateManager submits an UpdateManager transaction.
-func (c *Client) ExecuteUpdateManager(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
-	var resp api.TxResponse
-
-	err := c.RequestAPIv2(ctx, "update-manager", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
+// ExecuteUpdateValidatorKey submits an UpdateValidatorKey transaction.
 func (c *Client) ExecuteUpdateValidatorKey(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 

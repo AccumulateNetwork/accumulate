@@ -2,20 +2,12 @@
 
 Object:
   fields:
-  - name: Entry
-    type: bytes
-  - name: Height
-    type: uvarint
-  - name: Roots
-    repeatable: true
-    type: bytes
-
-ObjectMetadata:
-  fields:
     - name: Type
+      description: is the object's type
       type: ObjectType
       marshal-as: enum
     - name: Chains
+      description: lists the object's chains
       repeatable: true
       type: ChainMetadata
       marshal-as: reference
@@ -77,25 +69,6 @@ DirectoryIndexMetadata:
     - name: Count
       type: uvarint
 
-TransactionStatus:
-  fields:
-    - name: Remote
-      type: bool
-    - name: Delivered
-      type: bool
-    - name: Pending
-      type: bool
-    - name: Code
-      type: uvarint
-    - name: Message
-      type: string
-    - name: Result
-      type: TransactionResult
-      optional: true
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalTransactionResult
-
 Receipt:
   fields:
     - name: Start
@@ -119,3 +92,34 @@ HashSet:
     - name: Hashes
       type: hash
       repeatable: true
+
+TokenRecipient:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+
+ChainParams:
+  fields:
+    - name: Data
+      type: bytes
+    - name: IsUpdate
+      type: bool
+
+KeySpecParams:
+  fields:
+    - name: KeyHash
+      type: bytes
+    - name: Owner
+      type: url
+      pointer: true
+      optional: true
+
+AnchoredRecord:
+  fields:
+    - name: Record
+      type: bytes
+    - name: Anchor
+      type: chain

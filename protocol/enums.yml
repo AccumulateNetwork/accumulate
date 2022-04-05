@@ -69,18 +69,36 @@ KeyPageOperationType:
     value: 5
     description: updates the transactions the key page is allowed to execute
 
+AccountAuthOperationType:
+  Unknown:
+    value: 0
+    description: is used when the authorization operation is not known
+  Enable:
+    value: 1
+    description: enables authorization checks for an authority
+  Disable:
+    value: 2
+    description: disables authorization checks for an authority
+  AddAuthority:
+    value: 3
+    description: adds an authority
+  RemoveAuthority:
+    value: 4
+    description: removes an authority
+
 TransactionMax:
   User:
     value: 0x30
     description: is the highest number reserved for user transactions
   Synthetic:
     value: 0x5F
-    description:  is the highest number reserved for synthetic transactions
+    description: is the highest number reserved for synthetic transactions
   Internal:
     value: 0xFF
     description: is the highest number reserved for internal transactions
 
 TransactionType:
+  ##### USER TRANSACTIONS #####
   Unknown:
     value: 0
     description: represents an unknown transaction type
@@ -126,12 +144,6 @@ TransactionType:
   UpdateKeyPage:
     value: 0x0F
     description: adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction
-  UpdateManager:
-    value: 0x10
-    description: updates manager for the existing chain
-  RemoveManager:
-    value: 0x11
-    description: remove manager from existing chain
   AddValidator:
     value: 0x12
     description: add a validator
@@ -141,9 +153,14 @@ TransactionType:
   UpdateValidatorKey:
     value: 0x14
     description: update a validator key
+  UpdateAccountAuth:
+    value: 0x15
+    description: updates authorization for an account
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction
+
+  ##### SYNTHETIC TRANSACTIONS #####
   SyntheticCreateChain:
     value: 0x31
     description: creates or updates chains
@@ -168,6 +185,11 @@ TransactionType:
   SegWitDataEntry:
     value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
+  SyntheticReceipt:
+    value: 0x40
+    description: notifies the sender of synthetic transactions when a transaction has failed.
+
+  ##### INTERNAL TRANSACTIONS #####
   InternalGenesis:
     value: 0x60
     description: initializes system chains
@@ -201,12 +223,6 @@ AccountType:
   LiteTokenAccount:
     value: 5
     description: is a Lite Token Account
-  # Transaction:
-  #   value: 7
-  #   description: is a completed transaction
-  # PendingTransaction:
-  #   value: 8
-  #   description: is a pending transaction
   KeyPage:
     value: 9
     description: is a Key Page account
@@ -233,3 +249,20 @@ AllowedTransactionBit:
   UpdateKeyPage:
     value: 1
     description: is the offset of the UpdateKeyPage bit
+  UpdateAccountAuth:
+    value: 2
+    description: is the offset of the UpdateAccountAuth bit
+
+VoteType:
+  Accept:
+    value: 0x0
+    description: vote yea in favor of proposal
+  Reject:
+    value: 0x1
+    description: vote nay against a proposal
+  Abstain:
+    value: 0x2
+    description: chose not to vote on a proposal
+  Suggest:
+    value: 0x3
+    description: put forth a proposal

@@ -1,0 +1,231 @@
+# User transaction bodies
+
+CreateIdentity:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: KeyHash
+      type: bytes
+      optional: true
+    - name: KeyBookUrl
+      type: url
+      pointer: true
+      optional: true
+    - name: Manager
+      type: url
+      pointer: true
+      optional: true
+
+CreateTokenAccount:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: TokenUrl
+      type: url
+      pointer: true
+    - name: KeyBookUrl
+      type: url
+      pointer: true
+      optional: true
+    - name: Scratch
+      type: bool
+      optional: true
+    - name: Manager
+      type: url
+      pointer: true
+      optional: true
+
+SendTokens:
+  union: { type: transaction }
+  fields:
+    - name: Hash
+      type: chain
+      optional: true
+    - name: Meta
+      type: rawJson
+      optional: true
+    - name: To
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
+
+CreateDataAccount:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: KeyBookUrl
+      type: url
+      pointer: true
+      optional: true
+    - name: ManagerKeyBookUrl
+      type: url
+      pointer: true
+      optional: true
+    - name: Scratch
+      type: bool
+      optional: true
+
+WriteData:
+  union: { type: transaction }
+  fields:
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
+WriteDataTo:
+  union: { type: transaction }
+  fields:
+    - name: Recipient
+      type: url
+      pointer: true
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
+AcmeFaucet:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+
+CreateToken:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: KeyBookUrl
+      type: url
+      pointer: true
+      optional: true
+    - name: Symbol
+      type: string
+    - name: Precision
+      type: uvarint
+    - name: Properties
+      type: url
+      pointer: true
+      optional: true
+    - name: SupplyLimit
+      type: bigint
+      pointer: true
+      optional: true
+    - name: Manager
+      type: url
+      pointer: true
+      optional: true
+
+IssueTokens:
+  union: { type: transaction }
+  fields:
+    - name: Recipient
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+
+BurnTokens:
+  union: { type: transaction }
+  fields:
+    - name: Amount
+      type: bigint
+
+CreateKeyPage:
+  union: { type: transaction }
+  fields:
+    - name: Keys
+      repeatable: true
+      type: KeySpecParams
+      pointer: true
+      marshal-as: reference
+    - name: Manager
+      type: url
+      pointer: true
+      optional: true
+
+CreateKeyBook:
+  union: { type: transaction }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: PublicKeyHash
+      type: bytes
+    - name: Manager
+      type: url
+      pointer: true
+      optional: true
+
+AddCredits:
+  union: { type: transaction }
+  fields:
+    - name: Recipient
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+    - name: Oracle
+      type: uvarint
+      optional: true
+
+UpdateKeyPage:
+  union: { type: transaction }
+  fields:
+    - name: Operation
+      type: KeyPageOperation
+      marshal-as: value
+      repeatable: true
+      unmarshal-with: UnmarshalKeyPageOperation
+      zero-value: nil
+
+UpdateAccountAuth:
+  union: { type: transaction }
+  fields:
+    - name: Operations
+      type: AccountAuthOperation
+      marshal-as: value
+      unmarshal-with: UnmarshalAccountAuthOperation
+      zero-value: nil
+      repeatable: true
+
+AddValidator:
+  union: { type: transaction }
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+RemoveValidator:
+  union: { type: transaction }
+  fields:
+    - name: Key
+      type: bytes
+    - name: Owner
+      description: reserved for future use
+      type: url
+      pointer: true
+      optional: true
+
+UpdateValidatorKey:
+  union: { type: transaction }
+  fields:
+    - name: KeyHash
+      type: bytes
+    - name: NewKeyHash
+      type: bytes
+
+SignPending:
+  union: { type: transaction }
+  fields: []

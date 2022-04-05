@@ -1,0 +1,96 @@
+# Transaction signatures
+
+LegacyED25519Signature:
+  union: { type: signature }
+  fields:
+    - name: Timestamp
+      type: uint
+      alternative: Nonce
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+
+RCD1Signature:
+  union: { type: signature }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+
+ED25519Signature:
+  union: { type: signature }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+
+ReceiptSignature:
+  union: { type: signature }
+  embeddings:
+  - Receipt
+  fields:
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
+
+SyntheticSignature:
+  union: { type: signature }
+  description: is used to initiate transactions between BVNs
+  fields:
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
+    - name: DestinationNetwork
+      description: is the network that the transaction is sent to
+      type: url
+      pointer: true
+    - name: SequenceNumber
+      description: is the sequence number of the transaction
+      type: uint
+
+InternalSignature:
+  union: { type: signature }
+  description: is used when executing transactions internally
+  fields:
+    - name: Network
+      description: is the network that produced the transaction
+      type: url
+      pointer: true

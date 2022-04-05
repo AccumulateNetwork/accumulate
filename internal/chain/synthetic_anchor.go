@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type SyntheticAnchor struct {
@@ -26,7 +27,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.Type())
 	}
 
 	// Verify the source URL and get the subnet name
@@ -164,12 +165,13 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 
 		// Combine all of the receipts, from the txn to the synth anchor to the
 		// root anchor to the directory anchor
-		receipt, err := combineReceipts(nil, synthReceipt, rootReceipt, dirReceipt.Convert())
+		receipt, err := managed.CombineReceipts(synthReceipt, rootReceipt, dirReceipt.Convert())
 		if err != nil {
 			return nil, err
 		}
 
 		sig := new(protocol.ReceiptSignature)
+		sig.SourceNetwork = st.nodeUrl
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
 		st.SignTransaction(synth.TransactionHash[:], sig)
 		synth.NeedsReceipt = false

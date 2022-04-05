@@ -69,9 +69,9 @@ func getPackagePath() string {
 }
 
 func run(_ *cobra.Command, args []string) {
-	types, err := flags.files.Read(args, reflect.TypeOf((map[string]*typegen.DataType)(nil)))
+	types, err := flags.files.Read(args, reflect.TypeOf((map[string]*typegen.Type)(nil)))
 	check(err)
-	ttypes, err := convert(typegen.DataTypesFrom(types.(map[string]*typegen.DataType)), flags.Package, getPackagePath())
+	ttypes, err := convert(typegen.TypesFrom(types.(map[string]*typegen.Type)), flags.Package, getPackagePath())
 	check(err)
 
 	w := new(bytes.Buffer)

@@ -16,14 +16,14 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BurnTokens), tx.Transaction.Body)
 	}
 
-	var account tokenChain
+	var account protocol.TokenHolderAccount
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 	}
 
 	//ensure user cannot burn more than is in the account
@@ -36,7 +36,6 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	}
 
 	burn := new(protocol.SyntheticBurnTokens)
-	copy(burn.Cause[:], tx.GetTxHash())
 	burn.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burn)
 
