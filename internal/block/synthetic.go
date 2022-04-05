@@ -73,7 +73,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
 	txn.Body = body
-	initSig, err := new(signing.Signer).
+	initSig, err := new(signing.Builder).
 		SetUrl(m.Network.NodeUrl()).
 		SetVersion(ledgerState.Synthetic.Nonce).
 		InitiateSynthetic(txn, m.Router)
