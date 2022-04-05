@@ -3,6 +3,7 @@ package protocol
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"fmt"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -42,30 +43,41 @@ func (s faucetSigner) Timestamp() uint64 {
 	return uint64(s)
 }
 
-func (s faucetSigner) PublicKey() []byte {
-	return faucetKey[32:]
+func (s faucetSigner) Version() uint64 {
+	return 1
 }
 
-func (s faucetSigner) Sign(message []byte) *LegacyED25519Signature {
-	sig := new(LegacyED25519Signature)
-	sig.Timestamp = s.Timestamp()
-	sig.PublicKey = s.PublicKey()
-	sig.Signer = FaucetUrl
-	sig.SignerVersion = 1
-	SignLegacyED25519(sig, faucetKey, message)
-	return sig
+func (s faucetSigner) SetPublicKey(sig Signature) error {
+	switch sig := sig.(type) {
+	case *LegacyED25519Signature:
+		sig.PublicKey = faucetKey[32:]
+
+	case *ED25519Signature:
+		sig.PublicKey = faucetKey[32:]
+
+	case *RCD1Signature:
+		sig.PublicKey = faucetKey[32:]
+
+	default:
+		return fmt.Errorf("cannot set the public key on a %T", sig)
+	}
+
+	return nil
 }
 
-func (s faucetSigner) Initiate(txn *Transaction) *LegacyED25519Signature {
-	sig := new(LegacyED25519Signature)
-	sig.Timestamp = s.Timestamp()
-	sig.PublicKey = s.PublicKey()
-	sig.Signer = FaucetUrl
-	sig.SignerVersion = 1
+func (s faucetSigner) Sign(sig Signature, message []byte) error {
+	switch sig := sig.(type) {
+	case *LegacyED25519Signature:
+		SignLegacyED25519(sig, faucetKey, message)
 
-	init, _ := sig.InitiatorHash()
-	txn.Header.Initiator = *(*[32]byte)(init)
+	case *ED25519Signature:
+		SignED25519(sig, faucetKey, message)
 
-	SignLegacyED25519(sig, faucetKey, txn.GetHash())
-	return sig
+	case *RCD1Signature:
+		SignRCD1(sig, faucetKey, message)
+
+	default:
+		return fmt.Errorf("cannot sign %T with a key", sig)
+	}
+	return nil
 }
