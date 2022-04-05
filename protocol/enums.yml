@@ -255,3 +255,17 @@ AllowedTransactionBit:
   UpdateKeyPage:
     value: 1
     description: is the offset of the UpdateKeyPage bit
+
+VoteType:
+  Accept:
+    value: 0x0
+    description: vote yea in favor of proposal
+  Reject:
+    value: 0x1
+    description: vote nay against a proposal
+  Abstain:
+    value: 0x2
+    description: chose not to vote on a proposal
+  Suggest:
+    value: 0x3
+    description: put forth a proposal
