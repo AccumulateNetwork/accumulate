@@ -182,6 +182,7 @@ type ED25519Signature struct {
 	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
 	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote          VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 }
 
 type EmptyResult struct {
@@ -305,6 +306,7 @@ type LegacyED25519Signature struct {
 	Signature     []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Vote          VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 }
 
 type LiteDataAccount struct {
@@ -352,6 +354,7 @@ type RCD1Signature struct {
 	Signer        *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	SignerVersion uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
 	Timestamp     uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote          VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 }
 
 type Receipt struct {
@@ -1409,6 +1412,7 @@ func (v *ED25519Signature) Copy() *ED25519Signature {
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
 
 	return u
 }
@@ -1643,6 +1647,7 @@ func (v *LegacyED25519Signature) Copy() *LegacyED25519Signature {
 		u.Signer = (v.Signer).Copy()
 	}
 	u.SignerVersion = v.SignerVersion
+	u.Vote = v.Vote
 
 	return u
 }
@@ -1721,6 +1726,7 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
 
 	return u
 }
@@ -2740,6 +2746,9 @@ func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
 	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
 
 	return true
 }
@@ -3023,6 +3032,9 @@ func (v *LegacyED25519Signature) Equal(u *LegacyED25519Signature) bool {
 	if !(v.SignerVersion == u.SignerVersion) {
 		return false
 	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
 
 	return true
 }
@@ -3117,6 +3129,9 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 		return false
 	}
 	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
 		return false
 	}
 
@@ -4892,6 +4907,7 @@ var fieldNames_ED25519Signature = []string{
 	4: "Signer",
 	5: "SignerVersion",
 	6: "Timestamp",
+	7: "Vote",
 }
 
 func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
@@ -4913,6 +4929,9 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ED25519Signature)
@@ -5735,6 +5754,7 @@ var fieldNames_LegacyED25519Signature = []string{
 	4: "Signature",
 	5: "Signer",
 	6: "SignerVersion",
+	7: "Vote",
 }
 
 func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
@@ -5756,6 +5776,9 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(6, v.SignerVersion)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LegacyED25519Signature)
@@ -6042,6 +6065,7 @@ var fieldNames_RCD1Signature = []string{
 	4: "Signer",
 	5: "SignerVersion",
 	6: "Timestamp",
+	7: "Vote",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -6063,6 +6087,9 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
@@ -8740,6 +8767,9 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(6); ok {
 		v.Timestamp = x
 	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_ED25519Signature)
 	v.fieldsSet = seen
@@ -9218,6 +9248,9 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(6); ok {
 		v.SignerVersion = x
 	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_LegacyED25519Signature)
 	v.fieldsSet = seen
@@ -9374,6 +9407,9 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(6); ok {
 		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
@@ -10794,6 +10830,7 @@ func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 		Signer        *url.URL      `json:"signer,omitempty"`
 		SignerVersion uint64        `json:"signerVersion,omitempty"`
 		Timestamp     uint64        `json:"timestamp,omitempty"`
+		Vote          VoteType      `json:"vote,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -10801,6 +10838,7 @@ func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
 	return json.Marshal(&u)
 }
 
@@ -11040,6 +11078,7 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 		Signature     *string       `json:"signature,omitempty"`
 		Signer        *url.URL      `json:"signer,omitempty"`
 		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Vote          VoteType      `json:"vote,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
@@ -11048,6 +11087,7 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
+	u.Vote = v.Vote
 	return json.Marshal(&u)
 }
 
@@ -11137,6 +11177,7 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 		Signer        *url.URL      `json:"signer,omitempty"`
 		SignerVersion uint64        `json:"signerVersion,omitempty"`
 		Timestamp     uint64        `json:"timestamp,omitempty"`
+		Vote          VoteType      `json:"vote,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -11144,6 +11185,7 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
 	return json.Marshal(&u)
 }
 
@@ -12179,6 +12221,7 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 		Signer        *url.URL      `json:"signer,omitempty"`
 		SignerVersion uint64        `json:"signerVersion,omitempty"`
 		Timestamp     uint64        `json:"timestamp,omitempty"`
+		Vote          VoteType      `json:"vote,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -12186,6 +12229,7 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -12202,6 +12246,7 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	v.Signer = u.Signer
 	v.SignerVersion = u.SignerVersion
 	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
 	return nil
 }
 
@@ -12587,6 +12632,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 		Signature     *string       `json:"signature,omitempty"`
 		Signer        *url.URL      `json:"signer,omitempty"`
 		SignerVersion uint64        `json:"signerVersion,omitempty"`
+		Vote          VoteType      `json:"vote,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
@@ -12595,6 +12641,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
+	u.Vote = v.Vote
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -12615,6 +12662,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	}
 	v.Signer = u.Signer
 	v.SignerVersion = u.SignerVersion
+	v.Vote = u.Vote
 	return nil
 }
 
@@ -12759,6 +12807,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		Signer        *url.URL      `json:"signer,omitempty"`
 		SignerVersion uint64        `json:"signerVersion,omitempty"`
 		Timestamp     uint64        `json:"timestamp,omitempty"`
+		Vote          VoteType      `json:"vote,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -12766,6 +12815,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u.Signer = v.Signer
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -12782,6 +12832,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	v.Signer = u.Signer
 	v.SignerVersion = u.SignerVersion
 	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
 	return nil
 }
 

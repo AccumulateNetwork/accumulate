@@ -64,6 +64,10 @@ LegacyED25519Signature:
       pointer: true
     - name: SignerVersion # TODO Rename to SignerVersion
       type: uint
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
 
 RCD1Signature:
   union: { type: signature }
@@ -80,6 +84,10 @@ RCD1Signature:
     - name: Timestamp
       type: uint
       optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
 
 ED25519Signature:
   union: { type: signature }
@@ -95,6 +103,10 @@ ED25519Signature:
       type: uint
     - name: Timestamp
       type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
       optional: true
 
 ReceiptSignature:
