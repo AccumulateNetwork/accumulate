@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -70,7 +72,10 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	env.Transaction = new(protocol.Transaction)
 	env.Transaction.Header.Principal = protocol.FaucetUrl
 	env.Transaction.Body = req
-	sig, err := signing.Faucet(env.Transaction)
+	sig, err := new(signing.Builder).
+		UseFaucet().
+		UseSimpleHash().
+		Initiate(env.Transaction)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -78,17 +83,57 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	txrq := new(TxRequest)
 	txrq.Origin = env.Transaction.Header.Principal
-	txrq.Signer.Timestamp = env.Signatures[0].GetTimestamp()
-	txrq.Signer.PublicKey = env.Signatures[0].GetPublicKey()
+	txrq.Signer.Timestamp = sig.GetTimestamp()
+	txrq.Signer.PublicKey = sig.GetPublicKey()
 	txrq.Signer.Url = protocol.FaucetUrl
-	txrq.KeyPage.Version = env.Signatures[0].GetSignerVersion()
-	txrq.Signature = env.Signatures[0].GetSignature()
+	txrq.Signer.Version = sig.GetSignerVersion()
+	txrq.Signer.UseSimpleHash = true
+	txrq.Signature = sig.GetSignature()
 
 	body, err := env.Transaction.Body.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
 	return m.execute(ctx, txrq, body)
+}
+
+type txRequestSigner struct {
+	*TxRequest
+}
+
+func (r txRequestSigner) SetPublicKey(sig protocol.Signature) error {
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.ED25519Signature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.RCD1Signature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	default:
+		return fmt.Errorf("cannot set the public key on a %T", sig)
+	}
+
+	return nil
+}
+
+func (r txRequestSigner) Sign(sig protocol.Signature, message []byte) error {
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		sig.Signature = r.Signature
+
+	case *protocol.ED25519Signature:
+		sig.Signature = r.Signature
+
+	case *protocol.RCD1Signature:
+		sig.Signature = r.Signature
+
+	default:
+		return fmt.Errorf("cannot sign %T with a key", sig)
+	}
+	return nil
 }
 
 // execute either executes the request locally, or dispatches it to another BVC
@@ -106,60 +151,54 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		if err != nil {
 			return accumulateError(err)
 		}
-		env := new(protocol.Envelope)
-		var initHash []byte
-		// Build the initiator
-		switch req.Signer.SignatureType {
-		case protocol.SignatureTypeED25519:
-			initSig := new(protocol.ED25519Signature)
-			initSig.Timestamp = req.Signer.Timestamp
-			initSig.PublicKey = req.Signer.PublicKey
-			initSig.Signer = req.Signer.Url
-			initSig.SignerVersion = req.KeyPage.Version
-			initSig.Signature = req.Signature
-
-			initHash, err = initSig.InitiatorHash()
-			if err != nil {
-				return validatorError(err)
-			}
-			env.Signatures = append(env.Signatures, initSig)
-		case protocol.SignatureTypeRCD1:
-			initSig := new(protocol.RCD1Signature)
-			initSig.Timestamp = req.Signer.Timestamp
-			initSig.PublicKey = req.Signer.PublicKey
-			initSig.Signer = req.Signer.Url
-			initSig.SignerVersion = req.KeyPage.Version
-			initSig.Signature = req.Signature
-
-			initHash, err = initSig.InitiatorHash()
-			if err != nil {
-				return validatorError(err)
-			}
-			env.Signatures = append(env.Signatures, initSig)
-		default:
-			initSig := new(protocol.LegacyED25519Signature)
-			initSig.Timestamp = req.Signer.Timestamp
-			initSig.PublicKey = req.Signer.PublicKey
-			initSig.Signer = req.Signer.Url
-			initSig.SignerVersion = req.KeyPage.Version
-			initSig.Signature = req.Signature
-
-			initHash, err = initSig.InitiatorHash()
-			if err != nil {
-				return validatorError(err)
-			}
-			env.Signatures = append(env.Signatures, initSig)
-		}
 
 		// Build the envelope
+		env := new(protocol.Envelope)
+		envs = append(envs, env)
 		env.TxHash = req.TxHash
 		env.Transaction = new(protocol.Transaction)
 		env.Transaction.Body = body
 		env.Transaction.Header.Principal = req.Origin
-		env.Transaction.Header.Initiator = *(*[32]byte)(initHash)
 		env.Transaction.Header.Memo = req.Memo
 		env.Transaction.Header.Metadata = req.Metadata
-		envs = append(envs, env)
+
+		// Sign and initiate the transaction
+		sigBuilder := new(signing.Builder).
+			SetType(req.Signer.SignatureType).
+			SetTimestamp(req.Signer.Timestamp).
+			SetUrl(req.Signer.Url).
+			SetSigner(txRequestSigner{req})
+		if req.Signer.UseSimpleHash {
+			sigBuilder.UseSimpleHash()
+		} else {
+			sigBuilder.UseMerkleHash()
+		}
+		if req.Signer.Version != 0 {
+			sigBuilder.SetVersion(req.Signer.Version)
+		} else if req.KeyPage.Version != 0 {
+			sigBuilder.SetVersion(req.KeyPage.Version)
+		} else {
+			return validatorError(errors.New("missing signer version"))
+		}
+
+		var sig protocol.Signature
+		if env.Type() == protocol.TransactionTypeSignPending {
+			sig, err = sigBuilder.Sign(env.GetTxHash())
+		} else {
+			sig, err = sigBuilder.Initiate(env.Transaction)
+		}
+		if err != nil {
+			return validatorError(err)
+		}
+		env.Signatures = append(env.Signatures, sig)
+
+		if !env.VerifyTxHash() {
+			return validatorError(errors.New("invalid transaction hash"))
+		}
+
+		if !sig.Verify(env.GetTxHash()) {
+			return validatorError(errors.New("invalid signature"))
+		}
 	}
 
 	// Route the request
