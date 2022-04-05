@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -12,26 +13,24 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestExecuteCheckOnly(t *testing.T) {
-	payload, err := new(protocol.SignPending).MarshalBinary()
+	env := acctesting.NewTransaction().
+		WithPrincipal(protocol.FaucetUrl).
+		WithBody(&protocol.AcmeFaucet{}).
+		Faucet()
+
+	data, err := env.MarshalBinary()
 	require.NoError(t, err)
 
 	baseReq := TxRequest{
-		Origin:  url.MustParse("check"),
-		Payload: hex.EncodeToString(payload),
-		Signer: Signer{
-			PublicKey: make([]byte, 32),
-			Url:       url.MustParse("check"),
-			Timestamp: 1,
-		},
-		KeyPage: KeyPage{
-			Version: 1,
-		},
-		Signature: make([]byte, 64),
+		Origin:     url.MustParse("check"),
+		Payload:    hex.EncodeToString(data),
+		IsEnvelope: true,
 	}
 
 	t.Run("True", func(t *testing.T) {
@@ -61,7 +60,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 
 		req := baseReq
 		req.CheckOnly = true
-		r := j.DoExecute(context.Background(), &req, payload)
+		r := j.Execute(context.Background(), mustMarshal(t, &req))
 		err, _ = r.(error)
 		require.NoError(t, err)
 	})
@@ -93,8 +92,14 @@ func TestExecuteCheckOnly(t *testing.T) {
 
 		req := baseReq
 		req.CheckOnly = false
-		r := j.DoExecute(context.Background(), &req, payload)
+		r := j.Execute(context.Background(), mustMarshal(t, &req))
 		err, _ = r.(error)
 		require.NoError(t, err)
 	})
+}
+
+func mustMarshal(t testing.TB, v interface{}) []byte {
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
 }
