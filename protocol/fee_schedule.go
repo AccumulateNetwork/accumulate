@@ -103,7 +103,7 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeAddCredits, nil
 	case TransactionTypeUpdateKeyPage:
 		return FeeUpdateKeyPage, nil
-	case TransactionTypeUpdateManager, TransactionTypeRemoveManager, TransactionTypeUpdateAccountAuth:
+	case TransactionTypeUpdateAccountAuth:
 		return FeeUpdateAccountAuth, nil
 	case TransactionTypeSignPending:
 		return FeeSignature, nil
