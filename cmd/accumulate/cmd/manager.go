@@ -50,9 +50,11 @@ func SetManager(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	req := protocol.UpdateManager{}
-	req.ManagerKeyBook = managerKeyBookUrl
-	res, err := dispatchTxRequest("update-manager", &req, nil, u, signer)
+	req := protocol.UpdateAccountAuth{}
+	req.Operations = append(req.Operations, &protocol.AddAccountAuthorityOperation{
+		Authority: managerKeyBookUrl,
+	})
+	res, err := dispatchTxRequest("update-account-auth", &req, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -71,8 +73,16 @@ func RemoveManager(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	req := protocol.RemoveManager{}
-	res, err := dispatchTxRequest("remove-manager", &req, nil, u, signer)
+	account, err := getAccount(origin)
+	if err != nil {
+		return "", err
+	}
+
+	req := protocol.UpdateAccountAuth{}
+	req.Operations = append(req.Operations, &protocol.RemoveAccountAuthorityOperation{
+		Authority: account.Header().ManagerKeyBook,
+	})
+	res, err := dispatchTxRequest("update-account-auth", &req, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
