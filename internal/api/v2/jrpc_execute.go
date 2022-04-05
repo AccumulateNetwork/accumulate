@@ -84,7 +84,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	txrq := new(TxRequest)
 	txrq.Origin = env.Transaction.Header.Principal
 	txrq.Signer.Timestamp = sig.GetTimestamp()
-	txrq.Signer.PublicKey = sig.GetPublicKey()
+	txrq.Signer.PublicKey = sig.GetPublicKeyHash()
 	txrq.Signer.Url = protocol.FaucetUrl
 	txrq.Signer.Version = sig.GetSignerVersion()
 	txrq.Signer.UseSimpleHash = true

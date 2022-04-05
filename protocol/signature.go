@@ -29,6 +29,10 @@ func (s SignatureType) IsSystem() bool {
 func signatureHash(sig Signature) []byte {
 	// This should never fail unless the signature uses bigints
 	data, _ := sig.MarshalBinary()
+	return doSha256(data)
+}
+
+func doSha256(data []byte) []byte {
 	hash := sha256.Sum256(data)
 	return hash[:]
 }
@@ -65,7 +69,7 @@ func (s *LegacyED25519Signature) GetSignerVersion() uint64 { return s.SignerVers
 func (s *LegacyED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKey returns PublicKey.
-func (s *LegacyED25519Signature) GetPublicKey() []byte { return s.PublicKey }
+func (s *LegacyED25519Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
 
 // GetSignature returns Signature.
 func (s *LegacyED25519Signature) GetSignature() []byte { return s.Signature }
@@ -133,7 +137,7 @@ func (s *ED25519Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 func (s *ED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKey returns PublicKey.
-func (s *ED25519Signature) GetPublicKey() []byte { return s.PublicKey }
+func (s *ED25519Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
 
 // GetSignature returns Signature.
 func (s *ED25519Signature) GetSignature() []byte { return s.Signature }
@@ -200,11 +204,8 @@ func (s *RCD1Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 func (s *RCD1Signature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKey returns PublicKey prefixed with the RCD version number.
-func (s *RCD1Signature) GetPublicKey() []byte {
-	b := make([]byte, len(s.PublicKey)+1)
-	b[0] = 1
-	copy(b[1:], s.PublicKey)
-	return b
+func (s *RCD1Signature) GetPublicKeyHash() []byte {
+	return GetRCDHashFromPublicKey(s.PublicKey, 1)
 }
 
 // Verify returns true if this signature is a valid RCD1 signature of the hash.
@@ -266,7 +267,7 @@ func (s *ReceiptSignature) GetSignerVersion() uint64 { return 1 }
 func (s *ReceiptSignature) GetTimestamp() uint64 { return 1 }
 
 // GetPublicKey returns nil.
-func (s *ReceiptSignature) GetPublicKey() []byte { return nil }
+func (s *ReceiptSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns the marshalled receipt.
 func (s *ReceiptSignature) GetSignature() []byte {
@@ -309,7 +310,7 @@ func (s *SyntheticSignature) GetSignerVersion() uint64 { return 1 }
 func (s *SyntheticSignature) GetTimestamp() uint64 { return 1 }
 
 // GetPublicKey returns nil.
-func (s *SyntheticSignature) GetPublicKey() []byte { return nil }
+func (s *SyntheticSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns nil.
 func (s *SyntheticSignature) GetSignature() []byte { return nil }
@@ -357,7 +358,7 @@ func (s *InternalSignature) GetSignerVersion() uint64 { return 1 }
 func (s *InternalSignature) GetTimestamp() uint64 { return 1 }
 
 // GetPublicKey returns nil
-func (s *InternalSignature) GetPublicKey() []byte { return nil }
+func (s *InternalSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns nil.
 func (s *InternalSignature) GetSignature() []byte { return nil }
