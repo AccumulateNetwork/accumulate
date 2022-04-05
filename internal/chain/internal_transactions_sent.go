@@ -28,7 +28,7 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope
 	// Update the main ledger
 	ledger, ok := st.Origin.(*protocol.InternalLedger)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.Type())
 	}
 
 	unsent := ledger.Synthetic.Unsent

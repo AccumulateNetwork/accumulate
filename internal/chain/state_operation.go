@@ -138,7 +138,7 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 	}
 
 	// Check that the nonce is the only thing that changed
-	switch record.GetType() {
+	switch record.Type() {
 	case protocol.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.LastUsedOn = new.LastUsedOn
@@ -158,7 +158,7 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 		}
 
 	default:
-		return fmt.Errorf("account type %d is not a signator", old.GetType())
+		return fmt.Errorf("account type %d is not a signator", old.Type())
 	}
 
 	m.chains[record.Header().Url.AccountID32()] = record
@@ -189,7 +189,7 @@ type addDataEntry struct {
 func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataEntry *protocol.DataEntry) {
 	var stateRec protocol.Account
 
-	if record.GetType() == protocol.AccountTypeLiteDataAccount {
+	if record.Type() == protocol.AccountTypeLiteDataAccount {
 		stateRec = record
 	}
 

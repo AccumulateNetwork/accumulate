@@ -1,0 +1,18 @@
+MarshalAs:
+  Basic:
+    value: 0
+    description: marshals the field as a basic type
+    aliases:
+    - ''
+  None:
+    value: 1
+    description: omits the field from marshalling
+  Enum:
+    value: 2
+    description: marshals the field as an enumeration
+  Value:
+    value: 3
+    description: marshals the field as a value type
+  Reference:
+    value: 4
+    description: marshals the field as a reference type

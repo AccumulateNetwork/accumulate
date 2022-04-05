@@ -69,7 +69,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (p
 		}
 
 		// Check the identity
-		switch record.GetType() {
+		switch record.Type() {
 		case protocol.AccountTypeIdentity:
 		default:
 			// Make sure the ADI actually exists
@@ -83,7 +83,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (p
 		}
 
 		// Check the key book
-		switch record.GetType() {
+		switch record.Type() {
 		case protocol.AccountTypeKeyBook:
 			// A key book does not itself have a key book
 			if record.Header().KeyBook != nil {
