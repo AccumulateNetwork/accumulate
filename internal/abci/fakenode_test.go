@@ -396,13 +396,13 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 }
 
 func (n *FakeNode) GetDataAccount(url string) *protocol.DataAccount {
-	acct := protocol.NewDataAccount()
+	acct := new(protocol.DataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
-	acct := protocol.NewTokenAccount()
+	acct := new(protocol.TokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }

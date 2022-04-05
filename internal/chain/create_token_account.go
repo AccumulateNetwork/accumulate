@@ -22,7 +22,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *protocol.Envelope) (pro
 		return nil, fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, body.Url)
 	}
 
-	account := protocol.NewTokenAccount()
+	account := new(protocol.TokenAccount)
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
 	account.Scratch = body.Scratch

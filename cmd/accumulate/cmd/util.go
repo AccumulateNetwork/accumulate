@@ -727,9 +727,9 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 				return "", err
 			}
 
-			chainDesc := account.GetType().String()
+			chainDesc := account.Type().String()
 			if err == nil {
-				if v, ok := ApiToString[account.GetType()]; ok {
+				if v, ok := ApiToString[account.Type()]; ok {
 					chainDesc = v
 				}
 			}
@@ -951,7 +951,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:

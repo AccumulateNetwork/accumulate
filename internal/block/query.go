@@ -861,7 +861,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
-		if account.GetType() != protocol.AccountTypeKeyBook {
+		if account.Type() != protocol.AccountTypeKeyBook {
 			account, err = batch.Account(account.Header().KeyBook).GetState()
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}

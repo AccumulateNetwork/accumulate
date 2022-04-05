@@ -926,8 +926,6 @@ func (v *DirectoryQueryResult) IsValid() error {
 
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
 	}
 
 	switch len(errs) {
@@ -1045,18 +1043,12 @@ func (v *MultiResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Start is missing")
-	} else if v.Start == 0 {
-		errs = append(errs, "field Start is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Count is missing")
-	} else if v.Count == 0 {
-		errs = append(errs, "field Count is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
 	}
 
 	switch len(errs) {
@@ -1385,8 +1377,6 @@ func (v *ResponseByTxId) IsValid() error {
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Height is missing")
-	} else if v.Height == 0 {
-		errs = append(errs, "field Height is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field ChainState is missing")
@@ -1456,8 +1446,6 @@ func (v *ResponseChainEntry) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Height is missing")
-	} else if v.Height == 0 {
-		errs = append(errs, "field Height is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entry is missing")
@@ -1518,18 +1506,12 @@ func (v *ResponseChainRange) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
-	} else if v.Start == 0 {
-		errs = append(errs, "field Start is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field End is missing")
-	} else if v.End == 0 {
-		errs = append(errs, "field End is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Entries is missing")
@@ -1674,8 +1656,6 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Index is missing")
-	} else if v.Index == 0 {
-		errs = append(errs, "field Index is not set")
 	}
 
 	switch len(errs) {
@@ -1754,18 +1734,12 @@ func (v *ResponseTxHistory) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Start is missing")
-	} else if v.Start == 0 {
-		errs = append(errs, "field Start is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field End is missing")
-	} else if v.End == 0 {
-		errs = append(errs, "field End is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Transactions is missing")
@@ -2380,7 +2354,6 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	reader.ReadValue(1, v.GeneralReceipt.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Account = x
 	}

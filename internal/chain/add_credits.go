@@ -66,7 +66,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		case *protocol.LiteTokenAccount, *protocol.KeyPage:
 			// OK
 		default:
-			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.GetType())
+			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.Type())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if body.Recipient.Routing() == tx.Transaction.Header.Principal.Routing() {
