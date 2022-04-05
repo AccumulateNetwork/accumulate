@@ -3,8 +3,8 @@
 ## Constructing Envelopes
 
 - Transactions are submitted to the protocol within envelopes.
-- An envelope comprises signatures and a transaction.
-- A transaction comprises a principal account, initiator hash, and body.
+- An envelope is comprised of signatures and a transaction.
+- A transaction is comprised of a principal account, initiator hash, and body.
 
 ## Signing Transactions
 
