@@ -34,10 +34,10 @@ func (b *MemoryDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	if v, ok := b.buckets[sha256.Sum256(bucket)]; ok {
 		value = v.Get(key)
 		if value == nil {
-			err = fmt.Errorf("key not found")
+			err = ErrNotFound
 		}
 	} else {
-		err = fmt.Errorf("bucket not defined")
+		err = ErrNoBucket
 	}
 	return value, err
 }
@@ -68,7 +68,7 @@ func (b *MemoryDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 
 	var ok bool
 	if buck, ok = b.buckets[sha256.Sum256(bucket)]; !ok {
-		err = fmt.Errorf("bucket not defined")
+		err = ErrNoBucket
 	}
 	return buck, err
 }
@@ -82,7 +82,7 @@ func (b *MemoryDB) Delete(bucket []byte, key []byte) (err error) {
 	if buck, ok := b.buckets[sha256.Sum256(bucket)]; ok {
 		err = buck.Delete(key)
 	} else {
-		err = fmt.Errorf("bucket not defined")
+		err = ErrNoBucket
 	}
 	return err
 }
