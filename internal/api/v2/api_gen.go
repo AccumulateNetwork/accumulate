@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 35)
+		m.methods = make(jsonrpc2.MethodMap, 33)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -28,12 +28,11 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-token"] = m.ExecuteCreateToken
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
 	m.methods["issue-tokens"] = m.ExecuteIssueTokens
-	m.methods["remove-manager"] = m.ExecuteRemoveManager
 	m.methods["remove-validator"] = m.ExecuteRemoveValidator
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
+	m.methods["update-key"] = m.ExecuteUpdateKey
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
-	m.methods["update-manager"] = m.ExecuteUpdateManager
 	m.methods["update-validator-key"] = m.ExecuteUpdateValidatorKey
 	m.methods["write-data"] = m.ExecuteWriteData
 	m.methods["write-data-to"] = m.ExecuteWriteDataTo
@@ -45,7 +44,6 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
-	m.methods["query-minor-blocks"] = m.QueryMinorBlocks
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
 	m.methods["status"] = m.Status
@@ -87,6 +85,7 @@ func (m *JrpcMethods) ExecuteAddCredits(ctx context.Context, params json.RawMess
 	return m.executeWith(ctx, params, new(protocol.AddCredits))
 }
 
+// ExecuteAddValidator submits an AddValidator transaction.
 func (m *JrpcMethods) ExecuteAddValidator(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.AddValidator))
 }
@@ -136,11 +135,7 @@ func (m *JrpcMethods) ExecuteIssueTokens(ctx context.Context, params json.RawMes
 	return m.executeWith(ctx, params, new(protocol.IssueTokens))
 }
 
-// ExecuteRemoveManager submits a RemoveManager transaction.
-func (m *JrpcMethods) ExecuteRemoveManager(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.RemoveManager))
-}
-
+// ExecuteRemoveValidator submits a RemoveValidator transaction.
 func (m *JrpcMethods) ExecuteRemoveValidator(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.RemoveValidator))
 }
@@ -150,8 +145,14 @@ func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMess
 	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
 }
 
+// ExecuteUpdateAccountAuth submits an UpdateAccountAuth transaction.
 func (m *JrpcMethods) ExecuteUpdateAccountAuth(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateAccountAuth))
+}
+
+// ExecuteUpdateKey submits an UpdateKey transaction.
+func (m *JrpcMethods) ExecuteUpdateKey(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.UpdateKey))
 }
 
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.
@@ -159,11 +160,7 @@ func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawM
 	return m.executeWith(ctx, params, new(protocol.UpdateKeyPage))
 }
 
-// ExecuteUpdateManager submits an UpdateManager transaction.
-func (m *JrpcMethods) ExecuteUpdateManager(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.UpdateManager))
-}
-
+// ExecuteUpdateValidatorKey submits an UpdateValidatorKey transaction.
 func (m *JrpcMethods) ExecuteUpdateValidatorKey(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateValidatorKey))
 }
@@ -242,17 +239,6 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 	}
 
 	return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
-}
-
-// QueryMinorBlocks queries an account's minor blocks.
-func (m *JrpcMethods) QueryMinorBlocks(_ context.Context, params json.RawMessage) interface{} {
-	req := new(MinorBlocksQuery)
-	err := m.parse(params, req)
-	if err != nil {
-		return err
-	}
-
-	return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination))
 }
 
 // QueryTx queries a transaction by ID.

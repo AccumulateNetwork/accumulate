@@ -10,13 +10,17 @@ type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyPage }
 
+func (CreateKeyPage) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateKeyPage{}).Validate(st, tx)
+}
+
 func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	var book *protocol.KeyBook
 	switch origin := st.Origin.(type) {
 	case *protocol.KeyBook:
 		book = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.Type())
 	}
 
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)
@@ -31,7 +35,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	scc := new(protocol.SyntheticCreateChain)
 	st.Submit(st.OriginUrl, scc)
 
-	page := protocol.NewKeyPage()
+	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
 	page.KeyBook = book.Url

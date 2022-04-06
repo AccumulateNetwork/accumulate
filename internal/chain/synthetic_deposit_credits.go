@@ -12,6 +12,10 @@ func (SyntheticDepositCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositCredits
 }
 
+func (SyntheticDepositCredits) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticDepositCredits{}).Validate(st, tx)
+}
+
 func (SyntheticDepositCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositCredits)
 	if !ok {
@@ -27,7 +31,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *protocol.Envelope)
 		account = origin
 
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
 	account.CreditCredits(body.Amount)

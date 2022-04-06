@@ -12,6 +12,10 @@ func (CreateTokenAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateTokenAccount
 }
 
+func (CreateTokenAccount) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateTokenAccount{}).Validate(st, tx)
+}
+
 func (CreateTokenAccount) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {
@@ -22,7 +26,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *protocol.Envelope) (pro
 		return nil, fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, body.Url)
 	}
 
-	account := protocol.NewTokenAccount()
+	account := new(protocol.TokenAccount)
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
 	account.Scratch = body.Scratch

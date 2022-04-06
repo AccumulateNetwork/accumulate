@@ -13,6 +13,10 @@ func (InternalTransactionsSent) Type() protocol.TransactionType {
 	return protocol.TransactionTypeInternalTransactionsSent
 }
 
+func (InternalTransactionsSent) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (InternalTransactionsSent{}).Validate(st, tx)
+}
+
 func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSent)
 	if !ok {
@@ -28,7 +32,7 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope
 	// Update the main ledger
 	ledger, ok := st.Origin.(*protocol.InternalLedger)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.Type())
 	}
 
 	unsent := ledger.Synthetic.Unsent

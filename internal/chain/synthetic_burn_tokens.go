@@ -12,6 +12,10 @@ func (SyntheticBurnTokens) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticBurnTokens
 }
 
+func (SyntheticBurnTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticBurnTokens{}).Validate(st, tx)
+}
+
 func (SyntheticBurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticBurnTokens)
 	if !ok {
@@ -20,7 +24,7 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (pr
 
 	account, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
 	account.Issued.Sub(&account.Issued, &body.Amount)

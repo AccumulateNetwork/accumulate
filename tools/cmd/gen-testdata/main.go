@@ -174,11 +174,11 @@ func parseUrl(s string) *url.URL {
 
 func txnTest(origin string, body TransactionBody) *TC {
 	originUrl := parseUrl(origin)
-	signer := new(signing.Signer)
+	signer := new(signing.Builder)
 	// In reality this would not work, but *shrug* it's a marshalling test
 	signer.Type = SignatureTypeLegacyED25519
 	signer.Url = originUrl
-	signer.PrivateKey = key
+	signer.SetPrivateKey(key)
 	signer.Version = 1
 	signer.Timestamp = uint64(rand.Uint32())
 	env := new(Envelope)

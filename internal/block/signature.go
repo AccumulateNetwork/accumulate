@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -112,14 +111,8 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 // validateInitialSignature verifies that the signature is a valid initial
 // signature for the transaction.
 func validateInitialSignature(transaction *protocol.Transaction, signature protocol.Signature) error {
-	// The initial signature must be able to create an initiator hash
-	initHash, err := signature.InitiatorHash()
-	if err != nil {
-		return protocol.NewError(protocol.ErrorCodeInvalidSignature, err)
-	}
-
-	// Verify the hash matches
-	if transaction.Header.Initiator != *(*[32]byte)(initHash) {
+	// Verify the initiator hash matches
+	if !protocol.SignatureDidInitiate(signature, transaction.Header.Initiator[:]) {
 		return protocol.Errorf(protocol.ErrorCodeInvalidSignature, "initiator signature does not match initiator hash")
 	}
 
@@ -445,8 +438,7 @@ func getAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 			}
 
 			for _, sig := range state.Signatures {
-				sigInitHash, err := sig.InitiatorHash()
-				if err == nil && bytes.Equal(sigInitHash, txnInitHash) {
+				if protocol.SignatureDidInitiate(sig, txnInitHash) {
 					signatures[0] = sig
 				} else {
 					signatures = append(signatures, sig)
