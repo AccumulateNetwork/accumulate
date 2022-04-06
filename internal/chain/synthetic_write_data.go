@@ -12,6 +12,10 @@ func (SyntheticWriteData) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticWriteData
 }
 
+func (SyntheticWriteData) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticWriteData{}).Validate(st, tx)
+}
+
 func (SyntheticWriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
 	if !ok {

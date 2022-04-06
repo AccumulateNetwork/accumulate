@@ -10,6 +10,10 @@ type WriteDataTo struct{}
 
 func (WriteDataTo) Type() protocol.TransactionType { return protocol.TransactionTypeWriteDataTo }
 
+func (WriteDataTo) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (WriteDataTo{}).Validate(st, tx)
+}
+
 func (WriteDataTo) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteDataTo)
 	if !ok {

@@ -13,6 +13,10 @@ func (InternalTransactionsSent) Type() protocol.TransactionType {
 	return protocol.TransactionTypeInternalTransactionsSent
 }
 
+func (InternalTransactionsSent) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (InternalTransactionsSent{}).Validate(st, tx)
+}
+
 func (InternalTransactionsSent) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSent)
 	if !ok {

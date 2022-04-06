@@ -12,6 +12,10 @@ func (CreateTokenAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateTokenAccount
 }
 
+func (CreateTokenAccount) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateTokenAccount{}).Validate(st, tx)
+}
+
 func (CreateTokenAccount) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {

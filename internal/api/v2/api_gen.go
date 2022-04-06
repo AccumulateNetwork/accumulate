@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 32)
+		m.methods = make(jsonrpc2.MethodMap, 33)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -31,6 +31,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["remove-validator"] = m.ExecuteRemoveValidator
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
+	m.methods["update-key"] = m.ExecuteUpdateKey
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["update-validator-key"] = m.ExecuteUpdateValidatorKey
 	m.methods["write-data"] = m.ExecuteWriteData
@@ -147,6 +148,11 @@ func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMess
 // ExecuteUpdateAccountAuth submits an UpdateAccountAuth transaction.
 func (m *JrpcMethods) ExecuteUpdateAccountAuth(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateAccountAuth))
+}
+
+// ExecuteUpdateKey submits an UpdateKey transaction.
+func (m *JrpcMethods) ExecuteUpdateKey(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.UpdateKey))
 }
 
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.

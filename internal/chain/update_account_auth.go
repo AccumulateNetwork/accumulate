@@ -12,6 +12,10 @@ func (UpdateAccountAuth) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateAccountAuth
 }
 
+func (UpdateAccountAuth) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (UpdateAccountAuth{}).Validate(st, tx)
+}
+
 func (UpdateAccountAuth) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
