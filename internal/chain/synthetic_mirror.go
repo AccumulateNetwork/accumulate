@@ -12,6 +12,10 @@ func (SyntheticMirror) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticMirror
 }
 
+func (SyntheticMirror) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticMirror{}).Validate(st, tx)
+}
+
 func (SyntheticMirror) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticMirror)
 	if !ok {
