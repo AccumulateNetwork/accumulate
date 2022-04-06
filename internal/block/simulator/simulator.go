@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -177,8 +178,7 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 				return
 			}
 
-			for i, status := range status {
-				status.For = *(*[32]byte)(submitted[i].GetTxHash())
+			for _, status := range status {
 				statusChan <- status
 			}
 		}(s.Subnet(subnet.ID))
@@ -214,11 +214,18 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		require.NoError(s, err)
 		x := s.Subnet(subnet)
 
-		// Check - check a copy so we don't cause strange errors by changing
-		// something
-		_, err = CheckTx(s, x.Database, x.Executor, envelope.Copy())
+		// Normalize - use a copy to avoid weird issues caused by modifying values
+		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
 		if err != nil {
 			return nil, err
+		}
+
+		// Check
+		for _, delivery := range deliveries {
+			_, err = CheckTx(s, x.Database, x.Executor, delivery)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Enqueue
@@ -234,9 +241,11 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	s.Helper()
 
 	ch := make(chan *protocol.TransactionStatus)
-	ids := make(map[[32]byte]bool, len(envelopes))
+	ids := map[[32]byte]bool{}
 	for _, env := range envelopes {
-		ids[*(*[32]byte)(env.GetTxHash())] = true
+		for _, d := range NormalizeEnvelope(s, env) {
+			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
+		}
 	}
 
 	_, err := s.Submit(envelopes...)
@@ -282,7 +291,9 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	s.Helper()
 
 	for _, envelope := range envelopes {
-		s.WaitForTransaction(status, envelope.GetTxHash())
+		for _, delivery := range NormalizeEnvelope(s, envelope) {
+			s.WaitForTransaction(status, delivery.Transaction.GetHash())
+		}
 	}
 }
 

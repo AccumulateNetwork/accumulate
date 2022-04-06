@@ -8,13 +8,13 @@ import (
 	"github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type router struct {
@@ -64,20 +64,19 @@ func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts 
 	return res, nil
 }
 
-func (r router) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*routing.ResponseSubmit, error) {
-	envelopes, err := transactions.UnmarshalAll(tx)
-	require.NoError(r, err)
-
+func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	x := r.Subnet(subnet)
 	if !pretend {
-		x.Submit(envelopes...)
+		x.Submit(envelope)
 		if async {
 			return new(routing.ResponseSubmit), nil
 		}
 	}
 
-	results := make([]*protocol.TransactionStatus, len(envelopes))
-	for i, envelope := range envelopes {
+	deliveries, err := chain.NormalizeEnvelope(envelope)
+	require.NoError(r, err)
+	results := make([]*protocol.TransactionStatus, len(deliveries))
+	for i, envelope := range deliveries {
 		status := new(protocol.TransactionStatus)
 
 		result, err := CheckTx(r.TB, x.Database, x.Executor, envelope)
@@ -91,9 +90,8 @@ func (r router) Submit(ctx context.Context, subnet string, tx []byte, pretend, a
 			if status.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
 				r.Logger.Info("Transaction failed to check",
 					"err", err,
-					"type", envelope.Type(),
-					"txn-hash", logging.AsHex(envelope.GetTxHash()).Slice(0, 4),
-					"env-hash", logging.AsHex(envelope.EnvHash()).Slice(0, 4),
+					"type", envelope.Transaction.Body.Type(),
+					"txn-hash", logging.AsHex(envelope.Transaction.GetHash()).Slice(0, 4),
 					"code", status.Code,
 					"message", status.Message,
 					"principal", envelope.Transaction.Header.Principal)
@@ -113,11 +111,10 @@ func (r router) Submit(ctx context.Context, subnet string, tx []byte, pretend, a
 		if result.Code == 0 {
 			continue
 		}
-		if !envelopes[i].Transaction.Type().IsUser() {
-			continue
+		if deliveries[i].Transaction.Body.Type().IsUser() {
+			resp.Code = uint32(protocol.ErrorCodeUnknownError)
+			resp.Log = "One or more user transactions failed"
 		}
-		resp.Code = uint32(protocol.ErrorCodeUnknownError)
-		resp.Log = "One or more user transactions failed"
 	}
 
 	return resp, nil

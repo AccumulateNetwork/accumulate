@@ -204,6 +204,10 @@ func goJsonTypeSingle(field *Field) string {
 }
 
 func GoJsonType(field *Field) string {
+	if field.Repeatable && field.UnmarshalWith != "" {
+		return "encoding.JsonUnmarshalListWith[" + GoResolveType(field, false, true) + "]"
+	}
+
 	typ := goJsonTypeSingle(field)
 	switch {
 	case !field.Repeatable:
@@ -478,14 +482,9 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 	if field.UnmarshalWith != "" {
 		if !field.Repeatable {
-			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %s}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
+			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
 		}
-		return fmt.Sprintf(
-			"	%s = make([]%s, len(%s));\n"+
-				"	for i, x := range %[3]s {\n"+
-				"		%[1]s[i] = %[2]s{Value: x, Func: %[4]s}\n"+
-				"	}",
-			tgtName, goJsonTypeSingle(field), srcName, field.UnmarshalWith), nil
+		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)
@@ -513,9 +512,9 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 			return fmt.Sprintf("\t%s = %s.Value\n", tgtName, srcName), nil
 		}
 		return fmt.Sprintf(
-			"	%s = make(%s, len(%s));\n"+
-				"	for i, x := range %[3]s {\n"+
-				"		%[1]s[i] = x.Value\n"+
+			"	%s = make(%s, len(%s.Value));\n"+
+				"	for i, x := range %[3]s.Value {\n"+
+				"		%[1]s[i] = x\n"+
 				"	}",
 			tgtName, GoResolveType(field, false, false), srcName), nil
 	}

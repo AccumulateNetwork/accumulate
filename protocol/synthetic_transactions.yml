@@ -113,9 +113,6 @@ SyntheticForwardTransaction:
       type: ForwardedSignature
       marshal-as: reference
       repeatable: true
-    - name: TransactionHash
-      type: bytes
-      optional: true
     - name: Transaction
       type: Transaction
       marshal-as: reference

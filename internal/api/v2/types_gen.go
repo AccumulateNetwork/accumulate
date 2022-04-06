@@ -713,14 +713,11 @@ func (v *SignatureBook) MarshalJSON() ([]byte, error) {
 
 func (v *SignaturePage) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Signer     SignerMetadata                                                    `json:"signer,omitempty"`
-		Signatures encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Signature]] `json:"signatures,omitempty"`
+		Signer     SignerMetadata                                     `json:"signer,omitempty"`
+		Signatures encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
 	}{}
 	u.Signer = v.Signer
-	u.Signatures = make([]encoding.JsonUnmarshalWith[protocol.Signature], len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.JsonUnmarshalWith[protocol.Signature]{Value: x, Func: protocol.UnmarshalSignature}
-	}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	return json.Marshal(&u)
 }
 
@@ -768,20 +765,20 @@ func (v *TokenSend) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            string                                                            `json:"type,omitempty"`
-		MainChain       *MerkleState                                                      `json:"mainChain,omitempty"`
-		MerkleState     *MerkleState                                                      `json:"merkleState,omitempty"`
-		Data            interface{}                                                       `json:"data,omitempty"`
-		Origin          *url.URL                                                          `json:"origin,omitempty"`
-		Sponsor         *url.URL                                                          `json:"sponsor,omitempty"`
-		TransactionHash *string                                                           `json:"transactionHash,omitempty"`
-		Txid            *string                                                           `json:"txid,omitempty"`
-		Transaction     *protocol.Transaction                                             `json:"transaction,omitempty"`
-		Signatures      encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Signature]] `json:"signatures,omitempty"`
-		Status          *protocol.TransactionStatus                                       `json:"status,omitempty"`
-		SyntheticTxids  encoding.JsonList[string]                                         `json:"syntheticTxids,omitempty"`
-		Receipts        encoding.JsonList[*query.TxReceipt]                               `json:"receipts,omitempty"`
-		SignatureBooks  encoding.JsonList[*SignatureBook]                                 `json:"signatureBooks,omitempty"`
+		Type            string                                             `json:"type,omitempty"`
+		MainChain       *MerkleState                                       `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                                       `json:"merkleState,omitempty"`
+		Data            interface{}                                        `json:"data,omitempty"`
+		Origin          *url.URL                                           `json:"origin,omitempty"`
+		Sponsor         *url.URL                                           `json:"sponsor,omitempty"`
+		TransactionHash *string                                            `json:"transactionHash,omitempty"`
+		Txid            *string                                            `json:"txid,omitempty"`
+		Transaction     *protocol.Transaction                              `json:"transaction,omitempty"`
+		Signatures      encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus                        `json:"status,omitempty"`
+		SyntheticTxids  encoding.JsonList[string]                          `json:"syntheticTxids,omitempty"`
+		Receipts        encoding.JsonList[*query.TxReceipt]                `json:"receipts,omitempty"`
+		SignatureBooks  encoding.JsonList[*SignatureBook]                  `json:"signatureBooks,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -792,10 +789,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Transaction = v.Transaction
-	u.Signatures = make([]encoding.JsonUnmarshalWith[protocol.Signature], len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.JsonUnmarshalWith[protocol.Signature]{Value: x, Func: protocol.UnmarshalSignature}
-	}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Status = v.Status
 	u.SyntheticTxids = make(encoding.JsonList[string], len(v.SyntheticTxids))
 	for i, x := range v.SyntheticTxids {
@@ -1333,21 +1327,18 @@ func (v *SignatureBook) UnmarshalJSON(data []byte) error {
 
 func (v *SignaturePage) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Signer     SignerMetadata                                                    `json:"signer,omitempty"`
-		Signatures encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Signature]] `json:"signatures,omitempty"`
+		Signer     SignerMetadata                                     `json:"signer,omitempty"`
+		Signatures encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
 	}{}
 	u.Signer = v.Signer
-	u.Signatures = make([]encoding.JsonUnmarshalWith[protocol.Signature], len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.JsonUnmarshalWith[protocol.Signature]{Value: x, Func: protocol.UnmarshalSignature}
-	}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Signer = u.Signer
-	v.Signatures = make([]protocol.Signature, len(u.Signatures))
-	for i, x := range u.Signatures {
-		v.Signatures[i] = x.Value
+	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+	for i, x := range u.Signatures.Value {
+		v.Signatures[i] = x
 	}
 	return nil
 }
@@ -1432,20 +1423,20 @@ func (v *TokenSend) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            string                                                            `json:"type,omitempty"`
-		MainChain       *MerkleState                                                      `json:"mainChain,omitempty"`
-		MerkleState     *MerkleState                                                      `json:"merkleState,omitempty"`
-		Data            interface{}                                                       `json:"data,omitempty"`
-		Origin          *url.URL                                                          `json:"origin,omitempty"`
-		Sponsor         *url.URL                                                          `json:"sponsor,omitempty"`
-		TransactionHash *string                                                           `json:"transactionHash,omitempty"`
-		Txid            *string                                                           `json:"txid,omitempty"`
-		Transaction     *protocol.Transaction                                             `json:"transaction,omitempty"`
-		Signatures      encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Signature]] `json:"signatures,omitempty"`
-		Status          *protocol.TransactionStatus                                       `json:"status,omitempty"`
-		SyntheticTxids  encoding.JsonList[string]                                         `json:"syntheticTxids,omitempty"`
-		Receipts        encoding.JsonList[*query.TxReceipt]                               `json:"receipts,omitempty"`
-		SignatureBooks  encoding.JsonList[*SignatureBook]                                 `json:"signatureBooks,omitempty"`
+		Type            string                                             `json:"type,omitempty"`
+		MainChain       *MerkleState                                       `json:"mainChain,omitempty"`
+		MerkleState     *MerkleState                                       `json:"merkleState,omitempty"`
+		Data            interface{}                                        `json:"data,omitempty"`
+		Origin          *url.URL                                           `json:"origin,omitempty"`
+		Sponsor         *url.URL                                           `json:"sponsor,omitempty"`
+		TransactionHash *string                                            `json:"transactionHash,omitempty"`
+		Txid            *string                                            `json:"txid,omitempty"`
+		Transaction     *protocol.Transaction                              `json:"transaction,omitempty"`
+		Signatures      encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+		Status          *protocol.TransactionStatus                        `json:"status,omitempty"`
+		SyntheticTxids  encoding.JsonList[string]                          `json:"syntheticTxids,omitempty"`
+		Receipts        encoding.JsonList[*query.TxReceipt]                `json:"receipts,omitempty"`
+		SignatureBooks  encoding.JsonList[*SignatureBook]                  `json:"signatureBooks,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -1456,10 +1447,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
 	u.Txid = encoding.BytesToJSON(v.TransactionHash)
 	u.Transaction = v.Transaction
-	u.Signatures = make([]encoding.JsonUnmarshalWith[protocol.Signature], len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.JsonUnmarshalWith[protocol.Signature]{Value: x, Func: protocol.UnmarshalSignature}
-	}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Status = v.Status
 	u.SyntheticTxids = make(encoding.JsonList[string], len(v.SyntheticTxids))
 	for i, x := range v.SyntheticTxids {
@@ -1500,9 +1488,9 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Transaction = u.Transaction
-	v.Signatures = make([]protocol.Signature, len(u.Signatures))
-	for i, x := range u.Signatures {
-		v.Signatures[i] = x.Value
+	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+	for i, x := range u.Signatures.Value {
+		v.Signatures[i] = x
 	}
 	v.Status = u.Status
 	v.SyntheticTxids = make([][32]byte, len(u.SyntheticTxids))

@@ -2387,15 +2387,12 @@ func (v *ChainState) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryQueryResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Entries         encoding.JsonList[string]                                       `json:"entries,omitempty"`
-		ExpandedEntries encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Account]] `json:"expandedEntries,omitempty"`
-		Total           uint64                                                          `json:"total"`
+		Entries         encoding.JsonList[string]                        `json:"entries,omitempty"`
+		ExpandedEntries encoding.JsonUnmarshalListWith[protocol.Account] `json:"expandedEntries,omitempty"`
+		Total           uint64                                           `json:"total"`
 	}{}
 	u.Entries = v.Entries
-	u.ExpandedEntries = make([]encoding.JsonUnmarshalWith[protocol.Account], len(v.ExpandedEntries))
-	for i, x := range v.ExpandedEntries {
-		u.ExpandedEntries[i] = encoding.JsonUnmarshalWith[protocol.Account]{Value: x, Func: protocol.UnmarshalAccount}
-	}
+	u.ExpandedEntries = encoding.JsonUnmarshalListWith[protocol.Account]{Value: v.ExpandedEntries, Func: protocol.UnmarshalAccountJSON}
 	u.Total = v.Total
 	return json.Marshal(&u)
 }
@@ -2442,7 +2439,7 @@ func (v *ResponseAccount) MarshalJSON() ([]byte, error) {
 		ChainState encoding.JsonList[ChainState]                `json:"chainState,omitempty"`
 		Receipt    *GeneralReceipt                              `json:"receipt,omitempty"`
 	}{}
-	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccount}
+	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
 	u.ChainState = v.ChainState
 	u.Receipt = v.Receipt
 	return json.Marshal(&u)
@@ -2574,14 +2571,11 @@ func (v *ResponseTxHistory) MarshalJSON() ([]byte, error) {
 
 func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Account    encoding.JsonUnmarshalWith[protocol.Account]                      `json:"account,omitempty"`
-		Signatures encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Signature]] `json:"signatures,omitempty"`
+		Account    encoding.JsonUnmarshalWith[protocol.Account]       `json:"account,omitempty"`
+		Signatures encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
 	}{}
-	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccount}
-	u.Signatures = make([]encoding.JsonUnmarshalWith[protocol.Signature], len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.JsonUnmarshalWith[protocol.Signature]{Value: x, Func: protocol.UnmarshalSignature}
-	}
+	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	return json.Marshal(&u)
 }
 
@@ -2642,23 +2636,20 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Entries         encoding.JsonList[string]                                       `json:"entries,omitempty"`
-		ExpandedEntries encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Account]] `json:"expandedEntries,omitempty"`
-		Total           uint64                                                          `json:"total"`
+		Entries         encoding.JsonList[string]                        `json:"entries,omitempty"`
+		ExpandedEntries encoding.JsonUnmarshalListWith[protocol.Account] `json:"expandedEntries,omitempty"`
+		Total           uint64                                           `json:"total"`
 	}{}
 	u.Entries = v.Entries
-	u.ExpandedEntries = make([]encoding.JsonUnmarshalWith[protocol.Account], len(v.ExpandedEntries))
-	for i, x := range v.ExpandedEntries {
-		u.ExpandedEntries[i] = encoding.JsonUnmarshalWith[protocol.Account]{Value: x, Func: protocol.UnmarshalAccount}
-	}
+	u.ExpandedEntries = encoding.JsonUnmarshalListWith[protocol.Account]{Value: v.ExpandedEntries, Func: protocol.UnmarshalAccountJSON}
 	u.Total = v.Total
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Entries = u.Entries
-	v.ExpandedEntries = make([]protocol.Account, len(u.ExpandedEntries))
-	for i, x := range u.ExpandedEntries {
-		v.ExpandedEntries[i] = x.Value
+	v.ExpandedEntries = make([]protocol.Account, len(u.ExpandedEntries.Value))
+	for i, x := range u.ExpandedEntries.Value {
+		v.ExpandedEntries[i] = x
 	}
 	v.Total = u.Total
 	return nil
@@ -2732,7 +2723,7 @@ func (v *ResponseAccount) UnmarshalJSON(data []byte) error {
 		ChainState encoding.JsonList[ChainState]                `json:"chainState,omitempty"`
 		Receipt    *GeneralReceipt                              `json:"receipt,omitempty"`
 	}{}
-	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccount}
+	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
 	u.ChainState = v.ChainState
 	u.Receipt = v.Receipt
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -2977,22 +2968,19 @@ func (v *ResponseTxHistory) UnmarshalJSON(data []byte) error {
 
 func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Account    encoding.JsonUnmarshalWith[protocol.Account]                      `json:"account,omitempty"`
-		Signatures encoding.JsonList[encoding.JsonUnmarshalWith[protocol.Signature]] `json:"signatures,omitempty"`
+		Account    encoding.JsonUnmarshalWith[protocol.Account]       `json:"account,omitempty"`
+		Signatures encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
 	}{}
-	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccount}
-	u.Signatures = make([]encoding.JsonUnmarshalWith[protocol.Signature], len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.JsonUnmarshalWith[protocol.Signature]{Value: x, Func: protocol.UnmarshalSignature}
-	}
+	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Account = u.Account.Value
 
-	v.Signatures = make([]protocol.Signature, len(u.Signatures))
-	for i, x := range u.Signatures {
-		v.Signatures[i] = x.Value
+	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+	for i, x := range u.Signatures.Value {
+		v.Signatures[i] = x
 	}
 	return nil
 }

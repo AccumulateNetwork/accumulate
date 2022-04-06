@@ -119,13 +119,13 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 
 	req := new(api.TxRequest)
-	req.Origin = env.Transaction.Header.Principal
+	req.Origin = env.Transaction[0].Header.Principal
 	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].(protocol.KeySignature).GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
 	req.KeyPage.Version = env.Signatures[0].GetSignerVersion()
-	req.Payload = env.Transaction.Body
+	req.Payload = env.Transaction[0].Body
 	return req
 }
 
@@ -157,13 +157,13 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUr
 		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 
 	req := new(api.TxRequest)
-	req.Origin = env.Transaction.Header.Principal
+	req.Origin = env.Transaction[0].Header.Principal
 	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	req.Signer.Url = env.Signatures[0].GetSigner()
 	req.Signer.PublicKey = env.Signatures[0].(protocol.KeySignature).GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
 	req.KeyPage.Version = env.Signatures[0].GetSignerVersion()
-	req.Payload = env.Transaction.Body
+	req.Payload = env.Transaction[0].Body
 
 	resp := new(api.TxResponse)
 	callApi(t, japi, method, req, resp)
@@ -212,13 +212,13 @@ func (d *e2eDUT) GetRecordHeight(s string) uint64 {
 }
 
 func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
-	data, err := tx.Transaction.Body.MarshalBinary()
+	data, err := tx.Transaction[0].Body.MarshalBinary()
 	d.Require().NoError(err)
 
 	d.T().Helper()
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
-	pl.Origin = tx.Transaction.Header.Principal
+	pl.Origin = tx.Transaction[0].Header.Principal
 	pl.Signer.Timestamp = tx.Signatures[0].GetTimestamp()
 	pl.Signer.Url = tx.Signatures[0].GetSigner()
 	pl.Signer.PublicKey = tx.Signatures[0].(protocol.KeySignature).GetPublicKey()
