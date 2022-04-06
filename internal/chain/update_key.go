@@ -77,7 +77,7 @@ func (UpdateKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.Tran
 		return nil, fmt.Errorf("invalid signature state")
 	}
 
-	_, entry, ok := page.EntryByKey(sigEnv.Signatures[0].GetPublicKey())
+	_, entry, ok := page.EntryByKeyHash(sigEnv.Signatures[0].GetPublicKeyHash())
 	if !ok {
 		return nil, fmt.Errorf("the signing key does not exist on %v", st.OriginUrl)
 	}
