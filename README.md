@@ -1,5 +1,7 @@
 # Accumulate
 
+test
+
 Accumulate is a novel blockchain network designed to be hugely scalable while maintaining
 security. [More details](docs/Accumulate.md)
 
