@@ -106,7 +106,7 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 
 		keyPage, ok := signer.Account.(*protocol.KeyPage)
 		if ok {
-			page.Signer.AcceptThreshold = keyPage.Threshold
+			page.Signer.AcceptThreshold = keyPage.AcceptThreshold
 		}
 	}
 
