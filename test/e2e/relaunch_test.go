@@ -101,6 +101,8 @@ func TestRelaunch(t *testing.T) {
 }
 
 func rpcCall(t *testing.T, method func(context.Context, json.RawMessage) interface{}, input, output interface{}) {
+	t.Helper()
+
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
 	res := method(context.Background(), data)

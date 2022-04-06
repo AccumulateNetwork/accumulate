@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -38,6 +40,8 @@ var keyCmd = &cobra.Command{
 				if len(args) == 3 {
 					if args[1] == "lite" {
 						out, err = ImportKey(args[2], "")
+					} else if args[1] == "factoid" {
+						out, err = ImportFactoidKey(args[2])
 					} else {
 						PrintKeyImport()
 					}
@@ -97,6 +101,10 @@ var keyCmd = &cobra.Command{
 	},
 }
 
+func init() {
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+}
+
 var keyUpdateCmd = &cobra.Command{
 	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
 	Short: "Self-update a key",
@@ -130,6 +138,8 @@ func PrintKeyGenerate() {
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
 	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
+	fmt.Println("  accumulate key import factoid [factoid private address]  Import a factoid private address")
+
 	fmt.Println("  accumulate key import lite [private key hex]       Import a key as a lite address")
 }
 
@@ -139,6 +149,42 @@ func PrintKey() {
 	PrintKeyImport()
 
 	PrintKeyExport()
+}
+
+func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error) {
+	sig, err := Db.Get(BucketSigType, pubKey)
+	switch {
+	case err == nil:
+		// Ok
+
+	case errors.Is(err, db.ErrNotFound),
+		errors.Is(err, db.ErrNoBucket):
+		// Default to legacy ED25519
+		hash := sha256.Sum256(pubKey)
+		return protocol.SignatureTypeLegacyED25519, hash[:], nil
+
+	default:
+		return 0, nil, err
+	}
+
+	sigType, err := ValidateSigType(string(sig))
+	if err != nil {
+		return 0, nil, err
+	}
+
+	switch sigType {
+	case protocol.SignatureTypeLegacyED25519,
+		protocol.SignatureTypeED25519:
+		hash := sha256.Sum256(pubKey)
+		return sigType, hash[:], nil
+
+	case protocol.SignatureTypeRCD1:
+		hash := protocol.GetRCDHashFromPublicKey(pubKey, 1)
+		return sigType, hash, nil
+
+	default:
+		return 0, nil, fmt.Errorf("unsupported signature type %v", sigType)
+	}
 }
 
 func resolvePrivateKey(s string) ([]byte, error) {
@@ -154,13 +200,18 @@ func resolvePrivateKey(s string) ([]byte, error) {
 	return LookupByPubKey(pub)
 }
 
-func resolvePublicKey(s string) ([]byte, error) {
+func resolvePublicKey(s string) (pubKey, keyHash []byte, sigType protocol.SignatureType, err error) {
 	pub, _, err := parseKey(s)
 	if err != nil {
-		return nil, err
+		return nil, nil, 0, err
 	}
 
-	return pub, nil
+	sigType, keyHash, err = resolveKeyTypeAndHash(pub)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	return pub, keyHash, sigType, nil
 }
 
 func parseKey(s string) (pubKey, privKey []byte, err error) {
@@ -278,6 +329,15 @@ func GenerateKey(label string) (string, error) {
 	}
 
 	err = Db.Put(BucketLabel, []byte(label), pubKey)
+	if err != nil {
+		return "", err
+	}
+
+	sigtype, err := ValidateSigType(SigType)
+	if err != nil {
+		return "", err
+	}
+	err = Db.Put(BucketSigType, privKey[32:], []byte(sigtype.String()))
 	if err != nil {
 		return "", err
 	}
@@ -594,6 +654,74 @@ func ExportMnemonic() (string, error) {
 	}
 }
 
+func ImportFactoidKey(factoidkey string) (out string, err error) {
+
+	if strings.Contains(factoidkey, "Fs") {
+		label, rcdhash, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
+		if err != nil {
+			return "", err
+		}
+
+		label, _ = LabelForLiteTokenAccount(label)
+		_, err = LookupByLabel(label)
+		if err == nil {
+			return "", fmt.Errorf("key name is already being used")
+		}
+
+		_, err = LookupByPubKey(rcdhash)
+		lab := "not found"
+		if err == nil {
+			b, _ := Db.GetBucket(BucketLabel)
+			if b != nil {
+				for _, v := range b.KeyValueList {
+					if bytes.Equal(v.Value, rcdhash) {
+						lab = string(v.Key)
+						break
+					}
+				}
+				return "", fmt.Errorf("private key already exists in wallet by key name of %s", lab)
+			}
+		}
+
+		err = Db.Put(BucketKeys, rcdhash, privatekey)
+
+		if err != nil {
+			return "", err
+		}
+		err = Db.Put(BucketSigType, rcdhash, []byte(protocol.SignatureTypeRCD1.String()))
+
+		if err != nil {
+			return "", err
+		}
+		err = Db.Put(BucketSigType, privatekey[32:], []byte(protocol.SignatureTypeRCD1.String()))
+
+		if err != nil {
+			return "", err
+		}
+
+		err = Db.Put(BucketLabel, []byte(label), rcdhash)
+		if err != nil {
+			return "", err
+		}
+
+		if WantJsonOutput {
+			a := KeyResponse{}
+			a.Label = types.String(label)
+			a.PublicKey = types.Bytes(rcdhash)
+			dump, err := json.Marshal(&a)
+			if err != nil {
+				return "", err
+			}
+			out = fmt.Sprintf("%s\n", string(dump))
+		} else {
+			out = fmt.Sprintf("\tname\t\t:%s\n\trcd Hash\t:%x\n", label, rcdhash)
+		}
+	} else {
+		out, err = "", fmt.Errorf("invalid factoid key must begin with `Fs`")
+	}
+	return out, err
+}
+
 func UpdateKey(args []string) (string, error) {
 	principal, err := url.Parse(args[0])
 	if err != nil {
@@ -605,7 +733,7 @@ func UpdateKey(args []string) (string, error) {
 		return "", err
 	}
 
-	newPubKey, err := resolvePublicKey(args[0])
+	newPubKey, _, _, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
