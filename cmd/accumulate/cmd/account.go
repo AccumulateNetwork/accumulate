@@ -272,7 +272,13 @@ func GenerateAccount(args []string) (string, error) {
 	var label string
 	if len(args) > 0 {
 		label = args[0]
-		resolve
+		_, err := resolvePrivateKey(args[0])
+		if err != nil {
+			return "", fmt.Errorf("no suitable key to generate lite account from key %s (%v)", args[0], err)
+		}
+
+		IsLiteAccount()
+
 	}
 	return GenerateKey(label)
 }
