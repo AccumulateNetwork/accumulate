@@ -226,6 +226,12 @@ UpdateValidatorKey:
     - name: NewKeyHash
       type: bytes
 
+UpdateKey:
+  union: { type: transaction }
+  fields:
+    - name: NewKeyHash
+      type: bytes
+
 SignPending:
   union: { type: transaction }
   fields: []
