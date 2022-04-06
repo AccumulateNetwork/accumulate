@@ -107,7 +107,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		qr := queryRecord(t, japi, "query-key-index", q)
 		resp := new(query.ResponseKeyPageIndex)
 		recode(t, qr.Data, resp)
-		signator = resp.KeyPage
+		signator = resp.Signer
 	}
 
 	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: signator})

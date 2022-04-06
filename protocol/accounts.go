@@ -1,0 +1,52 @@
+package protocol
+
+import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+)
+
+type Account interface {
+	encoding.BinaryValue
+	CopyAsInterface() interface{}
+	Type() AccountType
+	GetUrl() *url.URL
+}
+
+type FullAccount interface {
+	Account
+	GetAuth() *AccountAuth
+}
+
+func (a *UnknownAccount) GetUrl() *url.URL { return a.Url }
+
+func (a *LiteDataAccount) GetUrl() *url.URL  { return a.Url }
+func (a *LiteIdentity) GetUrl() *url.URL     { return a.Url }
+func (a *LiteTokenAccount) GetUrl() *url.URL { return a.Url }
+
+func (a *ADI) GetUrl() *url.URL                     { return a.Url }
+func (a *Anchor) GetUrl() *url.URL                  { return a.Url }
+func (a *DataAccount) GetUrl() *url.URL             { return a.Url }
+func (a *InternalLedger) GetUrl() *url.URL          { return a.Url }
+func (a *InternalSyntheticLedger) GetUrl() *url.URL { return a.Url }
+func (a *KeyBook) GetUrl() *url.URL                 { return a.Url }
+func (a *KeyPage) GetUrl() *url.URL                 { return a.Url }
+func (a *TokenAccount) GetUrl() *url.URL            { return a.Url }
+func (a *TokenIssuer) GetUrl() *url.URL             { return a.Url }
+
+func (a *ADI) GetAuth() *AccountAuth                     { return &a.AccountAuth }
+func (a *Anchor) GetAuth() *AccountAuth                  { return &a.AccountAuth }
+func (a *DataAccount) GetAuth() *AccountAuth             { return &a.AccountAuth }
+func (a *InternalLedger) GetAuth() *AccountAuth          { return &a.AccountAuth }
+func (a *InternalSyntheticLedger) GetAuth() *AccountAuth { return &a.AccountAuth }
+func (a *KeyBook) GetAuth() *AccountAuth                 { return &a.AccountAuth }
+func (a *TokenAccount) GetAuth() *AccountAuth            { return &a.AccountAuth }
+func (a *TokenIssuer) GetAuth() *AccountAuth             { return &a.AccountAuth }
+
+// KeyBook is a backwards compatability shim for the API
+func (a *KeyPage) KeyBook() *url.URL {
+	if a.Url == nil {
+		return nil
+	}
+	book, _, _ := ParseKeyPageUrl(a.Url)
+	return book
+}
