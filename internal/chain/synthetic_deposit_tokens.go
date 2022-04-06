@@ -25,7 +25,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
 	}
 
-	var account protocol.TokenHolderAccount
+	var account protocol.AccountWithTokens
 	if st.Origin != nil {
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
@@ -57,7 +57,6 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 		case errors.Is(err, storage.ErrNotFound):
 			liteIdentity = new(protocol.LiteIdentity)
 			liteIdentity.Url = originIdentity
-			liteIdentity.KeyBook = originIdentity
 			st.Update(liteIdentity)
 		default:
 			return nil, err

@@ -94,7 +94,7 @@ func (t *Transaction) AddSignature(newSignature protocol.Signature) (int, error)
 }
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
-	var acct protocol.SignerAccount
+	var acct protocol.Signer
 	var version uint64
 	err := t.batch.Account(signer).GetStateAs(&acct)
 	switch {

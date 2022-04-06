@@ -27,7 +27,7 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		recipients[i] = to.Url
 	}
 
-	var account protocol.TokenHolderAccount
+	var account protocol.AccountWithTokens
 	switch origin := st.Origin.(type) {
 	case *protocol.TokenAccount:
 		account = origin
