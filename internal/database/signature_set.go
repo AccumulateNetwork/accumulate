@@ -33,8 +33,8 @@ func newSigSet(txn *Transaction, signer *url.URL, signerVersion uint64, writable
 		return nil, err
 	}
 
-	// If the version has changed, erase all previous signatures
-	if s.hashes.Version != signerVersion {
+	// Reset if the set is writable and the version is different
+	if writable && s.hashes.Version != signerVersion {
 		s.hashes.Reset(signerVersion)
 	}
 	return s, nil

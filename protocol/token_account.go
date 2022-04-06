@@ -6,7 +6,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-type TokenHolder interface {
+type AccountWithTokens interface {
+	Account
 	TokenBalance() *big.Int
 	CreditTokens(amount *big.Int) bool
 	CanDebitTokens(amount *big.Int) bool
@@ -14,17 +15,18 @@ type TokenHolder interface {
 	GetTokenUrl() *url.URL
 }
 
-type CreditHolder interface {
+type AccountWithCredits interface {
+	Account
 	GetCreditBalance() uint64
 	CreditCredits(amount uint64)
 	DebitCredits(amount uint64) bool
 	CanDebitCredits(amount uint64) bool
 }
 
-var _ TokenHolder = (*TokenAccount)(nil)
-var _ TokenHolder = (*LiteTokenAccount)(nil)
-var _ CreditHolder = (*KeyPage)(nil)
-var _ CreditHolder = (*LiteTokenAccount)(nil)
+var _ AccountWithTokens = (*TokenAccount)(nil)
+var _ AccountWithTokens = (*LiteTokenAccount)(nil)
+var _ AccountWithCredits = (*KeyPage)(nil)
+var _ AccountWithCredits = (*LiteTokenAccount)(nil)
 
 func (acct *TokenAccount) TokenBalance() *big.Int {
 	return &acct.Balance
