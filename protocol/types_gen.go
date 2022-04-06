@@ -614,6 +614,11 @@ type UpdateAllowedKeyPageOperation struct {
 	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny"`
 }
 
+type UpdateKey struct {
+	fieldsSet  []bool
+	NewKeyHash []byte `json:"newKeyHash,omitempty" form:"newKeyHash" query:"newKeyHash" validate:"required"`
+}
+
 type UpdateKeyOperation struct {
 	fieldsSet []bool
 	OldEntry  KeySpecParams `json:"oldEntry,omitempty" form:"oldEntry" query:"oldEntry" validate:"required"`
@@ -780,6 +785,8 @@ func (*UpdateAccountAuth) Type() TransactionType { return TransactionTypeUpdateA
 func (*UpdateAllowedKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeUpdateAllowed
 }
+
+func (*UpdateKey) Type() TransactionType { return TransactionTypeUpdateKey }
 
 func (*UpdateKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeUpdate }
 
@@ -1929,6 +1936,16 @@ func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
 }
 
 func (v *UpdateAllowedKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateKey) Copy() *UpdateKey {
+	u := new(UpdateKey)
+
+	u.NewKeyHash = encoding.BytesCopy(v.NewKeyHash)
+
+	return u
+}
+
+func (v *UpdateKey) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UpdateKeyOperation) Copy() *UpdateKeyOperation {
 	u := new(UpdateKeyOperation)
@@ -3432,6 +3449,14 @@ func (v *UpdateAllowedKeyPageOperation) Equal(u *UpdateAllowedKeyPageOperation) 
 		if !(v.Deny[i] == u.Deny[i]) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *UpdateKey) Equal(u *UpdateKey) bool {
+	if !(bytes.Equal(v.NewKeyHash, u.NewKeyHash)) {
+		return false
 	}
 
 	return true
@@ -7722,6 +7747,46 @@ func (v *UpdateAllowedKeyPageOperation) IsValid() error {
 	}
 }
 
+var fieldNames_UpdateKey = []string{
+	1: "Type",
+	2: "NewKeyHash",
+}
+
+func (v *UpdateKey) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.NewKeyHash) == 0) {
+		writer.WriteBytes(2, v.NewKeyHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateKey)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateKey) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field NewKeyHash is missing")
+	} else if len(v.NewKeyHash) == 0 {
+		errs = append(errs, "field NewKeyHash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_UpdateKeyOperation = []string{
 	1: "Type",
 	2: "OldEntry",
@@ -10224,6 +10289,29 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error 
 	return err
 }
 
+func (v *UpdateKey) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.NewKeyHash = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateKey)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *UpdateKeyOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11526,6 +11614,16 @@ func (v *UpdateAllowedKeyPageOperation) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Allow = v.Allow
 	u.Deny = v.Deny
+	return json.Marshal(&u)
+}
+
+func (v *UpdateKey) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		NewKeyHash *string         `json:"newKeyHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NewKeyHash = encoding.BytesToJSON(v.NewKeyHash)
 	return json.Marshal(&u)
 }
 
@@ -13721,6 +13819,27 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalJSON(data []byte) error {
 	}
 	v.Allow = u.Allow
 	v.Deny = u.Deny
+	return nil
+}
+
+func (v *UpdateKey) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		NewKeyHash *string         `json:"newKeyHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NewKeyHash = encoding.BytesToJSON(v.NewKeyHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.NewKeyHash); err != nil {
+		return fmt.Errorf("error decoding NewKeyHash: %w", err)
+	} else {
+		v.NewKeyHash = x
+	}
 	return nil
 }
 
