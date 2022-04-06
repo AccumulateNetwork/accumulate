@@ -10,6 +10,10 @@ type BurnTokens struct{}
 
 func (BurnTokens) Type() protocol.TransactionType { return protocol.TransactionTypeBurnTokens }
 
+func (BurnTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (BurnTokens{}).Validate(st, tx)
+}
+
 func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.BurnTokens)
 	if !ok {
@@ -23,7 +27,7 @@ func (BurnTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 	}
 
 	//ensure user cannot burn more than is in the account

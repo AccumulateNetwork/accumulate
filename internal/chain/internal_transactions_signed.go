@@ -13,6 +13,10 @@ func (InternalTransactionsSigned) Type() protocol.TransactionType {
 	return protocol.TransactionTypeInternalTransactionsSigned
 }
 
+func (InternalTransactionsSigned) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (InternalTransactionsSigned{}).Validate(st, tx)
+}
+
 func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSigned)
 	if !ok {
@@ -21,7 +25,7 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelo
 
 	ledger, ok := st.Origin.(*protocol.InternalLedger)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeInternalLedger, st.Origin.Type())
 	}
 
 	signatures := map[[32]byte]protocol.Signature{}

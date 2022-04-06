@@ -12,6 +12,10 @@ func (CreateDataAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateDataAccount
 }
 
+func (CreateDataAccount) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateDataAccount{}).Validate(st, tx)
+}
+
 func (CreateDataAccount) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateDataAccount)
 	if !ok {
@@ -24,7 +28,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *protocol.Envelope) (prot
 	}
 
 	//create the data account
-	account := protocol.NewDataAccount()
+	account := new(protocol.DataAccount)
 	account.Url = body.Url
 	account.Scratch = body.Scratch
 	account.ManagerKeyBook = body.ManagerKeyBookUrl

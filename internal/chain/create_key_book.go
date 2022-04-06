@@ -10,9 +10,13 @@ type CreateKeyBook struct{}
 
 func (CreateKeyBook) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyBook }
 
+func (CreateKeyBook) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateKeyBook{}).Validate(st, tx)
+}
+
 func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.Type())
 	}
 
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyBook)
@@ -41,7 +45,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		return nil, fmt.Errorf("failed to marshal state for KeyPage %s: %v", page.Url, err)
 	}
 
-	book := protocol.NewKeyBook()
+	book := new(protocol.KeyBook)
 	book.Url = body.Url
 	book.PageCount = 1
 	book.ManagerKeyBook = body.Manager

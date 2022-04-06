@@ -15,12 +15,24 @@ func (AddValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeAddValidator
 }
 
+func (AddValidator) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (AddValidator{}).Validate(st, tx)
+}
+
 func (RemoveValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeRemoveValidator
 }
 
+func (RemoveValidator) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (RemoveValidator{}).Validate(st, tx)
+}
+
 func (UpdateValidatorKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateValidatorKey
+}
+
+func (UpdateValidatorKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (UpdateValidatorKey{}).Validate(st, tx)
 }
 
 func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol.TransactionResult, error) {

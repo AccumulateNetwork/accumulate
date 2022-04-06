@@ -126,7 +126,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..20}
+for i in {1..1}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
@@ -150,6 +150,8 @@ ensure-key keytest-1-0
 ensure-key keytest-2-0
 ensure-key keytest-2-1
 ensure-key keytest-2-2
+ensure-key keytest-2-3-orig
+ensure-key keytest-2-3-new
 ensure-key keytest-3-0
 ensure-key keytest-3-1
 echo
@@ -215,12 +217,19 @@ BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 section "Add a key to page 2 using a key from page 3"
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-1
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
+wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-3-orig
 success
 
 section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
+
+section "Update a key with only that key's signature"
+wait-for cli-tx key update keytest/book/2 keytest-2-3-orig keytest-2-3-new || die "Failed to update key"
+accumulate -j get key keytest keytest-2-3-orig > /dev/null && die "Still found old key" || true
+accumulate -j get key keytest keytest-2-3-new | jq -C --indent 0 || die "Could not find new key"
+success
 
 section "Create an ADI Token Account"
 wait-for cli-tx account create token --scratch keytest keytest-1-0 0 keytest/tokens ACME keytest/book

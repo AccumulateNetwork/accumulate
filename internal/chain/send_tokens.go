@@ -12,6 +12,10 @@ type SendTokens struct{}
 
 func (SendTokens) Type() protocol.TransactionType { return protocol.TransactionTypeSendTokens }
 
+func (SendTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SendTokens{}).Validate(st, tx)
+}
+
 func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {
@@ -30,7 +34,7 @@ func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 	case *protocol.LiteTokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want %v or %v, got %v", protocol.AccountTypeTokenAccount, protocol.AccountTypeLiteTokenAccount, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want %v or %v, got %v", protocol.AccountTypeTokenAccount, protocol.AccountTypeLiteTokenAccount, st.Origin.Type())
 	}
 
 	//now check to see if we can transact

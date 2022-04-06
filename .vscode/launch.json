@@ -91,6 +91,27 @@
       "args": ["${workspaceFolder}/.testdata/sdk.json"]
     },
     {
+      "name": "Generate Protocol Types",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-types",
+      "cwd": "${workspaceFolder}/protocol",
+      "args": [
+        "account_auth_operations.yml",
+        "accounts.yml",
+        "general.yml",
+        "internal.yml",
+        "key_page_operations.yml",
+        "query.yml",
+        "signatures.yml",
+        "synthetic_transactions.yml",
+        "transaction.yml",
+        "transaction_results.yml",
+        "user_transactions.yml",
+      ]
+    },
+    {
       "name": "Run CLI",
       "type": "go",
       "request": "launch",

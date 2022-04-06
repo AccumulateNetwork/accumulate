@@ -621,6 +621,11 @@ type UpdateAllowedKeyPageOperation struct {
 	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny"`
 }
 
+type UpdateKey struct {
+	fieldsSet  []bool
+	NewKeyHash []byte `json:"newKeyHash,omitempty" form:"newKeyHash" query:"newKeyHash" validate:"required"`
+}
+
 type UpdateKeyOperation struct {
 	fieldsSet []bool
 	OldEntry  KeySpecParams `json:"oldEntry,omitempty" form:"oldEntry" query:"oldEntry" validate:"required"`
@@ -656,218 +661,65 @@ type WriteDataTo struct {
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
-// Deprated: use new(ADI)
-func NewADI() *ADI {
-	return new(ADI)
-}
-
-// Deprated: use new(Anchor)
-func NewAnchor() *Anchor {
-	return new(Anchor)
-}
-
-// Deprated: use new(DataAccount)
-func NewDataAccount() *DataAccount {
-	return new(DataAccount)
-}
-
-// Deprated: use new(InternalLedger)
-func NewInternalLedger() *InternalLedger {
-	return new(InternalLedger)
-}
-
-// Deprated: use new(InternalSyntheticLedger)
-func NewInternalSyntheticLedger() *InternalSyntheticLedger {
-	return new(InternalSyntheticLedger)
-}
-
-// Deprated: use new(KeyBook)
-func NewKeyBook() *KeyBook {
-	return new(KeyBook)
-}
-
-// Deprated: use new(KeyPage)
-func NewKeyPage() *KeyPage {
-	return new(KeyPage)
-}
-
-// Deprated: use new(LiteDataAccount)
-func NewLiteDataAccount() *LiteDataAccount {
-	return new(LiteDataAccount)
-}
-
-// Deprated: use new(LiteIdentity)
-func NewLiteIdentity() *LiteIdentity {
-	return new(LiteIdentity)
-}
-
-// Deprated: use new(LiteTokenAccount)
-func NewLiteTokenAccount() *LiteTokenAccount {
-	return new(LiteTokenAccount)
-}
-
-// Deprated: use new(TokenAccount)
-func NewTokenAccount() *TokenAccount {
-	return new(TokenAccount)
-}
-
-// Deprated: use new(TokenIssuer)
-func NewTokenIssuer() *TokenIssuer {
-	return new(TokenIssuer)
-}
-
-// Deprated: use new(UnknownAccount)
-func NewUnknownAccount() *UnknownAccount {
-	return new(UnknownAccount)
-}
-
 func (*ADI) Type() AccountType { return AccountTypeIdentity }
 
-// Deprated: use Type
-func (*ADI) GetType() AccountType { return AccountTypeIdentity }
-
 func (*AcmeFaucet) Type() TransactionType { return TransactionTypeAcmeFaucet }
-
-// Deprated: use Type
-func (*AcmeFaucet) GetType() TransactionType { return TransactionTypeAcmeFaucet }
 
 func (*AddAccountAuthorityOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeAddAuthority
 }
 
-// Deprated: use Type
-func (*AddAccountAuthorityOperation) GetType() AccountAuthOperationType {
-	return AccountAuthOperationTypeAddAuthority
-}
-
 func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
-
-// Deprated: use Type
-func (*AddCredits) GetType() TransactionType { return TransactionTypeAddCredits }
 
 func (*AddCreditsResult) Type() TransactionType { return TransactionTypeAddCredits }
 
-// Deprated: use Type
-func (*AddCreditsResult) GetType() TransactionType { return TransactionTypeAddCredits }
-
 func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeAdd }
-
-// Deprated: use Type
-func (*AddKeyOperation) GetType() KeyPageOperationType { return KeyPageOperationTypeAdd }
 
 func (*AddValidator) Type() TransactionType { return TransactionTypeAddValidator }
 
-// Deprated: use Type
-func (*AddValidator) GetType() TransactionType { return TransactionTypeAddValidator }
-
 func (*Anchor) Type() AccountType { return AccountTypeAnchor }
-
-// Deprated: use Type
-func (*Anchor) GetType() AccountType { return AccountTypeAnchor }
 
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
-// Deprated: use Type
-func (*BurnTokens) GetType() TransactionType { return TransactionTypeBurnTokens }
-
 func (*CreateDataAccount) Type() TransactionType { return TransactionTypeCreateDataAccount }
-
-// Deprated: use Type
-func (*CreateDataAccount) GetType() TransactionType { return TransactionTypeCreateDataAccount }
 
 func (*CreateIdentity) Type() TransactionType { return TransactionTypeCreateIdentity }
 
-// Deprated: use Type
-func (*CreateIdentity) GetType() TransactionType { return TransactionTypeCreateIdentity }
-
 func (*CreateKeyBook) Type() TransactionType { return TransactionTypeCreateKeyBook }
-
-// Deprated: use Type
-func (*CreateKeyBook) GetType() TransactionType { return TransactionTypeCreateKeyBook }
 
 func (*CreateKeyPage) Type() TransactionType { return TransactionTypeCreateKeyPage }
 
-// Deprated: use Type
-func (*CreateKeyPage) GetType() TransactionType { return TransactionTypeCreateKeyPage }
-
 func (*CreateToken) Type() TransactionType { return TransactionTypeCreateToken }
-
-// Deprated: use Type
-func (*CreateToken) GetType() TransactionType { return TransactionTypeCreateToken }
 
 func (*CreateTokenAccount) Type() TransactionType { return TransactionTypeCreateTokenAccount }
 
-// Deprated: use Type
-func (*CreateTokenAccount) GetType() TransactionType { return TransactionTypeCreateTokenAccount }
-
 func (*DataAccount) Type() AccountType { return AccountTypeDataAccount }
-
-// Deprated: use Type
-func (*DataAccount) GetType() AccountType { return AccountTypeDataAccount }
 
 func (*DisableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeDisable
 }
 
-// Deprated: use Type
-func (*DisableAccountAuthOperation) GetType() AccountAuthOperationType {
-	return AccountAuthOperationTypeDisable
-}
-
 func (*ED25519Signature) Type() SignatureType { return SignatureTypeED25519 }
 
-// Deprated: use Type
-func (*ED25519Signature) GetType() SignatureType { return SignatureTypeED25519 }
-
 func (*EmptyResult) Type() TransactionType { return TransactionTypeUnknown }
-
-// Deprated: use Type
-func (*EmptyResult) GetType() TransactionType { return TransactionTypeUnknown }
 
 func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
 
-// Deprated: use Type
-func (*EnableAccountAuthOperation) GetType() AccountAuthOperationType {
-	return AccountAuthOperationTypeEnable
-}
-
 func (*InternalGenesis) Type() TransactionType { return TransactionTypeInternalGenesis }
 
-// Deprated: use Type
-func (*InternalGenesis) GetType() TransactionType { return TransactionTypeInternalGenesis }
-
 func (*InternalLedger) Type() AccountType { return AccountTypeInternalLedger }
-
-// Deprated: use Type
-func (*InternalLedger) GetType() AccountType { return AccountTypeInternalLedger }
 
 func (*InternalSendTransactions) Type() TransactionType {
 	return TransactionTypeInternalSendTransactions
 }
 
-// Deprated: use Type
-func (*InternalSendTransactions) GetType() TransactionType {
-	return TransactionTypeInternalSendTransactions
-}
-
 func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
-
-// Deprated: use Type
-func (*InternalSignature) GetType() SignatureType { return SignatureTypeInternal }
 
 func (*InternalSyntheticLedger) Type() AccountType { return AccountTypeInternalSyntheticLedger }
 
-// Deprated: use Type
-func (*InternalSyntheticLedger) GetType() AccountType { return AccountTypeInternalSyntheticLedger }
-
 func (*InternalTransactionsSent) Type() TransactionType {
-	return TransactionTypeInternalTransactionsSent
-}
-
-// Deprated: use Type
-func (*InternalTransactionsSent) GetType() TransactionType {
 	return TransactionTypeInternalTransactionsSent
 }
 
@@ -875,206 +727,85 @@ func (*InternalTransactionsSigned) Type() TransactionType {
 	return TransactionTypeInternalTransactionsSigned
 }
 
-// Deprated: use Type
-func (*InternalTransactionsSigned) GetType() TransactionType {
-	return TransactionTypeInternalTransactionsSigned
-}
-
 func (*IssueTokens) Type() TransactionType { return TransactionTypeIssueTokens }
-
-// Deprated: use Type
-func (*IssueTokens) GetType() TransactionType { return TransactionTypeIssueTokens }
 
 func (*KeyBook) Type() AccountType { return AccountTypeKeyBook }
 
-// Deprated: use Type
-func (*KeyBook) GetType() AccountType { return AccountTypeKeyBook }
-
 func (*KeyPage) Type() AccountType { return AccountTypeKeyPage }
-
-// Deprated: use Type
-func (*KeyPage) GetType() AccountType { return AccountTypeKeyPage }
 
 func (*LegacyED25519Signature) Type() SignatureType { return SignatureTypeLegacyED25519 }
 
-// Deprated: use Type
-func (*LegacyED25519Signature) GetType() SignatureType { return SignatureTypeLegacyED25519 }
-
 func (*LiteDataAccount) Type() AccountType { return AccountTypeLiteDataAccount }
-
-// Deprated: use Type
-func (*LiteDataAccount) GetType() AccountType { return AccountTypeLiteDataAccount }
 
 func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 
-// Deprated: use Type
-func (*LiteIdentity) GetType() AccountType { return AccountTypeLiteIdentity }
-
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
-
-// Deprated: use Type
-func (*LiteTokenAccount) GetType() AccountType { return AccountTypeLiteTokenAccount }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
-// Deprated: use Type
-func (*RCD1Signature) GetType() SignatureType { return SignatureTypeRCD1 }
-
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
-
-// Deprated: use Type
-func (*ReceiptSignature) GetType() SignatureType { return SignatureTypeReceipt }
 
 func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeRemoveAuthority
 }
 
-// Deprated: use Type
-func (*RemoveAccountAuthorityOperation) GetType() AccountAuthOperationType {
-	return AccountAuthOperationTypeRemoveAuthority
-}
-
 func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeRemove }
-
-// Deprated: use Type
-func (*RemoveKeyOperation) GetType() KeyPageOperationType { return KeyPageOperationTypeRemove }
 
 func (*RemoveValidator) Type() TransactionType { return TransactionTypeRemoveValidator }
 
-// Deprated: use Type
-func (*RemoveValidator) GetType() TransactionType { return TransactionTypeRemoveValidator }
-
 func (*SegWitDataEntry) Type() TransactionType { return TransactionTypeSegWitDataEntry }
 
-// Deprated: use Type
-func (*SegWitDataEntry) GetType() TransactionType { return TransactionTypeSegWitDataEntry }
-
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
-
-// Deprated: use Type
-func (*SendTokens) GetType() TransactionType { return TransactionTypeSendTokens }
 
 func (*SetThresholdKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeSetThreshold
 }
 
-// Deprated: use Type
-func (*SetThresholdKeyPageOperation) GetType() KeyPageOperationType {
-	return KeyPageOperationTypeSetThreshold
-}
-
 func (*SignPending) Type() TransactionType { return TransactionTypeSignPending }
-
-// Deprated: use Type
-func (*SignPending) GetType() TransactionType { return TransactionTypeSignPending }
 
 func (*SyntheticAnchor) Type() TransactionType { return TransactionTypeSyntheticAnchor }
 
-// Deprated: use Type
-func (*SyntheticAnchor) GetType() TransactionType { return TransactionTypeSyntheticAnchor }
-
 func (*SyntheticBurnTokens) Type() TransactionType { return TransactionTypeSyntheticBurnTokens }
-
-// Deprated: use Type
-func (*SyntheticBurnTokens) GetType() TransactionType { return TransactionTypeSyntheticBurnTokens }
 
 func (*SyntheticCreateChain) Type() TransactionType { return TransactionTypeSyntheticCreateChain }
 
-// Deprated: use Type
-func (*SyntheticCreateChain) GetType() TransactionType { return TransactionTypeSyntheticCreateChain }
-
 func (*SyntheticDepositCredits) Type() TransactionType { return TransactionTypeSyntheticDepositCredits }
-
-// Deprated: use Type
-func (*SyntheticDepositCredits) GetType() TransactionType {
-	return TransactionTypeSyntheticDepositCredits
-}
 
 func (*SyntheticDepositTokens) Type() TransactionType { return TransactionTypeSyntheticDepositTokens }
 
-// Deprated: use Type
-func (*SyntheticDepositTokens) GetType() TransactionType {
-	return TransactionTypeSyntheticDepositTokens
-}
-
 func (*SyntheticMirror) Type() TransactionType { return TransactionTypeSyntheticMirror }
-
-// Deprated: use Type
-func (*SyntheticMirror) GetType() TransactionType { return TransactionTypeSyntheticMirror }
 
 func (*SyntheticReceipt) Type() TransactionType { return TransactionTypeSyntheticReceipt }
 
-// Deprated: use Type
-func (*SyntheticReceipt) GetType() TransactionType { return TransactionTypeSyntheticReceipt }
-
 func (*SyntheticSignature) Type() SignatureType { return SignatureTypeSynthetic }
-
-// Deprated: use Type
-func (*SyntheticSignature) GetType() SignatureType { return SignatureTypeSynthetic }
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
-// Deprated: use Type
-func (*SyntheticWriteData) GetType() TransactionType { return TransactionTypeSyntheticWriteData }
-
 func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
-
-// Deprated: use Type
-func (*TokenAccount) GetType() AccountType { return AccountTypeTokenAccount }
 
 func (*TokenIssuer) Type() AccountType { return AccountTypeTokenIssuer }
 
-// Deprated: use Type
-func (*TokenIssuer) GetType() AccountType { return AccountTypeTokenIssuer }
-
 func (*UnknownAccount) Type() AccountType { return AccountTypeUnknown }
 
-// Deprated: use Type
-func (*UnknownAccount) GetType() AccountType { return AccountTypeUnknown }
-
 func (*UpdateAccountAuth) Type() TransactionType { return TransactionTypeUpdateAccountAuth }
-
-// Deprated: use Type
-func (*UpdateAccountAuth) GetType() TransactionType { return TransactionTypeUpdateAccountAuth }
 
 func (*UpdateAllowedKeyPageOperation) Type() KeyPageOperationType {
 	return KeyPageOperationTypeUpdateAllowed
 }
 
-// Deprated: use Type
-func (*UpdateAllowedKeyPageOperation) GetType() KeyPageOperationType {
-	return KeyPageOperationTypeUpdateAllowed
-}
+func (*UpdateKey) Type() TransactionType { return TransactionTypeUpdateKey }
 
 func (*UpdateKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeUpdate }
 
-// Deprated: use Type
-func (*UpdateKeyOperation) GetType() KeyPageOperationType { return KeyPageOperationTypeUpdate }
-
 func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPage }
-
-// Deprated: use Type
-func (*UpdateKeyPage) GetType() TransactionType { return TransactionTypeUpdateKeyPage }
 
 func (*UpdateValidatorKey) Type() TransactionType { return TransactionTypeUpdateValidatorKey }
 
-// Deprated: use Type
-func (*UpdateValidatorKey) GetType() TransactionType { return TransactionTypeUpdateValidatorKey }
-
 func (*WriteData) Type() TransactionType { return TransactionTypeWriteData }
-
-// Deprated: use Type
-func (*WriteData) GetType() TransactionType { return TransactionTypeWriteData }
 
 func (*WriteDataResult) Type() TransactionType { return TransactionTypeWriteData }
 
-// Deprated: use Type
-func (*WriteDataResult) GetType() TransactionType { return TransactionTypeWriteData }
-
 func (*WriteDataTo) Type() TransactionType { return TransactionTypeWriteDataTo }
-
-// Deprated: use Type
-func (*WriteDataTo) GetType() TransactionType { return TransactionTypeWriteDataTo }
 
 func (v *ADI) Copy() *ADI {
 	u := new(ADI)
@@ -2215,6 +1946,16 @@ func (v *UpdateAllowedKeyPageOperation) Copy() *UpdateAllowedKeyPageOperation {
 }
 
 func (v *UpdateAllowedKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateKey) Copy() *UpdateKey {
+	u := new(UpdateKey)
+
+	u.NewKeyHash = encoding.BytesCopy(v.NewKeyHash)
+
+	return u
+}
+
+func (v *UpdateKey) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UpdateKeyOperation) Copy() *UpdateKeyOperation {
 	u := new(UpdateKeyOperation)
@@ -3732,6 +3473,14 @@ func (v *UpdateAllowedKeyPageOperation) Equal(u *UpdateAllowedKeyPageOperation) 
 	return true
 }
 
+func (v *UpdateKey) Equal(u *UpdateKey) bool {
+	if !(bytes.Equal(v.NewKeyHash, u.NewKeyHash)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *UpdateKeyOperation) Equal(u *UpdateKeyOperation) bool {
 	if !((&v.OldEntry).Equal(&u.OldEntry)) {
 		return false
@@ -3819,7 +3568,7 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeIdentity)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 
 	_, _, err := writer.Reset(fieldNames_ADI)
@@ -3829,6 +3578,9 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 func (v *ADI) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -3914,7 +3666,7 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeAcmeFaucet)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
@@ -3926,6 +3678,9 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 func (v *AcmeFaucet) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
@@ -3986,7 +3741,7 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountAuthOperationTypeAddAuthority)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
@@ -3998,6 +3753,9 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 func (v *AddAccountAuthorityOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
@@ -4025,7 +3783,7 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeAddCredits)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
@@ -4043,6 +3801,9 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 func (v *AddCredits) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Recipient is missing")
 	} else if v.Recipient == nil {
@@ -4075,7 +3836,7 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeAddCredits)
+	writer.WriteEnum(1, v.Type())
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
@@ -4093,6 +3854,9 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 func (v *AddCreditsResult) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
@@ -4128,7 +3892,7 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, KeyPageOperationTypeAdd)
+	writer.WriteEnum(1, v.Type())
 	if !((v.Entry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.Entry)
 	}
@@ -4140,6 +3904,9 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 func (v *AddKeyOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
 	} else if (v.Entry).Equal(new(KeySpecParams)) {
@@ -4166,7 +3933,7 @@ func (v *AddValidator) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeAddValidator)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(2, v.Key)
 	}
@@ -4181,6 +3948,9 @@ func (v *AddValidator) MarshalBinary() ([]byte, error) {
 func (v *AddValidator) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
@@ -4206,7 +3976,7 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeAnchor)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 
 	_, _, err := writer.Reset(fieldNames_Anchor)
@@ -4216,6 +3986,9 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 func (v *Anchor) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -4359,7 +4132,7 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeBurnTokens)
+	writer.WriteEnum(1, v.Type())
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
@@ -4371,6 +4144,9 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 func (v *BurnTokens) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
@@ -4487,7 +4263,7 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeCreateDataAccount)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
@@ -4508,6 +4284,9 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 func (v *CreateDataAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
@@ -4536,7 +4315,7 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeCreateIdentity)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
@@ -4557,6 +4336,9 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 func (v *CreateIdentity) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
@@ -4584,7 +4366,7 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeCreateKeyBook)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
@@ -4602,6 +4384,9 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 func (v *CreateKeyBook) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
@@ -4633,7 +4418,7 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeCreateKeyPage)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
 			writer.WriteValue(2, v)
@@ -4650,6 +4435,9 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 func (v *CreateKeyPage) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Keys is missing")
 	} else if len(v.Keys) == 0 {
@@ -4681,7 +4469,7 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeCreateToken)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
@@ -4711,6 +4499,9 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 func (v *CreateToken) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
@@ -4750,7 +4541,7 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeCreateTokenAccount)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
@@ -4774,6 +4565,9 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 func (v *CreateTokenAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
@@ -4805,7 +4599,7 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeDataAccount)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(!v.Scratch) {
 		writer.WriteBool(3, v.Scratch)
@@ -4818,6 +4612,9 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 func (v *DataAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -4913,7 +4710,7 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountAuthOperationTypeDisable)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
@@ -4925,6 +4722,9 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 func (v *DisableAccountAuthOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
@@ -4955,7 +4755,7 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, SignatureTypeED25519)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
@@ -4982,6 +4782,9 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 func (v *ED25519Signature) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field PublicKey is missing")
 	} else if len(v.PublicKey) == 0 {
@@ -5021,7 +4824,7 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeUnknown)
+	writer.WriteEnum(1, v.Type())
 
 	_, _, err := writer.Reset(fieldNames_EmptyResult)
 	return buffer.Bytes(), err
@@ -5029,6 +4832,10 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 
 func (v *EmptyResult) IsValid() error {
 	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -5049,7 +4856,7 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountAuthOperationTypeEnable)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
@@ -5061,6 +4868,9 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 func (v *EnableAccountAuthOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
@@ -5229,7 +5039,7 @@ func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeInternalGenesis)
+	writer.WriteEnum(1, v.Type())
 
 	_, _, err := writer.Reset(fieldNames_InternalGenesis)
 	return buffer.Bytes(), err
@@ -5237,6 +5047,10 @@ func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
 
 func (v *InternalGenesis) IsValid() error {
 	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -5263,7 +5077,7 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeInternalLedger)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(v.Index == 0) {
 		writer.WriteInt(3, v.Index)
@@ -5291,6 +5105,9 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 func (v *InternalLedger) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -5344,7 +5161,7 @@ func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeInternalSendTransactions)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(2, &v)
@@ -5358,6 +5175,9 @@ func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
 func (v *InternalSendTransactions) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
@@ -5383,7 +5203,7 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, SignatureTypeInternal)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Network == nil) {
 		writer.WriteUrl(2, v.Network)
 	}
@@ -5395,6 +5215,9 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 func (v *InternalSignature) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Network is missing")
 	} else if v.Network == nil {
@@ -5421,7 +5244,7 @@ func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeInternalSyntheticLedger)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
@@ -5436,6 +5259,9 @@ func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
 func (v *InternalSyntheticLedger) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -5464,7 +5290,7 @@ func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeInternalTransactionsSent)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteHash(2, &v)
@@ -5478,6 +5304,9 @@ func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
 func (v *InternalTransactionsSent) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
@@ -5503,7 +5332,7 @@ func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeInternalTransactionsSigned)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(2, &v)
@@ -5517,6 +5346,9 @@ func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
 func (v *InternalTransactionsSigned) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
@@ -5543,7 +5375,7 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeIssueTokens)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
@@ -5558,6 +5390,9 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 func (v *IssueTokens) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Recipient is missing")
 	} else if v.Recipient == nil {
@@ -5589,7 +5424,7 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeKeyBook)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(v.PageCount == 0) {
 		writer.WriteUint(3, v.PageCount)
@@ -5602,6 +5437,9 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 func (v *KeyBook) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -5638,7 +5476,7 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeKeyPage)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(3, v.CreditBalance)
@@ -5674,6 +5512,9 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 func (v *KeyPage) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -5829,7 +5670,7 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, SignatureTypeLegacyED25519)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(2, v.Timestamp)
 	}
@@ -5856,6 +5697,9 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 func (v *LegacyED25519Signature) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Timestamp is missing")
 	} else if v.Timestamp == 0 {
@@ -5902,7 +5746,7 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeLiteDataAccount)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(len(v.Tail) == 0) {
 		writer.WriteBytes(3, v.Tail)
@@ -5915,6 +5759,9 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 func (v *LiteDataAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -5943,7 +5790,7 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeLiteIdentity)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
@@ -5953,6 +5800,9 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 func (v *LiteIdentity) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -5980,7 +5830,7 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeLiteTokenAccount)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(3, v.TokenUrl)
@@ -6002,6 +5852,9 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 func (v *LiteTokenAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -6140,7 +5993,7 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, SignatureTypeRCD1)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
@@ -6167,6 +6020,9 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 func (v *RCD1Signature) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field PublicKey is missing")
 	} else if len(v.PublicKey) == 0 {
@@ -6307,7 +6163,7 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, SignatureTypeReceipt)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.Receipt)
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(3, v.SourceNetwork)
@@ -6320,6 +6176,9 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 func (v *ReceiptSignature) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.Receipt.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -6348,7 +6207,7 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountAuthOperationTypeRemoveAuthority)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
@@ -6360,6 +6219,9 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 func (v *RemoveAccountAuthorityOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
@@ -6385,7 +6247,7 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, KeyPageOperationTypeRemove)
+	writer.WriteEnum(1, v.Type())
 	if !((v.Entry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.Entry)
 	}
@@ -6397,6 +6259,9 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 func (v *RemoveKeyOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
 	} else if (v.Entry).Equal(new(KeySpecParams)) {
@@ -6423,7 +6288,7 @@ func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeRemoveValidator)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(2, v.Key)
 	}
@@ -6438,6 +6303,9 @@ func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
 func (v *RemoveValidator) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
@@ -6465,7 +6333,7 @@ func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSegWitDataEntry)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !(v.EntryUrl == nil) {
 		writer.WriteUrl(3, v.EntryUrl)
@@ -6481,6 +6349,9 @@ func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
 func (v *SegWitDataEntry) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -6516,7 +6387,7 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSendTokens)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Hash == ([32]byte{})) {
 		writer.WriteHash(2, &v.Hash)
 	}
@@ -6536,6 +6407,9 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 func (v *SendTokens) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field To is missing")
 	} else if len(v.To) == 0 {
@@ -6605,7 +6479,7 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, KeyPageOperationTypeSetThreshold)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Threshold == 0) {
 		writer.WriteUint(2, v.Threshold)
 	}
@@ -6617,6 +6491,9 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 func (v *SetThresholdKeyPageOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Threshold is missing")
 	} else if v.Threshold == 0 {
@@ -6641,7 +6518,7 @@ func (v *SignPending) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSignPending)
+	writer.WriteEnum(1, v.Type())
 
 	_, _, err := writer.Reset(fieldNames_SignPending)
 	return buffer.Bytes(), err
@@ -6649,6 +6526,10 @@ func (v *SignPending) MarshalBinary() ([]byte, error) {
 
 func (v *SignPending) IsValid() error {
 	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -6676,7 +6557,7 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticAnchor)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Source == nil) {
 		writer.WriteUrl(2, v.Source)
 	}
@@ -6711,6 +6592,9 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 func (v *SyntheticAnchor) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Source is missing")
 	} else if v.Source == nil {
@@ -6772,7 +6656,7 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticBurnTokens)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
@@ -6785,6 +6669,9 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 func (v *SyntheticBurnTokens) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -6814,7 +6701,7 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticCreateChain)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
@@ -6829,6 +6716,9 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 func (v *SyntheticCreateChain) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -6858,7 +6748,7 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticDepositCredits)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !(v.Amount == 0) {
 		writer.WriteUint(3, v.Amount)
@@ -6871,6 +6761,9 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 func (v *SyntheticDepositCredits) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -6901,7 +6794,7 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticDepositTokens)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !(v.Token == nil) {
 		writer.WriteUrl(3, v.Token)
@@ -6917,6 +6810,9 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 func (v *SyntheticDepositTokens) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -7087,7 +6983,7 @@ func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticMirror)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Objects) == 0) {
 		for _, v := range v.Objects {
 			writer.WriteValue(2, &v)
@@ -7101,6 +6997,9 @@ func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
 func (v *SyntheticMirror) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Objects is missing")
 	} else if len(v.Objects) == 0 {
@@ -7172,7 +7071,7 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticReceipt)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !(v.SynthTxHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.SynthTxHash)
@@ -7188,6 +7087,9 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 func (v *SyntheticReceipt) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -7223,7 +7125,7 @@ func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, SignatureTypeSynthetic)
+	writer.WriteEnum(1, v.Type())
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(2, v.SourceNetwork)
 	}
@@ -7241,6 +7143,9 @@ func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
 func (v *SyntheticSignature) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field SourceNetwork is missing")
 	} else if v.SourceNetwork == nil {
@@ -7277,7 +7182,7 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeSyntheticWriteData)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(3, &v.Entry)
@@ -7290,6 +7195,9 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 func (v *SyntheticWriteData) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.SyntheticOrigin.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -7321,7 +7229,7 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeTokenAccount)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(3, v.TokenUrl)
@@ -7340,6 +7248,9 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 func (v *TokenAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -7378,7 +7289,7 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeTokenIssuer)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 	if !(len(v.Symbol) == 0) {
 		writer.WriteString(3, v.Symbol)
@@ -7403,6 +7314,9 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 func (v *TokenIssuer) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -7767,7 +7681,7 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, AccountTypeUnknown)
+	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.AccountHeader)
 
 	_, _, err := writer.Reset(fieldNames_UnknownAccount)
@@ -7777,6 +7691,9 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 func (v *UnknownAccount) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if err := v.AccountHeader.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
@@ -7800,7 +7717,7 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeUpdateAccountAuth)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Operations) == 0) {
 		for _, v := range v.Operations {
 			writer.WriteValue(2, v)
@@ -7814,6 +7731,9 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 func (v *UpdateAccountAuth) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Operations is missing")
 	} else if len(v.Operations) == 0 {
@@ -7840,7 +7760,7 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, KeyPageOperationTypeUpdateAllowed)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Allow) == 0) {
 		for _, v := range v.Allow {
 			writer.WriteEnum(2, v)
@@ -7858,6 +7778,50 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 
 func (v *UpdateAllowedKeyPageOperation) IsValid() error {
 	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_UpdateKey = []string{
+	1: "Type",
+	2: "NewKeyHash",
+}
+
+func (v *UpdateKey) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.NewKeyHash) == 0) {
+		writer.WriteBytes(2, v.NewKeyHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateKey)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateKey) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field NewKeyHash is missing")
+	} else if len(v.NewKeyHash) == 0 {
+		errs = append(errs, "field NewKeyHash is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -7879,7 +7843,7 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, KeyPageOperationTypeUpdate)
+	writer.WriteEnum(1, v.Type())
 	if !((v.OldEntry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.OldEntry)
 	}
@@ -7894,6 +7858,9 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 func (v *UpdateKeyOperation) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field OldEntry is missing")
 	} else if (v.OldEntry).Equal(new(KeySpecParams)) {
@@ -7924,7 +7891,7 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeUpdateKeyPage)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.Operation) == 0) {
 		for _, v := range v.Operation {
 			writer.WriteValue(2, v)
@@ -7938,6 +7905,9 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 func (v *UpdateKeyPage) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Operation is missing")
 	} else if len(v.Operation) == 0 {
@@ -7964,7 +7934,7 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeUpdateValidatorKey)
+	writer.WriteEnum(1, v.Type())
 	if !(len(v.KeyHash) == 0) {
 		writer.WriteBytes(2, v.KeyHash)
 	}
@@ -7979,6 +7949,9 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 func (v *UpdateValidatorKey) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field KeyHash is missing")
 	} else if len(v.KeyHash) == 0 {
@@ -8009,7 +7982,7 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeWriteData)
+	writer.WriteEnum(1, v.Type())
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
@@ -8021,6 +7994,9 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 func (v *WriteData) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
 	} else if (v.Entry).Equal(new(DataEntry)) {
@@ -8048,7 +8024,7 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeWriteData)
+	writer.WriteEnum(1, v.Type())
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
 	}
@@ -8066,6 +8042,9 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 func (v *WriteDataResult) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field EntryHash is missing")
 	} else if v.EntryHash == ([32]byte{}) {
@@ -8102,7 +8081,7 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteEnum(1, TransactionTypeWriteDataTo)
+	writer.WriteEnum(1, v.Type())
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
@@ -8117,6 +8096,9 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 func (v *WriteDataTo) IsValid() error {
 	var errs []string
 
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Recipient is missing")
 	} else if v.Recipient == nil {
@@ -8145,13 +8127,13 @@ func (v *ADI) UnmarshalBinary(data []byte) error {
 func (v *ADI) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeIdentity {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeIdentity, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_ADI)
@@ -8191,13 +8173,13 @@ func (v *AcmeFaucet) UnmarshalBinary(data []byte) error {
 func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeAcmeFaucet {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAcmeFaucet, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -8230,13 +8212,13 @@ func (v *AddAccountAuthorityOperation) UnmarshalBinary(data []byte) error {
 func (v *AddAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountAuthOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountAuthOperationTypeAddAuthority {
-		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeAddAuthority, typ)
+	var vType AccountAuthOperationType
+	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -8253,13 +8235,13 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeAddCredits {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAddCredits, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
@@ -8282,13 +8264,13 @@ func (v *AddCreditsResult) UnmarshalBinary(data []byte) error {
 func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeAddCredits {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAddCredits, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBigInt(2); ok {
 		v.Amount = *x
 	}
@@ -8311,13 +8293,13 @@ func (v *AddKeyOperation) UnmarshalBinary(data []byte) error {
 func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ KeyPageOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != KeyPageOperationTypeAdd {
-		return fmt.Errorf("field Type: want %v, got %v", KeyPageOperationTypeAdd, typ)
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
@@ -8334,13 +8316,13 @@ func (v *AddValidator) UnmarshalBinary(data []byte) error {
 func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeAddValidator {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeAddValidator, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Key = x
 	}
@@ -8360,13 +8342,13 @@ func (v *Anchor) UnmarshalBinary(data []byte) error {
 func (v *Anchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeAnchor {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeAnchor, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_Anchor)
@@ -8382,7 +8364,6 @@ func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	reader.ReadValue(1, v.ChainMetadata.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Account = x
 	}
@@ -8430,13 +8411,13 @@ func (v *BurnTokens) UnmarshalBinary(data []byte) error {
 func (v *BurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeBurnTokens {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeBurnTokens, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBigInt(2); ok {
 		v.Amount = *x
 	}
@@ -8491,13 +8472,13 @@ func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
 func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeCreateDataAccount {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateDataAccount, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -8523,13 +8504,13 @@ func (v *CreateIdentity) UnmarshalBinary(data []byte) error {
 func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeCreateIdentity {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateIdentity, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -8555,13 +8536,13 @@ func (v *CreateKeyBook) UnmarshalBinary(data []byte) error {
 func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeCreateKeyBook {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateKeyBook, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -8584,13 +8565,13 @@ func (v *CreateKeyPage) UnmarshalBinary(data []byte) error {
 func (v *CreateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeCreateKeyPage {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateKeyPage, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Keys = append(v.Keys, x)
@@ -8614,13 +8595,13 @@ func (v *CreateToken) UnmarshalBinary(data []byte) error {
 func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeCreateToken {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateToken, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -8655,13 +8636,13 @@ func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
 func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeCreateTokenAccount {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeCreateTokenAccount, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -8690,15 +8671,14 @@ func (v *DataAccount) UnmarshalBinary(data []byte) error {
 func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeDataAccount {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeDataAccount, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadBool(3); ok {
 		v.Scratch = x
 	}
@@ -8751,13 +8731,13 @@ func (v *DisableAccountAuthOperation) UnmarshalBinary(data []byte) error {
 func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountAuthOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountAuthOperationTypeDisable {
-		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeDisable, typ)
+	var vType AccountAuthOperationType
+	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -8774,13 +8754,13 @@ func (v *ED25519Signature) UnmarshalBinary(data []byte) error {
 func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ SignatureType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != SignatureTypeED25519 {
-		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeED25519, typ)
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -8812,11 +8792,12 @@ func (v *EmptyResult) UnmarshalBinary(data []byte) error {
 func (v *EmptyResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeUnknown {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUnknown, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
 	seen, err := reader.Reset(fieldNames_EmptyResult)
@@ -8831,13 +8812,13 @@ func (v *EnableAccountAuthOperation) UnmarshalBinary(data []byte) error {
 func (v *EnableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountAuthOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountAuthOperationTypeEnable {
-		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeEnable, typ)
+	var vType AccountAuthOperationType
+	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -8930,11 +8911,12 @@ func (v *InternalGenesis) UnmarshalBinary(data []byte) error {
 func (v *InternalGenesis) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeInternalGenesis {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeInternalGenesis, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalGenesis)
@@ -8949,15 +8931,14 @@ func (v *InternalLedger) UnmarshalBinary(data []byte) error {
 func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeInternalLedger {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeInternalLedger, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadInt(3); ok {
 		v.Index = x
 	}
@@ -8989,13 +8970,13 @@ func (v *InternalSendTransactions) UnmarshalBinary(data []byte) error {
 func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeInternalSendTransactions {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeInternalSendTransactions, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		if x := new(SendTransaction); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Transactions = append(v.Transactions, *x)
@@ -9016,13 +8997,13 @@ func (v *InternalSignature) UnmarshalBinary(data []byte) error {
 func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ SignatureType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != SignatureTypeInternal {
-		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeInternal, typ)
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Network = x
 	}
@@ -9039,15 +9020,14 @@ func (v *InternalSyntheticLedger) UnmarshalBinary(data []byte) error {
 func (v *InternalSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeInternalSyntheticLedger {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeInternalSyntheticLedger, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	for {
 		if x := new(SyntheticLedgerEntry); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Pending = append(v.Pending, x)
@@ -9068,13 +9048,13 @@ func (v *InternalTransactionsSent) UnmarshalBinary(data []byte) error {
 func (v *InternalTransactionsSent) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeInternalTransactionsSent {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeInternalTransactionsSent, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		if x, ok := reader.ReadHash(2); ok {
 			v.Transactions = append(v.Transactions, *x)
@@ -9095,13 +9075,13 @@ func (v *InternalTransactionsSigned) UnmarshalBinary(data []byte) error {
 func (v *InternalTransactionsSigned) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeInternalTransactionsSigned {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeInternalTransactionsSigned, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		if x := new(TransactionSignature); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Transactions = append(v.Transactions, *x)
@@ -9122,13 +9102,13 @@ func (v *IssueTokens) UnmarshalBinary(data []byte) error {
 func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeIssueTokens {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeIssueTokens, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
@@ -9148,15 +9128,14 @@ func (v *KeyBook) UnmarshalBinary(data []byte) error {
 func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeKeyBook {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeKeyBook, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadUint(3); ok {
 		v.PageCount = x
 	}
@@ -9173,15 +9152,14 @@ func (v *KeyPage) UnmarshalBinary(data []byte) error {
 func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeKeyPage {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeKeyPage, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadUint(3); ok {
 		v.CreditBalance = x
 	}
@@ -9264,13 +9242,13 @@ func (v *LegacyED25519Signature) UnmarshalBinary(data []byte) error {
 func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ SignatureType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != SignatureTypeLegacyED25519 {
-		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeLegacyED25519, typ)
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUint(2); ok {
 		v.Timestamp = x
 	}
@@ -9302,15 +9280,14 @@ func (v *LiteDataAccount) UnmarshalBinary(data []byte) error {
 func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeLiteDataAccount {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeLiteDataAccount, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Tail = x
 	}
@@ -9327,13 +9304,13 @@ func (v *LiteIdentity) UnmarshalBinary(data []byte) error {
 func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeLiteIdentity {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeLiteIdentity, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_LiteIdentity)
@@ -9348,15 +9325,14 @@ func (v *LiteTokenAccount) UnmarshalBinary(data []byte) error {
 func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeLiteTokenAccount {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeLiteTokenAccount, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(3); ok {
 		v.TokenUrl = x
 	}
@@ -9424,13 +9400,13 @@ func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
 func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ SignatureType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != SignatureTypeRCD1 {
-		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeRCD1, typ)
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -9507,15 +9483,14 @@ func (v *ReceiptSignature) UnmarshalBinary(data []byte) error {
 func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ SignatureType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != SignatureTypeReceipt {
-		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeReceipt, typ)
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.Receipt.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(3); ok {
 		v.SourceNetwork = x
 	}
@@ -9532,13 +9507,13 @@ func (v *RemoveAccountAuthorityOperation) UnmarshalBinary(data []byte) error {
 func (v *RemoveAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountAuthOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountAuthOperationTypeRemoveAuthority {
-		return fmt.Errorf("field Type: want %v, got %v", AccountAuthOperationTypeRemoveAuthority, typ)
+	var vType AccountAuthOperationType
+	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -9555,13 +9530,13 @@ func (v *RemoveKeyOperation) UnmarshalBinary(data []byte) error {
 func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ KeyPageOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != KeyPageOperationTypeRemove {
-		return fmt.Errorf("field Type: want %v, got %v", KeyPageOperationTypeRemove, typ)
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
@@ -9578,13 +9553,13 @@ func (v *RemoveValidator) UnmarshalBinary(data []byte) error {
 func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeRemoveValidator {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeRemoveValidator, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Key = x
 	}
@@ -9604,15 +9579,14 @@ func (v *SegWitDataEntry) UnmarshalBinary(data []byte) error {
 func (v *SegWitDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSegWitDataEntry {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSegWitDataEntry, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(3); ok {
 		v.EntryUrl = x
 	}
@@ -9632,13 +9606,13 @@ func (v *SendTokens) UnmarshalBinary(data []byte) error {
 func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSendTokens {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSendTokens, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadHash(2); ok {
 		v.Hash = *x
 	}
@@ -9688,13 +9662,13 @@ func (v *SetThresholdKeyPageOperation) UnmarshalBinary(data []byte) error {
 func (v *SetThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ KeyPageOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != KeyPageOperationTypeSetThreshold {
-		return fmt.Errorf("field Type: want %v, got %v", KeyPageOperationTypeSetThreshold, typ)
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUint(2); ok {
 		v.Threshold = x
 	}
@@ -9711,11 +9685,12 @@ func (v *SignPending) UnmarshalBinary(data []byte) error {
 func (v *SignPending) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSignPending {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSignPending, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
 	seen, err := reader.Reset(fieldNames_SignPending)
@@ -9730,13 +9705,13 @@ func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
 func (v *SyntheticAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticAnchor {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticAnchor, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Source = x
 	}
@@ -9778,15 +9753,14 @@ func (v *SyntheticBurnTokens) UnmarshalBinary(data []byte) error {
 func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticBurnTokens {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticBurnTokens, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
@@ -9803,15 +9777,14 @@ func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
 func (v *SyntheticCreateChain) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticCreateChain {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticCreateChain, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	for {
 		if x := new(ChainParams); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Chains = append(v.Chains, *x)
@@ -9832,15 +9805,14 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticDepositCredits {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticDepositCredits, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	if x, ok := reader.ReadUint(3); ok {
 		v.Amount = x
 	}
@@ -9857,15 +9829,14 @@ func (v *SyntheticDepositTokens) UnmarshalBinary(data []byte) error {
 func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticDepositTokens {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticDepositTokens, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Token = x
 	}
@@ -9946,13 +9917,13 @@ func (v *SyntheticMirror) UnmarshalBinary(data []byte) error {
 func (v *SyntheticMirror) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticMirror {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticMirror, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		if x := new(AnchoredRecord); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Objects = append(v.Objects, *x)
@@ -9992,15 +9963,14 @@ func (v *SyntheticReceipt) UnmarshalBinary(data []byte) error {
 func (v *SyntheticReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticReceipt {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticReceipt, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	if x, ok := reader.ReadHash(3); ok {
 		v.SynthTxHash = *x
 	}
@@ -10020,13 +9990,13 @@ func (v *SyntheticSignature) UnmarshalBinary(data []byte) error {
 func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ SignatureType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != SignatureTypeSynthetic {
-		return fmt.Errorf("field Type: want %v, got %v", SignatureTypeSynthetic, typ)
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.SourceNetwork = x
 	}
@@ -10049,15 +10019,14 @@ func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
 func (v *SyntheticWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeSyntheticWriteData {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeSyntheticWriteData, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-
 	if x := new(DataEntry); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
@@ -10074,15 +10043,14 @@ func (v *TokenAccount) UnmarshalBinary(data []byte) error {
 func (v *TokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeTokenAccount {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeTokenAccount, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadUrl(3); ok {
 		v.TokenUrl = x
 	}
@@ -10105,15 +10073,14 @@ func (v *TokenIssuer) UnmarshalBinary(data []byte) error {
 func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeTokenIssuer {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeTokenIssuer, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
-
 	if x, ok := reader.ReadString(3); ok {
 		v.Symbol = x
 	}
@@ -10297,13 +10264,13 @@ func (v *UnknownAccount) UnmarshalBinary(data []byte) error {
 func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ AccountType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != AccountTypeUnknown {
-		return fmt.Errorf("field Type: want %v, got %v", AccountTypeUnknown, typ)
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	reader.ReadValue(2, v.AccountHeader.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_UnknownAccount)
@@ -10318,13 +10285,13 @@ func (v *UpdateAccountAuth) UnmarshalBinary(data []byte) error {
 func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeUpdateAccountAuth {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateAccountAuth, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		ok := reader.ReadValue(2, func(b []byte) error {
 			x, err := UnmarshalAccountAuthOperation(b)
@@ -10350,13 +10317,13 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinary(data []byte) error {
 func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ KeyPageOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != KeyPageOperationTypeUpdateAllowed {
-		return fmt.Errorf("field Type: want %v, got %v", KeyPageOperationTypeUpdateAllowed, typ)
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		if x := new(TransactionType); reader.ReadEnum(2, x) {
 			v.Allow = append(v.Allow, *x)
@@ -10377,6 +10344,29 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error 
 	return err
 }
 
+func (v *UpdateKey) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.NewKeyHash = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateKey)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *UpdateKeyOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10384,13 +10374,13 @@ func (v *UpdateKeyOperation) UnmarshalBinary(data []byte) error {
 func (v *UpdateKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ KeyPageOperationType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != KeyPageOperationTypeUpdate {
-		return fmt.Errorf("field Type: want %v, got %v", KeyPageOperationTypeUpdate, typ)
+	var vType KeyPageOperationType
+	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.OldEntry = *x
 	}
@@ -10410,13 +10400,13 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeUpdateKeyPage {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateKeyPage, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	for {
 		ok := reader.ReadValue(2, func(b []byte) error {
 			x, err := UnmarshalKeyPageOperation(b)
@@ -10442,13 +10432,13 @@ func (v *UpdateValidatorKey) UnmarshalBinary(data []byte) error {
 func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeUpdateValidatorKey {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeUpdateValidatorKey, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadBytes(2); ok {
 		v.KeyHash = x
 	}
@@ -10468,13 +10458,13 @@ func (v *WriteData) UnmarshalBinary(data []byte) error {
 func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeWriteData {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeWriteData, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
@@ -10491,13 +10481,13 @@ func (v *WriteDataResult) UnmarshalBinary(data []byte) error {
 func (v *WriteDataResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeWriteData {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeWriteData, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadHash(2); ok {
 		v.EntryHash = *x
 	}
@@ -10520,13 +10510,13 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	var typ TransactionType
-	if !reader.ReadEnum(1, &typ) {
-		return fmt.Errorf("field Type: missing")
-	} else if typ != TransactionTypeWriteDataTo {
-		return fmt.Errorf("field Type: want %v, got %v", TransactionTypeWriteDataTo, typ)
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
 	}
-
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
@@ -11690,6 +11680,16 @@ func (v *UpdateAllowedKeyPageOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *UpdateKey) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		NewKeyHash *string         `json:"newKeyHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NewKeyHash = encoding.BytesToJSON(v.NewKeyHash)
+	return json.Marshal(&u)
+}
+
 func (v *UpdateKeyOperation) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type     KeyPageOperationType `json:"type"`
@@ -11783,6 +11783,9 @@ func (v *ADI) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
@@ -11800,6 +11803,9 @@ func (v *AcmeFaucet) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Url = u.Url
 	return nil
 }
@@ -11813,6 +11819,9 @@ func (v *AddAccountAuthorityOperation) UnmarshalJSON(data []byte) error {
 	u.Authority = v.Authority
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Authority = u.Authority
 	return nil
@@ -11831,6 +11840,9 @@ func (v *AddCredits) UnmarshalJSON(data []byte) error {
 	u.Oracle = v.Oracle
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Recipient = u.Recipient
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
@@ -11856,6 +11868,9 @@ func (v *AddCreditsResult) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
@@ -11876,6 +11891,9 @@ func (v *AddKeyOperation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Entry = u.Entry
 	return nil
 }
@@ -11891,6 +11909,9 @@ func (v *AddValidator) UnmarshalJSON(data []byte) error {
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
@@ -11916,6 +11937,9 @@ func (v *Anchor) UnmarshalJSON(data []byte) error {
 	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -11991,6 +12015,9 @@ func (v *BurnTokens) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
@@ -12034,6 +12061,9 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Url = u.Url
 	v.KeyBookUrl = u.KeyBookUrl
 	v.ManagerKeyBookUrl = u.ManagerKeyBookUrl
@@ -12056,6 +12086,9 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
 	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
@@ -12082,6 +12115,9 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Url = u.Url
 	if x, err := encoding.BytesFromJSON(u.PublicKeyHash); err != nil {
 		return fmt.Errorf("error decoding PublicKeyHash: %w", err)
@@ -12103,6 +12139,9 @@ func (v *CreateKeyPage) UnmarshalJSON(data []byte) error {
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Keys = u.Keys
 	v.Manager = u.Manager
@@ -12130,6 +12169,9 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u.Manager = v.Manager
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
 	v.KeyBookUrl = u.KeyBookUrl
@@ -12163,6 +12205,9 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Url = u.Url
 	v.TokenUrl = u.TokenUrl
 	v.KeyBookUrl = u.KeyBookUrl
@@ -12188,6 +12233,9 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -12229,6 +12277,9 @@ func (v *DisableAccountAuthOperation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Authority = u.Authority
 	return nil
 }
@@ -12252,6 +12303,9 @@ func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
 	u.Vote = v.Vote
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
@@ -12278,6 +12332,9 @@ func (v *EmptyResult) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	return nil
 }
 
@@ -12290,6 +12347,9 @@ func (v *EnableAccountAuthOperation) UnmarshalJSON(data []byte) error {
 	u.Authority = v.Authority
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Authority = u.Authority
 	return nil
@@ -12361,6 +12421,9 @@ func (v *InternalGenesis) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	return nil
 }
 
@@ -12392,6 +12455,9 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
@@ -12419,6 +12485,9 @@ func (v *InternalSendTransactions) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Transactions = u.Transactions
 	return nil
 }
@@ -12432,6 +12501,9 @@ func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u.Network = v.Network
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Network = u.Network
 	return nil
@@ -12455,6 +12527,9 @@ func (v *InternalSyntheticLedger) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
@@ -12475,6 +12550,9 @@ func (v *InternalTransactionsSent) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Transactions = make([][32]byte, len(u.Transactions))
 	for i, x := range u.Transactions {
@@ -12497,6 +12575,9 @@ func (v *InternalTransactionsSigned) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Transactions = u.Transactions
 	return nil
 }
@@ -12512,6 +12593,9 @@ func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Recipient = u.Recipient
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
@@ -12539,6 +12623,9 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	u.PageCount = v.PageCount
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -12581,6 +12668,9 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.TransactionBlacklist = v.TransactionBlacklist
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -12680,6 +12770,9 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	if u.Timestamp != 0 {
 		v.Timestamp = u.Timestamp
 	} else {
@@ -12719,6 +12812,9 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
@@ -12746,6 +12842,9 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	u.AuthDisabled = v.AccountHeader.AuthDisabled
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -12779,6 +12878,9 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u.CreditBalance = v.CreditBalance
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -12853,6 +12955,9 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u.Vote = v.Vote
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
@@ -12932,6 +13037,9 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	if x, err := encoding.BytesFromJSON(u.Start); err != nil {
 		return fmt.Errorf("error decoding Start: %w", err)
 	} else {
@@ -12957,6 +13065,9 @@ func (v *RemoveAccountAuthorityOperation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Authority = u.Authority
 	return nil
 }
@@ -12970,6 +13081,9 @@ func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 	u.Entry = v.Entry
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Entry = u.Entry
 	return nil
@@ -12986,6 +13100,9 @@ func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
@@ -13011,6 +13128,9 @@ func (v *SegWitDataEntry) UnmarshalJSON(data []byte) error {
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
@@ -13040,6 +13160,9 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	u.To = v.To
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
@@ -13085,6 +13208,9 @@ func (v *SetThresholdKeyPageOperation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Threshold = u.Threshold
 	return nil
 }
@@ -13096,6 +13222,9 @@ func (v *SignPending) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	return nil
 }
@@ -13123,6 +13252,9 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	u.Receipts = v.Receipts
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Source = u.Source
 	v.Major = u.Major
@@ -13157,6 +13289,9 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
@@ -13185,6 +13320,9 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
@@ -13208,6 +13346,9 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u.Amount = v.Amount
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
@@ -13234,6 +13375,9 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
@@ -13333,6 +13477,9 @@ func (v *SyntheticMirror) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Objects = u.Objects
 	return nil
 }
@@ -13372,6 +13519,9 @@ func (v *SyntheticReceipt) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
@@ -13401,6 +13551,9 @@ func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.SourceNetwork = u.SourceNetwork
 	v.DestinationNetwork = u.DestinationNetwork
 	v.SequenceNumber = u.SequenceNumber
@@ -13420,6 +13573,9 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u.Entry = v.Entry
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.SyntheticOrigin.Source = u.Source
 	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
@@ -13452,6 +13608,9 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -13492,6 +13651,9 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u.SupplyLimit = encoding.BigintToJSON(v.SupplyLimit)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
@@ -13677,6 +13839,9 @@ func (v *UnknownAccount) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.AccountHeader.Url = u.Url
 	v.AccountHeader.KeyBook = u.KeyBook
 	v.AccountHeader.ManagerKeyBook = u.ManagerKeyBook
@@ -13701,6 +13866,9 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Operations = make([]AccountAuthOperation, len(u.Operations))
 	for i, x := range u.Operations {
 		if y, err := UnmarshalAccountAuthOperationJSON(x); err != nil {
@@ -13724,8 +13892,32 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Allow = u.Allow
 	v.Deny = u.Deny
+	return nil
+}
+
+func (v *UpdateKey) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		NewKeyHash *string         `json:"newKeyHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NewKeyHash = encoding.BytesToJSON(v.NewKeyHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.NewKeyHash); err != nil {
+		return fmt.Errorf("error decoding NewKeyHash: %w", err)
+	} else {
+		v.NewKeyHash = x
+	}
 	return nil
 }
 
@@ -13740,6 +13932,9 @@ func (v *UpdateKeyOperation) UnmarshalJSON(data []byte) error {
 	u.NewEntry = v.NewEntry
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.OldEntry = u.OldEntry
 	v.NewEntry = u.NewEntry
@@ -13762,6 +13957,9 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Operation = make([]KeyPageOperation, len(u.Operation))
 	for i, x := range u.Operation {
@@ -13786,6 +13984,9 @@ func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
 		return fmt.Errorf("error decoding KeyHash: %w", err)
 	} else {
@@ -13809,6 +14010,9 @@ func (v *WriteData) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	v.Entry = u.Entry
 	return nil
 }
@@ -13826,6 +14030,9 @@ func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
 	u.AccountID = encoding.BytesToJSON(v.AccountID)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
@@ -13852,6 +14059,9 @@ func (v *WriteDataTo) UnmarshalJSON(data []byte) error {
 	u.Entry = v.Entry
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Recipient = u.Recipient
 	v.Entry = u.Entry

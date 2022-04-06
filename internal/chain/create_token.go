@@ -10,6 +10,10 @@ type CreateToken struct{}
 
 func (CreateToken) Type() protocol.TransactionType { return protocol.TransactionTypeCreateToken }
 
+func (CreateToken) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateToken{}).Validate(st, tx)
+}
+
 func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateToken)
 	if !ok {
@@ -20,7 +24,7 @@ func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 		return nil, fmt.Errorf("precision must be in range 0 to 18")
 	}
 
-	token := protocol.NewTokenIssuer()
+	token := new(protocol.TokenIssuer)
 	token.Url = body.Url
 	token.Precision = body.Precision
 	token.SupplyLimit = body.SupplyLimit

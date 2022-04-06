@@ -141,7 +141,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return recordFailedTransaction(batch, transaction, signer, err)
 	}
 
-	result, err := executor.Validate(st, &protocol.Envelope{Transaction: transaction})
+	result, err := executor.Execute(st, &protocol.Envelope{Transaction: transaction})
 	if err != nil {
 		return recordFailedTransaction(batch, transaction, signer, err)
 	}
@@ -176,8 +176,27 @@ func transactionIsReady(batch *database.Batch, transaction *protocol.Transaction
 		return true, nil
 	}
 
-	// Check if any signer has reached its threshold
+	// UpdateKey transactions are always M=1 and always require a signature from
+	// the initiator
 	txnObj := batch.Transaction(transaction.GetHash())
+	if transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
+		if status.Initiator == nil {
+			return false, fmt.Errorf("missing initiator")
+		}
+
+		initSigs, err := txnObj.ReadSignatures(status.Initiator)
+		if err != nil {
+			return false, fmt.Errorf("load initiator signatures: %w", err)
+		}
+
+		if initSigs.Count() == 0 {
+			return false, fmt.Errorf("missing initiator signature")
+		}
+
+		return true, nil
+	}
+
+	// Check if any signer has reached its threshold
 	for _, signerUrl := range status.Signers {
 		// Load the signer
 		var signer protocol.SignerAccount
