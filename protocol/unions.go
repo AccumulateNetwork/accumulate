@@ -35,7 +35,6 @@ type Signature interface {
 	GetSignerVersion() uint64
 	GetTimestamp() uint64
 	GetPublicKeyHash() []byte
-	GetPublicKey() []byte
 	GetSignature() []byte
 }
 

@@ -13,6 +13,7 @@ var _ protocol.TransactionBody = (*FakeTransactionBody)(nil)
 func (f *FakeTransactionBody) Type() protocol.TransactionType { return f.TheType }
 
 var _ protocol.Signature = (*FakeSignature)(nil)
+var _ protocol.KeySignature = (*FakeSignature)(nil)
 
 func (f *FakeSignature) Type() protocol.SignatureType   { return f.TheType }
 func (f *FakeSignature) GetVote() protocol.VoteType     { return f.Vote }
@@ -25,6 +26,14 @@ func (f *FakeSignature) GetSignerVersion() uint64       { return f.SignerVersion
 func (f *FakeSignature) GetTimestamp() uint64           { return f.Timestamp }
 func (f *FakeSignature) GetPublicKey() []byte           { return f.PublicKey }
 func (f *FakeSignature) GetSignature() []byte           { return make([]byte, 32) }
+
+func (f *FakeSignature) GetPublicKeyHash() []byte {
+	if f.Type() == protocol.SignatureTypeRCD1 {
+		return protocol.GetRCDHashFromPublicKey(f.PublicKey, 1)
+	}
+	hash := sha256.Sum256(f.PublicKey)
+	return hash[:]
+}
 
 var _ protocol.Account = (*FakeLiteAccount)(nil)
 
