@@ -102,8 +102,8 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
-		if page.Threshold > uint64(len(page.Keys)) {
-			page.Threshold = uint64(len(page.Keys))
+		if page.AcceptThreshold > uint64(len(page.Keys)) {
+			page.AcceptThreshold = uint64(len(page.Keys))
 		}
 		return nil
 
