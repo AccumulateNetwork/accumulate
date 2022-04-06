@@ -22,6 +22,7 @@ func prepareBenchmark(b *testing.B) (newExec *block.Executor, newBlock *block.Bl
 	block.IsLeader = true
 	block.Index = protocol.GenesisBlock + 1
 	block.Time = time.Now()
+	block.Batch = db.Begin(true)
 	_, err := exec.BeginBlock(block)
 	require.NoError(b, err)
 
@@ -38,7 +39,7 @@ func prepareBenchmark(b *testing.B) (newExec *block.Executor, newBlock *block.Bl
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(liteAddr).
-		WithSigner(exec.Network.NodeUrl(), 1).
+		WithSigner(exec.Network.ValidatorPage(0), 1).
 		WithCurrentTimestamp().
 		WithBody(deposit).
 		Initiate(protocol.SignatureTypeED25519, exec.Key)
@@ -51,8 +52,9 @@ func HighTps(b *testing.B, exec *block.Executor, block *block.Block, env *protoc
 }
 
 func BenchmarkHighTps(b *testing.B) {
-
 	exec, block, env := prepareBenchmark(b)
+	defer block.Batch.Discard()
+
 	// Execute the benchmark
 	for _, size := range []int{1, 10, 100, 1000} {
 		b.Run(fmt.Sprint(size), func(b *testing.B) {
@@ -60,15 +62,14 @@ func BenchmarkHighTps(b *testing.B) {
 			for i := 0; i < size; i++ {
 				HighTps(b, exec, block, env)
 			}
-			/*
-				// Benchmark how long DeliverTx takes
-				b.ResetTimer()
-				b.Run("DeliverTx", func(b *testing.B) {
-					for i := 0; i < b.N; i++ {
-						HighTps(b, exec, block, env)
-					}
-				})
-			*/
+
+			// Benchmark how long DeliverTx takes
+			b.ResetTimer()
+			b.Run("DeliverTx", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					HighTps(b, exec, block, env)
+				}
+			})
 		})
 	}
 }
