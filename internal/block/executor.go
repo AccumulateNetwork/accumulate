@@ -86,6 +86,15 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	return m, nil
 }
 
+// PingGovernor_TESTONLY pings the governor. If runDidCommit is running, this
+// will block until runDidCommit completes.
+func (m *Executor) PingGovernor_TESTONLY() {
+	select {
+	case m.governor.messages <- govPing{}:
+	case <-m.governor.done:
+	}
+}
+
 func (m *Executor) logDebug(msg string, keyVals ...interface{}) {
 	m.logger.Debug(msg, keyVals...)
 }

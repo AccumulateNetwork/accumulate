@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -186,9 +189,46 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	errs := g.dispatcher.Send(context.Background())
 	go func() {
 		for err := range errs {
-			g.logger.Error("Failed to dispatch transactions", "error", err)
+			g.checkDispatchError(err)
 		}
 	}()
+}
+
+// checkDispatchError returns nil if the error can be ignored.
+func (g *governor) checkDispatchError(err error) {
+	if err == nil {
+		return
+	}
+
+	// TODO This may be unnecessary once this issue is fixed:
+	// https://github.com/tendermint/tendermint/issues/7185.
+
+	// Is the error "tx already exists in cache"?
+	if err.Error() == tm.ErrTxInCache.Error() {
+		return
+	}
+
+	// Or RPC error "tx already exists in cache"?
+	var rpcErr1 *jrpc.RPCError
+	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
+		return
+	}
+
+	var rpcErr2 jsonrpc2.Error
+	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
+		return
+	}
+
+	var protoErr *protocol.Error
+	if errors.As(err, &protoErr) {
+		// Without this, the simulator generates tons of errors. Why?
+		if protoErr.Code == protocol.ErrorCodeAlreadyDelivered {
+			return
+		}
+	}
+
+	// It's a real error
+	g.logger.Error("Failed to dispatch transactions", "error", err)
 }
 
 func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.InternalLedger) {
@@ -278,6 +318,10 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 		env.Transaction = pending.Transaction
 		env.Signatures = signatures
 
+		if env.Type() != protocol.TransactionTypeSyntheticAnchor {
+			print("")
+		}
+
 		// Marshal it
 		raw, err := env.MarshalBinary()
 		if err != nil {
@@ -291,7 +335,12 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
 		} else {
 			if debugSendAnchor || typ != protocol.TransactionTypeSyntheticAnchor {
-				g.logger.Debug("Sending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
+				g.logger.Debug("Sending synth txn",
+					"origin", env.Transaction.Header.Principal,
+					"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
+					"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),
+					"type", typ,
+					"block", msg.block.Index)
 			}
 			g.sent[txid32] = true
 		}
