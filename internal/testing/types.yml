@@ -1,0 +1,64 @@
+FakeTransactionBody:
+  fields:
+  - name: TheType
+    type: protocol.TransactionType
+    marshal-as: enum
+
+FakeSignature:
+  fields:
+  - name: TheType
+    type: protocol.SignatureType
+    marshal-as: enum
+  - name: Vote
+    type: protocol.VoteType
+    marshal-as: enum
+  - name: PublicKey
+    type: bytes
+  - name: Signer
+    type: url
+    pointer: true
+  - name: SignerVersion
+    type: uint
+  - name: Timestamp
+    type: uint
+    optional: true
+
+FakeLiteAccount:
+  fields:
+  - name: TheType
+    type: protocol.AccountType
+    marshal-as: enum
+  - name: Url
+    type: url
+    pointer: true
+
+FakeAccount:
+  fields:
+  - type: FakeLiteAccount
+    marshal-as: reference
+  - type: protocol.AccountAuth
+    marshal-as: reference
+
+FakeAuthority:
+  fields:
+  - type: FakeAccount
+    marshal-as: reference
+  - name: Signers
+    type: url
+    pointer: true
+
+FakeSigner:
+  fields:
+  - type: FakeLiteAccount
+    marshal-as: reference
+  - name: CreditBalance
+    type: uvarint
+  - name: Threshold
+    type: uvarint
+  - name: Version
+    type: uvarint
+  - name: Keys
+    repeatable: true
+    type: protocol.KeySpec
+    pointer: true
+    marshal-as: reference

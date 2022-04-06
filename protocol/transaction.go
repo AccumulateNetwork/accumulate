@@ -39,6 +39,45 @@ func (s *TransactionStatus) AddSigner(signer *url.URL) {
 	s.Signers[i] = signer
 }
 
+func (s *TransactionStatus) FindSigners(authority *url.URL) []*url.URL {
+	// Find the first signer for the given authority. This depends on the fact
+	// that signers are always children of authorities. Or in the case of lite
+	// token accounts, equal to (for now).
+	i := sort.Search(len(s.Signers), func(i int) bool {
+		return s.Signers[i].Compare(authority) >= 0
+	})
+
+	// Past the end of the list, no match
+	if i >= len(s.Signers) {
+		return nil
+	}
+
+	// Entry matches (lite token account)
+	if s.Signers[i].Equal(authority) {
+		return []*url.URL{authority}
+	}
+
+	// Authority is not the parent of the entry, no match
+	if !authority.ParentOf(s.Signers[i]) {
+		return nil
+	}
+
+	// Find the first signer that is not a child of the given authority
+	j := sort.Search(len(s.Signers), func(i int) bool {
+		// For some I, Search expects this function to return false for
+		// slice[:i] and true for slice[i:]. If the entry sorts before the
+		// authority, return false. If the entry is the child of the authority,
+		// return false. If the entry is not a child and sorts after, return
+		// true. That will return the end of the range of entries that are
+		// children of the signer.
+		if s.Signers[i].Compare(authority) < 0 {
+			return false
+		}
+		return !authority.ParentOf(s.Signers[i])
+	})
+	return s.Signers[i:j]
+}
+
 func NewTransaction(typ TransactionType) (TransactionBody, error) {
 	return NewTransactionBody(typ)
 }
