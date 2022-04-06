@@ -50,17 +50,17 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		adi := new(protocol.ADI)
 		adi.Url = uAdi
-		adi.KeyBook = uBook
+		adi.AddAuthority(uBook)
 		records = append(records, adi)
 
 		book := new(protocol.KeyBook)
 		book.Url = uBook
+		book.AddAuthority(uBook)
 		book.PageCount = 1
 		records = append(records, book)
 
 		page := new(protocol.KeyPage)
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
-		page.KeyBook = uBook
 		page.AcceptThreshold = 1
 		page.Version = 1
 		records = append(records, page)
@@ -80,7 +80,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the ledger
 		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
-		ledger.KeyBook = uBook
+		ledger.AddAuthority(uBook)
 		ledger.Synthetic.Nonce = 1
 		ledger.ActiveOracle = oraclePrice
 		ledger.PendingOracle = ledger.ActiveOracle
@@ -90,19 +90,19 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the synth ledger
 		synthLedger := new(protocol.InternalSyntheticLedger)
 		synthLedger.Url = uAdi.JoinPath(protocol.SyntheticLedgerPath)
-		synthLedger.KeyBook = uBook
+		synthLedger.AddAuthority(uBook)
 		records = append(records, synthLedger)
 
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
 		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
-		anchors.KeyBook = uBook
+		anchors.AddAuthority(uBook)
 		records = append(records, anchors)
 
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))
 		for i, r := range records {
-			urls[i] = r.Header().Url
+			urls[i] = r.GetUrl()
 		}
 
 		type DataRecord struct {
@@ -123,7 +123,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da := new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Votes)
-		da.KeyBook = uBook
+		da.AddAuthority(uBook)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -133,7 +133,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da = new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Evidence)
-		da.KeyBook = uBook
+		da.AddAuthority(uBook)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -151,14 +151,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
-			da.KeyBook = uBook
+			da.AddAuthority(uBook)
 
 			records = append(records, da)
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
-			acme.KeyBook = uBook
+			acme.AddAuthority(uBook)
 			acme.Url = protocol.AcmeUrl()
 			acme.Precision = 8
 			acme.Symbol = "ACME"

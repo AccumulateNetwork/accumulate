@@ -28,12 +28,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
-	if page.KeyBook == nil {
-		return nil, fmt.Errorf("invalid origin record: page %s does not have a KeyBook", page.Url)
+	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
+	if !ok {
+		return nil, fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
 	}
 
 	var book *protocol.KeyBook
-	err := st.LoadUrlAs(page.KeyBook, &book)
+	err := st.LoadUrlAs(bookUrl, &book)
 	if err != nil {
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}

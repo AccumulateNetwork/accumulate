@@ -207,9 +207,6 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		return "", err
 	}
 
-	var newKey []byte
-	var oldKey []byte
-
 	ukp := protocol.UpdateKeyPage{}
 
 	switch op {
@@ -217,46 +214,41 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		oldKey, err = resolvePublicKey(args[0])
+		_, oldKeyHash, _, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
 
-		newKey, err = resolvePublicKey(args[1])
+		_, newKeyHash, _, err := resolvePublicKey(args[1])
 		if err != nil {
 			return "", err
 		}
 
-		oldKeyHash := sha256.Sum256(oldKey)
-		newKeyHash := sha256.Sum256(newKey)
 		ukp.Operation = append(ukp.Operation, &protocol.UpdateKeyOperation{
-			OldEntry: protocol.KeySpecParams{KeyHash: oldKeyHash[:]},
-			NewEntry: protocol.KeySpecParams{KeyHash: newKeyHash[:]},
+			OldEntry: protocol.KeySpecParams{KeyHash: oldKeyHash},
+			NewEntry: protocol.KeySpecParams{KeyHash: newKeyHash},
 		})
 	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		newKey, err = resolvePublicKey(args[0])
-		newKeyHash := sha256.Sum256(newKey)
+		_, newKeyHash, _, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
 		ukp.Operation = append(ukp.Operation, &protocol.AddKeyOperation{
-			Entry: protocol.KeySpecParams{KeyHash: newKeyHash[:]},
+			Entry: protocol.KeySpecParams{KeyHash: newKeyHash},
 		})
 	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		oldKey, err = resolvePublicKey(args[0])
-		oldKeyHash := sha256.Sum256(oldKey)
-
+		_, oldKeyHash, _, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
 		ukp.Operation = append(ukp.Operation, &protocol.RemoveKeyOperation{
-			Entry: protocol.KeySpecParams{KeyHash: oldKeyHash[:]},
+			Entry: protocol.KeySpecParams{KeyHash: oldKeyHash},
 		})
 	}
 

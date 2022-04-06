@@ -131,36 +131,34 @@ var txnTests = []*TCG{
 	}},
 }
 
+var simpleAuth = &AccountAuth{Authorities: []AuthorityEntry{{Url: parseUrl("adi/book")}}}
+var managerAuth = &AccountAuth{Authorities: []AuthorityEntry{{Url: parseUrl("adi/book"), Disabled: true}, {Url: parseUrl("adi/mgr")}}}
+
 var acntTests = []*TCG{
 	{Name: "Identity", Cases: []*TC{
-		testdata.NewAcntTest(&ADI{AccountHeader: AccountHeader{Url: parseUrl("adi"), KeyBook: parseUrl("adi/book")}}),
-		testdata.NewAcntTest(&ADI{AccountHeader: AccountHeader{Url: parseUrl("adi"), KeyBook: parseUrl("adi/book"),
-			ManagerKeyBook: parseUrl("adi/mgr")}}),
+		testdata.NewAcntTest(&ADI{Url: parseUrl("adi"), AccountAuth: *simpleAuth}),
+		testdata.NewAcntTest(&ADI{Url: parseUrl("adi"), AccountAuth: *managerAuth}),
 	}},
 	{Name: "TokenIssuer", Cases: []*TC{
-		testdata.NewAcntTest(&TokenIssuer{AccountHeader: AccountHeader{Url: parseUrl("adi/foocoin"), KeyBook: parseUrl("adi/book")},
-			Symbol: "FOO", Precision: 10}),
+		testdata.NewAcntTest(&TokenIssuer{Url: parseUrl("adi/foocoin"), AccountAuth: *simpleAuth, Symbol: "FOO", Precision: 10}),
 	}},
 	{Name: "TokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&TokenAccount{AccountHeader: AccountHeader{Url: parseUrl("adi/foo"), KeyBook: parseUrl("adi/book")},
-			TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
+		testdata.NewAcntTest(&TokenAccount{Url: parseUrl("adi/foo"), AccountAuth: *simpleAuth, TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-token-account")},
-			TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
+		testdata.NewAcntTest(&LiteTokenAccount{Url: parseUrl("lite-token-account"), TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{AccountHeader: AccountHeader{Url: parseUrl("adi/page"), KeyBook: parseUrl("adi/book")},
-			Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
+		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
-		testdata.NewAcntTest(&KeyBook{AccountHeader: AccountHeader{Url: parseUrl("adi/book")}}),
+		testdata.NewAcntTest(&KeyBook{Url: parseUrl("adi/book")}),
 	}},
 	{Name: "DataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&DataAccount{AccountHeader: AccountHeader{Url: parseUrl("adi/data"), KeyBook: parseUrl("adi/book")}}),
+		testdata.NewAcntTest(&DataAccount{Url: parseUrl("adi/data"), AccountAuth: *simpleAuth}),
 	}},
 	{Name: "LiteDataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteDataAccount{AccountHeader: AccountHeader{Url: parseUrl("lite-data-account")}, Tail: []byte("asdf")}),
+		testdata.NewAcntTest(&LiteDataAccount{Url: parseUrl("lite-data-account"), Tail: []byte("asdf")}),
 	}},
 }
 

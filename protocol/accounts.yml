@@ -1,30 +1,25 @@
 # Accounts - names should be nouns
 
-AccountHeader:
-  fields:
-  - name: Url
-    type: url
-    pointer: true
-  - name: KeyBook
-    type: url
-    pointer: true
-  - name: ManagerKeyBook
-    type: url
-    pointer: true
-  - name: AuthDisabled
-    description: allows any key to sign for the main key book
-    type: bool
-
 UnknownAccount:
   union: { type: account, value: Unknown }
-  embeddings:
-  - AccountHeader
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+
+LiteIdentity:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
 
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }
-  embeddings:
-  - AccountHeader
   fields:
+    - name: Url
+      type: url
+      pointer: true
     - name: TokenUrl
       type: url
       pointer: true
@@ -38,23 +33,34 @@ LiteTokenAccount:
 
 LiteDataAccount:
   union: { type: account, value: LiteDataAccount }
-  embeddings:
-    - AccountHeader
   fields:
+    - name: Url
+      type: url
+      pointer: true
     - name: Tail
       type: bytes
 
 ADI:
   union: { type: account, value: Identity }
-  embeddings:
-    - AccountHeader
-  fields: [ ]
+  fields:
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
 
 TokenAccount:
   union: { type: account, value: TokenAccount }
-  embeddings:
-  - AccountHeader
   fields:
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: TokenUrl
       type: url
       pointer: true
@@ -64,11 +70,28 @@ TokenAccount:
       type: bool
       optional: true
 
+KeyBook:
+  union: { type: account }
+  fields:
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
+    - name: PageCount
+      type: uvarint
+
 KeyPage:
   union: { type: account }
-  embeddings:
-  - AccountHeader
   fields:
+    # Key pages do not have their own auth. They are subordinate to the key book
+    # they are part of.
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
     - name: CreditBalance
       type: uvarint
     - name: AcceptThreshold
@@ -97,28 +120,30 @@ KeyPage:
       pointer: true
       optional: true
 
-KeyBook:
-  union: { type: account }
-  embeddings:
-  - AccountHeader
-  fields:
-    - name: PageCount
-      type: uvarint
-
 DataAccount:
   union: { type: account, value: DataAccount }
-  embeddings:
-  - AccountHeader
   fields:
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: Scratch
       type: bool
       optional: true
 
 TokenIssuer:
   union: { type: account }
-  embeddings:
-  - AccountHeader
   fields:
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: Symbol
       type: string
     - name: Precision
@@ -135,27 +160,9 @@ TokenIssuer:
 
 Anchor:
   union: { type: account }
-  embeddings:
-  - AccountHeader
-  fields: [ ]
-
-##### Data Types #####
-
-KeySpec:
   fields:
-    - name: PublicKeyHash
-      type: bytes
-      alternative: PublicKey
-    - name: LastUsedOn
-      type: uvarint
-      alternative: Nonce
-    - name: Owner
+    - name: Url
       type: url
       pointer: true
-
-LiteIdentity:
-  union: { type: account }
-  embeddings:
-  - AccountHeader
-  fields: [ ]
-
+    - type: AccountAuth
+      marshal-as: reference

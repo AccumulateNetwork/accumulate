@@ -69,7 +69,7 @@ func AddCredits(db DB, account *url.URL, credits float64) error {
 		return err
 	}
 
-	state.(protocol.CreditHolder).CreditCredits(uint64(credits * protocol.CreditPrecision))
+	state.(protocol.AccountWithCredits).CreditCredits(uint64(credits * protocol.CreditPrecision))
 	return db.Account(account).PutState(state)
 }
 
@@ -87,9 +87,9 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 	txid := sha256.Sum256([]byte("fake txid"))
 	urls := make([]*url.URL, len(chains))
 	for i, c := range chains {
-		urls[i] = c.Header().Url
+		urls[i] = c.GetUrl()
 
-		r := db.Account(c.Header().Url)
+		r := db.Account(c.GetUrl())
 		err := r.PutState(c)
 		if err != nil {
 			return err
@@ -133,11 +133,12 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 
 	book := new(protocol.KeyBook)
 	book.Url = bookUrl
+	book.AddAuthority(bookUrl)
 	book.PageCount = 1
 
 	adi := new(protocol.ADI)
 	adi.Url = identityUrl
-	adi.KeyBook = bookUrl
+	adi.AddAuthority(bookUrl)
 
 	return WriteStates(db, adi, book, page)
 }
@@ -154,7 +155,7 @@ func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
 
 	adi := new(protocol.ADI)
 	adi.Url = identityUrl
-	adi.KeyBook = originUrl.JoinPath("book0")
+	adi.AddAuthority(originUrl.JoinPath("book0"))
 
 	return WriteStates(db, adi)
 }
@@ -195,7 +196,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account := new(protocol.TokenAccount)
 		account.Url = u
 		account.TokenUrl = tu
-		account.KeyBook = u.Identity().JoinPath("book0")
+		account.AddAuthority(u.Identity().JoinPath("book0"))
 		account.Balance.SetInt64(int64(tokens * protocol.AcmePrecision))
 		chain = account
 	}
@@ -211,7 +212,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLim
 
 	issuer := new(protocol.TokenIssuer)
 	issuer.Url = u
-	issuer.KeyBook = u.Identity().JoinPath("book0")
+	issuer.AddAuthority(u.Identity().JoinPath("book0"))
 	issuer.Symbol = symbol
 	issuer.Precision = precision
 	issuer.SupplyLimit = supplyLimit
@@ -234,7 +235,6 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
-	page.KeyBook = bookUrl
 	page.AcceptThreshold = 1
 	page.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
@@ -256,10 +256,10 @@ func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) er
 
 	book := new(protocol.KeyBook)
 	book.Url = bookUrl
+	book.AddAuthority(bookUrl)
 	book.PageCount = 1
 
 	page := new(protocol.KeyPage)
-	page.KeyBook = bookUrl
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
@@ -285,19 +285,6 @@ func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
 
 	fn(page)
 	return db.Account(account).PutState(page)
-}
-
-func UpdateAccountAuth(db DB, account string, enable bool) error {
-	u, err := url.Parse(account)
-	if err != nil {
-		return err
-	}
-	state, err := db.Account(u).GetState()
-	if err != nil {
-		return err
-	}
-	state.Header().AuthDisabled = !enable
-	return db.Account(u).PutState(state)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING

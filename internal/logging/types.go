@@ -78,3 +78,17 @@ func AsHex(v interface{}) LogAsHex {
 
 	return LogAsHexValue(fmt.Sprint(v))
 }
+
+type LogWithFormat struct {
+	Format string
+	Values []interface{}
+}
+
+func (v LogWithFormat) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fmt.Sprintf(v.Format, v.Values...))
+}
+
+//go:inline
+func WithFormat(format string, values ...interface{}) LogWithFormat {
+	return LogWithFormat{format, values}
+}
