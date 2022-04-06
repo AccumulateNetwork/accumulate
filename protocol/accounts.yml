@@ -94,8 +94,19 @@ KeyPage:
       pointer: true
     - name: CreditBalance
       type: uvarint
-    - name: Threshold
+    - name: AcceptThreshold
       type: uvarint
+      alternative: Threshold
+      description: is the number of acceptances required to accept a transaction
+    - name: RejectThreshold
+      type: uvarint
+      description: is the number of rejections required to reject a transaction
+    - name: ResponseThreshold
+      type: uvarint
+      description: is the number of responses that must be received before a transaction will be processed
+    - name: BlockThreshold
+      type: uvarint
+      description: is the number of minor blocks that must elapse before a transaction will be processed
     - name: Version
       type: uvarint
     - name: Keys
