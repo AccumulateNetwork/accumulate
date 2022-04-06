@@ -1,10 +1,15 @@
 package db
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/boltdb/bolt"
 )
+
+var ErrNotOpen = errors.New("database not open")
+var ErrNotFound = errors.New("key not found")
+var ErrNoBucket = errors.New("bucket not defined")
 
 type BoltDB struct {
 	db *bolt.DB
@@ -13,7 +18,7 @@ type BoltDB struct {
 //Close the database
 func (b *BoltDB) Close() error {
 	if b.db == nil {
-		return fmt.Errorf("database not open")
+		return ErrNotOpen
 	}
 	return b.db.Close()
 }
@@ -27,17 +32,17 @@ func (b *BoltDB) InitDB(filename string) (err error) {
 //Get will get an entry in the database given a bucket and key
 func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	if b.db == nil {
-		return nil, fmt.Errorf("database not open")
+		return nil, ErrNotOpen
 	}
 
 	err = b.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucket)
 		if b == nil {
-			return fmt.Errorf("bucket not defined")
+			return ErrNoBucket
 		}
 		value = b.Get(key)
 		if value == nil {
-			return fmt.Errorf("key not found")
+			return ErrNotFound
 		}
 		return err
 	})
@@ -48,7 +53,7 @@ func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 //Put will write data to a given bucket using the key
 func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
 	if b.db == nil {
-		return fmt.Errorf("database not open")
+		return ErrNotOpen
 	}
 
 	return b.db.Update(func(tx *bolt.Tx) error {
@@ -63,13 +68,13 @@ func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
 //GetBucket will return the contents of a bucket
 func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 	if b.db == nil {
-		return nil, fmt.Errorf("database not open")
+		return nil, ErrNotOpen
 	}
 
 	err = b.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(bucket)
 		if b == nil {
-			return fmt.Errorf("bucket not defined")
+			return ErrNoBucket
 		}
 		c := b.Cursor()
 		buck = new(Bucket)
@@ -85,13 +90,13 @@ func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 // Delete will remove a key/value pair from the bucket
 func (b *BoltDB) Delete(bucket []byte, key []byte) error {
 	if b.db == nil {
-		return fmt.Errorf("database not open")
+		return ErrNotOpen
 	}
 
 	return b.db.Update(func(tx *bolt.Tx) error {
 		buck := tx.Bucket(bucket)
 		if buck == nil {
-			return fmt.Errorf("bucket not defined")
+			return ErrNoBucket
 		}
 		return buck.Delete(key)
 	})
@@ -100,7 +105,7 @@ func (b *BoltDB) Delete(bucket []byte, key []byte) error {
 // DeleteBucket will delete all key/value pairs from a bucket
 func (b *BoltDB) DeleteBucket(bucket []byte) error {
 	if b.db == nil {
-		return fmt.Errorf("database not open")
+		return ErrNotOpen
 	}
 
 	return b.db.Update(func(tx *bolt.Tx) error {
