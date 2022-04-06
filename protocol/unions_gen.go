@@ -187,6 +187,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticWriteData), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
+	case TransactionTypeUpdateKey:
+		return new(UpdateKey), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
 	case TransactionTypeUpdateValidatorKey:
