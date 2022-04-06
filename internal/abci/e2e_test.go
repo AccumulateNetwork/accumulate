@@ -835,7 +835,7 @@ func TestAddKey(t *testing.T) {
 	require.Equal(t, nkh[:], spec.Keys[1].PublicKeyHash)
 }
 
-func TestUpdateKey(t *testing.T) {
+func TestUpdateKeyPage(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
@@ -868,6 +868,51 @@ func TestUpdateKey(t *testing.T) {
 	spec := n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, nkh[:], spec.Keys[0].PublicKeyHash)
+}
+
+func TestUpdateKey(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	n := nodes[subnets[1]][0]
+
+	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
+	newKeyHash := sha256.Sum256(newKey.PubKey().Bytes())
+	testKeyHash := sha256.Sum256(testKey.PubKey().Bytes())
+	_ = testKeyHash
+
+	// UpdateKey should always be single-sig, so set the threshold to 2 and
+	// ensure the transaction still succeeds.
+
+	batch := n.db.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, url.MustParse("foo/book1/1"), func(p *protocol.KeyPage) { p.Threshold = 2 }))
+	require.NoError(t, batch.Commit())
+
+	spec := n.GetKeyPage("foo/book1/1")
+	require.Len(t, spec.Keys, 1)
+	require.Equal(t, testKeyHash[:], spec.Keys[0].PublicKeyHash)
+
+	txnHashes := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKeyHash[:]
+
+		send(newTxn("foo/book1/1").
+			WithBody(body).
+			WithSigner(url.MustParse("foo/book1/1"), 1).
+			Initiate(protocol.SignatureTypeLegacyED25519, testKey))
+	})
+	batch = n.db.Begin(false)
+	defer batch.Discard()
+	status, err := batch.Transaction(txnHashes[0][:]).GetStatus()
+	require.NoError(t, err)
+	require.False(t, status.Pending, "Transaction is still pending")
+
+	spec = n.GetKeyPage("foo/book1/1")
+	require.Len(t, spec.Keys, 1)
+	require.Equal(t, newKeyHash[:], spec.Keys[0].PublicKeyHash)
 }
 
 func TestRemoveKey(t *testing.T) {

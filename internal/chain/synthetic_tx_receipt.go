@@ -14,6 +14,10 @@ func (SyntheticReceipt) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticReceipt
 }
 
+func (SyntheticReceipt) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticReceipt{}).Validate(st, tx)
+}
+
 /* === Receipt executor === */
 
 func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {

@@ -24,6 +24,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
+func init() {
+	keyCmd.AddCommand(keyUpdateCmd)
+}
+
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
@@ -99,7 +103,13 @@ var keyCmd = &cobra.Command{
 
 func init() {
 	keyCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+}
 
+var keyUpdateCmd = &cobra.Command{
+	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
+	Short: "Self-update a key",
+	Args:  cobra.RangeArgs(3, 5),
+	Run:   runCmdFunc(UpdateKey),
 }
 
 type KeyResponse struct {
@@ -710,4 +720,26 @@ func ImportFactoidKey(factoidkey string) (out string, err error) {
 		out, err = "", fmt.Errorf("invalid factoid key must begin with `Fs`")
 	}
 	return out, err
+}
+
+func UpdateKey(args []string) (string, error) {
+	principal, err := url.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return "", err
+	}
+
+	newPubKey, _, _, err := resolvePublicKey(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	newPubKeyHash := sha256.Sum256(newPubKey)
+	txn := new(protocol.UpdateKey)
+	txn.NewKeyHash = newPubKeyHash[:]
+	return dispatchTxAndPrintResponse("update-key", txn, nil, principal, signer)
 }

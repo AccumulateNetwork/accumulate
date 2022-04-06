@@ -158,6 +158,12 @@ ExecuteUpdateKeyPage:
   rpc: update-key-page
   input: UpdateKeyPage
 
+ExecuteUpdateKey:
+  description: submits an UpdateKey transaction
+  kind: execute
+  rpc: update-key
+  input: UpdateKey
+
 ExecuteWriteData:
   description: submits a WriteData transaction
   kind: execute

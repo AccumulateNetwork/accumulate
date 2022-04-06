@@ -14,6 +14,11 @@ import (
 
 var ErrCannotInitiate = errors.New("signature cannot initiate a transaction: values are missing")
 
+type KeySignature interface {
+	Signature
+	GetPublicKey() []byte
+}
+
 // IsSystem returns true if the signature type is a system signature type.
 func (s SignatureType) IsSystem() bool {
 	switch s {
@@ -68,8 +73,11 @@ func (s *LegacyED25519Signature) GetSignerVersion() uint64 { return s.SignerVers
 // GetTimestamp returns Timestamp.
 func (s *LegacyED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
 
-// GetPublicKey returns PublicKey.
+// GetPublicKeyHash returns the hash of PublicKey.
 func (s *LegacyED25519Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+
+// GetPublicKey returns PublicKey.
+func (s *LegacyED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // GetSignature returns Signature.
 func (s *LegacyED25519Signature) GetSignature() []byte { return s.Signature }
@@ -136,8 +144,11 @@ func (s *ED25519Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 // GetTimestamp returns Timestamp.
 func (s *ED25519Signature) GetTimestamp() uint64 { return s.Timestamp }
 
-// GetPublicKey returns PublicKey.
+// GetPublicKeyHash returns the hash of PublicKey.
 func (s *ED25519Signature) GetPublicKeyHash() []byte { return doSha256(s.PublicKey) }
+
+// GetPublicKey returns PublicKey.
+func (s *ED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // GetSignature returns Signature.
 func (s *ED25519Signature) GetSignature() []byte { return s.Signature }
@@ -203,10 +214,11 @@ func (s *RCD1Signature) GetSignerVersion() uint64 { return s.SignerVersion }
 // GetTimestamp returns Timestamp.
 func (s *RCD1Signature) GetTimestamp() uint64 { return s.Timestamp }
 
-// GetPublicKey returns PublicKey prefixed with the RCD version number.
-func (s *RCD1Signature) GetPublicKeyHash() []byte {
-	return GetRCDHashFromPublicKey(s.PublicKey, 1)
-}
+// GetPublicKeyHash returns RCD1 hash of PublicKey.
+func (s *RCD1Signature) GetPublicKeyHash() []byte { return GetRCDHashFromPublicKey(s.PublicKey, 1) }
+
+// GetPublicKey returns PublicKey.
+func (s *RCD1Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // Verify returns true if this signature is a valid RCD1 signature of the hash.
 func (e *RCD1Signature) Verify(txnHash []byte) bool {
