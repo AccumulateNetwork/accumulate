@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -165,7 +164,7 @@ func getKey(urlStr string, key []byte) (*query.ResponseKeyPageIndex, error) {
 }
 
 func GetKey(url, key string) (string, error) {
-	keyb, err := hex.DecodeString(key)
+	keyb, err := resolvePublicKey(key)
 	if err != nil {
 		return "", err
 	}

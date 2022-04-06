@@ -56,11 +56,14 @@ const (
 	// FeeAddCredits conversion of ACME tokens to credits a "free" transaction
 	FeeAddCredits Fee = 0
 
-	// FeeUpdateKeyPage $0.03
-	FeeUpdateKeyPage Fee = 300
+	// FeeUpdateAuth $0.03
+	FeeUpdateAuth Fee = 300
 
-	// FeeUpdateAccountAuth $0.03
-	FeeUpdateAccountAuth Fee = 300
+	// // FeeUpdateAccountAuth $0.03
+	// FeeUpdateAccountAuth Fee = 300
+
+	// // FeeUpdateKeyPage $0.03
+	// FeeUpdateKey Fee = 300
 
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
@@ -102,9 +105,11 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 	case TransactionTypeAddCredits:
 		return FeeAddCredits, nil
 	case TransactionTypeUpdateKeyPage:
-		return FeeUpdateKeyPage, nil
+		return FeeUpdateAuth, nil
 	case TransactionTypeUpdateAccountAuth:
-		return FeeUpdateAccountAuth, nil
+		return FeeUpdateAuth, nil
+	case TransactionTypeUpdateKey:
+		return FeeUpdateAuth, nil
 	case TransactionTypeSignPending:
 		return FeeSignature, nil
 	default:
