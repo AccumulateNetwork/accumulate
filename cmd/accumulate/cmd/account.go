@@ -130,11 +130,11 @@ var accountQrCmd = &cobra.Command{
 }
 
 var accountGenerateCmd = &cobra.Command{
-	Use:   "generate",
-	Short: "Generate random lite token account",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
-		out, err := GenerateAccount()
+	Use:   "generate [key name (optional)]",
+	Short: "Generate a random lite token account or a lite account derived previously imported/created key",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GenerateAccount(args)
 		printOutput(cmd, out, err)
 	},
 }
@@ -268,8 +268,13 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	return ActionResponseFrom(res).Print()
 }
 
-func GenerateAccount() (string, error) {
-	return GenerateKey("")
+func GenerateAccount(args []string) (string, error) {
+	var label string
+	if len(args) > 0 {
+		label = args[0]
+		resolve
+	}
+	return GenerateKey(label)
 }
 
 func ListAccounts() (string, error) {
@@ -281,6 +286,7 @@ func ListAccounts() (string, error) {
 	var out string
 	for _, v := range b.KeyValueList {
 		lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
+		println(string(v.Value))
 		if err != nil {
 			continue
 		}

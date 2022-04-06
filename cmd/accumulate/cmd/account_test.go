@@ -73,25 +73,24 @@ func testCase3_3(t *testing.T, tc *testCmd) {
 //unitTest3_3
 //Create ADI Token Account with invalid token URL, should fail
 func testCase3_4(t *testing.T, tc *testCmd) {
-
 	t.Helper()
+
 	type FactoidPair struct {
 		Fs string
 		FA string
 	}
-	fct := []FactoidPair{
-		{"Fs1jQGc9GJjyWNroLPq7x6LbYQHveyjWNPXSqAvCEKpETNoTU5dP", "FA22de5NSG2FA2HmMaD4h8qSAZAJyztmmnwgLPghCQKoSekwYYct"},
-		{"Fs2wZzM2iBn4HEbhwEUZjLfcbTo5Rf6ChRNjNJWDiyWmy9zkPQNP", "FA3heCmxKCk1tCCfiAMDmX8Ctg6XTQjRRaJrF5Jagc9rbo7wqQLV"},
-		{"Fs1fxJbUWQRbTXH4as6qazoZ3hunmzL9JfiEpA6diCGCBE4jauqs", "FA2PSjogJ7UWwrwtevXtoRDnpxeafuRno16pES7KY4i51pL3kWV5"},
-		{"Fs2Fb4aB1N8VCBkQmeYMnLSNFtwGeRkqSmDbgw5BLa2Gdd8SVXjh", "FA3BW5bhnR6vBba42djAL9QMuKPafJurmGxM499u43PNFUdvKEKz"},
-		{"Fs2sSpxAPA1YqB69rvwVhRKUkLAbtoXNjyCjoK9kCofBEbVEt9dv", "FA3sMQeEgh2z6Hr5Pr8Kfnhh49QchVpmitGswUJjc1Mw3B3BW727"}}
+	fs := "Fs1jQGc9GJjyWNroLPq7x6LbYQHveyjWNPXSqAvCEKpETNoTU5dP"
+	fa := "FA22de5NSG2FA2HmMaD4h8qSAZAJyztmmnwgLPghCQKoSekwYYct"
 
-	for _, v := range fct {
-		//quick protocol import check.
-		r, err := tc.execute(t, "key import factoid "+v.Fs)
-		require.Error(t, err)
-		t.Log(r)
-	}
+	//quick check to make sure the factoid addresses are correct.
+	fa, rcdHash, _, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(fs)
+	_ = rcdHash
+	require.Equal(t, fa, fa)
+
+	//quick protocol import check.
+	r, err := tc.execute(t, "key import factoid "+fs)
+	require.Error(t, err)
+	t.Log(r)
 
 }
 

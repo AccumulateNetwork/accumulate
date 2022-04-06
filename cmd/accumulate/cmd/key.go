@@ -36,6 +36,8 @@ var keyCmd = &cobra.Command{
 				if len(args) == 3 {
 					if args[1] == "lite" {
 						out, err = ImportKey(args[2], "")
+					} else if args[1] == "factoid" {
+						out, err = ImportFactoidKey(args[2])
 					} else {
 						PrintKeyImport()
 					}
@@ -45,8 +47,6 @@ var keyCmd = &cobra.Command{
 						out, err = ImportMnemonic(args[2:])
 					case "private":
 						out, err = ImportKey(args[2], args[3])
-					case "factoid":
-						out, err = ImportFactoidKey(args[2])
 					case "public":
 						//reserved for future use.
 						fallthrough
