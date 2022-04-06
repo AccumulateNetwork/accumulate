@@ -5,9 +5,12 @@
 
 InternalLedger:
   union: { type: account }
-  embeddings:
-    - AccountHeader
   fields:
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: Index
       type: varint
     - name: Timestamp
@@ -25,9 +28,12 @@ InternalLedger:
 
 InternalSyntheticLedger:
   union: { type: account }
-  embeddings:
-    - AccountHeader
   fields:
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: Pending
       type: SyntheticLedgerEntry
       pointer: true

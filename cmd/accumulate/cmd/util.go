@@ -33,6 +33,25 @@ func runCmdFunc(fn func([]string) (string, error)) func(cmd *cobra.Command, args
 	}
 }
 
+func runTxnCmdFunc(fn func(*url2.URL, *signing.Builder, []string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		principal, err := url2.Parse(args[0])
+		if err != nil {
+			printOutput(cmd, "", err)
+			return
+		}
+
+		args, signer, err := prepareSigner(principal, args[1:])
+		if err != nil {
+			printOutput(cmd, "", err)
+			return
+		}
+
+		out, err := fn(principal, signer, args)
+		printOutput(cmd, out, err)
+	}
+}
+
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	u, err := url2.Parse(urlStr)
 	if err != nil {
@@ -95,18 +114,18 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	}
 
 	if len(args) < 2 {
-		signer.Url = keyInfo.KeyPage
+		signer.Url = keyInfo.Signer
 	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
-		signer.Url = protocol.FormatKeyPageUrl(keyInfo.KeyBook, v)
+		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
 		ct++
 	} else {
-		signer.Url = keyInfo.KeyPage
+		signer.Url = keyInfo.Signer
 	}
 
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
+		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
 	signer.Version = page.Version
 
@@ -209,6 +228,17 @@ func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody,
 	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
 	if err != nil {
 		return "", err
+	}
+
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
 	}
 
 	return ActionResponseFrom(res).Print()
@@ -745,7 +775,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", account.Header().Url, chainDesc)
+			out += fmt.Sprintf("\t%v (%s)\n", account.GetUrl(), chainDesc)
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
@@ -812,7 +842,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
+		for _, a := range ata.Authorities {
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", a.Url)
+		}
 
 		return out, nil
 	case protocol.AccountTypeIdentity.String():
@@ -824,7 +856,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 		var out string
 		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.Url)
-		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
+		for _, a := range adi.Authorities {
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", a.Url)
+		}
 
 		return out, nil
 	case protocol.AccountTypeKeyBook.String():
@@ -963,7 +997,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.Type())
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.GetUrl(), c.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:

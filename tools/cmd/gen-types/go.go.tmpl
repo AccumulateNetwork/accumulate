@@ -90,9 +90,9 @@ func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 {{range .Types}}{{if .IsBinary}}
 var fieldNames_{{.Name}} = []string{
 	{{- range .Fields}}
-	{{- if .IsMarshalled}}
+	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
-	{{.Number}}: "{{.Type}}",
+	{{.Number}}: "{{.Name}}",
 	{{- else}}
 	{{.Number}}: "{{.Name}}",
 	{{- end}}
@@ -105,9 +105,9 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	{{  range .Fields}}
-	{{- if .IsMarshalled}}
+	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
-	writer.WriteValue({{.Number}}, &v.{{.Type}})
+	writer.WriteValue({{.Number}}, &v.{{get .}})
 	{{- else if .OmitEmpty}}
 	if !({{isZero . (print "v." (get .))}}) {
 		{{binaryMarshalValue . "writer" (print "v." (get .))}}
@@ -126,9 +126,9 @@ func (v *{{.Name}}) IsValid() error {
 	var errs []string
 
 	{{  range .Fields}}
-	{{- if and .IsMarshalled .IsRequired}}
+	{{- if and .IsBinary .IsMarshalled .IsRequired}}
 	{{- if .IsEmbedded}}
-	if err := v.{{.Type}}.IsValid(); err != nil {
+	if err := v.{{get .}}.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	{{- else}}
@@ -163,9 +163,9 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	{{  range .Fields}}
-	{{- if .IsMarshalled}}
+	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
-	reader.ReadValue({{.Number}}, v.{{.Type}}.UnmarshalBinary)
+	reader.ReadValue({{.Number}}, v.{{get .}}.UnmarshalBinary)
 	{{- else if not .Virtual}}
 	{{binaryUnmarshalValue . "reader" (print "v." (get .))}}
 	{{- else}}
@@ -214,7 +214,7 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 {{- end}}
 
 {{define "valueFromJson"}}
-{{- if .Field.IsMarshalled}}
+{{- if and .Field.IsMarshalled (not (and .Field.NonBinary .Field.Virtual))}}
 {{- if .Field.Virtual}}
 {{areEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (errVirtualFieldNotEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name))}}
 {{- else if .Field.AlternativeName}}
@@ -235,7 +235,7 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 
 	{{- range .Fields}}
 	{{- if .IsEmbedded}}
-	{{- $name := .Type}}
+	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
 	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u" "ForUnmarshal" false}}
 	{{- end}}
@@ -253,7 +253,7 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 
 	{{- range .Fields}}
 	{{- if .IsEmbedded}}
-	{{- $name := .Type}}
+	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
 	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u" "ForUnmarshal" true}}
 	{{- end}}
@@ -267,7 +267,7 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 
 	{{- range .Fields}}
 	{{- if .IsEmbedded}}
-	{{- $name := .Type}}
+	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
 	{{- template "valueFromJson" map "Field" . "Src" "u" "Dst" (print "v." $name)}}
 	{{- end}}

@@ -11,75 +11,40 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func init() {
+	bookCmd.AddCommand(
+		bookGetCmd,
+		bookCreateCmd,
+	)
+
+	// Add auth cmd for backwards compatability
+	bookCmd.AddCommand(authCmd)
+}
+
 // bookCmd are the commands associated with managing key books
 var bookCmd = &cobra.Command{
 	Use:   "book",
 	Short: "Manage key books for a ADI chains",
-	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
-		if len(args) > 0 {
-			switch args[0] {
-			case "get":
-				if len(args) > 0 {
-					out, err = GetAndPrintKeyBook(args[1])
-				} else {
-					PrintKeyBookGet()
-				}
-			case "create":
-				if len(args) > 3 {
-					if args[0] == "create" {
-						out, err = CreateKeyBook(args[1], args[2:])
-					} else {
-						fmt.Println("Usage:")
-						PrintKeyBookCreate()
-					}
-				} else {
-					fmt.Println("Usage:")
-					PrintKeyBook()
-				}
-			case "auth":
-				if len(args) > 3 {
-					out, err = UpdateKeyBookAuth(args[1], args[2:])
-				} else {
-					fmt.Println("Usage:")
-					PrintUpdateKeyBookAuth()
-				}
-			default:
-				PrintKeyBook()
-			}
-		} else {
-			PrintKeyBook()
-		}
-		printOutput(cmd, out, err)
-	},
 }
 
-func PrintKeyBookGet() {
-	fmt.Println("  accumulate book get [URL]			Get existing Key Book by URL")
+var bookGetCmd = &cobra.Command{
+	Use:   "get",
+	Short: "Deprecated - use `accumulate get ...`",
+	Args:  cobra.ExactArgs(1),
+	Run:   runCmdFunc(GetAndPrintKeyBook),
 }
 
-func PrintKeyBookCreate() {
-	fmt.Println("  accumulate book create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1] Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.")
-	fmt.Println("\t\t example usage: accumulate book create acc://RedWagon redKey5 acc://RedWagon/RedBook")
+var bookCreateCmd = &cobra.Command{
+	Use:   "create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1",
+	Short: "Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.",
+	Args:  cobra.MinimumNArgs(3),
+	Run:   runCmdFunc(CreateKeyBook),
 }
 
-func PrintUpdateKeyBookAuth() {
-	fmt.Println("  accumulate book auth [origin adi url] [signing key name] [key index (optional)] [key height (optional)] enable  Enable keybook authentication.")
-	fmt.Println("  accumulate book auth [origin adi url] [signing key name] [key index (optional)] [key height (optional)] disable  Disable keybook authentication.")
-	fmt.Println("\t\t example usage: accumulate book auth acc://RedWagon redKey5 enable")
-	fmt.Println("\t\t example usage: accumulate book auth acc://RedWagon redKey5 disable")
-}
-
-func PrintKeyBook() {
-	PrintKeyBookGet()
-	PrintKeyBookCreate()
-}
-
-func GetAndPrintKeyBook(url string) (string, error) {
-	res, _, err := GetKeyBook(url)
+func GetAndPrintKeyBook(args []string) (string, error) {
+	res, _, err := GetKeyBook(args[0])
 	if err != nil {
-		return "", fmt.Errorf("error retrieving key book for %s", url)
+		return "", fmt.Errorf("error retrieving key book for %s", args[0])
 	}
 
 	return PrintChainQueryResponseV2(res)
@@ -104,14 +69,14 @@ func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
 }
 
 // CreateKeyBook create a new key book
-func CreateKeyBook(origin string, args []string) (string, error) {
-	originUrl, err := url2.Parse(origin)
+func CreateKeyBook(args []string) (string, error) {
+	originUrl, err := url2.Parse(args[0])
 	if err != nil {
 		return "", err
 	}
-	originKeyName := args[0]
+	originKeyName := args[1]
 
-	args, signer, err := prepareSigner(originUrl, args)
+	args, signer, err := prepareSigner(originUrl, args[1:])
 	if err != nil {
 		return "", err
 	}
@@ -145,55 +110,6 @@ func CreateKeyBook(origin string, args []string) (string, error) {
 	publicKeyHash := ph[:]
 	keyBook.PublicKeyHash = publicKeyHash
 	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
-}
-
-// UpdateKeyBookAuth update keybook for auth
-func UpdateKeyBookAuth(origin string, args []string) (string, error) {
-	originUrl, err := url2.Parse(origin)
-	if err != nil {
-		return "", err
-	}
-
-	args, signer, err := prepareSigner(originUrl, args)
-	if err != nil {
-		return "", err
-	}
-	if len(args) > 1 {
-		return "", fmt.Errorf("invalid number of arguments")
-	}
-
-	account, err := getAccount(origin)
-	if err != nil {
-		return "", err
-	}
-
-	var operation protocol.AccountAuthOperation
-	switch args[0] {
-	case "enable":
-		operation = &protocol.EnableAccountAuthOperation{Authority: account.Header().KeyBook}
-	case "disable":
-		operation = &protocol.DisableAccountAuthOperation{Authority: account.Header().KeyBook}
-	default:
-		return "", fmt.Errorf("invalid value passed in command")
-	}
-
-	txn := protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{operation}}
-	res, err := dispatchTxRequest("update-keybook-auth", &txn, nil, originUrl, signer)
 	if err != nil {
 		return "", err
 	}

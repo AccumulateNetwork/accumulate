@@ -31,7 +31,7 @@ func (m *stateCache) Create(record ...protocol.Account) {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
 	for _, r := range record {
-		m.chains[r.Header().Url.AccountID32()] = r
+		m.chains[r.GetUrl().AccountID32()] = r
 	}
 
 	m.operations = append(m.operations, &createRecords{record})
@@ -51,9 +51,43 @@ type updateRecord struct {
 // synthetic transaction, or the record is a transaction.
 func (m *stateCache) Update(record ...protocol.Account) {
 	for _, r := range record {
-		m.chains[r.Header().Url.AccountID32()] = r
-		m.operations = append(m.operations, &updateRecord{r.Header().Url, r})
+		m.chains[r.GetUrl().AccountID32()] = r
+		m.operations = append(m.operations, &updateRecord{r.GetUrl(), r})
 	}
+}
+
+func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
+	// Update: update an existing record. Non-synthetic transactions are
+	// not allowed to create accounts, so we must check if the record
+	// already exists. The record may have been added to the DB
+	// transaction already, so in order to actually know if the record
+	// exists on disk, we have to use GetPersistentEntry.
+
+	rec := st.batch.Account(op.url)
+	_, err := rec.GetState()
+	switch {
+	case err == nil:
+		// If the record already exists, update it
+
+	case !errors.Is(err, storage.ErrNotFound):
+		// Handle unexpected errors
+		return nil, fmt.Errorf("failed to check for an existing record: %v", err)
+
+	case st.txType.IsSynthetic() || st.txType.IsInternal():
+		// Synthetic and internal transactions are allowed to create accounts
+
+	default:
+		// Non-synthetic transactions are NOT allowed to create accounts
+		return nil, fmt.Errorf("cannot create an account in a non-synthetic transaction")
+	}
+
+	record := st.batch.Account(op.url)
+	err = record.PutState(op.record)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
+	}
+
+	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type updateTxStatus struct {
@@ -85,45 +119,6 @@ func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
 	return nil, nil
 }
 
-func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
-	// Update: update an existing record. Non-synthetic transactions are
-	// not allowed to create accounts, so we must check if the record
-	// already exists. The record may have been added to the DB
-	// transaction already, so in order to actually know if the record
-	// exists on disk, we have to use GetPersistentEntry.
-
-	rec := st.batch.Account(op.url)
-	_, err := rec.GetState()
-	switch {
-	case err == nil:
-		// If the record already exists, update it
-
-	case !errors.Is(err, storage.ErrNotFound):
-		// Handle unexpected errors
-		return nil, fmt.Errorf("failed to check for an existing record: %v", err)
-
-	case st.txType.IsSynthetic() || st.txType.IsInternal():
-		// Synthetic and internal transactions are allowed to create accounts
-
-	default:
-		// Non-synthetic transactions are NOT allowed to create accounts
-		return nil, fmt.Errorf("cannot create an account in a non-synthetic transaction")
-	}
-
-	header := op.record.Header()
-	if header.Url == nil {
-		header.Url = op.url
-	}
-
-	record := st.batch.Account(op.url)
-	err = record.PutState(op.record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
-	}
-
-	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
-}
-
 type updateSignator struct {
 	url    *url.URL
 	record protocol.Account
@@ -131,10 +126,10 @@ type updateSignator struct {
 
 func (m *stateCache) UpdateSignator(record protocol.Account) error {
 	// Load the previous state of the record
-	rec := m.batch.Account(record.Header().Url)
+	rec := m.batch.Account(record.GetUrl())
 	old, err := rec.GetState()
 	if err != nil {
-		return fmt.Errorf("failed to load state for %q", record.Header().Url)
+		return fmt.Errorf("failed to load state for %q", record.GetUrl())
 	}
 
 	// Check that the nonce is the only thing that changed
@@ -161,8 +156,8 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 		return fmt.Errorf("account type %d is not a signator", old.Type())
 	}
 
-	m.chains[record.Header().Url.AccountID32()] = record
-	m.operations = append(m.operations, &updateSignator{record.Header().Url, record})
+	m.chains[record.GetUrl().AccountID32()] = record
+	m.operations = append(m.operations, &updateSignator{record.GetUrl(), record})
 	return nil
 }
 
@@ -193,7 +188,7 @@ func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataE
 		stateRec = record
 	}
 
-	m.operations = append(m.operations, &addDataEntry{record.Header().Url, stateRec, entryHash, dataEntry})
+	m.operations = append(m.operations, &addDataEntry{record.GetUrl(), stateRec, entryHash, dataEntry})
 }
 
 func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {

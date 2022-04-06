@@ -257,7 +257,7 @@ func TestValidate(t *testing.T) {
 			},
 			Key: adiKey[32:],
 		}, keyIndex)
-		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+		assert.Equal(t, keyPageUrl, keyIndex.Signer)
 	})
 }
 
