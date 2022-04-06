@@ -23,6 +23,7 @@ var (
 	Prove          = false
 	Memo           string
 	Metadata       string
+	SigType        string
 )
 
 var currentUser = func() *user.User {
@@ -130,6 +131,7 @@ var (
 	BucketKeys     = []byte("keys")
 	BucketLabel    = []byte("label")
 	BucketMnemonic = []byte("mnemonic")
+	BucketSigType  = []byte("sigtype")
 )
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {

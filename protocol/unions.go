@@ -54,7 +54,7 @@ type Signature interface {
 	GetSigner() *url.URL
 	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion
 	GetTimestamp() uint64
-	GetPublicKey() []byte
+	GetPublicKeyHash() []byte
 	GetSignature() []byte // TODO Remove once the API is improved
 }
 

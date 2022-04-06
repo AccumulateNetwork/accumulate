@@ -168,7 +168,7 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	}
 
 	// Find the key entry
-	_, entry, ok := signer.EntryByKey(signature.GetPublicKey())
+	_, entry, ok := signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
 		return nil, nil, fmt.Errorf("key does not belong to signer")
 	}
