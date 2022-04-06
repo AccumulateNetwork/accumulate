@@ -154,6 +154,7 @@ ensure-key keytest-2-3-orig
 ensure-key keytest-2-3-new
 ensure-key keytest-3-0
 ensure-key keytest-3-1
+ensure-key keytest-mgr
 echo
 
 section "Create an ADI"
@@ -177,7 +178,7 @@ success
 section "Add credits to the ADI's key page 1"
 wait-for cli-tx credits ${LITE} keytest/book/1 60000
 BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 60000 ] && success || die "keytest/book/1 should have 60000 credits but has ${BALANCE}"
+[ "$BALANCE" -ge 5900000 ] && success || die "keytest/book/1 should have 6000000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
@@ -421,19 +422,32 @@ section "Query data entry range by URL"
 RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
-section "Create keypage with manager"
-wait-for cli-tx tx execute keytest/book keytest-1-0 '{"type": "createKeyPage", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
-RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
-[ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
+section "Create manager key book"
+wait-for cli-tx  book create keytest keytest-1-0 keytest/manager keytest-mgr || die "Failed to create manager key book"
+wait-for cli-tx credits ${LITE} keytest/manager/1 1000
+success
 
-section "Update manager to keypage"
-wait-for cli-tx manager set keytest/tokens keytest-1-0 keytest/book
-RESULT=$(accumulate -j get keytest/tokens | jq -re .data.managerKeyBook)
-[ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
+section "Create token account with manager"
+wait-for cli-tx account create token keytest keytest-1-0 --authority keytest/manager keytest/managed-tokens ACME || "Failed to create managed token account"
+RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
+[ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
+success
 
-section "Remove manager from keypage"
-wait-for cli-tx manager remove keytest/book/4 keytest-1-0
-accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
+section "Remove manager from token account"
+TXID=$(cli-tx auth remove keytest/managed-tokens keytest-1-0 keytest/manager) || die "Failed to initiate txn to remove manager"
+wait-for-tx $TXID
+accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+wait-for cli-tx-sig tx sign keytest/managed-tokens keytest-mgr $TXID
+accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
+RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
+[ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
+success
+
+section "Add manager to token account"
+wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 keytest/manager || die "Failed to add the manager"
+RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
+[ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
+success
 
 section "Query the lite identity"
 accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"

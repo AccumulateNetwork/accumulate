@@ -15,7 +15,7 @@ func TestBatchCommit(t *testing.T) {
 	defer batch.Discard()
 	ledger := new(protocol.InternalLedger)
 	ledger.Url = ledgerUrl
-	ledger.KeyBook = ledgerUrl
+	ledger.Authorities = []protocol.AuthorityEntry{{Url: ledgerUrl}}
 	ledger.Index = 5
 	require.NoError(t, batch.Account(ledgerUrl).PutState(ledger))
 	require.NoError(t, batch.Commit())

@@ -32,7 +32,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *protocol.Envelope) (protoc
 		}
 
 		// TODO Save the merkle state somewhere?
-		st.logger.Debug("Mirroring", "url", record.Header().Url)
+		st.logger.Debug("Mirroring", "url", record.GetUrl())
 		st.Update(record)
 	}
 

@@ -8,10 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -30,20 +28,8 @@ func SetupExecNetwork(t testing.TB) *TestRouter {
 	const nameB = "BlockValidator"
 
 	// Loggers
-	var logger log.Logger
-	if acctesting.LogConsole {
-		w, err := logging.NewConsoleWriter("plain")
-		require.NoError(t, err)
-		level, writer, err := logging.ParseLogLevel(acctesting.DefaultLogLevels, w)
-		require.NoError(t, err)
-		logger, err = logging.NewTendermintLogger(zerolog.New(writer), level, false)
-		require.NoError(t, err)
-	} else {
-		logger = logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	}
-
-	loggerD := logger.With("subnet", nameD)
-	loggerB := logger.With("subnet", nameB)
+	loggerD := acctesting.NewTestLogger(t).With("subnet", nameD)
+	loggerB := acctesting.NewTestLogger(t).With("subnet", nameB)
 
 	// Node keys
 	keyD := acctesting.GenerateKey(t.Name(), nameD)
@@ -74,7 +60,7 @@ func SetupExecNetwork(t testing.TB) *TestRouter {
 	// Initialize the router
 	router := &TestRouter{
 		TB:      t,
-		Logger:  logger.With("module", "test-router"),
+		Logger:  acctesting.NewTestLogger(t).With("module", "test-router"),
 		Network: &config.Network{Subnets: subnets},
 	}
 

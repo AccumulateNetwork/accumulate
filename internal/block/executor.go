@@ -300,7 +300,7 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 		return fmt.Errorf("no internal data transaction provided")
 	}
 
-	var signer protocol.SignerAccount
+	var signer protocol.Signer
 	signerUrl := m.Network.ValidatorPage(0)
 	err := block.Batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {

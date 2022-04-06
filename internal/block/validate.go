@@ -112,7 +112,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "invalid transaction: initiated by receipt signature")
 	}
 
-	var signer protocol.SignerAccount
+	var signer protocol.Signer
 	err = batch.Account(firstSig.GetSigner()).GetStateAs(&signer)
 	if err != nil {
 		return nil, fmt.Errorf("load signer: %w", err)
@@ -130,7 +130,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.Header().Url, signer, principal, transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.GetUrl(), signer, principal, transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 
 	// Execute the transaction
