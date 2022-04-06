@@ -15,3 +15,7 @@ func (g *governor) Ping() {
 func (x *Executor) WaitForGovernor() {
 	x.governor.Ping()
 }
+
+// func (e *Executor) ForceCommit() ([]byte, error) {
+// 	return e.commit(new(Block), true)
+// }
