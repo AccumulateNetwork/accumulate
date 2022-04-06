@@ -299,6 +299,9 @@ const TransactionTypeUpdateValidatorKey TransactionType = 20
 // TransactionTypeUpdateAccountAuth updates authorization for an account.
 const TransactionTypeUpdateAccountAuth TransactionType = 21
 
+// TransactionTypeUpdateKey update key for existing keys.
+const TransactionTypeUpdateKey TransactionType = 22
+
 // TransactionTypeSignPending is used to sign a pending transaction.
 const TransactionTypeSignPending TransactionType = 48
 
@@ -1142,7 +1145,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSignPending, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
 		*v = u
 		return true
 	default:
@@ -1191,6 +1194,8 @@ func (v TransactionType) String() string {
 		return "updateValidatorKey"
 	case TransactionTypeUpdateAccountAuth:
 		return "updateAccountAuth"
+	case TransactionTypeUpdateKey:
+		return "updateKey"
 	case TransactionTypeSignPending:
 		return "signPending"
 	case TransactionTypeSyntheticCreateChain:
@@ -1265,6 +1270,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateValidatorKey, true
 	case "updateAccountAuth":
 		return TransactionTypeUpdateAccountAuth, true
+	case "updateKey":
+		return TransactionTypeUpdateKey, true
 	case "signPending":
 		return TransactionTypeSignPending, true
 	case "syntheticCreateChain":
