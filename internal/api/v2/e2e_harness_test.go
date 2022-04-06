@@ -122,7 +122,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	req.Signer.Url = env.Signatures[0].GetSigner()
-	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
+	req.Signer.PublicKey = env.Signatures[0].(protocol.KeySignature).GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
 	req.KeyPage.Version = env.Signatures[0].GetSignerVersion()
 	req.Payload = env.Transaction.Body
@@ -160,7 +160,7 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUr
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
 	req.Signer.Url = env.Signatures[0].GetSigner()
-	req.Signer.PublicKey = env.Signatures[0].GetPublicKey()
+	req.Signer.PublicKey = env.Signatures[0].(protocol.KeySignature).GetPublicKey()
 	req.Signature = env.Signatures[0].GetSignature()
 	req.KeyPage.Version = env.Signatures[0].GetSignerVersion()
 	req.Payload = env.Transaction.Body
@@ -221,7 +221,7 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	pl.Origin = tx.Transaction.Header.Principal
 	pl.Signer.Timestamp = tx.Signatures[0].GetTimestamp()
 	pl.Signer.Url = tx.Signatures[0].GetSigner()
-	pl.Signer.PublicKey = tx.Signatures[0].GetPublicKey()
+	pl.Signer.PublicKey = tx.Signatures[0].(protocol.KeySignature).GetPublicKey()
 	pl.Signature = tx.Signatures[0].GetSignature()
 	pl.KeyPage.Version = tx.Signatures[0].GetSignerVersion()
 	pl.Payload = data

@@ -65,7 +65,11 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-
+		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
+		if err != nil {
+			return nil, nil, err
+		}
+		signer.Type = sigType
 		signer.Url = origin
 		signer.Version = 1
 		signer.SetPrivateKey(privKey)
@@ -79,7 +83,13 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.SetPrivateKey(privKey)
 	ct++
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
+	sigType, keyHash, err := resolveKeyTypeAndHash(privKey[32:])
+	if err != nil {
+		return nil, nil, err
+	}
+	signer.Type = sigType
+
+	keyInfo, err := getKey(origin.String(), keyHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
@@ -232,12 +242,14 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	}
 	env.Signatures = append(env.Signatures, sig)
 
+	keySig := sig.(protocol.KeySignature)
+
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.GetPublicKey()
+	req.Signer.PublicKey = keySig.GetPublicKey()
 	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
@@ -633,7 +645,7 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 				if sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
 				} else {
-					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
 				}
 			}
 		}
@@ -1096,4 +1108,25 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 		return nil, err
 	}
 	return acmeOracle, err
+}
+
+func ValidateSigType(input string) (protocol.SignatureType, error) {
+	var sigtype protocol.SignatureType
+	var err error
+	input = strings.ToLower(input)
+	switch input {
+	case "rcd1":
+		sigtype = protocol.SignatureTypeRCD1
+		err = nil
+	case "ed25519":
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	case "legacyed25519":
+		sigtype = protocol.SignatureTypeLegacyED25519
+		err = nil
+	default:
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	}
+	return sigtype, err
 }

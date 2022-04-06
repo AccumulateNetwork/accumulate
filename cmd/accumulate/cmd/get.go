@@ -164,7 +164,7 @@ func getKey(urlStr string, key []byte) (*query.ResponseKeyPageIndex, error) {
 }
 
 func GetKey(url, key string) (string, error) {
-	keyb, err := resolvePublicKey(key)
+	keyb, _, _, err := resolvePublicKey(key)
 	if err != nil {
 		return "", err
 	}

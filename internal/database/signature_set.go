@@ -167,10 +167,10 @@ func signatureKeyHash(sig protocol.Signature) [32]byte {
 
 	default:
 		// Normal signatures must come from a unique key
-		key := sig.GetPublicKey()
-		if key == nil {
+		hash := sig.GetPublicKeyHash()
+		if hash == nil {
 			panic("attempted to add a signature that doesn't have a key!")
 		}
-		return sha256.Sum256(key)
+		return *(*[32]byte)(hash)
 	}
 }
