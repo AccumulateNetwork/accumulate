@@ -57,35 +57,6 @@ func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx []byte) {
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
 var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
 
-// checkError returns nil if the error can be ignored.
-func (*dispatcher) checkError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// TODO This may be unnecessary once this issue is fixed:
-	// https://github.com/tendermint/tendermint/issues/7185.
-
-	// Is the error "tx already exists in cache"?
-	if err.Error() == tm.ErrTxInCache.Error() {
-		return nil
-	}
-
-	// Or RPC error "tx already exists in cache"?
-	var rpcErr1 *jrpc.RPCError
-	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
-		return nil
-	}
-
-	var rpcErr2 jsonrpc2.Error
-	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
-		return nil
-	}
-
-	// It's a real error
-	return err
-}
-
 // Send sends all of the batches asynchronously.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	errs := make(chan error)
@@ -102,7 +73,6 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		go func() {
 			defer wg.Done()
 			resp, err := d.Router.Submit(ctx, subnet, batch, false, false)
-			err = d.checkError(err)
 			if err != nil {
 				errs <- err
 				return
@@ -124,7 +94,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 			for _, r := range rset.Results {
 				if r.Code != 0 {
-					errs <- errors.New(r.Message)
+					errs <- protocol.NewError(protocol.ErrorCode(r.Code), errors.New(r.Message))
 				}
 			}
 		}()
