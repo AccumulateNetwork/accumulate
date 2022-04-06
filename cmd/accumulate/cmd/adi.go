@@ -154,7 +154,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	pubKey, err := resolvePublicKey(args[1])
+	pubKey, _, _, err := resolvePublicKey(args[1])
 	if err != nil {
 		return "", err
 	}
