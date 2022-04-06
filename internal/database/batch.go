@@ -13,6 +13,32 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+// debug is a bit field for enabling debug log messages
+//nolint
+const debug = 0 |
+	// debugGet |
+	// debugGetValue |
+	// debugPut |
+	// debugPutValue |
+	// debugCache |
+	// debugCacheValue |
+	0
+
+const (
+	// debugGet logs the key of Batch.getValue
+	debugGet = 1 << iota
+	// debugGetValue logs the value of Batch.getValue
+	debugGetValue
+	// debugPut logs the key of Batch.putValue
+	debugPut
+	// debugPutValue logs the value of Batch.putValue
+	debugPutValue
+	// debugCache logs the key of Batch.cacheValue
+	debugCache
+	// debugCacheValue logs the value of Batch.cacheValue
+	debugCacheValue
+)
+
 // Batch batches database writes.
 type Batch struct {
 	done        bool
@@ -96,13 +122,6 @@ func (b *Batch) Update(fn func(*Batch) error) error {
 	return batch.Commit()
 }
 
-func (b *Batch) idStr() string {
-	if b.parent == nil {
-		return fmt.Sprint(b.id)
-	}
-	return fmt.Sprintf("%s.%d", b.parent.idStr(), b.id)
-}
-
 type TypedValue interface {
 	encoding.BinaryMarshaler
 	CopyAsInterface() interface{}
@@ -119,8 +138,17 @@ func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
 	// Cache the value, preserve dirtiness
 	cv := b.values[key]
 	cv.value = value
+
+	switch debug & (debugCache | debugCacheValue) {
+	case debugCache | debugCacheValue:
+		b.logger.Debug("Cache", "key", key, "value", value, "dirty", logging.WithFormat("%v → %v", cv.dirty, dirty))
+	case debugCache:
+		b.logger.Debug("Cache", "key", key, "dirty", logging.WithFormat("%v → %v", cv.dirty, dirty))
+	case debugCacheValue:
+		b.logger.Debug("Cache", "value", value, "dirty", logging.WithFormat("%v → %v", cv.dirty, dirty))
+	}
+
 	if dirty && !cv.dirty {
-		b.logger.Debug("Dirtying value", "key", key, "batch", b.idStr())
 		cv.dirty = true
 	}
 	b.values[key] = cv
@@ -134,9 +162,30 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	b.bptEntries[key] = hash
 }
 
-func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (TypedValue, error) {
+func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v TypedValue, err error) {
 	if b.done {
 		panic("attempted to use a commited or discarded batch")
+	}
+
+	switch debug & (debugGet | debugGetValue) {
+	case debugGet | debugGetValue:
+		defer func() {
+			if err != nil {
+				b.logger.Debug("Get", "key", key, "value", err)
+			} else {
+				b.logger.Debug("Get", "key", key, "value", v)
+			}
+		}()
+	case debugGet:
+		b.logger.Debug("Get", "key", key)
+	case debugGetValue:
+		defer func() {
+			if err != nil {
+				b.logger.Debug("Get", "error", err)
+			} else {
+				b.logger.Debug("Get", "value", v)
+			}
+		}()
 	}
 
 	// Check for an existing value
@@ -225,6 +274,15 @@ func (b *Batch) getValuePtr(key storage.Key, value interface {
 func (b *Batch) putValue(key storage.Key, value TypedValue) {
 	if b.done {
 		panic("attempted to use a commited or discarded batch")
+	}
+
+	switch debug & (debugPut | debugPutValue) {
+	case debugPut | debugPutValue:
+		b.logger.Debug("Put", "key", key, "value", value)
+	case debugPut:
+		b.logger.Debug("Put", "key", key)
+	case debugPutValue:
+		b.logger.Debug("Put", "value", value)
 	}
 
 	cv, ok := b.values[key]

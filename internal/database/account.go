@@ -60,24 +60,19 @@ func (r *Account) GetStateAs(state interface{}) error {
 // PutState stores the record state and adds the record to the BPT (as a hash).
 func (r *Account) PutState(state protocol.Account) error {
 	// Does the record state have a URL?
-	if state.Header().Url == nil {
+	if state.GetUrl() == nil {
 		return errors.New("invalid URL: empty")
 	}
 
 	// Is this the right URL - does it match the record's key?
-	if account(state.Header().Url) != r.key {
-		return fmt.Errorf("mismatched url: key is %X, URL is %v", r.key.objectBucket, state.Header().Url)
+	if account(state.GetUrl()) != r.key {
+		return fmt.Errorf("mismatched url: key is %X, URL is %v", r.key.objectBucket, state.GetUrl())
 	}
 
 	// Make sure the key book is set
-	switch state.(type) {
-	case *protocol.LiteTokenAccount, *protocol.LiteDataAccount,
-		*protocol.KeyBook, *protocol.KeyPage:
-		// Empty key book is OK
-	default:
-		if state.Header().KeyBook == nil {
-			return fmt.Errorf("missing key book")
-		}
+	account, ok := state.(protocol.FullAccount)
+	if ok && len(account.GetAuth().Authorities) == 0 {
+		return fmt.Errorf("missing key book")
 	}
 
 	// Store the state

@@ -26,7 +26,7 @@ func ComputeLiteDataAccountId(firstEntry *DataEntry) []byte {
 }
 
 func (c *LiteDataAccount) AccountId() ([]byte, error) {
-	head, err := ParseLiteDataAddress(c.Header().Url)
+	head, err := ParseLiteDataAddress(c.Url)
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ func (f *FileReader) SetFlags(flags *pflag.FlagSet, label string) {
 	flags.StringSliceVar(&f.Rename, "rename", nil, "Rename "+label+", e.g. 'Foo:Bar'")
 }
 
-func (f *FileReader) Read(files []string, typ reflect.Type) (interface{}, error) {
+func (f *FileReader) ReadMap(files []string, typ reflect.Type) (interface{}, error) {
 	if typ.Kind() != reflect.Map {
 		panic("typ must be a map type")
 	}
@@ -70,6 +70,32 @@ func (f *FileReader) Read(files []string, typ reflect.Type) (interface{}, error)
 	}
 
 	return all.Interface(), nil
+}
+
+type Decoder interface {
+	Decode(interface{}) error
+}
+
+type Decodable interface {
+	DecodeFromFile(file string, dec Decoder) error
+}
+
+func (f *FileReader) ReadAll(files []string, value Decodable) error {
+	for _, file := range files {
+		f, err := os.Open(file)
+		if err != nil {
+			return fmt.Errorf("opening %q: %v", file, err)
+		}
+		defer f.Close()
+
+		dec := yaml.NewDecoder(f)
+		dec.KnownFields(true)
+		err = value.DecodeFromFile(file, dec)
+		if err != nil {
+			return fmt.Errorf("decoding %q: %v", file, err)
+		}
+	}
+	return nil
 }
 
 func (f *FileReader) include(all reflect.Value) (reflect.Value, error) {

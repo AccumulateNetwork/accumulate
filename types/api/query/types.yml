@@ -8,10 +8,12 @@ RequestKeyPageIndex:
 
 ResponseKeyPageIndex:
   fields:
-    - name: KeyBook
+    - name: Authority
+      alternative: KeyBook
       type: url
       pointer: true
-    - name: KeyPage
+    - name: Signer
+      alternative: KeyPage
       type: url
       pointer: true
     - name: Index

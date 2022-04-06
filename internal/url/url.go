@@ -220,6 +220,12 @@ func (u *URL) Parent() (*URL, bool) {
 	return v, true
 }
 
+// ParentOf returns true if U is the parent of V
+func (u *URL) ParentOf(v *URL) bool {
+	v, ok := v.Parent()
+	return ok && u.Equal(v)
+}
+
 // IdentityAccountID constructs an account identifier from the lower case
 // hostname. The port is not included.
 //
