@@ -881,7 +881,7 @@ func TestUpdateKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, url.MustParse("foo/book1/1"), func(p *protocol.KeyPage) { p.Threshold = 2 }))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, url.MustParse("foo/book1/1"), func(p *protocol.KeyPage) { p.AcceptThreshold = 2 }))
 	require.NoError(t, batch.Commit())
 
 	spec := n.GetKeyPage("foo/book1/1")
@@ -1377,7 +1377,7 @@ func TestMultisig(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
 	require.NoError(t, acctesting.UpdateKeyPage(batch, url.MustParse("foo/book0/1"), func(page *protocol.KeyPage) {
 		hash := sha256.Sum256(key2[32:])
-		page.Threshold = 2
+		page.AcceptThreshold = 2
 		page.CreditBalance = 1e8
 		page.Keys = append(page.Keys, &protocol.KeySpec{
 			PublicKeyHash: hash[:],
