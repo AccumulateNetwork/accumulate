@@ -12,6 +12,10 @@ type SendTokens struct{}
 
 func (SendTokens) Type() protocol.TransactionType { return protocol.TransactionTypeSendTokens }
 
+func (SendTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SendTokens{}).Validate(st, tx)
+}
+
 func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {

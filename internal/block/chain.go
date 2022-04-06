@@ -52,6 +52,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			WriteData{},
 			WriteDataTo{},
 			UpdateAccountAuth{},
+			UpdateKey{},
 
 			// BVN validator management
 			AddValidator{},
@@ -96,6 +97,9 @@ type TransactionExecutor interface {
 	// Type is the transaction type the executor can execute.
 	Type() protocol.TransactionType
 
-	// Validate fully validates and executes the transaction.
+	// Validate validates the transaction for acceptance.
 	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
+
+	// Execute fully validates and executes the transaction.
+	Execute(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
 }
