@@ -179,7 +179,7 @@ func (u *UnionSpec) Interface() string {
 	case "transaction":
 		return "TransactionBody"
 	default:
-		return strings.Title(u.Type)
+		return typegen.TitleCase(u.Type)
 	}
 }
 
@@ -191,7 +191,7 @@ func (u *UnionSpec) Enumeration() string {
 	case "result":
 		return "TransactionType"
 	}
-	return strings.Title(u.Type) + "Type"
+	return typegen.TitleCase(u.Type) + "Type"
 }
 
 func (f *Field) IsBinary() bool          { return !f.NonBinary }

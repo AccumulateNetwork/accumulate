@@ -102,17 +102,6 @@ if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; t
    wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
 fi
 
-section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
-    RESULT=$(accumulate -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
-    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
-else
-    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
-    echo
-fi
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
@@ -178,7 +167,7 @@ success
 section "Add credits to the ADI's key page 1"
 wait-for cli-tx credits ${LITE} keytest/book/1 60000
 BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 5900000 ] && success || die "keytest/book/1 should have 6000000 credits but has ${BALANCE}"
+[ "$BALANCE" -ge 6000000 ] && success || die "keytest/book/1 should have 6000000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
@@ -470,6 +459,17 @@ TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
 wait-for-tx $TXID
 MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
+
+section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
+    RESULT=$(accumulate -j data get dn/oracle)
+    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
+    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
+else
+    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+    echo
+fi
 
 section "Query votes chain"
 if [ -f "$NODE_PRIV_VAL" ]; then
