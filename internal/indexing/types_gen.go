@@ -508,6 +508,14 @@ func (v *TransactionChainIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *BlockStateIndex) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ProducedSynthTxns encoding.JsonList[*BlockStateSynthTxnEntry] `json:"producedSynthTxns,omitempty"`
+	}{}
+	u.ProducedSynthTxns = v.ProducedSynthTxns
+	return json.Marshal(&u)
+}
+
 func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transaction *string `json:"transaction,omitempty"`
@@ -520,13 +528,33 @@ func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 
 func (v *PendingTransactionsIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Transactions []string `json:"transactions,omitempty"`
+		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = make([]string, len(v.Transactions))
+	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
 	for i, x := range v.Transactions {
 		u.Transactions[i] = encoding.ChainToJSON(x)
 	}
 	return json.Marshal(&u)
+}
+
+func (v *TransactionChainIndex) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Entries encoding.JsonList[*TransactionChainEntry] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
+func (v *BlockStateIndex) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ProducedSynthTxns encoding.JsonList[*BlockStateSynthTxnEntry] `json:"producedSynthTxns,omitempty"`
+	}{}
+	u.ProducedSynthTxns = v.ProducedSynthTxns
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ProducedSynthTxns = u.ProducedSynthTxns
+	return nil
 }
 
 func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
@@ -550,9 +578,9 @@ func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 
 func (v *PendingTransactionsIndex) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Transactions []string `json:"transactions,omitempty"`
+		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = make([]string, len(v.Transactions))
+	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
 	for i, x := range v.Transactions {
 		u.Transactions[i] = encoding.ChainToJSON(x)
 	}
@@ -567,5 +595,17 @@ func (v *PendingTransactionsIndex) UnmarshalJSON(data []byte) error {
 			v.Transactions[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *TransactionChainIndex) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Entries encoding.JsonList[*TransactionChainEntry] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Entries = u.Entries
 	return nil
 }

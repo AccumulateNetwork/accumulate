@@ -184,29 +184,35 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 	return typ
 }
 
-func GoJsonType(field *Field) string {
-	var jtype string
+func goJsonTypeSingle(field *Field) string {
 	switch field.Type {
 	case "bytes":
-		jtype = "*string"
+		return "*string"
 	case "bigint":
-		jtype = "*string"
+		return "*string"
 	case "chain", "hash":
-		jtype = "string"
+		return "string"
 	case "duration", "any":
-		jtype = "interface{}"
-	default:
-		if field.UnmarshalWith != "" {
-			jtype = "json.RawMessage"
-		} else {
-			return ""
-		}
+		return "interface{}"
 	}
 
-	if field.Repeatable {
-		jtype = "[]" + jtype
+	if field.UnmarshalWith == "" {
+		return ""
 	}
-	return jtype
+
+	return "encoding.JsonUnmarshalWith[" + GoResolveType(field, false, true) + "]"
+}
+
+func GoJsonType(field *Field) string {
+	typ := goJsonTypeSingle(field)
+	switch {
+	case !field.Repeatable:
+		return typ
+	case typ != "":
+		return "encoding.JsonList[" + typ + "]"
+	default:
+		return "encoding.JsonList[" + GoResolveType(field, false, true) + "]"
+	}
 }
 
 func GoErrVirtualFieldNotEqual(field *Field, varName, valName string) (string, error) {
@@ -469,16 +475,17 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	return "\tfor { ok := " + expr + "; if !ok { break } }", nil
 }
 
-func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, errName string, errArgs ...string) (string, error) {
+func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 	if field.UnmarshalWith != "" {
-		err := GoFieldError("encoding", errName, errArgs...)
-		if !forUnmarshal {
-			err = "nil, " + err
-		}
 		if !field.Repeatable {
-			return fmt.Sprintf("\tif x, err := json.Marshal(%s); err != nil { return %s } else { %s = x }", srcName, err, tgtName), nil
+			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %s}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
 		}
-		return fmt.Sprintf("\t%s = make([]json.RawMessage, len(%s)); for i, x := range %[2]s { if y, err := json.Marshal(x); err != nil { return %s } else { %[1]s[i] = y } }", tgtName, srcName, err), nil
+		return fmt.Sprintf(
+			"	%s = make([]%s, len(%s));\n"+
+				"	for i, x := range %[3]s {\n"+
+				"		%[1]s[i] = %[2]s{Value: x, Func: %[4]s}\n"+
+				"	}",
+			tgtName, goJsonTypeSingle(field), srcName, field.UnmarshalWith), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)
@@ -503,9 +510,14 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 	err := GoFieldError("decoding", errName, errArgs...)
 	if field.UnmarshalWith != "" {
 		if !field.Repeatable {
-			return fmt.Sprintf("\tif x, err := %sJSON(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName), nil
+			return fmt.Sprintf("\t%s = %s.Value\n", tgtName, srcName), nil
 		}
-		return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if y, err := %sJSON(x); err != nil { return %s } else { %[1]s[i] = y } }", tgtName, GoResolveType(field, false, false), srcName, field.UnmarshalWith, err), nil
+		return fmt.Sprintf(
+			"	%s = make(%s, len(%s));\n"+
+				"	for i, x := range %[3]s {\n"+
+				"		%[1]s[i] = x.Value\n"+
+				"	}",
+			tgtName, GoResolveType(field, false, false), srcName), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)

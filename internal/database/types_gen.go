@@ -533,28 +533,34 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *exampleFullAccountState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		State  json.RawMessage `json:"state,omitempty"`
-		Chains []*merkleState  `json:"chains,omitempty"`
+		State  encoding.JsonUnmarshalWith[protocol.Account] `json:"state,omitempty"`
+		Chains encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
 	}{}
-	if x, err := json.Marshal(v.State); err != nil {
-		return nil, fmt.Errorf("error encoding State: %w", err)
-	} else {
-		u.State = x
-	}
+	u.State = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.State, Func: protocol.UnmarshalAccount}
 	u.Chains = v.Chains
 	return json.Marshal(&u)
 }
 
 func (v *merkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Count   uint64   `json:"count,omitempty"`
-		Pending []string `json:"pending,omitempty"`
+		Count   uint64                    `json:"count,omitempty"`
+		Pending encoding.JsonList[string] `json:"pending,omitempty"`
 	}{}
 	u.Count = v.Count
-	u.Pending = make([]string, len(v.Pending))
+	u.Pending = make(encoding.JsonList[string], len(v.Pending))
 	for i, x := range v.Pending {
 		u.Pending[i] = encoding.ChainToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *sigSetData) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Version uint64                           `json:"version,omitempty"`
+		Entries encoding.JsonList[sigSetKeyData] `json:"entries,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
 
@@ -572,9 +578,9 @@ func (v *sigSetKeyData) MarshalJSON() ([]byte, error) {
 
 func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txids []string `json:"txids,omitempty"`
+		Txids encoding.JsonList[string] `json:"txids,omitempty"`
 	}{}
-	u.Txids = make([]string, len(v.Txids))
+	u.Txids = make(encoding.JsonList[string], len(v.Txids))
 	for i, x := range v.Txids {
 		u.Txids[i] = encoding.ChainToJSON(x)
 	}
@@ -583,23 +589,15 @@ func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 
 func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		State  json.RawMessage `json:"state,omitempty"`
-		Chains []*merkleState  `json:"chains,omitempty"`
+		State  encoding.JsonUnmarshalWith[protocol.Account] `json:"state,omitempty"`
+		Chains encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
 	}{}
-	if x, err := json.Marshal(v.State); err != nil {
-		return fmt.Errorf("error encoding State: %w", err)
-	} else {
-		u.State = x
-	}
+	u.State = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.State, Func: protocol.UnmarshalAccount}
 	u.Chains = v.Chains
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := protocol.UnmarshalAccountJSON(u.State); err != nil {
-		return fmt.Errorf("error decoding State: %w", err)
-	} else {
-		v.State = x
-	}
+	v.State = u.State.Value
 
 	v.Chains = u.Chains
 	return nil
@@ -607,11 +605,11 @@ func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
 
 func (v *merkleState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Count   uint64   `json:"count,omitempty"`
-		Pending []string `json:"pending,omitempty"`
+		Count   uint64                    `json:"count,omitempty"`
+		Pending encoding.JsonList[string] `json:"pending,omitempty"`
 	}{}
 	u.Count = v.Count
-	u.Pending = make([]string, len(v.Pending))
+	u.Pending = make(encoding.JsonList[string], len(v.Pending))
 	for i, x := range v.Pending {
 		u.Pending[i] = encoding.ChainToJSON(x)
 	}
@@ -627,6 +625,21 @@ func (v *merkleState) UnmarshalJSON(data []byte) error {
 			v.Pending[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *sigSetData) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Version uint64                           `json:"version,omitempty"`
+		Entries encoding.JsonList[sigSetKeyData] `json:"entries,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Version = u.Version
+	v.Entries = u.Entries
 	return nil
 }
 
@@ -658,9 +671,9 @@ func (v *sigSetKeyData) UnmarshalJSON(data []byte) error {
 
 func (v *txSyntheticTxns) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txids []string `json:"txids,omitempty"`
+		Txids encoding.JsonList[string] `json:"txids,omitempty"`
 	}{}
-	u.Txids = make([]string, len(v.Txids))
+	u.Txids = make(encoding.JsonList[string], len(v.Txids))
 	for i, x := range v.Txids {
 		u.Txids[i] = encoding.ChainToJSON(x)
 	}
