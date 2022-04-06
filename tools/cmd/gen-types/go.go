@@ -97,9 +97,6 @@ func GoGetField(field *Field) string {
 	if field.Virtual {
 		return field.Name + "()"
 	}
-	if field.IsEmbedded() {
-		return field.Type
-	}
 	return field.Name
 }
 

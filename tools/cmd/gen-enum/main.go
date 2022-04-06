@@ -45,7 +45,7 @@ func check(err error) {
 }
 
 func run(_ *cobra.Command, args []string) {
-	types, err := flags.files.Read(args, reflect.TypeOf((map[string]typegen.Enum)(nil)))
+	types, err := flags.files.ReadMap(args, reflect.TypeOf((map[string]typegen.Enum)(nil)))
 	check(err)
 	ttypes := convert(types.(map[string]typegen.Enum), flags.Package)
 

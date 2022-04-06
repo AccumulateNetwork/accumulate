@@ -83,7 +83,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("failed to load recipient: %v", err)
 	}
 
-	var account protocol.TokenHolderAccount
+	var account protocol.AccountWithTokens
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin

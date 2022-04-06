@@ -17,14 +17,14 @@ type StateManager struct {
 	Origin    protocol.Account
 	OriginUrl *url.URL
 
-	Signator    protocol.SignerAccount
+	Signator    protocol.Signer
 	SignatorUrl *url.URL
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.SignerAccount, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.Signer, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.SignatorUrl = signerUrl
@@ -57,7 +57,7 @@ func (m *StateManager) Commit() (*ProcessTransactionState, error) {
 		}
 
 		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := record.Header().Url.RootIdentity()
+		id := record.GetUrl().RootIdentity()
 		scc, ok := create[id.String()]
 		if ok {
 			scc.Chains = append(scc.Chains, params)
@@ -114,18 +114,50 @@ func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	})
 }
 
-func (m *StateManager) setKeyBook(account protocol.Account, u *url.URL) error {
-	if u == nil {
-		account.Header().KeyBook = m.Origin.Header().KeyBook
-		return nil
-	}
-
+func (m *StateManager) AddAuthority(account protocol.FullAccount, u *url.URL) error {
 	var book *protocol.KeyBook
 	err := m.LoadUrlAs(u, &book)
 	if err != nil {
 		return fmt.Errorf("invalid key book %q: %v", u, err)
 	}
 
-	account.Header().KeyBook = u
+	account.GetAuth().AddAuthority(u)
+	return nil
+}
+
+func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
+	if !account.GetUrl().RootIdentity().Equal(m.OriginUrl.RootIdentity()) {
+		return fmt.Errorf("cannot inherit from principal: belongs to a different root identity")
+	}
+
+	principal, ok := m.Origin.(protocol.FullAccount)
+	if !ok {
+		return fmt.Errorf("cannot inherit from principal: not a full account")
+	}
+
+	// Inherit auth from the principal
+	auth := account.GetAuth()
+	*auth = *principal.GetAuth()
+	return nil
+}
+
+func (m *StateManager) SetAuth(account protocol.FullAccount, mainKeyBook, managerKeyBook *url.URL) error {
+	var err error
+	if mainKeyBook == nil {
+		err = m.InheritAuth(account)
+	} else {
+		err = m.AddAuthority(account, mainKeyBook)
+	}
+	if err != nil {
+		return err
+	}
+
+	if managerKeyBook != nil {
+		err = m.AddAuthority(account, managerKeyBook)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

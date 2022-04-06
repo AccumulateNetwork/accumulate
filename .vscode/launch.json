@@ -144,6 +144,12 @@
         // "keytest/tokens",
         // "keytest-1-1",
         // "e05d44e9688d21556b67c0afc8c3c2493c930ac67a608701e22b7c98a421df8e"
+
+        // "auth",
+        // "remove",
+        // "keytest/managed-tokens",
+        // "keytest-1-0",
+        // "keytest/manager"
       ]
     }
   ]

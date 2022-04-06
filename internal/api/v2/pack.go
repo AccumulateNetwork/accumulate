@@ -14,7 +14,7 @@ func packStateResponse(account protocol.Account, chains []query.ChainState, rece
 	res.Type = account.Type().String()
 	res.Data = account
 	res.Chains = chains
-	res.ChainId = account.Header().Url.AccountID()
+	res.ChainId = account.GetUrl().AccountID()
 	res.Receipt = receipt
 
 	for _, chain := range chains {
@@ -86,7 +86,7 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 		res.Signatures = append(res.Signatures, signer.Signatures...)
 
 		var book *SignatureBook
-		signerUrl := signer.Account.Header().Url
+		signerUrl := signer.Account.GetUrl()
 		bookUrl, _, ok := protocol.ParseKeyPageUrl(signerUrl)
 		if !ok {
 			book = new(SignatureBook)

@@ -5,7 +5,13 @@ import (
 )
 
 // debug is a bit field for enabling debug log messages
-const debug = 0 // | debugGet | debugGetValue | debugPut | debugPutValue
+//nolint
+const debug = 0 |
+	// debugGet |
+	// debugGetValue |
+	// debugPut |
+	// debugPutValue |
+	0
 
 const (
 	// debugGet logs the key of DebugBatch.Get
@@ -38,10 +44,12 @@ func (b *DebugBatch) Begin(writable bool) KeyValueTxn {
 }
 
 func (b *DebugBatch) Put(key Key, value []byte) error {
-	if debug&debugPut != 0 {
+	switch debug & (debugPut | debugPutValue) {
+	case debugPut | debugPutValue:
+		b.Logger.Debug("Put", "key", key, "value", logging.AsHex(value))
+	case debugPut:
 		b.Logger.Debug("Put", "key", key)
-	}
-	if debug&debugPutValue != 0 {
+	case debugPutValue:
 		b.Logger.Debug("Put", "value", logging.AsHex(value))
 	}
 
