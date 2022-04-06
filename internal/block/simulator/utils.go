@@ -1,124 +1,26 @@
-package block_test
-
-// Blackbox testing utilities
+package simulator
 
 import (
 	"encoding"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmtypes "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func SetupExecNetwork(t testing.TB) *TestRouter {
-	const nameD = protocol.Directory
-	const nameB = "BlockValidator"
-
-	// Loggers
-	loggerD := acctesting.NewTestLogger(t).With("subnet", nameD)
-	loggerB := acctesting.NewTestLogger(t).With("subnet", nameB)
-
-	// Node keys
-	keyD := acctesting.GenerateKey(t.Name(), nameD)
-	keyB := acctesting.GenerateKey(t.Name(), nameB)
-
-	// Databases
-	dbD := database.OpenInMemory(loggerD)
-	dbB := database.OpenInMemory(loggerB)
-
-	// Network configuration
-	subnets := []config.Subnet{
-		{Type: config.Directory, ID: nameD, Nodes: []config.Node{{Type: config.Validator, Address: nameD}}},
-		{Type: config.BlockValidator, ID: nameB, Nodes: []config.Node{{Type: config.Validator, Address: nameB}}},
-	}
-	networkD := config.Network{
-		Type:          config.Directory,
-		LocalSubnetID: nameD,
-		LocalAddress:  nameD,
-		Subnets:       subnets,
-	}
-	networkB := config.Network{
-		Type:          config.BlockValidator,
-		LocalSubnetID: nameB,
-		LocalAddress:  nameB,
-		Subnets:       subnets,
-	}
-
-	// Initialize the router
-	router := &TestRouter{
-		TB:      t,
-		Logger:  acctesting.NewTestLogger(t).With("module", "test-router"),
-		Network: &config.Network{Subnets: subnets},
-	}
-
-	// Create the executors
-	execD, err := NewNodeExecutor(ExecutorOptions{
-		Logger:  loggerD,
-		Key:     keyD,
-		Network: networkD,
-		Router:  router,
-	}, dbD)
-	require.NoError(t, err)
-	execB, err := NewNodeExecutor(ExecutorOptions{
-		Logger:  loggerB,
-		Key:     keyB,
-		Network: networkB,
-		Router:  router,
-	}, dbB)
-	require.NoError(t, err)
-
-	// Populate the router
-	router.Executors = map[string]*RouterExecEntry{
-		nameD: {Database: dbD, Executor: execD},
-		nameB: {Database: dbB, Executor: execB},
-	}
-
-	// Start the executors
-	require.NoError(t, execD.Start())
-	require.NoError(t, execB.Start())
-
-	return router
-}
-
-func SetupExecSingle(t testing.TB) (*database.Database, *Executor) {
-	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
-	db := database.OpenInMemory(logger)
-	key := acctesting.GenerateKey(t.Name())
-	subnetID := strings.ReplaceAll(t.Name(), "_", "-")
-	network := config.Network{
-		Type:          config.BlockValidator,
-		LocalSubnetID: subnetID,
-		Subnets: []config.Subnet{
-			{Type: config.Directory, ID: protocol.Directory},
-			{Type: config.BlockValidator, ID: subnetID},
-		},
-	}
-	exec, err := NewNodeExecutor(ExecutorOptions{
-		Logger:  logger,
-		Key:     key,
-		Network: network,
-		Router:  acctesting.NullRouter{},
-	}, db)
-	require.NoError(t, err)
-	require.NoError(t, exec.Start())
-
-	return db, exec
-}
-
 func InitChain(t testing.TB, db *database.Database, exec *Executor) {
+	t.Helper()
+
 	block := new(Block)
 	block.Index = protocol.GenesisBlock
 	block.Time = time.Unix(0, 0)
@@ -148,6 +50,8 @@ func InitChain(t testing.TB, db *database.Database, exec *Executor) {
 }
 
 func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
+	t.Helper()
+
 	if block == nil {
 		block = new(Block)
 		block.IsLeader = true
@@ -191,6 +95,8 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 }
 
 func CheckTx(t testing.TB, db *database.Database, exec *Executor, envelope *protocol.Envelope) (protocol.TransactionResult, error) {
+	t.Helper()
+
 	batch := db.Begin(false)
 	defer batch.Discard()
 
@@ -205,6 +111,8 @@ func CheckTx(t testing.TB, db *database.Database, exec *Executor, envelope *prot
 }
 
 func DeliverTx(t testing.TB, exec *Executor, block *Block, envelope *protocol.Envelope) *protocol.TransactionStatus {
+	t.Helper()
+
 	// Process signatures
 	batch := block.Batch.Begin(true)
 	defer batch.Discard()
@@ -239,7 +147,7 @@ func DeliverTx(t testing.TB, exec *Executor, block *Block, envelope *protocol.En
 
 	if !envelope.Type().IsInternal() && envelope.Type() != protocol.TransactionTypeSyntheticAnchor {
 		exec.Logger.Info("Transaction delivered",
-			"module", "test-router",
+			"module", "simulator",
 			"block", block.Index,
 			"type", envelope.Type(),
 			"txn-hash", logging.AsHex(envelope.GetTxHash()).Slice(0, 4),
@@ -270,6 +178,8 @@ type queryRequest interface {
 }
 
 func Query(t testing.TB, db *database.Database, exec *Executor, req queryRequest, prove bool) interface{} {
+	t.Helper()
+
 	var err error
 	qr := new(query.Query)
 	qr.Type = req.Type()

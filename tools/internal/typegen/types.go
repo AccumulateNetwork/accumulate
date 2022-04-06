@@ -47,7 +47,7 @@ func (t *Types) DecodeFromFile(file string, dec Decoder) error {
 		*t = append(*t, typ)
 
 		if typ.Union.Type != "" && typ.Union.Value == "" {
-			typ.Union.Value = strings.TrimSuffix(name, strings.Title(typ.Union.Type))
+			typ.Union.Value = strings.TrimSuffix(name, TitleCase(typ.Union.Type))
 		}
 	}
 	return nil
