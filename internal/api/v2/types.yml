@@ -112,8 +112,6 @@ SignerMetadata:
 MinorQueryResponse:
   non-binary: true
   incomparable: true
-  embeddings:
-    - TransactionQueryResponse
   fields:
     - name: BlockIndex
       description: is the index of the block. Only include when indexing the root anchor chain
@@ -122,6 +120,18 @@ MinorQueryResponse:
       description: is the start time of the block.
       type: time
       pointer: true
+    - name: TxCount
+      description: shows how many transactions this block contains
+      type: uint
+    - name: TxIds
+      repeatable: true
+      type: bytes
+    - name: Transactions
+      type: TransactionQueryResponse
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
 
 MerkleState:
   non-binary: true
@@ -269,6 +279,13 @@ MinorBlocksQuery:
   embeddings:
     - UrlQuery
     - QueryPagination
+  fields:
+    - name: TxFetchMode
+      type: protocol.TxFetchMode
+      optional: true
+    - name: FilterSynthAnchorsOnlyBlocks
+      type: bool
+      optional: true
 
 QueryOptions:
   non-binary: true

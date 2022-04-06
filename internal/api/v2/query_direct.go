@@ -462,7 +462,7 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode protocol.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
 	// TODO move to pagination.validate()
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
@@ -477,10 +477,13 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (
 		return nil, errors.New("count is too large")
 	}
 
-	req := new(query.RequestMinorBlocks)
-	req.Account = u
-	req.Start = pagination.Start
-	req.Limit = pagination.Count
+	req := &query.RequestMinorBlocks{
+		Account:                      u,
+		Start:                        pagination.Start,
+		Limit:                        pagination.Count,
+		TxFetchMode:                  txFetchMode,
+		FilterSynthAnchorsOnlyBlocks: includeSynthAnchors,
+	}
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
@@ -506,9 +509,7 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination) (
 		if err != nil {
 			return nil, err
 		}
-		if queryRes.Data != nil { // TODO Blocks without Data (genesis) will crash the CLI. Omitting for now but maybe these need to be skipped on the CLI side?
-			mres.Items = append(mres.Items, queryRes)
-		}
+		mres.Items = append(mres.Items, queryRes)
 	}
 
 	return mres, nil

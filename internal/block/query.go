@@ -899,57 +899,13 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
 		}
 	case types.QueryTypeMinorBlocks:
-		req := query.RequestMinorBlocks{}
-		err := req.UnmarshalBinary(q.Content)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
-		}
-
-		ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-
-		idxChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
-		}
-		idxEntries, err := idxChain.Entries(int64(req.Start), int64(req.Start+req.Limit))
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
-		}
-
-		resp := query.ResponseMinorBlocks{}
-		for _, idxData := range idxEntries {
-			minorEntry := new(query.ResponseMinorEntry)
-
-			idxEntry := new(protocol.IndexEntry)
-			err := idxEntry.UnmarshalBinary(idxData)
-			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
-
-			}
-			minorEntry.BlockIndex = idxEntry.BlockIndex
-			minorEntry.BlockTime = idxEntry.BlockTime
-
-			if idxEntry.BlockIndex > 0 {
-				chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, idxEntry.BlockIndex).Get()
-				if err != nil {
-					return nil, nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
-				}
-				for _, updIdx := range chainUpdatesIndex.Entries {
-					minorEntry.TxId = *(*[32]byte)(updIdx.Entry)
-
-					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
-					if err == nil {
-						txt := qr.Envelope.Type()
-						if !txt.IsInternal() && txt != protocol.TransactionTypeSyntheticAnchor { // TODO Allow internal?
-							minorEntry.ResponseByTxId = *qr
-						}
-					}
-				}
-			}
-			resp.Entries = append(resp.Entries, minorEntry)
+		resp, pErr := m.queryMinorBlocks(batch, q)
+		if pErr != nil {
+			return nil, nil, pErr
 		}
 
 		k = []byte("minor-block")
+		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
@@ -959,6 +915,73 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
 	}
 	return k, v, err
+}
+
+func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*query.ResponseMinorBlocks, *protocol.Error) {
+	req := query.RequestMinorBlocks{}
+	err := req.UnmarshalBinary(q.Content)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
+
+	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	idxChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+	}
+	idxEntries, err := idxChain.Entries(int64(req.Start), int64(req.Start+req.Limit))
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+	}
+
+	resp := query.ResponseMinorBlocks{}
+	for _, idxData := range idxEntries {
+		minorEntry := new(query.ResponseMinorEntry)
+
+		idxEntry := new(protocol.IndexEntry)
+		err := idxEntry.UnmarshalBinary(idxData)
+		if err != nil {
+			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+
+		}
+		minorEntry.BlockIndex = idxEntry.BlockIndex
+		minorEntry.BlockTime = idxEntry.BlockTime
+
+		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < protocol.TxFetchModeOmit || req.FilterSynthAnchorsOnlyBlocks) {
+			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, idxEntry.BlockIndex).Get()
+			if err != nil {
+				return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+			}
+			minorEntry.TxCount = uint64(len(chainUpdatesIndex.Entries))
+			internalTxCount := uint64(0)
+			synthAnchorCount := uint64(0)
+			for _, updIdx := range chainUpdatesIndex.Entries {
+				if req.TxFetchMode <= protocol.TxFetchModeIds {
+					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
+				}
+				if req.TxFetchMode == protocol.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
+					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
+					if err == nil {
+						txt := qr.Envelope.Type()
+						if txt.IsInternal() {
+							internalTxCount++
+						} else if req.TxFetchMode == protocol.TxFetchModeExpand {
+							minorEntry.Transactions = append(minorEntry.Transactions, qr)
+						}
+						if txt == protocol.TransactionTypeSyntheticAnchor && req.FilterSynthAnchorsOnlyBlocks {
+							synthAnchorCount++
+						}
+					}
+				}
+			}
+			if minorEntry.TxCount > (internalTxCount + synthAnchorCount) {
+				resp.Entries = append(resp.Entries, minorEntry)
+			}
+		} else {
+			resp.Entries = append(resp.Entries, minorEntry)
+		}
+	}
+	return &resp, nil
 }
 
 func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) ([]protocol.Account, error) {

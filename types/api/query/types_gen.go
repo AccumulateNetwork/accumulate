@@ -69,10 +69,12 @@ type RequestKeyPageIndex struct {
 }
 
 type RequestMinorBlocks struct {
-	fieldsSet []bool
-	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	fieldsSet                    []bool
+	Account                      *url.URL             `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start                        uint64               `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit                        uint64               `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
+	FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks" validate:"required"`
 }
 
 type RequestTxHistory struct {
@@ -148,11 +150,15 @@ type ResponseMinorBlocks struct {
 
 type ResponseMinorEntry struct {
 	fieldsSet []bool
-	ResponseByTxId
 	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
 	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
 	// BlockTime is the start time of the block..
 	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	// TxCount shows how many transactions this block contains.
+	TxCount uint64   `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
+	TxIds   [][]byte `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
+	// Transactions the transactions within this block.
+	Transactions []*ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
 type ResponsePending struct {
@@ -277,6 +283,8 @@ func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
+	u.TxFetchMode = v.TxFetchMode
+	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
 
 	return u
 }
@@ -444,11 +452,21 @@ func (v *ResponseMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponseMinorEntry) Copy() *ResponseMinorEntry {
 	u := new(ResponseMinorEntry)
 
-	u.ResponseByTxId = *v.ResponseByTxId.Copy()
 	u.BlockIndex = v.BlockIndex
 	if v.BlockTime != nil {
 		u.BlockTime = new(time.Time)
 		*u.BlockTime = *v.BlockTime
+	}
+	u.TxCount = v.TxCount
+	u.TxIds = make([][]byte, len(v.TxIds))
+	for i, v := range v.TxIds {
+		u.TxIds[i] = encoding.BytesCopy(v)
+	}
+	u.Transactions = make([]*ResponseByTxId, len(v.Transactions))
+	for i, v := range v.Transactions {
+		if v != nil {
+			u.Transactions[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -643,6 +661,12 @@ func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
 		return false
 	}
 	if !(v.Limit == u.Limit) {
+		return false
+	}
+	if !(v.TxFetchMode == u.TxFetchMode) {
+		return false
+	}
+	if !(v.FilterSynthAnchorsOnlyBlocks == u.FilterSynthAnchorsOnlyBlocks) {
 		return false
 	}
 
@@ -875,9 +899,6 @@ func (v *ResponseMinorBlocks) Equal(u *ResponseMinorBlocks) bool {
 }
 
 func (v *ResponseMinorEntry) Equal(u *ResponseMinorEntry) bool {
-	if !v.ResponseByTxId.Equal(&u.ResponseByTxId) {
-		return false
-	}
 	if !(v.BlockIndex == u.BlockIndex) {
 		return false
 	}
@@ -888,6 +909,25 @@ func (v *ResponseMinorEntry) Equal(u *ResponseMinorEntry) bool {
 		return false
 	case !(*v.BlockTime == *u.BlockTime):
 		return false
+	}
+	if !(v.TxCount == u.TxCount) {
+		return false
+	}
+	if len(v.TxIds) != len(u.TxIds) {
+		return false
+	}
+	for i := range v.TxIds {
+		if !(bytes.Equal(v.TxIds[i], u.TxIds[i])) {
+			return false
+		}
+	}
+	if len(v.Transactions) != len(u.Transactions) {
+		return false
+	}
+	for i := range v.Transactions {
+		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1337,6 +1377,8 @@ var fieldNames_RequestMinorBlocks = []string{
 	1: "Account",
 	2: "Start",
 	3: "Limit",
+	4: "TxFetchMode",
+	5: "FilterSynthAnchorsOnlyBlocks",
 }
 
 func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
@@ -1351,6 +1393,12 @@ func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Limit == 0) {
 		writer.WriteUint(3, v.Limit)
+	}
+	if !(v.TxFetchMode == 0) {
+		writer.WriteEnum(4, v.TxFetchMode)
+	}
+	if !(!v.FilterSynthAnchorsOnlyBlocks) {
+		writer.WriteBool(5, v.FilterSynthAnchorsOnlyBlocks)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
@@ -1374,6 +1422,16 @@ func (v *RequestMinorBlocks) IsValid() error {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxFetchMode is missing")
+	} else if v.TxFetchMode == 0 {
+		errs = append(errs, "field TxFetchMode is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field FilterSynthAnchorsOnlyBlocks is missing")
+	} else if !v.FilterSynthAnchorsOnlyBlocks {
+		errs = append(errs, "field FilterSynthAnchorsOnlyBlocks is not set")
 	}
 
 	switch len(errs) {
@@ -1882,18 +1940,12 @@ func (v *ResponseMinorBlocks) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Start is missing")
-	} else if v.Start == 0 {
-		errs = append(errs, "field Start is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field End is missing")
-	} else if v.End == 0 {
-		errs = append(errs, "field End is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Total is missing")
-	} else if v.Total == 0 {
-		errs = append(errs, "field Total is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Entries is missing")
@@ -1912,21 +1964,35 @@ func (v *ResponseMinorBlocks) IsValid() error {
 }
 
 var fieldNames_ResponseMinorEntry = []string{
-	1: "ResponseByTxId",
-	2: "BlockIndex",
-	3: "BlockTime",
+	1: "BlockIndex",
+	2: "BlockTime",
+	3: "TxCount",
+	4: "TxIds",
+	5: "Transactions",
 }
 
 func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.ResponseByTxId)
 	if !(v.BlockIndex == 0) {
-		writer.WriteUint(2, v.BlockIndex)
+		writer.WriteUint(1, v.BlockIndex)
 	}
 	if !(v.BlockTime == nil) {
-		writer.WriteTime(3, *v.BlockTime)
+		writer.WriteTime(2, *v.BlockTime)
+	}
+	if !(v.TxCount == 0) {
+		writer.WriteUint(3, v.TxCount)
+	}
+	if !(len(v.TxIds) == 0) {
+		for _, v := range v.TxIds {
+			writer.WriteBytes(4, v)
+		}
+	}
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			writer.WriteValue(5, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseMinorEntry)
@@ -1936,18 +2002,30 @@ func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 func (v *ResponseMinorEntry) IsValid() error {
 	var errs []string
 
-	if err := v.ResponseByTxId.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field BlockIndex is missing")
 	} else if v.BlockIndex == 0 {
 		errs = append(errs, "field BlockIndex is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field BlockTime is missing")
 	} else if v.BlockTime == nil {
 		errs = append(errs, "field BlockTime is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field TxCount is missing")
+	} else if v.TxCount == 0 {
+		errs = append(errs, "field TxCount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxIds is missing")
+	} else if len(v.TxIds) == 0 {
+		errs = append(errs, "field TxIds is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Transactions is missing")
+	} else if len(v.Transactions) == 0 {
+		errs = append(errs, "field Transactions is not set")
 	}
 
 	switch len(errs) {
@@ -2344,6 +2422,12 @@ func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Limit = x
 	}
+	if x := new(protocol.TxFetchMode); reader.ReadEnum(4, x) {
+		v.TxFetchMode = *x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.FilterSynthAnchorsOnlyBlocks = x
+	}
 
 	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
 	v.fieldsSet = seen
@@ -2615,13 +2699,28 @@ func (v *ResponseMinorEntry) UnmarshalBinary(data []byte) error {
 func (v *ResponseMinorEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, v.ResponseByTxId.UnmarshalBinary)
-
-	if x, ok := reader.ReadUint(2); ok {
+	if x, ok := reader.ReadUint(1); ok {
 		v.BlockIndex = x
 	}
-	if x, ok := reader.ReadTime(3); ok {
+	if x, ok := reader.ReadTime(2); ok {
 		v.BlockTime = &x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.TxCount = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(4); ok {
+			v.TxIds = append(v.TxIds, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(ResponseByTxId); reader.ReadValue(5, x.UnmarshalBinary) {
+			v.Transactions = append(v.Transactions, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseMinorEntry)
@@ -2879,30 +2978,20 @@ func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId         string                      `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope          `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds *string                     `json:"txSynthTxIds,omitempty"`
-		Height       int64                       `json:"height"`
-		ChainState   []*string                   `json:"chainState,omitempty"`
-		Receipts     []*TxReceipt                `json:"receipts,omitempty"`
-		Signers      []SignatureSet              `json:"signers,omitempty"`
-		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
+		BlockIndex   uint64            `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time        `json:"blockTime,omitempty"`
+		TxCount      uint64            `json:"txCount,omitempty"`
+		TxIds        []*string         `json:"txIds,omitempty"`
+		Transactions []*ResponseByTxId `json:"transactions,omitempty"`
 	}{}
-	u.TxId = encoding.ChainToJSON(v.ResponseByTxId.TxId)
-	u.Envelope = v.ResponseByTxId.Envelope
-	u.Status = v.ResponseByTxId.Status
-	u.TxSynthTxIds = encoding.BytesToJSON(v.ResponseByTxId.TxSynthTxIds)
-	u.Height = v.ResponseByTxId.Height
-	u.ChainState = make([]*string, len(v.ResponseByTxId.ChainState))
-	for i, x := range v.ResponseByTxId.ChainState {
-		u.ChainState[i] = encoding.BytesToJSON(x)
-	}
-	u.Receipts = v.ResponseByTxId.Receipts
-	u.Signers = v.ResponseByTxId.Signers
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make([]*string, len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -3234,58 +3323,35 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId         string                      `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope          `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus `json:"status,omitempty"`
-		TxSynthTxIds *string                     `json:"txSynthTxIds,omitempty"`
-		Height       int64                       `json:"height"`
-		ChainState   []*string                   `json:"chainState,omitempty"`
-		Receipts     []*TxReceipt                `json:"receipts,omitempty"`
-		Signers      []SignatureSet              `json:"signers,omitempty"`
-		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
+		BlockIndex   uint64            `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time        `json:"blockTime,omitempty"`
+		TxCount      uint64            `json:"txCount,omitempty"`
+		TxIds        []*string         `json:"txIds,omitempty"`
+		Transactions []*ResponseByTxId `json:"transactions,omitempty"`
 	}{}
-	u.TxId = encoding.ChainToJSON(v.ResponseByTxId.TxId)
-	u.Envelope = v.ResponseByTxId.Envelope
-	u.Status = v.ResponseByTxId.Status
-	u.TxSynthTxIds = encoding.BytesToJSON(v.ResponseByTxId.TxSynthTxIds)
-	u.Height = v.ResponseByTxId.Height
-	u.ChainState = make([]*string, len(v.ResponseByTxId.ChainState))
-	for i, x := range v.ResponseByTxId.ChainState {
-		u.ChainState[i] = encoding.BytesToJSON(x)
-	}
-	u.Receipts = v.ResponseByTxId.Receipts
-	u.Signers = v.ResponseByTxId.Signers
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make([]*string, len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.ChainFromJSON(u.TxId); err != nil {
-		return fmt.Errorf("error decoding TxId: %w", err)
-	} else {
-		v.ResponseByTxId.TxId = x
-	}
-	v.ResponseByTxId.Envelope = u.Envelope
-	v.ResponseByTxId.Status = u.Status
-	if x, err := encoding.BytesFromJSON(u.TxSynthTxIds); err != nil {
-		return fmt.Errorf("error decoding TxSynthTxIds: %w", err)
-	} else {
-		v.ResponseByTxId.TxSynthTxIds = x
-	}
-	v.ResponseByTxId.Height = u.Height
-	v.ResponseByTxId.ChainState = make([][]byte, len(u.ChainState))
-	for i, x := range u.ChainState {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ChainState: %w", err)
-		} else {
-			v.ResponseByTxId.ChainState[i] = x
-		}
-	}
-	v.ResponseByTxId.Receipts = u.Receipts
-	v.ResponseByTxId.Signers = u.Signers
 	v.BlockIndex = u.BlockIndex
 	v.BlockTime = u.BlockTime
+	v.TxCount = u.TxCount
+	v.TxIds = make([][]byte, len(u.TxIds))
+	for i, x := range u.TxIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding TxIds: %w", err)
+		} else {
+			v.TxIds[i] = x
+		}
+	}
+	v.Transactions = u.Transactions
 	return nil
 }
 

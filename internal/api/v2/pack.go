@@ -118,12 +118,15 @@ func packMinorQueryResponse(entry *query.ResponseMinorEntry) (*MinorQueryRespons
 	resp := new(MinorQueryResponse)
 	resp.BlockIndex = entry.BlockIndex
 	resp.BlockTime = entry.BlockTime
-	if entry.Envelope != nil {
-		var txQryResp *TransactionQueryResponse
-		txQryResp, err = packTxResponse(&entry.ResponseByTxId, nil, entry.Envelope, entry.Status)
-		resp.TransactionQueryResponse = *txQryResp
+	resp.TxCount = entry.TxCount
+	resp.TxIds = entry.TxIds
+	for _, tx := range entry.Transactions {
+		if tx.Envelope != nil {
+			var txQryResp *TransactionQueryResponse
+			txQryResp, err = packTxResponse(tx, nil, tx.Envelope, tx.Status)
+			resp.Transactions = append(resp.Transactions, txQryResp)
+		}
 	}
-	resp.TransactionHash = entry.TxId[:]
 	return resp, err
 }
 

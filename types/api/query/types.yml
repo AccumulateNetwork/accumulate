@@ -267,6 +267,11 @@ RequestMinorBlocks:
       type: uint
     - name: Limit
       type: uint
+    - name: TxFetchMode
+      type: protocol.TxFetchMode
+      marshal-as: enum
+    - name: FilterSynthAnchorsOnlyBlocks
+      type: bool
 
 ResponseMinorBlocks:
   fields:
@@ -286,8 +291,6 @@ ResponseMinorBlocks:
       marshal-as: reference
 
 ResponseMinorEntry:
-  embeddings:
-    - ResponseByTxId
   fields:
     - name: BlockIndex
       description: is the index of the block. Only include when indexing the root anchor chain
@@ -296,3 +299,15 @@ ResponseMinorEntry:
       description: is the start time of the block.
       type: time
       pointer: true
+    - name: TxCount
+      description: shows how many transactions this block contains
+      type: uint
+    - name: TxIds
+      repeatable: true
+      type: bytes
+    - name: Transactions
+      description: the transactions within this block
+      type: ResponseByTxId
+      repeatable: true
+      pointer: true
+      marshal-as: reference

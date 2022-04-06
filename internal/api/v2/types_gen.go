@@ -103,14 +103,20 @@ type MetricsResponse struct {
 type MinorBlocksQuery struct {
 	UrlQuery
 	QueryPagination
+	TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
+	FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
 }
 
 type MinorQueryResponse struct {
-	TransactionQueryResponse
+
 	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
 	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
 	// BlockTime is the start time of the block..
 	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	// TxCount shows how many transactions this block contains.
+	TxCount      uint64                      `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
+	TxIds        [][]byte                    `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
+	Transactions []*TransactionQueryResponse `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
 type MultiResponse struct {
@@ -676,61 +682,36 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url   *url.URL `json:"url,omitempty"`
-		Start uint64   `json:"start,omitempty"`
-		Count uint64   `json:"count,omitempty"`
+		Url                          *url.URL             `json:"url,omitempty"`
+		Start                        uint64               `json:"start,omitempty"`
+		Count                        uint64               `json:"count,omitempty"`
+		TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty"`
+		FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
+	u.TxFetchMode = v.TxFetchMode
+	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
 	return json.Marshal(&u)
 }
 
 func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            string                      `json:"type,omitempty"`
-		MainChain       *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
-		Data            interface{}                 `json:"data,omitempty"`
-		Origin          *url.URL                    `json:"origin,omitempty"`
-		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
-		TransactionHash *string                     `json:"transactionHash,omitempty"`
-		Txid            *string                     `json:"txid,omitempty"`
-		Transaction     *protocol.Transaction       `json:"transaction,omitempty"`
-		Signatures      []json.RawMessage           `json:"signatures,omitempty"`
-		Status          *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
-		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
-		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
-		BlockIndex      uint64                      `json:"blockIndex,omitempty"`
-		BlockTime       *time.Time                  `json:"blockTime,omitempty"`
+		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
+		TxCount      uint64                      `json:"txCount,omitempty"`
+		TxIds        []*string                   `json:"txIds,omitempty"`
+		Transactions []*TransactionQueryResponse `json:"transactions,omitempty"`
 	}{}
-	u.Type = v.TransactionQueryResponse.Type
-	u.MainChain = v.TransactionQueryResponse.MainChain
-	u.MerkleState = v.TransactionQueryResponse.MainChain
-	u.Data = encoding.AnyToJSON(v.TransactionQueryResponse.Data)
-	u.Origin = v.TransactionQueryResponse.Origin
-	u.Sponsor = v.TransactionQueryResponse.Origin
-	u.TransactionHash = encoding.BytesToJSON(v.TransactionQueryResponse.TransactionHash)
-	u.Txid = encoding.BytesToJSON(v.TransactionQueryResponse.TransactionHash)
-	u.Transaction = v.TransactionQueryResponse.Transaction
-	u.Signatures = make([]json.RawMessage, len(v.TransactionQueryResponse.Signatures))
-	for i, x := range v.TransactionQueryResponse.Signatures {
-		if y, err := json.Marshal(x); err != nil {
-			return nil, fmt.Errorf("error encoding Signatures: %w", err)
-		} else {
-			u.Signatures[i] = y
-		}
-	}
-	u.Status = v.TransactionQueryResponse.Status
-	u.SyntheticTxids = make([]string, len(v.TransactionQueryResponse.SyntheticTxids))
-	for i, x := range v.TransactionQueryResponse.SyntheticTxids {
-		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
-	}
-	u.Receipts = v.TransactionQueryResponse.Receipts
-	u.SignatureBooks = v.TransactionQueryResponse.SignatureBooks
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make([]*string, len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -1304,121 +1285,59 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url   *url.URL `json:"url,omitempty"`
-		Start uint64   `json:"start,omitempty"`
-		Count uint64   `json:"count,omitempty"`
+		Url                          *url.URL             `json:"url,omitempty"`
+		Start                        uint64               `json:"start,omitempty"`
+		Count                        uint64               `json:"count,omitempty"`
+		TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty"`
+		FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
+	u.TxFetchMode = v.TxFetchMode
+	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
+	v.TxFetchMode = u.TxFetchMode
+	v.FilterSynthAnchorsOnlyBlocks = u.FilterSynthAnchorsOnlyBlocks
 	return nil
 }
 
 func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            string                      `json:"type,omitempty"`
-		MainChain       *MerkleState                `json:"mainChain,omitempty"`
-		MerkleState     *MerkleState                `json:"merkleState,omitempty"`
-		Data            interface{}                 `json:"data,omitempty"`
-		Origin          *url.URL                    `json:"origin,omitempty"`
-		Sponsor         *url.URL                    `json:"sponsor,omitempty"`
-		TransactionHash *string                     `json:"transactionHash,omitempty"`
-		Txid            *string                     `json:"txid,omitempty"`
-		Transaction     *protocol.Transaction       `json:"transaction,omitempty"`
-		Signatures      []json.RawMessage           `json:"signatures,omitempty"`
-		Status          *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids  []string                    `json:"syntheticTxids,omitempty"`
-		Receipts        []*query.TxReceipt          `json:"receipts,omitempty"`
-		SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty"`
-		BlockIndex      uint64                      `json:"blockIndex,omitempty"`
-		BlockTime       *time.Time                  `json:"blockTime,omitempty"`
+		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
+		TxCount      uint64                      `json:"txCount,omitempty"`
+		TxIds        []*string                   `json:"txIds,omitempty"`
+		Transactions []*TransactionQueryResponse `json:"transactions,omitempty"`
 	}{}
-	u.Type = v.TransactionQueryResponse.Type
-	u.MainChain = v.TransactionQueryResponse.MainChain
-	u.MerkleState = v.TransactionQueryResponse.MainChain
-	u.Data = encoding.AnyToJSON(v.TransactionQueryResponse.Data)
-	u.Origin = v.TransactionQueryResponse.Origin
-	u.Sponsor = v.TransactionQueryResponse.Origin
-	u.TransactionHash = encoding.BytesToJSON(v.TransactionQueryResponse.TransactionHash)
-	u.Txid = encoding.BytesToJSON(v.TransactionQueryResponse.TransactionHash)
-	u.Transaction = v.TransactionQueryResponse.Transaction
-	u.Signatures = make([]json.RawMessage, len(v.TransactionQueryResponse.Signatures))
-	for i, x := range v.TransactionQueryResponse.Signatures {
-		if y, err := json.Marshal(x); err != nil {
-			return fmt.Errorf("error encoding Signatures: %w", err)
-		} else {
-			u.Signatures[i] = y
-		}
-	}
-	u.Status = v.TransactionQueryResponse.Status
-	u.SyntheticTxids = make([]string, len(v.TransactionQueryResponse.SyntheticTxids))
-	for i, x := range v.TransactionQueryResponse.SyntheticTxids {
-		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
-	}
-	u.Receipts = v.TransactionQueryResponse.Receipts
-	u.SignatureBooks = v.TransactionQueryResponse.SignatureBooks
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make([]*string, len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.TransactionQueryResponse.Type = u.Type
-	if u.MainChain != nil {
-		v.TransactionQueryResponse.MainChain = u.MainChain
-	} else {
-		v.TransactionQueryResponse.MainChain = u.MerkleState
-	}
-	if x, err := encoding.AnyFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.TransactionQueryResponse.Data = x
-	}
-	if u.Origin != nil {
-		v.TransactionQueryResponse.Origin = u.Origin
-	} else {
-		v.TransactionQueryResponse.Origin = u.Sponsor
-	}
-	if u.TransactionHash != nil {
-		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
-			return fmt.Errorf("error decoding TransactionHash: %w", err)
-		} else {
-			v.TransactionQueryResponse.TransactionHash = x
-		}
-	} else {
-		if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-			return fmt.Errorf("error decoding TransactionHash: %w", err)
-		} else {
-			v.TransactionQueryResponse.TransactionHash = x
-		}
-	}
-	v.TransactionQueryResponse.Transaction = u.Transaction
-	v.TransactionQueryResponse.Signatures = make([]protocol.Signature, len(u.Signatures))
-	for i, x := range u.Signatures {
-		if y, err := protocol.UnmarshalSignatureJSON(x); err != nil {
-			return fmt.Errorf("error decoding Signatures: %w", err)
-		} else {
-			v.TransactionQueryResponse.Signatures[i] = y
-		}
-	}
-	v.TransactionQueryResponse.Status = u.Status
-	v.TransactionQueryResponse.SyntheticTxids = make([][32]byte, len(u.SyntheticTxids))
-	for i, x := range u.SyntheticTxids {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding SyntheticTxids: %w", err)
-		} else {
-			v.TransactionQueryResponse.SyntheticTxids[i] = x
-		}
-	}
-	v.TransactionQueryResponse.Receipts = u.Receipts
-	v.TransactionQueryResponse.SignatureBooks = u.SignatureBooks
 	v.BlockIndex = u.BlockIndex
 	v.BlockTime = u.BlockTime
+	v.TxCount = u.TxCount
+	v.TxIds = make([][]byte, len(u.TxIds))
+	for i, x := range u.TxIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding TxIds: %w", err)
+		} else {
+			v.TxIds[i] = x
+		}
+	}
+	v.Transactions = u.Transactions
 	return nil
 }
 

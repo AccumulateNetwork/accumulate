@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"sync"
 	"time"
 
@@ -151,11 +152,11 @@ func (q *queryDispatch) QueryDataSet(url *url.URL, pagination QueryPagination, q
 	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
 
-func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPagination, txFetchMode protocol.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
 	r, err := q.Router.RouteAccount(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryMinorBlocks(url, pagination)
+	return q.direct(r).QueryMinorBlocks(url, pagination, txFetchMode, includeSynthAnchors)
 }
