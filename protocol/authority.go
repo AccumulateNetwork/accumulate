@@ -68,10 +68,10 @@ func (p *KeyPage) GetVersion() uint64 { return p.Version }
 
 // GetSignatureThreshold returns Threshold.
 func (p *KeyPage) GetSignatureThreshold() uint64 {
-	if p.Threshold == 0 {
+	if p.AcceptThreshold == 0 {
 		return 1
 	}
-	return p.Threshold
+	return p.AcceptThreshold
 }
 
 // EntryByKeyHash finds the entry with a matching key hash.
