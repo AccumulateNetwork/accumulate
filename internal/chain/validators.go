@@ -87,8 +87,8 @@ func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (proto
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-	if page.Threshold > uint64(len(page.Keys)) {
-		page.Threshold = uint64(len(page.Keys))
+	if page.AcceptThreshold > uint64(len(page.Keys)) {
+		page.AcceptThreshold = uint64(len(page.Keys))
 	}
 
 	// Record the update

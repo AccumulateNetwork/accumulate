@@ -38,7 +38,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
-	page.Threshold = 1 // Require one signature from the Key Page
+	page.AcceptThreshold = 1 // Require one signature from the Key Page
 	book.PageCount++
 
 	err := scc.Update(book)
