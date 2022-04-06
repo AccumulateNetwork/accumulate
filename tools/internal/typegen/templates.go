@@ -8,7 +8,16 @@ import (
 	"io/ioutil"
 	"strings"
 	"text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
+
+var enUsTitle = cases.Title(language.AmericanEnglish)
+
+func TitleCase(s string) string {
+	return enUsTitle.String(s[:1]) + s[1:]
+}
 
 type TemplateLibrary struct {
 	functions template.FuncMap
