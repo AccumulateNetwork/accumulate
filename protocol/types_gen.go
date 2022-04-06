@@ -292,10 +292,17 @@ type KeyBook struct {
 }
 
 type KeyPage struct {
-	fieldsSet            []bool
-	Url                  *url.URL             `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	CreditBalance        uint64               `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
-	Threshold            uint64               `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
+	fieldsSet     []bool
+	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	// AcceptThreshold is the number of acceptances required to accept a transaction.
+	AcceptThreshold uint64 `json:"acceptThreshold,omitempty" form:"acceptThreshold" query:"acceptThreshold" validate:"required"`
+	// RejectThreshold is the number of rejections required to reject a transaction.
+	RejectThreshold uint64 `json:"rejectThreshold,omitempty" form:"rejectThreshold" query:"rejectThreshold" validate:"required"`
+	// ResponseThreshold is the number of responses that must be received before a transaction will be processed.
+	ResponseThreshold uint64 `json:"responseThreshold,omitempty" form:"responseThreshold" query:"responseThreshold" validate:"required"`
+	// BlockThreshold is the number of minor blocks that must elapse before a transaction will be processed.
+	BlockThreshold       uint64               `json:"blockThreshold,omitempty" form:"blockThreshold" query:"blockThreshold" validate:"required"`
 	Version              uint64               `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty" form:"transactionBlacklist" query:"transactionBlacklist"`
@@ -1376,7 +1383,10 @@ func (v *KeyPage) Copy() *KeyPage {
 		u.Url = (v.Url).Copy()
 	}
 	u.CreditBalance = v.CreditBalance
-	u.Threshold = v.Threshold
+	u.AcceptThreshold = v.AcceptThreshold
+	u.RejectThreshold = v.RejectThreshold
+	u.ResponseThreshold = v.ResponseThreshold
+	u.BlockThreshold = v.BlockThreshold
 	u.Version = v.Version
 	u.Keys = make([]*KeySpec, len(v.Keys))
 	for i, v := range v.Keys {
@@ -2799,7 +2809,16 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	if !(v.CreditBalance == u.CreditBalance) {
 		return false
 	}
-	if !(v.Threshold == u.Threshold) {
+	if !(v.AcceptThreshold == u.AcceptThreshold) {
+		return false
+	}
+	if !(v.RejectThreshold == u.RejectThreshold) {
+		return false
+	}
+	if !(v.ResponseThreshold == u.ResponseThreshold) {
+		return false
+	}
+	if !(v.BlockThreshold == u.BlockThreshold) {
 		return false
 	}
 	if !(v.Version == u.Version) {
@@ -5652,13 +5671,16 @@ func (v *KeyBook) IsValid() error {
 }
 
 var fieldNames_KeyPage = []string{
-	1: "Type",
-	2: "Url",
-	3: "CreditBalance",
-	4: "Threshold",
-	5: "Version",
-	6: "Keys",
-	7: "TransactionBlacklist",
+	1:  "Type",
+	2:  "Url",
+	3:  "CreditBalance",
+	4:  "AcceptThreshold",
+	5:  "RejectThreshold",
+	6:  "ResponseThreshold",
+	7:  "BlockThreshold",
+	8:  "Version",
+	9:  "Keys",
+	10: "TransactionBlacklist",
 }
 
 func (v *KeyPage) MarshalBinary() ([]byte, error) {
@@ -5672,19 +5694,28 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(3, v.CreditBalance)
 	}
-	if !(v.Threshold == 0) {
-		writer.WriteUint(4, v.Threshold)
+	if !(v.AcceptThreshold == 0) {
+		writer.WriteUint(4, v.AcceptThreshold)
+	}
+	if !(v.RejectThreshold == 0) {
+		writer.WriteUint(5, v.RejectThreshold)
+	}
+	if !(v.ResponseThreshold == 0) {
+		writer.WriteUint(6, v.ResponseThreshold)
+	}
+	if !(v.BlockThreshold == 0) {
+		writer.WriteUint(7, v.BlockThreshold)
 	}
 	if !(v.Version == 0) {
-		writer.WriteUint(5, v.Version)
+		writer.WriteUint(8, v.Version)
 	}
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
-			writer.WriteValue(6, v)
+			writer.WriteValue(9, v)
 		}
 	}
 	if !(v.TransactionBlacklist == nil) {
-		writer.WriteEnum(7, *v.TransactionBlacklist)
+		writer.WriteEnum(10, *v.TransactionBlacklist)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyPage)
@@ -5708,16 +5739,31 @@ func (v *KeyPage) IsValid() error {
 		errs = append(errs, "field CreditBalance is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Threshold is missing")
-	} else if v.Threshold == 0 {
-		errs = append(errs, "field Threshold is not set")
+		errs = append(errs, "field AcceptThreshold is missing")
+	} else if v.AcceptThreshold == 0 {
+		errs = append(errs, "field AcceptThreshold is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field RejectThreshold is missing")
+	} else if v.RejectThreshold == 0 {
+		errs = append(errs, "field RejectThreshold is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field ResponseThreshold is missing")
+	} else if v.ResponseThreshold == 0 {
+		errs = append(errs, "field ResponseThreshold is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field BlockThreshold is missing")
+	} else if v.BlockThreshold == 0 {
+		errs = append(errs, "field BlockThreshold is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
 		errs = append(errs, "field Version is missing")
 	} else if v.Version == 0 {
 		errs = append(errs, "field Version is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field Keys is missing")
 	} else if len(v.Keys) == 0 {
 		errs = append(errs, "field Keys is not set")
@@ -9401,19 +9447,28 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.CreditBalance = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
-		v.Threshold = x
+		v.AcceptThreshold = x
 	}
 	if x, ok := reader.ReadUint(5); ok {
+		v.RejectThreshold = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.ResponseThreshold = x
+	}
+	if x, ok := reader.ReadUint(7); ok {
+		v.BlockThreshold = x
+	}
+	if x, ok := reader.ReadUint(8); ok {
 		v.Version = x
 	}
 	for {
-		if x := new(KeySpec); reader.ReadValue(6, x.UnmarshalBinary) {
+		if x := new(KeySpec); reader.ReadValue(9, x.UnmarshalBinary) {
 			v.Keys = append(v.Keys, x)
 		} else {
 			break
 		}
 	}
-	if x := new(AllowedTransactions); reader.ReadEnum(7, x) {
+	if x := new(AllowedTransactions); reader.ReadEnum(10, x) {
 		v.TransactionBlacklist = x
 	}
 
@@ -11249,7 +11304,11 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		Url                  *url.URL             `json:"url,omitempty"`
 		CreditBalance        uint64               `json:"creditBalance,omitempty"`
+		AcceptThreshold      uint64               `json:"acceptThreshold,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
+		RejectThreshold      uint64               `json:"rejectThreshold,omitempty"`
+		ResponseThreshold    uint64               `json:"responseThreshold,omitempty"`
+		BlockThreshold       uint64               `json:"blockThreshold,omitempty"`
 		Version              uint64               `json:"version,omitempty"`
 		Keys                 []*KeySpec           `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty"`
@@ -11258,7 +11317,11 @@ func (v *KeyPage) MarshalJSON() ([]byte, error) {
 	u.KeyBook = v.KeyBook()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
-	u.Threshold = v.Threshold
+	u.AcceptThreshold = v.AcceptThreshold
+	u.Threshold = v.AcceptThreshold
+	u.RejectThreshold = v.RejectThreshold
+	u.ResponseThreshold = v.ResponseThreshold
+	u.BlockThreshold = v.BlockThreshold
 	u.Version = v.Version
 	u.Keys = v.Keys
 	u.TransactionBlacklist = v.TransactionBlacklist
@@ -12811,7 +12874,11 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 		KeyBook              *url.URL             `json:"keyBook,omitempty"`
 		Url                  *url.URL             `json:"url,omitempty"`
 		CreditBalance        uint64               `json:"creditBalance,omitempty"`
+		AcceptThreshold      uint64               `json:"acceptThreshold,omitempty"`
 		Threshold            uint64               `json:"threshold,omitempty"`
+		RejectThreshold      uint64               `json:"rejectThreshold,omitempty"`
+		ResponseThreshold    uint64               `json:"responseThreshold,omitempty"`
+		BlockThreshold       uint64               `json:"blockThreshold,omitempty"`
 		Version              uint64               `json:"version,omitempty"`
 		Keys                 []*KeySpec           `json:"keys,omitempty"`
 		TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty"`
@@ -12820,7 +12887,11 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	u.KeyBook = v.KeyBook()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
-	u.Threshold = v.Threshold
+	u.AcceptThreshold = v.AcceptThreshold
+	u.Threshold = v.AcceptThreshold
+	u.RejectThreshold = v.RejectThreshold
+	u.ResponseThreshold = v.ResponseThreshold
+	u.BlockThreshold = v.BlockThreshold
 	u.Version = v.Version
 	u.Keys = v.Keys
 	u.TransactionBlacklist = v.TransactionBlacklist
@@ -12832,7 +12903,14 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
-	v.Threshold = u.Threshold
+	if u.AcceptThreshold != 0 {
+		v.AcceptThreshold = u.AcceptThreshold
+	} else {
+		v.AcceptThreshold = u.Threshold
+	}
+	v.RejectThreshold = u.RejectThreshold
+	v.ResponseThreshold = u.ResponseThreshold
+	v.BlockThreshold = u.BlockThreshold
 	v.Version = u.Version
 	v.Keys = u.Keys
 	v.TransactionBlacklist = u.TransactionBlacklist
