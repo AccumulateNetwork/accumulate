@@ -86,21 +86,27 @@ function success {
 
 NODE_PRIV_VAL0="${NODE_ROOT0:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
 NODE_PRIV_VAL1="${NODE_ROOT1:-~/.accumulate/dn/Node1}/config/priv_validator_key.json"
+NODES_DIR=$(readlink -m "${NODE_ROOT0:-~/.accumulate/dn/Node0}/..")
 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d | wc -l)
-if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
-   section "Add a new DN validator"
-   declare -g TEST_NODE_WORK_DIR=~/node1
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
-   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
+section "Add a new DN validator"
+NUM_DNNS=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
+if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; then
+   echo -e "We have only ${NUM_DNNS} DN validators, spinning up an extra DN."
+   echo
+   declare -g TEST_NODE_WORK_DIR=${NODES_DIR}
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/Node2" --skip-version-check --no-website
+   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/Node2" &
    declare -g ACCPID=$!
    # Get Keys
-   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
+   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/Node0/config/priv_validator_key.json)
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
    # Register new validator
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" $hexPubKey
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" $hexPubKeyS
+else
+    echo -e "We have ${NUM_DNNS} DN validators which is enough to run this test."
+    echo
 fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"

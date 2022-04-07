@@ -199,7 +199,7 @@ UpdateAccountAuth:
 AddValidator:
   union: { type: transaction }
   fields:
-    - name: Key
+    - name: PubKey
       type: bytes
     - name: Owner
       description: reserved for future use
@@ -210,7 +210,7 @@ AddValidator:
 RemoveValidator:
   union: { type: transaction }
   fields:
-    - name: Key
+    - name: PubKey
       type: bytes
     - name: Owner
       description: reserved for future use
@@ -221,9 +221,9 @@ RemoveValidator:
 UpdateValidatorKey:
   union: { type: transaction }
   fields:
-    - name: KeyHash
+    - name: PubKey
       type: bytes
-    - name: NewKeyHash
+    - name: NewPubKey
       type: bytes
 
 UpdateKey:
