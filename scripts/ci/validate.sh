@@ -93,18 +93,20 @@ TEST_DN_NODE_DIR="${NODE_ROOT0:-~/.accumulate/dn/Node0}/.."
 section "Add a new DN validator"
 NUM_DNNS=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; then
-   echo -e "We have only ${NUM_DNNS} DN validators, spinning up an extra DN."
-   echo
-   TEST_DN_NODE_DIR=$(realpath "$TEST_DN_NODE_DIR")
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR/Node2" --skip-version-check --no-website
-   accumulated run -n 0 -w "$TEST_DN_NODE_DIR/Node2" &
-   declare -g ACCPID=$!
-   # Get Keys
-   pubkey=$(jq -re .pub_key.value $TEST_DN_NODE_DIR/Node2/config/priv_validator_key.json)
-   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
-   # Register new validator
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "${hexPubKey}"
+  echo -e "We have only ${NUM_DNNS} DN validators, spinning up an extra DN."
+  echo
+  TEST_DN_NODE_DIR=$(realpath "$TEST_DN_NODE_DIR")
+  accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR/Node2" --skip-version-check --no-website
+  # Get Keys
+  pubkey=$(jq -re .pub_key.value $TEST_DN_NODE_DIR/Node2/config/priv_validator_key.json)
+  pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+  declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+  # Register new validator
+  wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "${hexPubKey}"
+  # Start new validator
+  accumulated run -n 0 -w "$TEST_DN_NODE_DIR/Node2" &
+  declare -g ACCPID=$!
+
 else
     echo -e "We have ${NUM_DNNS} DN validators which is enough to run this test."
     echo
