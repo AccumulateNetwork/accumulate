@@ -115,7 +115,6 @@ BTCLegacySignature:
       type: hash
       optional: true
 
-
 ETHSignature:
   union: { type: signature }
   fields:
@@ -138,7 +137,6 @@ ETHSignature:
     - name: TransactionHash
       type: hash
       optional: true
-
 
 ReceiptSignature:
   union: { type: signature }

@@ -58,7 +58,7 @@ func (v MarshalAs) String() string {
 
 // MarshalAsByName returns the named Marshal As.
 func MarshalAsByName(name string) (MarshalAs, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "basic":
 		return MarshalAsBasic, true
 	case "":
