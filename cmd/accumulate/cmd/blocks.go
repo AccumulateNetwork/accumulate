@@ -85,7 +85,7 @@ func init() {
 }
 
 func PrintGetMinorBLocks() {
-	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [include synthetic anchors true|false (optional)] Get minor blocks")
+	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [filter synth-anchors only blocks true|false (optional)] Get minor blocks")
 }
 
 func PrintBlocks() {

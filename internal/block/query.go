@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/hex"
 	"errors"
@@ -952,10 +953,16 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
 			}
-			minorEntry.TxCount = uint64(len(chainUpdatesIndex.Entries))
+			minorEntry.TxCount = uint64(0)
 			internalTxCount := uint64(0)
 			synthAnchorCount := uint64(0)
+			var lastTxid []byte
 			for _, updIdx := range chainUpdatesIndex.Entries {
+				if bytes.Compare(updIdx.Entry, lastTxid) == 0 { // There are like 4 ChainUpdates for each tx, we don't need duplicates
+					continue
+				}
+				minorEntry.TxCount++
+
 				if req.TxFetchMode <= protocol.TxFetchModeIds {
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
@@ -973,6 +980,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 						}
 					}
 				}
+				lastTxid = updIdx.Entry
 			}
 			if minorEntry.TxCount > (internalTxCount + synthAnchorCount) {
 				resp.Entries = append(resp.Entries, minorEntry)
