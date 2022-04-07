@@ -1042,6 +1042,9 @@ func printReflection(field, indent string, value reflect.Value) string {
 
 	if typ.AssignableTo(reflect.TypeOf(new(url2.URL))) {
 		v := value.Interface().(*url2.URL)
+		if v == nil {
+			return out + " (nil)\n"
+		}
 		return out + " " + v.String() + "\n"
 	}
 
