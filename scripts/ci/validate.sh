@@ -99,7 +99,9 @@ if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; 
   accumulated init node 3 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR" --skip-version-check --no-website
 
   # Register new validator
-  wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "$TEST_DN_NODE_DIR/Node3/config/priv_validator_key.json"
+  TXID=$(cli-tx validator add dn "$NODE_PRIV_VAL0" "$TEST_DN_NODE_DIR/Node3/config/priv_validator_key.json")
+  wait-for-tx $TXID
+  wait-for cli-tx-sig tx sign dn "$NODE_PRIV_VAL1" $TXID
 
   # Start new validator
   accumulated run -n 3 -w "$TEST_DN_NODE_DIR" &
