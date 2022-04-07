@@ -92,6 +92,7 @@ var PriceOracleAuthority = PriceOracle().String()
 
 // AcmePrecision is the precision of ACME token amounts.
 const AcmePrecision = 1e8
+const AcmePrecisionPower = 8
 
 // AcmeOraclePrecision is the precision of the oracle in 100 * USD of one ACME token.
 const AcmeOraclePrecision = 10000

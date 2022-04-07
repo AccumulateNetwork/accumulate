@@ -1374,8 +1374,8 @@ func TestUpdateValidators(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
 
-		body.KeyHash = nh1[:]
-		body.NewKeyHash = nh2[:]
+		body.Key = nh1[:]
+		body.NewKey = nh2[:]
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 2).

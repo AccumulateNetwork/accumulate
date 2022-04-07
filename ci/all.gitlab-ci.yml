@@ -21,6 +21,14 @@ go test:
   - go build -v ./...
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname
 
+playbooks:
+  stage: test
+  extends: [ .rules all, .go ]
+  needs: []
+  script:
+  - go build ./cmd/play-accumulate
+  - find playbooks -name '*.play' -exec ./play-accumulate {} \;
+
 validate simple:
   stage: test
   extends: [ .rules all, .go ]
