@@ -97,6 +97,8 @@ if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; 
   echo
   TEST_DN_NODE_DIR=$(realpath "$TEST_DN_NODE_DIR")
   accumulated init node 2 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR" --skip-version-check --no-website
+  ls -l /nodes/dn
+  ls -l /nodes/dn/Node2
 
   # Register new validator
   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "$TEST_DN_NODE_DIR/Node2/config/priv_validator_key.json"
