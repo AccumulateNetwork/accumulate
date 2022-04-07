@@ -120,6 +120,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *Delivery) (*protocol.
 
 		if !delivery.Transaction.Type().IsInternal() && delivery.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
 			kv := []interface{}{
+				"module", "block-executor",
 				"block", block.Index,
 				"type", delivery.Transaction.Type(),
 				"pending", status.Pending,

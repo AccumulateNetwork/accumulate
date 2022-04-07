@@ -38,7 +38,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	localReceipt := acctResp.Receipt.Receipt
 
 	// Execute enough blocks to ensure the block is anchored
-	sim.ExecuteBlocks(5)
+	sim.ExecuteBlocks(10)
 
 	// Get a proof of the BVN anchor
 	req = new(query.RequestByUrl)

@@ -431,6 +431,7 @@ TXID=$(cli-tx auth remove keytest/managed-tokens keytest-1-0 manager/book) || di
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
 wait-for cli-tx-sig tx sign keytest/managed-tokens manager@manager/book/1 $TXID
+sleep 1 # This should not be necessary
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
 RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
