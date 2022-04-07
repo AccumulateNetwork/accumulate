@@ -134,7 +134,7 @@ var accountGenerateCmd = &cobra.Command{
 	Short: "Generate a random lite token account or a lite account derived previously imported/created key",
 	Args:  cobra.MinimumNArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := GenerateAccount(args)
+		out, err := GenerateAccount()
 		printOutput(cmd, out, err)
 	},
 }
@@ -279,19 +279,8 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	return ActionResponseFrom(res).Print()
 }
 
-func GenerateAccount(args []string) (string, error) {
-	var label string
-	if len(args) > 0 {
-		label = args[0]
-		_, err := resolvePrivateKey(args[0])
-		if err != nil {
-			return "", fmt.Errorf("no suitable key to generate lite account from key %s (%v)", args[0], err)
-		}
-
-		IsLiteAccount()
-
-	}
-	return GenerateKey(label)
+func GenerateAccount() (string, error) {
+	return GenerateKey("")
 }
 
 func ListAccounts() (string, error) {
@@ -303,13 +292,41 @@ func ListAccounts() (string, error) {
 	var out string
 	for _, v := range b.KeyValueList {
 		lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
-		println(string(v.Value))
+
 		if err != nil {
+			println(string(v.Key))
 			continue
 		}
 		l, _ := LabelForLiteTokenAccount(lt.String())
 		if l == string(v.Key) {
 			out += fmt.Sprintf("%s\n", lt)
+		} else {
+			//now check to see if we are a factoid address
+			_, err := protocol.GetRCDFromFactoidAddress(string(v.Key))
+			if err != nil {
+				//if we aren't a factoid address move along
+				continue
+			}
+			//so we are potentially a RCD based account, now check to see if we own the keys
+			pk, _ := resolvePrivateKey(string(v.Key))
+			fs, err := protocol.GetFactoidSecretFromPrivKey(pk)
+			if err != nil {
+				continue
+			}
+			_, _, pk, err = protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(fs)
+			if err != nil {
+				continue
+			}
+
+			if bytes.Equal(pk[32:], v.Value) {
+				lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
+				if err != nil {
+					continue
+				}
+
+				out += fmt.Sprintf("%s (%s)\n", lt, string(v.Key))
+			}
+
 		}
 	}
 	//TODO: this probably should also list out adi accounts as well
