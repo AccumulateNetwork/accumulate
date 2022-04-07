@@ -113,9 +113,9 @@ func (q *queryDispatch) QueryDirectory(url *url.URL, pagination QueryPagination,
 	return q.direct(r).QueryDirectory(url, pagination, queryOptions)
 }
 
-func (q *queryDispatch) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
+func (q *queryDispatch) QueryTx(id []byte, wait time.Duration, ignorePending bool, opts QueryOptions) (*TransactionQueryResponse, error) {
 	res, err := q.queryAll(func(qdr *queryDirect) (interface{}, error) {
-		return qdr.QueryTx(id, wait, opts)
+		return qdr.QueryTx(id, wait, ignorePending, opts)
 	}, fmt.Errorf("transaction %X not found", id))
 	if err != nil {
 		return nil, err

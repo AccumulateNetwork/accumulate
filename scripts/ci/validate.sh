@@ -26,16 +26,27 @@ function wait-for {
     wait-for-tx $NO_CHECK "$TXID" || return 1
 }
 
-# wait-for-tx [--no-check] <tx id> - Wait for a transaction and any synthetic transactions to complete
+# wait-for-tx [--no-check] [--ignore-pending] <tx id> - Wait for a transaction and any synthetic transactions to complete
 function wait-for-tx {
-    if [ "$1" == "--no-check" ]; then
-        local NO_CHECK=$1
-        shift
-    fi
+    while true; do
+        case "$1" in
+        --no-check)
+            local NO_CHECK=$1
+            shift
+            ;;
+        --ignore-pending)
+            local IGNORE_PENDING=$1
+            shift
+            ;;
+        *)
+            break
+            ;;
+        esac
+    done
 
     local TXID=$1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    local RESP=$(accumulate tx get -j --wait 1m $TXID)
+    local RESP=$(accumulate tx get -j $IGNORE_PENDING --wait 1m $TXID)
     echo $RESP | jq -C --indent 0
 
     if [ -z "$NO_CHECK" ]; then
@@ -44,7 +55,7 @@ function wait-for-tx {
     fi
 
     for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
-        wait-for-tx $NO_CHECK "$TXID" || return 1
+        wait-for-tx $NO_CHECK $IGNORE_PENDING "$TXID" || return 1
     done
 }
 
@@ -430,9 +441,8 @@ section "Remove manager from token account"
 TXID=$(cli-tx auth remove keytest/managed-tokens keytest-1-0 manager/book) || die "Failed to initiate txn to remove manager"
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-wait-for cli-tx-sig tx sign keytest/managed-tokens manager@manager/book/1 $TXID
-sleep 1 # This should not be necessary
-accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
+wait-for cli-tx-sig tx sign keytest/managed-tokens manager@manager $TXID || die "Failed to sign transaction"
+wait-for-tx --ignore-pending $TXID || die "Transaction was not delivered"
 RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
 success

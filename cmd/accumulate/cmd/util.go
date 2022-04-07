@@ -96,12 +96,12 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	}
 
 	var keyName string
-	signerUrl, err := url2.Parse(args[0])
-	if err == nil && signerUrl.UserInfo != "" {
-		keyName = signerUrl.UserInfo
-		signerUrl.UserInfo = ""
+	keyHolder, err := url2.Parse(args[0])
+	if err == nil && keyHolder.UserInfo != "" {
+		keyName = keyHolder.UserInfo
+		keyHolder.UserInfo = ""
 	} else {
-		signerUrl = nil
+		keyHolder = origin
 		keyName = args[0]
 	}
 
@@ -118,14 +118,12 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	}
 	signer.Type = sigType
 
-	keyInfo, err := getKey(origin.String(), keyHash)
+	keyInfo, err := getKey(keyHolder.String(), keyHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	if signerUrl != nil {
-		signer.Url = signerUrl
-	} else if len(args) < 2 {
+	if len(args) < 2 {
 		signer.Url = keyInfo.Signer
 	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
 		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
@@ -576,7 +574,7 @@ func PrintJsonRpcError(err error) (string, error) {
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
 		if WantJsonOutput {
-			cmd.PrintErrf("{\"error\":%v}", err)
+			cmd.PrintErrf("{\"error\":%v}\n", err)
 		} else {
 			cmd.PrintErrf("Error: %v\n", err)
 		}
