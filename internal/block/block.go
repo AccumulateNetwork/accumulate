@@ -133,8 +133,10 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *Delivery) (*protocol.
 					"code", status.Code,
 					"error", status.Message,
 				)
+				x.Logger.Info("Transaction failed", kv...)
+			} else {
+				x.Logger.Debug("Transaction succeeded", kv...)
 			}
-			x.Logger.Info("Transaction delivered", kv...)
 		}
 	}
 
