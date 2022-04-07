@@ -15,12 +15,24 @@ func (AddValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeAddValidator
 }
 
+func (AddValidator) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (AddValidator{}).Validate(st, tx)
+}
+
 func (RemoveValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeRemoveValidator
 }
 
+func (RemoveValidator) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (RemoveValidator{}).Validate(st, tx)
+}
+
 func (UpdateValidatorKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateValidatorKey
+}
+
+func (UpdateValidatorKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (UpdateValidatorKey{}).Validate(st, tx)
 }
 
 func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol.TransactionResult, error) {
@@ -43,7 +55,7 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	page.Threshold = protocol.GetValidatorsMOfN(len(page.Keys))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
 
 	// Record the update
 	didUpdateKeyPage(page)
@@ -78,7 +90,7 @@ func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (proto
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-	page.Threshold = protocol.GetValidatorsMOfN(len(page.Keys))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
 
 	// Record the update
 	didUpdateKeyPage(page)

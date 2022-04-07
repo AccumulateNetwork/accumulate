@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 //go:embed go.go.tmpl
@@ -45,14 +47,16 @@ var goFuncs = template.FuncMap{
 		return typ
 	},
 
-	"areEqual":             GoAreEqual,
-	"copy":                 GoCopy,
-	"binaryMarshalValue":   GoBinaryMarshalValue,
-	"binaryUnmarshalValue": GoBinaryUnmarshalValue,
-	"valueToJson":          GoValueToJson,
-	"valueFromJson":        GoValueFromJson,
-	"jsonZeroValue":        GoJsonZeroValue,
-	"isZero":               GoIsZero,
+	"get":                     GoGetField,
+	"areEqual":                GoAreEqual,
+	"copy":                    GoCopy,
+	"binaryMarshalValue":      GoBinaryMarshalValue,
+	"binaryUnmarshalValue":    GoBinaryUnmarshalValue,
+	"valueToJson":             GoValueToJson,
+	"valueFromJson":           GoValueFromJson,
+	"jsonZeroValue":           GoJsonZeroValue,
+	"isZero":                  GoIsZero,
+	"errVirtualFieldNotEqual": GoErrVirtualFieldNotEqual,
 
 	"needsCustomJSON": func(typ *Type) bool {
 		if typ.IsUnion() {
@@ -91,6 +95,13 @@ var goFuncs = template.FuncMap{
 	},
 }
 
+func GoGetField(field *Field) string {
+	if field.Virtual {
+		return field.Name + "()"
+	}
+	return field.Name
+}
+
 func GoFieldError(op, name string, args ...string) string {
 	args = append(args, "err")
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
@@ -99,9 +110,9 @@ func GoFieldError(op, name string, args ...string) string {
 func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type {
 	case "bool", "string", "duration", "time", "bytes", "uint", "int":
-		return strings.Title(field.Type), false
+		return typegen.TitleCase(field.Type), false
 	case "url", "hash":
-		return strings.Title(field.Type), true
+		return typegen.TitleCase(field.Type), true
 	case "rawJson":
 		return "Bytes", false
 	case "bigint":
@@ -129,11 +140,11 @@ func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type {
 	case "bytes", "chain", "duration", "any":
-		return strings.Title(field.Type), false
+		return typegen.TitleCase(field.Type), false
 	case "hash":
 		return "Chain", false
 	case "bigint":
-		return strings.Title(field.Type), true
+		return typegen.TitleCase(field.Type), true
 	}
 
 	return "", false
@@ -196,6 +207,10 @@ func GoJsonType(field *Field) string {
 		jtype = "[]" + jtype
 	}
 	return jtype
+}
+
+func GoErrVirtualFieldNotEqual(field *Field, varName, valName string) (string, error) {
+	return fmt.Sprintf(`return fmt.Errorf("field %s: not equal: want %%%%v, got %%%%v", %s, %s)`, field.Name, varName, valName), nil
 }
 
 func GoIsZero(field *Field, varName string) (string, error) {
@@ -263,7 +278,7 @@ func GoJsonZeroValue(field *Field) (string, error) {
 	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
 }
 
-func GoAreEqual(field *Field, varName, otherName string) (string, error) {
+func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, error) {
 	var expr string
 	var wantPtr bool
 	switch field.Type {
@@ -299,15 +314,15 @@ func GoAreEqual(field *Field, varName, otherName string) (string, error) {
 	if field.Repeatable {
 		expr = fmt.Sprintf(expr, ptrPrefix, "%[2]s[i]", "%[3]s[i]")
 		return fmt.Sprintf(
-			"	if len(%[2]s) != len(%[3]s) { return false }\n"+
+			"	if len(%[2]s) != len(%[3]s) { "+whenNotEqual+" }\n"+
 				"	for i := range %[2]s {\n"+
-				"		if !("+expr+") { return false }\n"+
+				"		if !("+expr+") { "+whenNotEqual+" }\n"+
 				"	}",
 			ptrPrefix, varName, otherName), nil
 	}
 
 	if !field.Pointer {
-		return fmt.Sprintf("\tif !("+expr+") { return false }", ptrPrefix, varName, otherName), nil
+		return fmt.Sprintf("\tif !("+expr+") { "+whenNotEqual+" }", ptrPrefix, varName, otherName), nil
 	}
 
 	return fmt.Sprintf(

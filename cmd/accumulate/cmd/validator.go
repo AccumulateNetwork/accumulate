@@ -46,7 +46,7 @@ func addValidator(args []string) (string, error) {
 		return "", err
 	}
 
-	newKey, err := resolvePublicKey(args[0])
+	newKey, _, _, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
@@ -62,7 +62,7 @@ func removeValidator(args []string) (string, error) {
 		return "", err
 	}
 
-	oldKey, err := resolvePublicKey(args[0])
+	oldKey, _, _, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
@@ -78,12 +78,12 @@ func updateValidatorKey(args []string) (string, error) {
 		return "", err
 	}
 
-	oldKey, err := resolvePublicKey(args[0])
+	oldKey, _, _, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
 
-	newKey, err := resolvePublicKey(args[1])
+	newKey, _, _, err := resolvePublicKey(args[1])
 	if err != nil {
 		return "", err
 	}

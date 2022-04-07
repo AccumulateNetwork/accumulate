@@ -12,23 +12,138 @@ import (
 
 var PackagePath string
 
+// convert converts typegen.Types to local Types.
+func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, error) {
+	// Initialize
+	ttypes := new(Types)
+	ttypes.Package = pkgName
+	PackagePath = pkgPath
+	lup := map[string]*Type{}
+	unions := map[string]*UnionSpec{}
+
+	// Convert types
+	for _, typ := range append(types, refTypes...) {
+		// Initialize
+		ttyp := new(Type)
+		ttyp.Type = *typ
+		ttypes.Types = append(ttypes.Types, ttyp)
+		lup[typ.Name] = ttyp
+		ttyp.Fields = make([]*Field, 0, len(typ.Fields)+len(typ.Embeddings))
+
+		// If the type is a union
+		if typ.Union.Type == "" {
+			continue
+		}
+
+		// Look up or define the union spec
+		union, ok := unions[typ.Union.Type]
+		if !ok {
+			union = new(UnionSpec)
+			union.Type = typ.Union.Type
+			ttypes.Unions = append(ttypes.Unions, union)
+			unions[typ.Union.Type] = union
+		}
+
+		// Set the union spec, add the type
+		ttyp.UnionSpec = union
+		union.Members = append(union.Members, ttyp)
+	}
+
+	for _, typ := range ttypes.Types {
+		// Unions have a virtual field for the discriminator
+		if typ.IsUnion() {
+			field := new(Field)
+			field.Name = "Type"
+			field.Type = typ.UnionSpec.Enumeration()
+			field.MarshalAs = "enum"
+			field.KeepEmpty = true
+			field.Virtual = true
+			typ.Fields = append(typ.Fields, field)
+		}
+
+		// Resolve embedded types
+		for _, name := range typ.Type.Embeddings {
+			etyp, ok := lup[name]
+			if !ok {
+				return nil, fmt.Errorf("unknown embedded type %s", name)
+			}
+			field := new(Field)
+			field.Type = name
+			field.TypeRef = etyp
+			typ.Fields = append(typ.Fields, field)
+		}
+
+		// Convert fields
+		for _, field := range typ.Type.Fields {
+			tfield := new(Field)
+			tfield.Field = *field
+			if field.MarshalAs != "" {
+				tfield.TypeRef = lup[tfield.Type]
+			}
+			typ.Fields = append(typ.Fields, tfield)
+		}
+	}
+
+	// Make names for embedded fields
+	for _, typ := range ttypes.Types {
+		for _, field := range typ.Fields {
+			if field.Name != "" {
+				continue
+			}
+
+			field.IsEmbedded = true
+			bits := strings.Split(field.Type, ".")
+			if len(bits) == 1 {
+				field.Name = field.Type
+			} else {
+				field.Name = bits[1]
+			}
+		}
+	}
+
+	// Number the fields
+	for _, typ := range ttypes.Types {
+		var num uint = 1
+		for _, field := range typ.Fields {
+			if field.IsMarshalled() && field.IsBinary() {
+				field.Number = num
+				num++
+			}
+		}
+	}
+
+	// Slice out reference types
+	ttypes.Types = ttypes.Types[:len(types)]
+	return ttypes, nil
+}
+
 type Types struct {
 	Package string
 	Types   []*Type
 	Unions  []*UnionSpec
 }
 
-type Type struct {
-	typegen.DataType
-	Embeddings []Embedding
-	Fields     []*Field
-	UnionSpec  *UnionSpec
+type UnionSpec struct {
+	Type    string
+	Members []*Type
 }
 
-func (t *Type) IsAccount() bool       { return t.Union.Type == "account" }
-func (t *Type) IsBinary() bool        { return !t.NonBinary }
-func (t *Type) IsComparable() bool    { return !t.Incomparable }
-func (t *Type) MakeConstructor() bool { return !t.OmitNewFunc }
+type Type struct {
+	typegen.Type
+	Fields    []*Field
+	UnionSpec *UnionSpec
+}
+
+type Field struct {
+	typegen.Field
+	TypeRef    *Type
+	Number     uint
+	IsEmbedded bool
+}
+
+func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
+func (t *Type) IsBinary() bool     { return !t.NonBinary }
+func (t *Type) IsComparable() bool { return !t.Incomparable }
 
 // Deprecated: use Union
 func (t *Type) Kind() string {
@@ -59,17 +174,12 @@ func (t *Type) UnionValue() string {
 	return t.Union.Value
 }
 
-type UnionSpec struct {
-	Type    string
-	Members []*Type
-}
-
 func (u *UnionSpec) Interface() string {
 	switch u.Type {
 	case "transaction":
 		return "TransactionBody"
 	default:
-		return strings.Title(u.Type)
+		return typegen.TitleCase(u.Type)
 	}
 }
 
@@ -81,19 +191,10 @@ func (u *UnionSpec) Enumeration() string {
 	case "result":
 		return "TransactionType"
 	}
-	return strings.Title(u.Type) + "Type"
+	return typegen.TitleCase(u.Type) + "Type"
 }
 
-type Embedding struct {
-	*Type
-	Number uint
-}
-
-type Field struct {
-	typegen.Field
-	Number uint
-}
-
+func (f *Field) IsBinary() bool          { return !f.NonBinary }
 func (f *Field) AlternativeName() string { return f.Alternative }
 func (f *Field) IsPointer() bool         { return f.Pointer }
 func (f *Field) IsMarshalled() bool      { return f.MarshalAs != "none" }
@@ -103,73 +204,6 @@ func (f *Field) AsEnum() bool            { return f.MarshalAs == "enum" }
 func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
-
-func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
-	ttypes := new(Types)
-	ttypes.Package = pkgName
-	PackagePath = pkgPath
-	ttypes.Types = make([]*Type, len(types))
-	lup := map[string]*Type{}
-	unions := map[string]*UnionSpec{}
-
-	for i, typ := range types {
-		ttyp := new(Type)
-		ttyp.DataType = *typ
-		ttypes.Types[i] = ttyp
-		lup[typ.Name] = ttyp
-		ttyp.Fields = make([]*Field, len(typ.Fields))
-		for i, field := range typ.Fields {
-			ttyp.Fields[i] = &Field{Field: *field}
-		}
-
-		if typ.Union.Type == "" {
-			continue
-		}
-
-		union, ok := unions[typ.Union.Type]
-		if !ok {
-			union = new(UnionSpec)
-			union.Type = typ.Union.Type
-			ttypes.Unions = append(ttypes.Unions, union)
-			unions[typ.Union.Type] = union
-		}
-
-		ttyp.UnionSpec = union
-		union.Members = append(union.Members, ttyp)
-	}
-
-	for i, typ := range types {
-		ttyp := ttypes.Types[i]
-		ttyp.Embeddings = make([]Embedding, len(typ.Embeddings))
-		for i, name := range typ.Embeddings {
-			etyp, ok := lup[name]
-			if !ok {
-				return nil, fmt.Errorf("unknown embedded type %s", name)
-			}
-			ttyp.Embeddings[i].Type = etyp
-		}
-	}
-
-	for _, typ := range ttypes.Types {
-		var num uint = 1
-		if typ.IsUnion() {
-			num += 1
-		}
-		for i := range typ.Embeddings {
-			typ.Embeddings[i].Number = num
-			num++
-		}
-		for _, field := range typ.Fields {
-			if !field.IsMarshalled() {
-				continue
-			}
-			field.Number = num
-			num++
-		}
-	}
-
-	return ttypes, nil
-}
 
 func lcName(s string) string {
 	if s == "" {
@@ -221,4 +255,5 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":  lcName,
 	"map":     makeMap,
 	"natural": natural,
+	"debug":   fmt.Printf,
 })

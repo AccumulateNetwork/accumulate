@@ -158,6 +158,12 @@ ExecuteUpdateKeyPage:
   rpc: update-key-page
   input: UpdateKeyPage
 
+ExecuteUpdateKey:
+  description: submits an UpdateKey transaction
+  kind: execute
+  rpc: update-key
+  input: UpdateKey
+
 ExecuteWriteData:
   description: submits a WriteData transaction
   kind: execute
@@ -182,38 +188,26 @@ ExecuteBurnTokens:
   rpc: burn-tokens
   input: BurnTokens
 
-ExecuteUpdateManager:
-  description: submits an UpdateManager transaction
-  kind: execute
-  rpc: update-manager
-  input: UpdateManager
-
-ExecuteRemoveManager:
-  description: submits a RemoveManager transaction
-  kind: execute
-  rpc: remove-manager
-  input: RemoveManager
-
 ExecuteAddValidator:
-  # description: submits an AddValidator transaction
+  description: submits an AddValidator transaction
   kind: execute
   rpc: add-validator
   input: AddValidator
 
 ExecuteRemoveValidator:
-  # description: submits a RemoveValidator transaction
+  description: submits a RemoveValidator transaction
   kind: execute
   rpc: remove-validator
   input: RemoveValidator
 
 ExecuteUpdateValidatorKey:
-  # description: submits an UpdateValidatorKey transaction
+  description: submits an UpdateValidatorKey transaction
   kind: execute
   rpc: update-validator-key
   input: UpdateValidatorKey
 
 ExecuteUpdateAccountAuth:
-  # description: submits an UpdateAccountAuth transaction
+  description: submits an UpdateAccountAuth transaction
   kind: execute
   rpc: update-account-auth
   input: UpdateAccountAuth

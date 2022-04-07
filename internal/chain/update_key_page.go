@@ -13,6 +13,10 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
+func (UpdateKeyPage) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (UpdateKeyPage{}).Validate(st, tx)
+}
+
 func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
@@ -21,15 +25,16 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
-	if page.KeyBook == nil {
-		return nil, fmt.Errorf("invalid origin record: page %s does not have a KeyBook", page.Url)
+	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
+	if !ok {
+		return nil, fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
 	}
 
 	var book *protocol.KeyBook
-	err := st.LoadUrlAs(page.KeyBook, &book)
+	err := st.LoadUrlAs(bookUrl, &book)
 	if err != nil {
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
@@ -95,8 +100,8 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
-		if page.Threshold > uint64(len(page.Keys)) {
-			page.Threshold = uint64(len(page.Keys))
+		if page.AcceptThreshold > uint64(len(page.Keys)) {
+			page.AcceptThreshold = uint64(len(page.Keys))
 		}
 		return nil
 
