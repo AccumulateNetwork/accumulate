@@ -100,7 +100,7 @@ if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; 
    accumulated run -n 0 -w "$TEST_DN_NODE_DIR/Node2" &
    declare -g ACCPID=$!
    # Get Keys
-   pubkey=$(jq -re .pub_key.value $TEST_DN_NODE_DIR/Node0/config/priv_validator_key.json)
+   pubkey=$(jq -re .pub_key.value $TEST_DN_NODE_DIR/Node2/config/priv_validator_key.json)
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
    # Register new validator
