@@ -96,15 +96,13 @@ if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; 
   echo -e "We have only ${NUM_DNNS} DN validators, spinning up an extra DN."
   echo
   TEST_DN_NODE_DIR=$(realpath "$TEST_DN_NODE_DIR")
-  accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR/Node2" --skip-version-check --no-website
-  # Get Keys
-  pubkey=$(jq -re .pub_key.value $TEST_DN_NODE_DIR/Node2/config/priv_validator_key.json)
-  pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-  declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+  accumulated init node 2 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR" --skip-version-check --no-website
+
   # Register new validator
-  wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "${hexPubKey}"
+  wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "$TEST_DN_NODE_DIR/Node2/config/priv_validator_key.json"
+
   # Start new validator
-  accumulated run -n 0 -w "$TEST_DN_NODE_DIR/Node2" &
+  accumulated run -n 2 -w "$TEST_DN_NODE_DIR" &
   declare -g ACCPID=$!
 
 else
