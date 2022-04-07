@@ -11,13 +11,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
-
 func TestSaveState(t *testing.T) {
-	numberEntries := 500732 //               A pretty reasonable sized BPT
+	numberEntries := 50732 //               A pretty reasonable sized BPT
 
 	DirName, err := ioutil.TempDir("", "AccDB")
 	require.Nil(t, err, "failed to create directory")
-	defer os.RemoveAll(DirName) 
+	defer os.RemoveAll(DirName)
 
 	BDB, err := badger.New(DirName+"/add", nil)
 	defer BDB.Close()
@@ -30,14 +29,16 @@ func TestSaveState(t *testing.T) {
 	values.SetSeed([]byte{1, 2, 3})      //     use a different sequence for values
 	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT
 		chainID := keys.NextAList() //      Get a key, keep a list
-		value := values.GetRandBuff(int(values.GetRandInt64()%2048))
+		value := values.GetRandBuff(int(values.GetRandInt64() % 2048))
 		hash := sha256.Sum256(value)
-		storeTx.Put(hash,value)
-		bpt.Insert(chainID, hash)  //      Insert the Key with the value into the BPT
+		storeTx.Put(hash, value)
+		bpt.Insert(chainID, hash) //      Insert the Key with the value into the BPT
 	}
 	bptManager.DBManager.Commit()
-	
-	err = bpt.SaveSnapShot(DirName+"/SnapShot")
-	require.Nil(t,err,"snapshot failed")
-}
+	bpt.manager.DBManager = BDB.Begin(true)
 
+	err = bpt.SaveSnapshot(DirName + "/SnapShot")
+
+	Bpt := NewBPTManager()
+	require.Nil(t, err, "snapshot failed")
+}

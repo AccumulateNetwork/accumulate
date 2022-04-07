@@ -6,6 +6,8 @@ import (
 	"math/rand"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSliceBytes(t *testing.T) {
@@ -84,4 +86,13 @@ func TestHexToBytes(t *testing.T) {
 	if testHex("abcdef") {
 		t.Error("error on valid characters")
 	}
+}
+
+func TestInt64FixedBytes(t *testing.T){
+	value := 0x0123456789987654
+	iBytes := Uint64FixedBytes(uint64(value))
+	require.Truef(t,len(iBytes)==8,"fail len = %d",len(iBytes))
+	v, data := BytesFixedUint64(iBytes)
+	require.Truef(t,int(v)==value,"fail %x %x %x",iBytes,v,value)
+	require.True(t,len(data)==0,"fail")
 }
