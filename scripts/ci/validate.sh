@@ -94,7 +94,7 @@ NUM_DNNS=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; then
    echo -e "We have only ${NUM_DNNS} DN validators, spinning up an extra DN."
    echo
-   TEST_DN_NODE_DIR=$(realpath "$NODE_PRIV_VAL0")
+   TEST_DN_NODE_DIR=$(realpath "$TEST_DN_NODE_DIR")
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR/Node2" --skip-version-check --no-website
    accumulated run -n 0 -w "$TEST_DN_NODE_DIR/Node2" &
    declare -g ACCPID=$!
