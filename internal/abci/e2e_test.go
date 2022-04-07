@@ -29,6 +29,8 @@ var rand = randpkg.New(randpkg.NewSource(0))
 
 type Tx = protocol.Envelope
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestEndToEndSuite(t *testing.T) {
 	t.Skip("This is failing and may be more trouble than it's worth")
 

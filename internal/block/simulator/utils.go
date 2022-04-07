@@ -2,7 +2,6 @@ package simulator
 
 import (
 	"encoding"
-	"errors"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +10,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -109,7 +109,7 @@ func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delive
 
 	result, err := exec.ValidateEnvelope(batch, delivery)
 	if err != nil {
-		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 	if result == nil {
 		return new(protocol.EmptyResult), nil

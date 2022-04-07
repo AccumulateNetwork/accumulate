@@ -2,10 +2,10 @@ package pkg
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -99,7 +99,7 @@ func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) 
 		}
 	}
 
-	return nil, fmt.Errorf("transaction %X %w", hash, storage.ErrNotFound)
+	return nil, errors.NotFound("transaction %X not found", hash[:4])
 }
 
 func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
@@ -114,18 +114,17 @@ func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 		return nil, err
 	}
 
-	status := new(protocol.TransactionStatus)
-	status.Code = uint64(resp.Code)
-	if resp.Info != "" {
-		status.Message = resp.Info
-	} else {
-		status.Message = resp.Log
+	rset := new(protocol.TransactionResultSet)
+	err = rset.UnmarshalBinary(resp.Data)
+	if err != nil {
+		return nil, err
 	}
-	return status, nil
+
+	return rset.Results[0], nil
 }
 
-func (s SimEngine) WaitFor(hash [32]byte) (*protocol.TransactionStatus, *protocol.Transaction, error) {
-	status, txn := s.WaitForTransaction(func(status *protocol.TransactionStatus) bool {
+func (s SimEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
+	status, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
 		return status.Delivered || status.Pending
 	}, hash[:])
 	return status, txn, nil

@@ -2,12 +2,12 @@ package block
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -43,7 +43,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Basic validation
 	if !signature.Verify(delivery.Transaction.GetHash()) {
-		return nil, errors.New("invalid")
+		return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
@@ -252,7 +252,7 @@ func validateLocalLiteSignature(transaction *protocol.Transaction, signer *proto
 // validateRemoteLiteSignature verifies that the lite token account is
 // authorized to sign for the principal.
 func validateRemoteLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
-	return protocol.NewError(protocol.ErrorCodeUnauthorized, errors.New("remote signatures are not supported for lite accounts"))
+	return errors.Format(errors.StatusUnauthorized, "remote signatures are not supported for lite accounts")
 }
 
 // validateLocalPageSignature verifies that the key page is authorized to sign for
@@ -365,7 +365,7 @@ func validateNormalSignature(batch *database.Batch, transaction *protocol.Transa
 		return fmt.Errorf("calculating fee: %w", err)
 	}
 	if !signer.CanDebitCredits(fee.AsUInt64()) {
-		return protocol.Errorf(protocol.ErrorCodeInsufficientCredits, "insufficient credits: have %s, want %s",
+		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
 			protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}
@@ -418,7 +418,7 @@ func processNormalSignature(batch *database.Batch, transaction *protocol.Transac
 		return fmt.Errorf("calculating fee: %w", err)
 	}
 	if !signer.DebitCredits(fee.AsUInt64()) {
-		return protocol.Errorf(protocol.ErrorCodeInsufficientCredits, "insufficient credits: have %s, want %s",
+		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
 			protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}
