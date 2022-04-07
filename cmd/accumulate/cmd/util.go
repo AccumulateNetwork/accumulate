@@ -98,7 +98,6 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	var keyName string
 	signerUrl, err := url2.Parse(args[0])
 	if err == nil && signerUrl.UserInfo != "" {
-		fmt.Printf("Using URL for signer: %v\n", signerUrl)
 		keyName = signerUrl.UserInfo
 		signerUrl.UserInfo = ""
 	} else {
