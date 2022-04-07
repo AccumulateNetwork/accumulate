@@ -22,27 +22,6 @@ type TransactionMax uint64
 // VoteType specifies how the user wants to vote on a proposal (e.g. transaction, initiative, etc)
 type VoteType uint64
 
-type Account interface {
-	encoding.BinaryValue
-	GetType() AccountType
-	Type() AccountType
-	Header() *AccountHeader
-	CopyAsInterface() interface{}
-}
-
-type SignerAccount interface {
-	Account
-	KeyHolder
-	CreditHolder
-	GetSignatureThreshold() uint64
-	GetVersion() uint64
-}
-
-type TokenHolderAccount interface {
-	Account
-	TokenHolder
-}
-
 type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
@@ -53,20 +32,18 @@ type Signature interface {
 	GetVote() VoteType
 
 	GetSigner() *url.URL
-	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion
+	GetSignerVersion() uint64
 	GetTimestamp() uint64
-	GetPublicKey() []byte
-	GetSignature() []byte // TODO Remove once the API is improved
+	GetPublicKeyHash() []byte
+	GetSignature() []byte
 }
 
 type TransactionBody interface {
 	encoding.BinaryValue
-	GetType() TransactionType
 	Type() TransactionType
 }
 
 type TransactionResult interface {
-	GetType() TransactionType
 	Type() TransactionType
 	encoding.BinaryValue
 }

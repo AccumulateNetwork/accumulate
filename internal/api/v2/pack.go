@@ -11,10 +11,10 @@ import (
 
 func packStateResponse(account protocol.Account, chains []query.ChainState, receipt *query.GeneralReceipt) (*ChainQueryResponse, error) {
 	res := new(ChainQueryResponse)
-	res.Type = account.GetType().String()
+	res.Type = account.Type().String()
 	res.Data = account
 	res.Chains = chains
-	res.ChainId = account.Header().Url.AccountID()
+	res.ChainId = account.GetUrl().AccountID()
 	res.Receipt = receipt
 
 	for _, chain := range chains {
@@ -31,7 +31,7 @@ func packStateResponse(account protocol.Account, chains []query.ChainState, rece
 
 func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *protocol.Envelope, status *protocol.TransactionStatus) (*TransactionQueryResponse, error) {
 	res := new(TransactionQueryResponse)
-	res.Type = envelope.Transaction.Body.GetType().String()
+	res.Type = envelope.Transaction.Body.Type().String()
 	res.Data = envelope.Transaction.Body
 	res.TransactionHash = qrResp.TxId[:]
 	res.MainChain = ms
@@ -86,7 +86,7 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 		res.Signatures = append(res.Signatures, signer.Signatures...)
 
 		var book *SignatureBook
-		signerUrl := signer.Account.Header().Url
+		signerUrl := signer.Account.GetUrl()
 		bookUrl, _, ok := protocol.ParseKeyPageUrl(signerUrl)
 		if !ok {
 			book = new(SignatureBook)
@@ -106,7 +106,7 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 
 		keyPage, ok := signer.Account.(*protocol.KeyPage)
 		if ok {
-			page.Signer.AcceptThreshold = keyPage.Threshold
+			page.Signer.AcceptThreshold = keyPage.AcceptThreshold
 		}
 	}
 

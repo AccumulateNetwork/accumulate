@@ -18,6 +18,10 @@ func (SyntheticAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticAnchor
 }
 
+func (SyntheticAnchor) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticAnchor{}).Validate(st, tx)
+}
+
 func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
@@ -27,7 +31,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.Type())
 	}
 
 	// Verify the source URL and get the subnet name

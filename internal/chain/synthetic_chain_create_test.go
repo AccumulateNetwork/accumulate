@@ -22,11 +22,11 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	book, err := url.Parse("foo/book0")
 	require.NoError(t, err)
 
-	account := protocol.NewTokenAccount()
+	account := new(protocol.TokenAccount)
 	account.Url, err = url.Parse("foo/bar/baz")
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
-	account.KeyBook = book
+	account.AddAuthority(book)
 	body := new(protocol.SyntheticCreateChain)
 	cause := [32]byte{1}
 	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
@@ -72,11 +72,11 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	book, err := url.Parse("foo/book0")
 	require.NoError(t, err)
 
-	account := protocol.NewTokenAccount()
+	account := new(protocol.TokenAccount)
 	account.Url, err = url.Parse("foo/bar/baz")
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
-	account.KeyBook = book
+	account.AddAuthority(book)
 	body := new(protocol.SyntheticCreateChain)
 	cause := [32]byte{1}
 	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)

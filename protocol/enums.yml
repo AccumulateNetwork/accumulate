@@ -156,6 +156,9 @@ TransactionType:
   UpdateAccountAuth:
     value: 0x15
     description: updates authorization for an account
+  UpdateKey:
+    value: 0x16
+    description: update key for existing keys
   SignPending:
     value: 0x30
     description: is used to sign a pending transaction

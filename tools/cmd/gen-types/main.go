@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,9 +16,10 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package  string
-	Out      string
-	Language string
+	Package   string
+	Out       string
+	Language  string
+	Reference []string
 }
 
 func main() {
@@ -32,6 +32,7 @@ func main() {
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
+	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
@@ -48,7 +49,7 @@ func check(err error) {
 	}
 }
 
-func getPackagePath() string {
+var moduleInfo = func() struct{ Dir string } {
 	buf := new(bytes.Buffer)
 	cmd := exec.Command("go", "list", "-m", "-json")
 	cmd.Stdout = buf
@@ -56,11 +57,17 @@ func getPackagePath() string {
 
 	info := new(struct{ Dir string })
 	check(json.Unmarshal(buf.Bytes(), info))
+	return *info
+}()
 
+func getWdPackagePath() string {
 	wd, err := os.Getwd()
 	check(err)
+	return getPackagePath(wd)
+}
 
-	rel, err := filepath.Rel(info.Dir, wd)
+func getPackagePath(dir string) string {
+	rel, err := filepath.Rel(moduleInfo.Dir, dir)
 	check(err)
 
 	rel = strings.ReplaceAll(rel, "\\", "/")
@@ -69,9 +76,12 @@ func getPackagePath() string {
 }
 
 func run(_ *cobra.Command, args []string) {
-	types, err := flags.files.Read(args, reflect.TypeOf((map[string]*typegen.DataType)(nil)))
-	check(err)
-	ttypes, err := convert(typegen.DataTypesFrom(types.(map[string]*typegen.DataType)), flags.Package, getPackagePath())
+	var types, refTypes typegen.Types
+	check(flags.files.ReadAll(args, &types))
+	check(flags.files.ReadAll(flags.Reference, &refTypes))
+	types.Sort()
+	refTypes.Sort()
+	ttypes, err := convert(types, refTypes, flags.Package, getWdPackagePath())
 	check(err)
 
 	w := new(bytes.Buffer)

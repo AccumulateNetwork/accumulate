@@ -291,8 +291,25 @@ func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashe
 	n.t.Helper()
 
 	sigHashes, txnHashes, err := n.Execute(inBlock)
-	require.NoError(n.t, err)
-	return sigHashes, txnHashes
+	if err == nil {
+		return sigHashes, txnHashes
+	}
+
+	var data struct{ Data []byte }
+	if json.Unmarshal([]byte(err.Error()), &data) != nil {
+		require.NoError(n.t, err)
+	}
+
+	results := new(protocol.TransactionResultSet)
+	if results.UnmarshalBinary(data.Data) != nil {
+		require.NoError(n.t, err)
+	}
+
+	for _, result := range results.Results {
+		assert.Zero(n.t, result.Code, result.Message)
+	}
+	n.t.FailNow()
+	panic("unreachable")
 }
 
 func (n *FakeNode) MustExecuteAndWait(inBlock func(func(*protocol.Envelope))) [][32]byte {
@@ -396,13 +413,13 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 }
 
 func (n *FakeNode) GetDataAccount(url string) *protocol.DataAccount {
-	acct := protocol.NewDataAccount()
+	acct := new(protocol.DataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
-	acct := protocol.NewTokenAccount()
+	acct := new(protocol.TokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }

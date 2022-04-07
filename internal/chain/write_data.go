@@ -10,15 +10,19 @@ type WriteData struct{}
 
 func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
 
+func (WriteData) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (WriteData{}).Validate(st, tx)
+}
+
 func (WriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
-	if st.Origin.GetType() != protocol.AccountTypeDataAccount {
+	if st.Origin.Type() != protocol.AccountTypeDataAccount {
 		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
-			protocol.AccountTypeDataAccount, st.Origin.GetType())
+			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
 	//check will return error if there is too much data or no data for the entry

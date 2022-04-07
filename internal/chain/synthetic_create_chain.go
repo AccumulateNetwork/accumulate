@@ -15,6 +15,10 @@ func (SyntheticCreateChain) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticCreateChain
 }
 
+func (SyntheticCreateChain) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticCreateChain{}).Validate(st, tx)
+}
+
 func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateChain)
 	if !ok {
@@ -33,7 +37,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (p
 			return nil, fmt.Errorf("invalid chain payload: %v", err)
 		}
 
-		u := record.Header().Url
+		u := record.GetUrl()
 		_, err = st.LoadUrl(u)
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
@@ -69,7 +73,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (p
 		}
 
 		// Check the identity
-		switch record.GetType() {
+		switch record.Type() {
 		case protocol.AccountTypeIdentity:
 		default:
 			// Make sure the ADI actually exists
@@ -83,29 +87,22 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (p
 		}
 
 		// Check the key book
-		switch record.GetType() {
-		case protocol.AccountTypeKeyBook:
-			// A key book does not itself have a key book
-			if record.Header().KeyBook != nil {
-				return nil, errors.New("invalid key book: KeyBook is not empty")
-			}
+		fullAccount, ok := record.(protocol.FullAccount)
+		if !ok {
+			continue
+		}
 
-		case protocol.AccountTypeKeyPage:
-			// A key page can be unbound
-
-		default:
-			// Anything else must have a key book
-			if record.Header().KeyBook == nil {
-				return nil, fmt.Errorf("%q does not specify a key book", u)
-			}
+		auth := fullAccount.GetAuth()
+		if len(auth.Authorities) == 0 {
+			return nil, fmt.Errorf("%q does not specify a key book", u)
 		}
 
 		// Make sure the key book actually exists
-		if record.Header().KeyBook != nil {
+		for _, auth := range auth.Authorities {
 			var book *protocol.KeyBook
-			err = st.LoadUrlAs(record.Header().KeyBook, &book)
+			err = st.LoadUrlAs(auth.Url, &book)
 			if err != nil {
-				return nil, fmt.Errorf("invalid key book %q for %q: %v", record.Header().KeyBook, u, err)
+				return nil, fmt.Errorf("invalid key book %q for %q: %v", auth.Url, u, err)
 			}
 		}
 	}
