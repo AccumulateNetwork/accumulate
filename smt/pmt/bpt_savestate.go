@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
@@ -101,7 +100,7 @@ func (b *BPT) SaveSnapshot(filename string) error {
 
 // ReadSnapshot
 //
-func (b *BPT) ReadSnapshot(filename string) error {
+func (b *BPT) LoadSnapshot(filename string) error {
 	if b.NumNodes != 0 {
 		return errors.New("A snapshot can only be read into a new BPT")
 	}
@@ -113,13 +112,13 @@ func (b *BPT) ReadSnapshot(filename string) error {
 	defer file.Close()
 
 	buff := make([]byte, window*(32+8))
-	valueBuff := make([]byte,1024*128) // This needs to be the length of the longest state value; guessing 128k
+	valueBuff := make([]byte, 1024*128) // This needs to be the length of the longest state value; guessing 128k
 	_, err = file.Read(buff[:8])
 	if err != nil {
 		return err
 	}
 	numNodes, _ := common.BytesFixedUint64(buff)
-		
+
 	index := uint64(0)
 	for {
 		n, err := file.Read(buff)
@@ -129,27 +128,27 @@ func (b *BPT) ReadSnapshot(filename string) error {
 
 		for n > 0 && index < window*(32+8) && index < numNodes {
 			hash := buff[:32]
-			offset,_ := common.BytesFixedUint64(buff[32:])
-			_, e1 := file.Seek(0,int(offset))
+			offset, _ := common.BytesFixedUint64(buff[32:])
+			_, e1 := file.Seek(0, int(offset))
 			_, e2 := file.Read(valueBuff[:8])
-			valueLen,_ := common.BytesFixedUint64(valueBuff)
+			valueLen, _ := common.BytesFixedUint64(valueBuff)
 			_, e3 := file.Read(valueBuff[:valueLen])
 			hash2 := sha256.Sum256(valueBuff[:valueLen])
-			if !bytes.Equal(hash,hash2[:]){
-				return fmt.Errorf("Hash in snapshot does not match hash of data %x %x",hash,hash2)
+			if !bytes.Equal(hash, hash2[:]) {
+				return fmt.Errorf("Hash in snapshot does not match hash of data %x %x", hash, hash2)
 			}
 			switch {
-			case e1 != nil :
+			case e1 != nil:
 				return e1
-			case e2 != nil :
+			case e2 != nil:
 				return e2
-			case e3 != nil :
+			case e3 != nil:
 				return e3
 			}
-			index += 32+8
-			n -= 32+8
+			index += 32 + 8
+			n -= 32 + 8
 		}
-		if index >= numNodes{
+		if index >= numNodes {
 			break
 		}
 	}
