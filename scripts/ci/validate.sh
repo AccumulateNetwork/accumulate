@@ -104,7 +104,7 @@ if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; 
    pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
    declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
    # Register new validator
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" $hexPubKeyS
+   wait-for cli-tx validator add dn "$NODE_PRIV_VAL0" "${hexPubKey}"
 else
     echo -e "We have ${NUM_DNNS} DN validators which is enough to run this test."
     echo
