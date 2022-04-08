@@ -40,14 +40,14 @@ validate docker:
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
-    NODE_ROOT0: /nodes/dn/Node0
+    DN_NODES_DIR: /nodes/dn
   script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT0="${NODE_ROOT0}" --rm --entrypoint bash tools /scripts/ci/validate.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e DN_NODES_DIR="${DN_NODES_DIR}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose down
 
 lint:

@@ -2,6 +2,7 @@
 
 # Stop immediately on error
 set -e
+set -x
 
 # section <name> - Print a section header
 function section {
@@ -109,10 +110,6 @@ echo
 
 
 declare -r M_OF_N_FACTOR=$(bc -l <<< '2/3')
-if [ -f "${NODE_ROOT0:-~/.accumulate/dn/Node0}/.." ]; then
-  declare -r DN_NODES_DIR=$(realpath "${NODE_ROOT0:-~/.accumulate/dn/Node0}/..")
-fi
-
 declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
 if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
