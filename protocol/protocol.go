@@ -100,6 +100,12 @@ const AcmePrecision = 1e8
 // AcmeOraclePrecision is the precision of the oracle in 100 * USD of one ACME token.
 const AcmeOraclePrecision = 10000
 
+// InitialAcmeOracle is the oracle value at launch.
+const InitialAcmeOracle = 0.05
+
+// InitialAcmeOracleValue exists because golanglint-ci is dumb.
+const InitialAcmeOracleValue = InitialAcmeOracle * AcmeOraclePrecision
+
 // CreditPrecision is the precision of credit balances.
 const CreditPrecision = 1e2
 const CreditPrecisionPower = 2

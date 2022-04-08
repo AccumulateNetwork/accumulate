@@ -10,7 +10,7 @@ type Querier interface {
 	QueryUrl(url *url.URL, opts QueryOptions) (interface{}, error)
 	QueryDirectory(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryChain(id []byte) (*ChainQueryResponse, error)
-	QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error)
+	QueryTx(id []byte, wait time.Duration, ignorePending bool, opts QueryOptions) (*TransactionQueryResponse, error)
 	QueryTxHistory(url *url.URL, pagination QueryPagination) (*MultiResponse, error)
 	QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error)
 	QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)

@@ -1,4 +1,5 @@
 //go:build mainnet
+// +build mainnet
 
 // TODO Flip the flag to default to mainnet
 

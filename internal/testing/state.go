@@ -55,7 +55,8 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 		WithSigner(from, 1).
 		WithTimestamp(1).
 		WithBody(&send).
-		Initiate(protocol.SignatureTypeLegacyED25519, sponsor), nil
+		Initiate(protocol.SignatureTypeLegacyED25519, sponsor).
+		Build(), nil
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {

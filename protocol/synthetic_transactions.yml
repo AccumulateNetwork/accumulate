@@ -106,6 +106,22 @@ SyntheticReceipt:
       marshal-as: reference
       pointer: true
 
+SyntheticForwardTransaction:
+  union: { type: transaction, value: SyntheticForwardTransaction }
+  fields:
+    - name: Signatures
+      type: ForwardedSignature
+      marshal-as: reference
+      repeatable: true
+    - name: TransactionHash
+      type: bytes
+      optional: true
+    - name: Transaction
+      type: Transaction
+      marshal-as: reference
+      pointer: true
+      optional: true
+
 SegWitDataEntry:
   union: { type: transaction }
   embeddings:

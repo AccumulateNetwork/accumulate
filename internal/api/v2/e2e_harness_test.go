@@ -237,11 +237,11 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 	d.T().Helper()
 	for _, txid := range txids {
-		r, err := d.api().Querier().QueryTx(txid, 10*time.Second, api.QueryOptions{})
+		r, err := d.api().Querier().QueryTx(txid, 10*time.Second, false, api.QueryOptions{})
 		d.Require().NoError(err)
 
 		for _, txid := range r.SyntheticTxids {
-			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, api.QueryOptions{})
+			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, false, api.QueryOptions{})
 			d.Require().NoError(err)
 		}
 	}
