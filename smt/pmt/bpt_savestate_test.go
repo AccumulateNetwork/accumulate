@@ -8,12 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 func TestSaveState(t *testing.T) {
 
-	numberEntries := 5001 //               A pretty reasonable sized BPT
+	numberEntries := 1 //               A pretty reasonable sized BPT
 
 	DirName, err := ioutil.TempDir("", "AccDB")
 	require.Nil(t, err, "failed to create directory")
@@ -40,13 +41,17 @@ func TestSaveState(t *testing.T) {
 	require.NoError(t, err, "fail")
 	err = bptManager.DBManager.Commit()
 	require.NoError(t, err, "fail")
-	bpt.manager.DBManager = BDB.Begin(true)
+	storeTx = BDB.Begin(true)
+	bpt.manager.DBManager = storeTx
 
-	err = bpt.SaveSnapshot(DirName + "/SnapShot")
+	err = bpt.SaveSnapshot(DirName+"/SnapShot", storeTx.Get)
 	require.NoErrorf(t, err, "%v", err)
 
 	bptMan := NewBPTManager(nil)
-	err = bptMan.Bpt.LoadSnapshot(DirName + "/SnapShot")
+	err = bptMan.Bpt.LoadSnapshot(DirName+"/SnapShot", func(key storage.Key, value []byte) ([32]byte, error) {
+		hash := sha256.Sum256(value)
+		return hash, storeTx.Put(key, value)
+	})
 	require.NoErrorf(t, err, "%v", err)
 	err = bptMan.Bpt.Update()
 	require.True(t, bpt.Root.Hash == bptMan.Bpt.RootHash, "fail")
