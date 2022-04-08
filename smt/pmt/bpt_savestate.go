@@ -184,12 +184,12 @@ func (b *BPT) LoadSnapshot(filename string) error {
 			copy(hash[:], buff[idx+32:idx+64])                        // Copy over the hash
 			off, _ = common.BytesFixedUint64(buff[idx+64 : idx+64+8]) // And convert bytes to the offset to value
 
-			_, e1 := file.Seek(int64(fOff+off), 0)      // Seek to the value
-			_, e2 := file.Read(vBuff[:8])               // Read length of value
-			vLen, _ := common.BytesFixedUint64(vBuff)   // Convert bytes to uint64
-			_, e3 := file.Read(vBuff[:vLen])            // Read in the value
-			b.Insert(key, hash)                         // Insert the key/hash into the BPT
-			b.manager.DBManager.Put(hash, vBuff[:vLen]) // Insert the value into the DB
+			_, e1 := file.Seek(int64(fOff+off), 0)            // Seek to the value
+			_, e2 := file.Read(vBuff[:8])                     // Read length of value
+			vLen, _ := common.BytesFixedUint64(vBuff)         // Convert bytes to uint64
+			_, e3 := file.Read(vBuff[:vLen])                  // Read in the value
+			b.Insert(key, hash)                               // Insert the key/hash into the BPT
+			e4 := b.manager.DBManager.Put(hash, vBuff[:vLen]) // Insert the value into the DB
 
 			switch { //        errors not likely
 			case e1 != nil: // but report if found
@@ -198,6 +198,8 @@ func (b *BPT) LoadSnapshot(filename string) error {
 				return e2
 			case e3 != nil:
 				return e3
+			case e4 != nil:
+				return e4
 			}
 		}
 	}

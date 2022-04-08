@@ -20,8 +20,8 @@ func TestSaveState(t *testing.T) {
 	defer os.RemoveAll(DirName)
 
 	BDB, err := badger.New(DirName+"/add", nil)
-	defer BDB.Close()
 	require.Nil(t, err, "failed to create db")
+	defer BDB.Close()
 
 	storeTx := BDB.Begin(true)           // and begin its use.
 	bptManager := NewBPTManager(storeTx) // Create a BptManager.  We will create a new one each cycle.
@@ -43,6 +43,7 @@ func TestSaveState(t *testing.T) {
 	bpt.manager.DBManager = BDB.Begin(true)
 
 	err = bpt.SaveSnapshot(DirName + "/SnapShot")
+	require.NoErrorf(t, err, "%v", err)
 
 	bptMan := NewBPTManager(nil)
 	err = bptMan.Bpt.LoadSnapshot(DirName + "/SnapShot")
