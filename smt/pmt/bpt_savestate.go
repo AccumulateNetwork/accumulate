@@ -136,9 +136,9 @@ func (b *BPT) LoadSnapshot(filename string) error {
 	}
 	defer file.Close()
 
-	buff := make([]byte, window*(nLen)) //			          buff is a window's worth of key/hash/offset
-	vBuff := make([]byte, 1024*128)     //                    Big enough to load any value. 128k?
-	_, err = file.Read(vBuff[:8])       //                    Read number of entries
+	buff := make([]byte, window*(nLen))   //			          buff is a window's worth of key/hash/offset
+	vBuff := make([]byte, 1024*128)       //                    Big enough to load any value. 128k?
+	_, err = io.ReadFull(file, vBuff[:8]) //                    Read number of entries
 	if err != nil {
 		return err
 	}
@@ -153,10 +153,10 @@ func (b *BPT) LoadSnapshot(filename string) error {
 			toRead = numNodes //                                load what is left
 		}
 
-		_, e1 := file.Seek(fileIndex, 0)       //             Go back to the current end of the node list
-		_, e2 := file.Read(buff[:toRead*nLen]) //             Read all the nodes we need for this pass
-		fileIndex += int64(toRead * nLen)      //             Set the index to next set of nodes for next pass
-		numNodes -= toRead                     //             Count roRead as read
+		_, e1 := file.Seek(fileIndex, 0)               //             Go back to the current end of the node list
+		_, e2 := io.ReadFull(file, buff[:toRead*nLen]) //             Read all the nodes we need for this pass
+		fileIndex += int64(toRead * nLen)              //             Set the index to next set of nodes for next pass
+		numNodes -= toRead                             //             Count roRead as read
 
 		switch { //           errors not likely
 		case e1 != nil: //    but report if found
@@ -175,9 +175,9 @@ func (b *BPT) LoadSnapshot(filename string) error {
 			off, _ = common.BytesFixedUint64(buff[idx+64 : idx+64+8]) // And convert bytes to the offset to value
 
 			_, e1 := file.Seek(int64(fOff+off), 0)            // Seek to the value
-			_, e2 := file.Read(vBuff[:8])                     // Read length of value
+			_, e2 := io.ReadFull(file, vBuff[:8])             // Read length of value
 			vLen, _ := common.BytesFixedUint64(vBuff)         // Convert bytes to uint64
-			_, e3 := file.Read(vBuff[:vLen])                  // Read in the value
+			_, e3 := io.ReadFull(file, vBuff[:vLen])          // Read in the value
 			b.Insert(key, hash)                               // Insert the key/hash into the BPT
 			e4 := b.manager.DBManager.Put(hash, vBuff[:vLen]) // Insert the value into the DB
 
