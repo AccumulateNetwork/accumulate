@@ -104,11 +104,12 @@ func InitRootCmd(database db.DB) *cobra.Command {
 		Client.DebugRequest = ClientDebug
 
 		out, err := RestoreAccounts()
-		if err != nil {
+		if err != nil && err != db.ErrNoBucket {
 			return err
 		}
 		if out != "" {
-			return fmt.Errorf("Performaing\":\"%v]=\"}", out)
+			cmd.Println("performing account database update")
+			cmd.Println(out)
 		}
 		return nil
 	}

@@ -111,7 +111,7 @@ var keyCmd = &cobra.Command{
 }
 
 func init() {
-	keyCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
 }
 
 var keyUpdateCmd = &cobra.Command{
@@ -333,8 +333,13 @@ func GenerateKey(label string) (string, error) {
 		if errFs == nil || errFA == nil {
 			return "", fmt.Errorf("key name cannot be a factoid address")
 		}
-		if IsLiteAccount(label) {
-			return "", fmt.Errorf("key name cannot look like a lite account")
+		u, err := url.Parse(label)
+		if err != nil {
+			return "", err
+		}
+		_, _, err = protocol.ParseLiteTokenAddress(u)
+		if err != nil {
+			return "", fmt.Errorf("key name cannot look like an account")
 		}
 	}
 
@@ -350,16 +355,32 @@ func GenerateKey(label string) (string, error) {
 
 	pubKey := privKey[32:]
 
-	ltu, err := protocol.LiteTokenAddress(pubKey, protocol.AcmeUrl().String())
-	if err != nil {
-		return "", fmt.Errorf("unable to create lite token account")
-	}
-	if label == "" {
-		label = ltu.String()
+	var keyHash []byte
+	if sigtype == protocol.SignatureTypeRCD1 {
+		keyHash = protocol.GetRCDHashFromPublicKey(pubKey, 1)
+		if label == "" {
+			label, err = protocol.GetFactoidAddressFromRCDHash(keyHash)
+			if err != nil {
+				return "", err
+			}
+		}
+	} else {
+		h := sha256.Sum256(pubKey)
+		keyHash = h[:]
 	}
 
+	lt, err := protocol.LiteTokenAddressFromHash(keyHash, protocol.ACME)
+	if err != nil {
+		return "", fmt.Errorf("no label specified and cannot import as lite token account")
+	}
+	liteLabel, _ := LabelForLiteTokenAccount(lt.String())
+
+	if label == "" {
+		label = liteLabel
+	}
+
+	//here will change the label if it is a lite account specified, otherwise just use the label
 	label, _ = LabelForLiteTokenAccount(label)
-	liteLabel, _ := LabelForLiteTokenAccount(ltu.String())
 
 	_, err = LookupByLabel(label)
 	if err == nil {
@@ -390,7 +411,7 @@ func GenerateKey(label string) (string, error) {
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
-		a.LiteAccount = ltu
+		a.LiteAccount = lt
 		a.KeyType = sigtype
 		dump, err := json.Marshal(&a)
 		if err != nil {
@@ -398,7 +419,7 @@ func GenerateKey(label string) (string, error) {
 		}
 		out += fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out += fmt.Sprintf("%s :\t%x", label, pubKey)
+		out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pubKey, sigtype)
 	}
 	return out, nil
 }
@@ -471,7 +492,7 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		pk = token
 	}
 
-	keyHash := pk[32:]
+	var keyHash []byte
 	if signatureType == protocol.SignatureTypeRCD1 {
 		keyHash = protocol.GetRCDHashFromPublicKey(pk[32:], 1)
 	} else {
@@ -479,7 +500,7 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		keyHash = h[:]
 	}
 
-	lt, err := protocol.LiteAuthorityAddressFromHash(keyHash)
+	lt, err := protocol.LiteTokenAddressFromHash(keyHash, protocol.ACME)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
@@ -523,23 +544,12 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		return "", err
 	}
 
-	err = Db.Put(BucketLite, []byte(label), []byte(label))
+	err = Db.Put(BucketLite, []byte(liteLabel), []byte(label))
 	if err != nil {
 		return "", err
 	}
-
-	////allow to find type by key or label
-	//err = Db.Put(BucketSigType, []byte(label), common.Uint64Bytes(signatureType.GetEnumValue()))
-	//if err != nil {
-	//	return "", err
-	//}
 
 	err = Db.Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
-	if err != nil {
-		return "", err
-	}
-
-	err = Db.Put(BucketLite, []byte(liteLabel), []byte(label))
 	if err != nil {
 		return "", err
 	}
@@ -556,7 +566,7 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:%s\n\tpublic key\t:%x\n", label, pk[32:])
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk[32:], signatureType)
 	}
 	return out, nil
 }
@@ -761,76 +771,14 @@ func ExportMnemonic() (string, error) {
 }
 
 func ImportFactoidKey(factoidkey string) (out string, err error) {
-
-	if strings.Contains(factoidkey, "Fs") {
-		label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
-		if err != nil {
-			return "", err
-		}
-		return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
-	} else {
-		err = fmt.Errorf("key to import is not a factoid address")
+	if !strings.Contains(factoidkey, "Fs") {
+		return "", fmt.Errorf("key to import is not a factoid address")
 	}
-	//
-	//	publicKey := privatekey[32:]
-	//	label, _ = LabelForLiteTokenAccount(label)
-	//	_, err = LookupByLabel(label)
-	//	if err == nil {
-	//		return "", fmt.Errorf("key name is already being used")
-	//	}
-	//
-	//	_, err = LookupByPubKey(publicKey) //rcdhash)
-	//	lab := "not found"
-	//	if err == nil {
-	//		b, _ := Db.GetBucket(BucketLabel)
-	//		if b != nil {
-	//			for _, v := range b.KeyValueList {
-	//				if bytes.Equal(v.Value, rcdhash) {
-	//					lab = string(v.Key)
-	//					break
-	//				}
-	//			}
-	//			return "", fmt.Errorf("private key already exists in wallet by key name of %s", lab)
-	//		}
-	//	}
-	//
-	//	err = Db.Put(BucketKeys, rcdhash, privatekey)
-	//
-	//	if err != nil {
-	//		return "", err
-	//	}
-	//	err = Db.Put(BucketSigType, rcdhash, []byte(protocol.SignatureTypeRCD1.String()))
-	//
-	//	if err != nil {
-	//		return "", err
-	//	}
-	//	err = Db.Put(BucketSigType, privatekey[32:], []byte(protocol.SignatureTypeRCD1.String()))
-	//
-	//	if err != nil {
-	//		return "", err
-	//	}
-	//
-	//	err = Db.Put(BucketLabel, []byte(label), rcdhash)
-	//	if err != nil {
-	//		return "", err
-	//	}
-	//
-	//	if WantJsonOutput {
-	//		a := KeyResponse{}
-	//		a.Label = types.String(label)
-	//		a.PublicKey = types.Bytes(rcdhash)
-	//		dump, err := json.Marshal(&a)
-	//		if err != nil {
-	//			return "", err
-	//		}
-	//		out = fmt.Sprintf("%s\n", string(dump))
-	//	} else {
-	//		out = fmt.Sprintf("\tname\t\t:%s\n\trcd Hash\t:%x\n", label, rcdhash)
-	//	}
-	//} else {
-	//	out, err = "", fmt.Errorf("invalid factoid key must begin with `Fs`")
-	//}
-	return out, err
+	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
+	if err != nil {
+		return "", err
+	}
+	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
 }
 
 func UpdateKey(args []string) (string, error) {

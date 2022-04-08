@@ -116,16 +116,7 @@ const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
-	return LiteAuthorityAddressFromHash(chainId)
-}
-
-func LiteAuthorityAddress(publicKey []byte) (*url.URL, error) {
-	h := sha256.Sum256(publicKey)
-	return LiteAuthorityAddressFromHash(h[:])
-}
-
-func LiteAuthorityAddressFromHash(keyHash []byte) (*url.URL, error) {
-	u := liteAuthorityFromHash(keyHash)
+	u := liteAuthorityFromHash(chainId)
 	if u == nil {
 		return nil, fmt.Errorf("cannot create lite authority")
 	}
@@ -200,6 +191,38 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	}
 
 	return liteTokenAddress(pubKey, tokenUrl), nil
+}
+func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, error) {
+	tokenUrl, err := url.Parse(tokenUrlStr)
+	if err != nil {
+		return nil, err
+	}
+
+	if !AcmeUrl().Equal(tokenUrl) {
+		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
+			return nil, errors.New("invalid adi in token URL")
+		}
+		if tokenUrl.Path == "" {
+			return nil, errors.New("must have a path in token URL")
+		}
+	}
+	if tokenUrl.UserInfo != "" {
+		return nil, errors.New("token URLs cannot include user info")
+	}
+	if tokenUrl.Port() != "" {
+		return nil, errors.New("token URLs cannot include a port number")
+	}
+	if tokenUrl.Query != "" {
+		return nil, errors.New("token URLs cannot include a query")
+	}
+	if tokenUrl.Fragment != "" {
+		return nil, errors.New("token URLs cannot include a fragment")
+	}
+
+	liteUrl := liteAuthorityFromHash(pubKeyHash)
+	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
+
+	return liteUrl, nil
 }
 
 func liteAuthorityFromHash(pubKeyHash []byte) *url.URL {

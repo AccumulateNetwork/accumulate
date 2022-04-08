@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"io/ioutil"
 	"log"
 
@@ -37,7 +37,7 @@ func init() {
 	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch token account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch data account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
-	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
 }
 
 var flagAccount = struct {
@@ -281,35 +281,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 }
 
 func GenerateAccount() (string, error) {
-	tmp := WantJsonOutput
-	WantJsonOutput = true
-	out, err := GenerateKey("")
-	WantJsonOutput = tmp
-	if err != nil {
-		return "", err
-	}
-
-	var v KeyResponse
-	err = json.Unmarshal([]byte(out), &v)
-	if err != nil {
-		return "", err
-	}
-
-	v.LiteAccount, err = protocol.LiteTokenAddress(v.PublicKey.Bytes(), protocol.ACME)
-	if err != nil {
-		return "", err
-	}
-	if WantJsonOutput {
-		data, err := json.Marshal(&v)
-		if err != nil {
-			return "", err
-		}
-
-		return string(data), nil
-	}
-	out = fmt.Sprintf("Lite Account\t\t\t\t\t\t\tPublic Key\n")
-	out += fmt.Sprintf("%s\t%s", v.LiteAccount, v.PublicKey)
-	return out, nil
+	return GenerateKey("")
 }
 
 func ListAccounts() (string, error) {
@@ -440,7 +412,8 @@ func RestoreAccounts() (out string, err error) {
 		return
 	}
 	for _, v := range labelz.KeyValueList {
-		liteAccount, err := protocol.LiteTokenAddress(v.Value, protocol.ACME)
+		signatureType, hash, err := resolveKeyTypeAndHash(v.Value)
+		liteAccount, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
 		if err != nil {
 			return "", err
 		}
@@ -454,6 +427,11 @@ func RestoreAccounts() (out string, err error) {
 		out += fmt.Sprintf("lite identity %v mapped to key name %v\n", liteLabel, string(v.Key))
 
 		err = Db.Put(BucketLite, []byte(liteLabel), v.Key)
+		if err != nil {
+			return "", err
+		}
+
+		err = Db.Put(BucketSigType, v.Value, common.Uint64Bytes(signatureType.GetEnumValue()))
 		if err != nil {
 			return "", err
 		}
