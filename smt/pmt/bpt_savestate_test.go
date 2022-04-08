@@ -13,7 +13,7 @@ import (
 
 func TestSaveState(t *testing.T) {
 
-	numberEntries := 4 //               A pretty reasonable sized BPT
+	numberEntries := 5001 //               A pretty reasonable sized BPT
 
 	DirName, err := ioutil.TempDir("", "AccDB")
 	require.Nil(t, err, "failed to create directory")

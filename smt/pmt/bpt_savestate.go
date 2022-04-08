@@ -8,7 +8,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
-const window = 1000 //                                  Process this many BPT entries at a time
+const window = uint64(1000) //                               Process this many BPT entries at a time
+const nLen = 32 + 32 + 8    //                               Each node is a key (32), hash (32), offset(8)
 
 // SaveSnapshot
 // Saves a snapshot of the state of the BVN/DVN.
@@ -17,14 +18,19 @@ const window = 1000 //                                  Process this many BPT en
 // As long as the BVN is captured in its entirety within a block, the states
 // can be persisted over other blocks (as long as we don't delete any of those states
 //
-// Snapshot Format
+// Snapshot Format:
+//   8 byte count of nodes (NumNodes)
+//   [count of nodes]node   -- each node is a Fixed length
+//   [count of nodes]value  -- each value is variable length
 //
-// 8 byte count of nodes (NumNodes)
-// 32 byte Key -- 8 byte offset to value [NumNodes]
-// offset[0]--> 8 byte length, value 0
-// offset[1]--> 8 byte length, value 1
-// ...
-// offset[NumNodes-1] --> 8 byte length, value NumNodes-1
+// node:
+//   32 byte Key    -- 8 byte offset from end of nodes to value
+//   32 byte Hash   -- Hash of the value of the BPT entry
+//   8  byte offset -- from end of list of nodes to start of the value
+//
+// value:
+//   8  byte                  -- length of value
+//   n  [length of value]byte -- the bytes of the value
 //
 func (b *BPT) SaveSnapshot(filename string) error {
 	if b.manager == nil { //                                  Snapshot cannot be taken if we have no db
@@ -56,14 +62,14 @@ func (b *BPT) SaveSnapshot(filename string) error {
 	vOffset := uint64(0) //                                 Offset from the beginning of value section
 	NodeCnt := uint64(0) //                                 Recalculate number of nodes
 	for {                //
-		bptValues, next := b.GetRange(place, window) //     Read a thousand values from the BPT
-		NodeCnt += uint64(len(bptValues))
-		if len(bptValues) == 0 { //                         If there are none left, we break out
+		bptVals, next := b.GetRange(place, int(window)) //  Read a thousand values from the BPT
+		NodeCnt += uint64(len(bptVals))
+		if len(bptVals) == 0 { //                           If there are none left, we break out
 			break
 		}
 		place = next //                                     We will get the next 1000 after the last 1000
 
-		for _, v := range bptValues { //                    For all the key values we got (as many as 1000)
+		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
 			file.Write(v.Key[:])                         // Write the key out
 			file.Write(v.Hash[:])                        // Write the hash out
 			file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
@@ -72,8 +78,6 @@ func (b *BPT) SaveSnapshot(filename string) error {
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e2 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e3 := values.Write(value)                         // write out the value
-
-			fmt.Printf("Writ k %x h %x off %x\n", v.Key[:4], v.Hash[:4], vOffset)
 
 			vOffset += uint64(len(value)) + 8 // then set the offest past the end of the value
 
@@ -88,22 +92,11 @@ func (b *BPT) SaveSnapshot(filename string) error {
 		}
 	}
 
-	_, e1 := file.Seek(0, 0)
-	_, e2 := file.Write(common.Uint64FixedBytes(NodeCnt))
-
-	{
-		n, _ := file.Seek(0, 1)
-		fmt.Printf("\n\noffset to values %d\n\n", n)
-		file.Seek(0, 0)
-		buff := make([]byte, 256)
-		file.Read(buff)
-		fmt.Printf("Len %x\n", buff[:8])
-		fmt.Printf("key %x hash %x\n", buff[8:12], buff[40:44])
-	}
-
-	_, e3 := values.Seek(0, 0)
-	_, e4 := file.Seek(0, 2)
-	switch {
+	_, e1 := file.Seek(0, 0)                              // Goto front of file
+	_, e2 := file.Write(common.Uint64FixedBytes(NodeCnt)) //   and update number of nodes found
+	_, e3 := values.Seek(0, 0)                            // Go to front of values
+	_, e4 := file.Seek(0, 2)                              // Go to the end of file
+	switch {                                              // Not likely to fail, but report if it does
 	case e1 != nil:
 		return e1
 	case e2 != nil:
@@ -113,29 +106,27 @@ func (b *BPT) SaveSnapshot(filename string) error {
 	case e4 != nil:
 		return e3
 	}
-	buff := make([]byte, 1024*128) //    A big buffer to read all the values and write them into the Snapshot
-	for {
-		n, e1 := values.Read(buff[:]) // Read a bunch
-		fmt.Printf("Values: %x\n", buff[:n])
-		switch {
-		case n == 0: // When we read nothing, we are done
+
+	buff := make([]byte, 1024*128) //                        Just have to copy values onto the end of file
+	for {                          //                        so just blindly copy with a big buffer
+		n, e1 := values.Read(buff[:]) //                     Read a bunch
+		switch {                      //                     Check if done, or if an error
+		case e1 == nil && n == 0: //                         When we read nothing, we are done
 			return nil
 		case e1 != nil:
 			return e1
 		}
-
-		_, e2 := file.Write(buff[:n]) // Write a bunch
+		_, e2 := file.Write(buff[:n]) //                     Write a bunch
 
 		if e2 != nil {
 			return e2
 		}
-	}
+	} //                                                     rinse and repeat until all values written
 }
 
 // ReadSnapshot
 //
 func (b *BPT) LoadSnapshot(filename string) error {
-	fmt.Println("-----------------LoadSnapshot-------------------")
 	if b.MaxHeight != 0 {
 		return errors.New("A snapshot can only be read into a new BPT")
 	}
@@ -146,58 +137,59 @@ func (b *BPT) LoadSnapshot(filename string) error {
 	}
 	defer file.Close()
 
-	buff := make([]byte, window*(64+8))
-
-	file.Read(buff)
-	fmt.Printf("Len %x\n", buff[:8])
-	fmt.Printf("key %x hash %x\n", buff[8:12], buff[40:44])
-
-	valueBuff := make([]byte, 1024*128) // This needs to be the length of the longest state value; guessing 128k
-	file.Seek(0, 0)
-	_, err = file.Read(buff[:8])
+	buff := make([]byte, window*(nLen)) //			          buff is a window's worth of key/hash/offset
+	vBuff := make([]byte, 1024*128)     //                    Big enough to load any value. 128k?
+	_, err = file.Read(vBuff[:8])       //                    Read number of entries
 	if err != nil {
 		return err
 	}
-	numNodes, _ := common.BytesFixedUint64(buff)
-	fileOffset := uint64(8 + numNodes*(64+8))
-	index := uint64(0)
+	numNodes, _ := common.BytesFixedUint64(vBuff) //          Convert entry count to number of BPT nodes
 
-	for {
-		n, err := file.Read(buff)
-		if err != nil {
-			return err
+	fOff := uint64(8 + numNodes*(nLen)) //                    File offset to values in snapshot
+	fileIndex := int64(8)               //                    Used to track progress through the file
+	toRead := window                    //                    Assume a window's worth to read
+	for toRead > 0 {
+
+		if numNodes < toRead { //                             If not a window's worth of nodes left
+			toRead = numNodes //                                load what is left
 		}
 
-		for n > 0 && index < window*(64+8) && index < numNodes {
-			var key [32]byte
-			var hash [32]byte
-			copy(key[:], buff[index:index+32])
-			copy(hash[:], buff[index+32:index+64])
-			offset, _ := common.BytesFixedUint64(buff[index+64 : index+64+8])
-			_, e1 := file.Seek(int64(fileOffset+offset), 0)
-			_, e2 := file.Read(valueBuff[:8])
-			valueLen, _ := common.BytesFixedUint64(valueBuff)
-			_, e3 := file.Read(valueBuff[fileOffset+offset : fileOffset+offset+valueLen])
-			fmt.Printf("Read k %x h %x off %x val-len %x\n", key[:4], hash[:4], offset, valueBuff[:8])
-			//hash2 := sha256.Sum256(valueBuff[:valueLen])
-			//if hash != hash2 {
-			//	return fmt.Errorf("Hashes should match %x %x", hash[:8], hash2[:8])
-			//}
-			b.Insert(key, hash)
+		_, e1 := file.Seek(fileIndex, 0)       //             Go back to the current end of the node list
+		_, e2 := file.Read(buff[:toRead*nLen]) //             Read all the nodes we need for this pass
+		fileIndex += int64(toRead * nLen)      //             Set the index to next set of nodes for next pass
+		numNodes -= toRead                     //             Count roRead as read
 
-			switch {
-			case e1 != nil:
+		switch { //           errors not likely
+		case e1 != nil: //    but report if found
+			return e1
+		case e2 != nil:
+			return e2
+		}
+
+		for i := uint64(0); i < toRead; i++ { //                      Process the nodes we loaded
+			idx := i * nLen                                           // Each node is nLen Bytes
+			var key [32]byte                                          // Get the key,
+			var hash [32]byte                                         //   the hash, and
+			var off uint64                                            //   the value
+			copy(key[:], buff[idx:idx+32])                            // Copy over the key
+			copy(hash[:], buff[idx+32:idx+64])                        // Copy over the hash
+			off, _ = common.BytesFixedUint64(buff[idx+64 : idx+64+8]) // And convert bytes to the offset to value
+
+			_, e1 := file.Seek(int64(fOff+off), 0)      // Seek to the value
+			_, e2 := file.Read(vBuff[:8])               // Read length of value
+			vLen, _ := common.BytesFixedUint64(vBuff)   // Convert bytes to uint64
+			_, e3 := file.Read(vBuff[:vLen])            // Read in the value
+			b.Insert(key, hash)                         // Insert the key/hash into the BPT
+			b.manager.DBManager.Put(hash, vBuff[:vLen]) // Insert the value into the DB
+
+			switch { //        errors not likely
+			case e1 != nil: // but report if found
 				return e1
 			case e2 != nil:
 				return e2
 			case e3 != nil:
 				return e3
 			}
-			index += 32 + 8
-			n -= 32 + 8
-		}
-		if index >= numNodes {
-			break
 		}
 	}
 	return nil
