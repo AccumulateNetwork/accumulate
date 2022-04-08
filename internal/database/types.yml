@@ -21,3 +21,27 @@ txSyntheticTxns:
     - name: Txids
       type: chain
       repeatable: true
+
+merkleState:
+  fields:
+    - name: Count
+      type: uint
+    - name: Pending
+      type: hash
+      repeatable: true
+    - name: HashList
+      type: hash
+      repeatable: true
+
+exampleFullAccountState:
+  fields:
+    - name: State
+      type: protocol.Account
+      marshal-as: value
+      unmarshal-with: protocol.UnmarshalAccount
+      zero-value: nil
+    - name: Chains
+      type: merkleState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
