@@ -2,7 +2,6 @@
 
 # Stop immediately on error
 set -e
-set -x
 
 # section <name> - Print a section header
 function section {
@@ -116,12 +115,9 @@ fi
 
 declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-# if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
-if [ -f "$(nodePrivKey 0)" ] && [ "$NUM_DNNS" -ge "3" ]; then
+if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
   section "Add a new DN validator"
-
-#  accumulated init node 3 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
-  accumulated init node 3 http://127.0.1.4:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
+  accumulated init node 3 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
 
   # Register new validator
   TXID=$(cli-tx validator add dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
