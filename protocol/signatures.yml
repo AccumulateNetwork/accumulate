@@ -94,3 +94,18 @@ InternalSignature:
       description: is the network that produced the transaction
       type: url
       pointer: true
+
+ForwardedSignature:
+  union: { type: signature }
+  description: is used when forwarding signatures from one subnet to another
+  fields:
+    - name: Signature
+      type: KeySignature
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: UnmarshalKeySignature
+    - name: Signer
+      type: Signer
+      marshal-as: value
+      zero-value: nil
+      unmarshal-with: UnmarshalSigner

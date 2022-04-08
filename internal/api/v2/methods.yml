@@ -57,7 +57,7 @@ QueryTx:
   rpc: query-tx
   input: TxnQuery
   output: TransactionQueryResponse
-  call-params: [Txid, Wait, QueryOptions]
+  call-params: [Txid, Wait, IgnorePending, QueryOptions]
 
 QueryTxHistory:
   description: queries an account's transaction history

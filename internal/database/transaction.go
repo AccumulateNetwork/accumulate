@@ -21,7 +21,7 @@ func (b *Batch) Transaction(id []byte) *Transaction {
 }
 
 // ensureSigner ensures that the transaction's status includes the given signer.
-func (t *Transaction) ensureSigner(signer *url.URL) error {
+func (t *Transaction) ensureSigner(signer protocol.Signer) error {
 	status, err := t.GetStatus()
 	if err != nil {
 		return err
@@ -82,6 +82,26 @@ func (t *Transaction) ReadSignatures(signer *url.URL) (*SignatureSet, error) {
 	return t.newSigSet(signer, false)
 }
 
+// SignaturesForSigner returns a signature set for the given signer account.
+func (t *Transaction) SignaturesForSigner(signer protocol.Signer) (*SignatureSet, error) {
+	set, err := newSigSet(t, signer, true)
+	if err != nil {
+		return nil, fmt.Errorf("load signature set: %w", err)
+	}
+
+	return set, nil
+}
+
+// SignaturesForSigner returns a read-only signature set for the given signer account.
+func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer) (*SignatureSet, error) {
+	set, err := newSigSet(t, signer, false)
+	if err != nil {
+		return nil, fmt.Errorf("load signature set: %w", err)
+	}
+
+	return set, nil
+}
+
 // AddSignature loads the appropriate siganture set and adds the signature to
 // it.
 func (t *Transaction) AddSignature(newSignature protocol.Signature) (int, error) {
@@ -95,23 +115,21 @@ func (t *Transaction) AddSignature(newSignature protocol.Signature) (int, error)
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
 	var acct protocol.Signer
-	var version uint64
 	err := t.batch.Account(signer).GetStateAs(&acct)
 	switch {
 	case err == nil:
 		// If the signer exists, use its version
-		version = acct.GetVersion()
 
 	case errors.Is(err, storage.ErrNotFound):
 		// If the signer does not exist, use version 0. This is for signatures
 		// on synthetic transactions.
-		version = 0
+		acct = &protocol.UnknownSigner{Url: signer}
 
 	default:
 		return nil, fmt.Errorf("load signer: %w", err)
 	}
 
-	set, err := newSigSet(t, signer, version, writable)
+	set, err := newSigSet(t, acct, writable)
 	if err != nil {
 		return nil, fmt.Errorf("load signature set: %w", err)
 	}

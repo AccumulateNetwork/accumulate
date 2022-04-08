@@ -115,10 +115,12 @@ func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 }
 
 func (m *StateManager) AddAuthority(account protocol.FullAccount, u *url.URL) error {
-	var book *protocol.KeyBook
-	err := m.LoadUrlAs(u, &book)
-	if err != nil {
-		return fmt.Errorf("invalid key book %q: %v", u, err)
+	if m.OriginUrl.LocalTo(u) {
+		var book *protocol.KeyBook
+		err := m.LoadUrlAs(u, &book)
+		if err != nil {
+			return fmt.Errorf("invalid key book %q: %v", u, err)
+		}
 	}
 
 	account.GetAuth().AddAuthority(u)

@@ -12,14 +12,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
+func loadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
 	// An envelope with no signatures is invalid
 	if len(envelope.Signatures) == 0 {
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has no signatures")
 	}
 
 	// The transaction hash must be specified for signature transactions
-	if len(envelope.TxHash) == 0 && envelope.Type() == protocol.TransactionTypeSignPending {
+	if len(envelope.TxHash) == 0 && envelope.Type() == protocol.TransactionTypeRemote {
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "cannot sign pending transaction: missing transaction hash")
 	}
 
@@ -57,24 +57,40 @@ func (*Executor) LoadTransaction(batch *database.Batch, envelope *protocol.Envel
 
 	// Load previous transaction state
 	txState, err := batch.Transaction(envelope.GetTxHash()).GetState()
-	switch {
-	case err == nil:
-		// Load existing the transaction from the database
+	if err == nil {
+		// Loaded existing the transaction from the database
 		return txState.Transaction, nil
-
-	case !errors.Is(err, storage.ErrNotFound):
+	} else if !errors.Is(err, storage.ErrNotFound) {
 		// Unknown error
 		return nil, fmt.Errorf("load transaction: %v", err)
+	}
 
-	case envelope.Type() == protocol.TransactionTypeSignPending:
-		// If the envelope does not include the transaction, it must exist
-		// in the database
+	// If the envelope does not include a transaction, the transaction must
+	// exist locally
+	if envelope.Transaction == nil {
 		return nil, fmt.Errorf("load transaction: %v", err)
+	}
 
-	default:
+	if envelope.Transaction.Body.Type() != protocol.TransactionTypeRemote {
 		// Transaction is new
 		return envelope.Transaction, nil
 	}
+
+	// If any signature is local or forwarded, the transaction must exist
+	// locally
+	principal := envelope.Transaction.Header.Principal
+	for _, signature := range envelope.Signatures {
+		if signature.Type() == protocol.SignatureTypeForwarded || signature.GetSigner().LocalTo(principal) {
+			return nil, fmt.Errorf("load transaction: %v", err)
+		}
+	}
+
+	// Set the return value of GetHash
+	err = envelope.Transaction.SetHash(envelope.TxHash)
+	if err != nil {
+		return nil, err
+	}
+	return envelope.Transaction, nil
 }
 
 // ProcessTransaction processes a transaction. It will not return an error if
@@ -91,7 +107,8 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
-	// Load the initiator
+	// Load the initiator - do not use status.Initiator directly because that
+	// may be a modified version of the account
 	var signer protocol.Signer
 	err = batch.Account(status.Initiator).GetStateAs(&signer)
 	if err != nil {
@@ -217,23 +234,11 @@ outer:
 		}
 
 		// Check if any signer has reached its threshold
-		for _, signerUrl := range status.FindSigners(entry.Url) {
-			// TODO Enable remote signers
-			if !principal.GetUrl().RootIdentity().Equal(signerUrl.RootIdentity()) {
-				continue
-			}
-
-			// Load the signer
-			var signer protocol.Signer
-			err := batch.Account(signerUrl).GetStateAs(&signer)
-			if err != nil {
-				return false, fmt.Errorf("load signer %v: %w", signerUrl, err)
-			}
-
+		for _, signer := range status.FindSigners(entry.Url) {
 			// Load the signature set
-			signatures, err := txnObj.ReadSignatures(signerUrl)
+			signatures, err := txnObj.ReadSignaturesForSigner(signer)
 			if err != nil {
-				return false, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
+				return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 			}
 
 			// Check if the threshold has been reached
@@ -370,8 +375,11 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 
 	// But only if the paid paid is larger than the max failure paid
 	paid, err := protocol.ComputeTransactionFee(transaction)
-	if err != nil || paid <= protocol.FeeFailedMaximum {
+	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
+	}
+	if paid <= protocol.FeeFailedMaximum {
+		return status, state, nil
 	}
 
 	refund := paid - protocol.FeeFailedMaximum

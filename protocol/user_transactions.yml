@@ -232,6 +232,6 @@ UpdateKey:
     - name: NewKeyHash
       type: bytes
 
-SignPending:
-  union: { type: transaction }
+RemoteTransactionBody:
+  union: { type: transaction, value: Remote }
   fields: []
