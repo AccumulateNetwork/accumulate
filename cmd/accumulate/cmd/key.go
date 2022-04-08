@@ -126,7 +126,7 @@ type KeyResponse struct {
 	PrivateKey  types.Bytes            `json:"privateKey,omitempty"`
 	PublicKey   types.Bytes            `json:"publicKey,omitempty"`
 	KeyType     protocol.SignatureType `json:"keyType,omitempty"`
-	LiteAccount *url.URL               `json:"liteAcccount,omitempty"`
+	LiteAccount *url.URL               `json:"liteAccount,omitempty"`
 	Seed        types.Bytes            `json:"seed,omitempty"`
 	Mnemonic    types.String           `json:"mnemonic,omitempty"`
 }

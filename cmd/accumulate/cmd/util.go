@@ -84,10 +84,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-		sigType, rcd, err := resolveKeyTypeAndHash(privKey[32:])
-		fa, _ := protocol.GetFactoidAddressFromRCDHash(rcd)
-		la, _ := protocol.GetLiteAccountFromFactoidAddress(fa)
-		fmt.Printf("%s", la.String())
+		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
 		if err != nil {
 			return nil, nil, err
 		}
