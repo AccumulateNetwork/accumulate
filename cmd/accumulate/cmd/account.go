@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -289,24 +288,17 @@ func GenerateAccount() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	type LiteAccount struct {
-		Name        string `json:"name"`
-		PublicKey   string `json:"publicKey"`
-		LiteAccount string `json:"liteAccount"`
-	}
 
-	var v LiteAccount
+	var v KeyResponse
 	err = json.Unmarshal([]byte(out), &v)
 	if err != nil {
 		return "", err
 	}
-	publicKey, err := hex.DecodeString(v.PublicKey)
 
-	u, err := protocol.LiteTokenAddress(publicKey, protocol.ACME)
+	v.LiteAccount, err = protocol.LiteTokenAddress(v.PublicKey.Bytes(), protocol.ACME)
 	if err != nil {
 		return "", err
 	}
-	v.LiteAccount = u.String()
 	if WantJsonOutput {
 		data, err := json.Marshal(&v)
 		if err != nil {

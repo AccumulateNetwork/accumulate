@@ -122,11 +122,13 @@ var keyUpdateCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label      types.String `json:"name,omitempty"`
-	PrivateKey types.Bytes  `json:"privateKey,omitempty"`
-	PublicKey  types.Bytes  `json:"publicKey,omitempty"`
-	Seed       types.Bytes  `json:"seed,omitempty"`
-	Mnemonic   types.String `json:"mnemonic,omitempty"`
+	Label       types.String           `json:"name,omitempty"`
+	PrivateKey  types.Bytes            `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes            `json:"publicKey,omitempty"`
+	KeyType     protocol.SignatureType `json:"keyType,omitempty"`
+	LiteAccount *url.URL               `json:"liteAcccount,omitempty"`
+	Seed        types.Bytes            `json:"seed,omitempty"`
+	Mnemonic    types.String           `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -388,6 +390,8 @@ func GenerateKey(label string) (string, error) {
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
+		a.LiteAccount = ltu
+		a.KeyType = sigtype
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -524,11 +528,11 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		return "", err
 	}
 
-	//allow to find type by key or label
-	err = Db.Put(BucketSigType, []byte(label), common.Uint64Bytes(signatureType.GetEnumValue()))
-	if err != nil {
-		return "", err
-	}
+	////allow to find type by key or label
+	//err = Db.Put(BucketSigType, []byte(label), common.Uint64Bytes(signatureType.GetEnumValue()))
+	//if err != nil {
+	//	return "", err
+	//}
 
 	err = Db.Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
 	if err != nil {
@@ -544,6 +548,8 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = types.Bytes(pk[32:])
+		a.LiteAccount = lt
+		a.KeyType = signatureType
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -557,6 +563,7 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 
 func ExportKey(label string) (string, error) {
 	pk, err := LookupByLabel(label)
+	var sigType protocol.SignatureType
 	if err != nil {
 		pubk, err := pubKeyFromString(label)
 		if err != nil {
@@ -570,6 +577,10 @@ func ExportKey(label string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
+		sigType, _, err = resolveKeyTypeAndHash(pubk)
+		if err != nil {
+			return "", fmt.Errorf("no key type found")
+		}
 	}
 
 	if WantJsonOutput {
@@ -577,13 +588,14 @@ func ExportKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PrivateKey = pk[:32]
 		a.PublicKey = pk[32:]
+		a.KeyType = sigType
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s\n", string(dump)), nil
 	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:]), nil
+		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, pk[:32], pk[32:], sigType), nil
 	}
 }
 
