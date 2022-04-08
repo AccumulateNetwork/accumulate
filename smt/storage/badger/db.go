@@ -44,6 +44,8 @@ func New(filepath string, logger storage.Logger) (*DB, error) {
 		opts = opts.WithTruncate(true)
 	}
 
+	opts.WithMaxTableSize(1 << 30)
+
 	// Add logger
 	if logger != nil {
 		opts = opts.WithLogger(badgerLogger{logger})
