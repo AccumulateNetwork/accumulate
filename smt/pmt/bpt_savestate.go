@@ -101,11 +101,11 @@ func (b *BPT) SaveSnapshot(filename string) error {
 		}
 	}
 
-	_, e1 := file.Seek(0, 0)                              // Goto front of file
-	_, e2 := file.Write(common.Uint64FixedBytes(NodeCnt)) //   and update number of nodes found
-	_, e3 := values.Seek(0, 0)                            // Go to front of values
-	_, e4 := file.Seek(0, 2)                              // Go to the end of file
-	switch {                                              // Not likely to fail, but report if it does
+	_, e1 = file.Seek(0, 0)                              // Goto front of file
+	_, e2 = file.Write(common.Uint64FixedBytes(NodeCnt)) //   and update number of nodes found
+	_, e3 = values.Seek(0, 0)                            // Go to front of values
+	_, e4 := file.Seek(0, 2)                             // Go to the end of file
+	switch {                                             // Not likely to fail, but report if it does
 	case e1 != nil:
 		return e1
 	case e2 != nil:
