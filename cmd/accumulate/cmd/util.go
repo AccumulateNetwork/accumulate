@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -27,6 +28,25 @@ import (
 func runCmdFunc(fn func([]string) (string, error)) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		out, err := fn(args)
+		printOutput(cmd, out, err)
+	}
+}
+
+func runTxnCmdFunc(fn func(*url2.URL, *signing.Builder, []string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		principal, err := url2.Parse(args[0])
+		if err != nil {
+			printOutput(cmd, "", err)
+			return
+		}
+
+		args, signer, err := prepareSigner(principal, args[1:])
+		if err != nil {
+			printOutput(cmd, "", err)
+			return
+		}
+
+		out, err := fn(principal, signer, args)
 		printOutput(cmd, out, err)
 	}
 }
@@ -63,38 +83,58 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-
+		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
+		if err != nil {
+			return nil, nil, err
+		}
+		signer.Type = sigType
 		signer.Url = origin
 		signer.Version = 1
 		signer.SetPrivateKey(privKey)
 		return args, signer, nil
 	}
 
-	privKey, err := resolvePrivateKey(args[0])
+	var keyName string
+	keyHolder, err := url2.Parse(args[0])
+	if err == nil && keyHolder.UserInfo != "" {
+		keyName = keyHolder.UserInfo
+		keyHolder.UserInfo = ""
+	} else {
+		keyHolder = origin
+		keyName = args[0]
+	}
+
+	privKey, err := resolvePrivateKey(keyName)
 	if err != nil {
 		return nil, nil, err
 	}
 	signer.SetPrivateKey(privKey)
 	ct++
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
+	sigType, keyHash, err := resolveKeyTypeAndHash(privKey[32:])
+	if err != nil {
+		return nil, nil, err
+	}
+	signer.Type = sigType
+
+	keyInfo, err := getKey(keyHolder.String(), keyHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
 	if len(args) < 2 {
-		signer.Url = keyInfo.KeyPage
+		signer.Url = keyInfo.Signer
 	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
-		signer.Url = protocol.FormatKeyPageUrl(keyInfo.KeyBook, v)
+		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
 		ct++
 	} else {
-		signer.Url = keyInfo.KeyPage
+		signer.Url = keyInfo.Signer
 	}
 
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
+		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
 	signer.Version = page.Version
 
@@ -199,6 +239,17 @@ func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody,
 		return "", err
 	}
 
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
+
 	return ActionResponseFrom(res).Print()
 }
 
@@ -215,7 +266,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		sig, err = signer.Initiate(env.Transaction)
 		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
-		payload = new(protocol.SignPending)
+		payload = new(protocol.RemoteTransactionBody)
 		env = new(protocol.Envelope)
 		env.TxHash = txHash
 		env.Transaction = new(protocol.Transaction)
@@ -230,12 +281,14 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	}
 	env.Signatures = append(env.Signatures, sig)
 
+	keySig := sig.(protocol.KeySignature)
+
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.GetPublicKey()
+	req.Signer.PublicKey = keySig.GetPublicKey()
 	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
@@ -514,4 +567,25 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 		return nil, err
 	}
 	return acmeOracle, err
+}
+
+func ValidateSigType(input string) (protocol.SignatureType, error) {
+	var sigtype protocol.SignatureType
+	var err error
+	input = strings.ToLower(input)
+	switch input {
+	case "rcd1":
+		sigtype = protocol.SignatureTypeRCD1
+		err = nil
+	case "ed25519":
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	case "legacyed25519":
+		sigtype = protocol.SignatureTypeLegacyED25519
+		err = nil
+	default:
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	}
+	return sigtype, err
 }

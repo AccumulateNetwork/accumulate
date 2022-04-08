@@ -23,6 +23,8 @@ var (
 	Prove          = false
 	Memo           string
 	Metadata       string
+	SigType        string
+	Authorities    []string
 )
 
 var currentUser = func() *user.User {
@@ -60,23 +62,24 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")
 	flags.StringVarP(&Metadata, "metadata", "a", Metadata, "Transaction Metadata")
+	flags.StringSliceVar(&Authorities, "authority", nil, "Additional authorities to add when creating an account")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)
 	cmd.AddCommand(adiCmd)
+	cmd.AddCommand(authCmd)
 	cmd.AddCommand(bookCmd)
 	cmd.AddCommand(creditsCmd)
 	cmd.AddCommand(dataCmd)
 	cmd.AddCommand(getCmd)
 	cmd.AddCommand(keyCmd)
-	cmd.AddCommand(pageCmd)
-	cmd.AddCommand(txCmd)
-	cmd.AddCommand(versionCmd)
-	cmd.AddCommand(tokenCmd)
-	cmd.AddCommand(managerCmd)
 	cmd.AddCommand(oracleCmd)
+	cmd.AddCommand(pageCmd)
+	cmd.AddCommand(tokenCmd)
+	cmd.AddCommand(txCmd)
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(validatorCmd)
+	cmd.AddCommand(versionCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
@@ -131,6 +134,7 @@ var (
 	BucketKeys     = []byte("keys")
 	BucketLabel    = []byte("label")
 	BucketMnemonic = []byte("mnemonic")
+	BucketSigType  = []byte("sigtype")
 )
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {

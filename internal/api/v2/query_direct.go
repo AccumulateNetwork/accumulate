@@ -260,7 +260,7 @@ func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
 	return packStateResponse(resp.Account, resp.ChainState, nil)
 }
 
-func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
+func (q *queryDirect) QueryTx(id []byte, wait time.Duration, ignorePending bool, opts QueryOptions) (*TransactionQueryResponse, error) {
 	if len(id) != 32 {
 		return nil, fmt.Errorf("invalid TX ID: wanted 32 bytes, got %d", len(id))
 	}
@@ -307,6 +307,13 @@ query:
 	err = res.UnmarshalBinary(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid TX response: %v", err)
+	}
+
+	if res.Status.Pending && ignorePending {
+		// Pending, try again, linearly increasing the wait time
+		time.Sleep(sleep)
+		sleep += sleepIncr
+		goto query
 	}
 
 	return packTxResponse(res, nil, res.Envelope, res.Status)

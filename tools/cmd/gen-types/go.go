@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 //go:embed go.go.tmpl
@@ -97,9 +99,6 @@ func GoGetField(field *Field) string {
 	if field.Virtual {
 		return field.Name + "()"
 	}
-	if field.IsEmbedded() {
-		return field.Type
-	}
 	return field.Name
 }
 
@@ -111,9 +110,9 @@ func GoFieldError(op, name string, args ...string) string {
 func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type {
 	case "bool", "string", "duration", "time", "bytes", "uint", "int":
-		return strings.Title(field.Type), false
+		return typegen.TitleCase(field.Type), false
 	case "url", "hash":
-		return strings.Title(field.Type), true
+		return typegen.TitleCase(field.Type), true
 	case "rawJson":
 		return "Bytes", false
 	case "bigint":
@@ -141,11 +140,11 @@ func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type {
 	case "bytes", "chain", "duration", "any":
-		return strings.Title(field.Type), false
+		return typegen.TitleCase(field.Type), false
 	case "hash":
 		return "Chain", false
 	case "bigint":
-		return strings.Title(field.Type), true
+		return typegen.TitleCase(field.Type), true
 	}
 
 	return "", false

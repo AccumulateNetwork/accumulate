@@ -42,7 +42,8 @@ func (s *Suite) TestCreateLiteAccount() {
 		WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
 		WithTimestamp(nonce).
 		WithBody(&protocol.AddCredits{Recipient: senderUrl, Amount: *big.NewInt(amtAcmeToBuyCredits)}).
-		Initiate(protocol.SignatureTypeLegacyED25519, sender)
+		Initiate(protocol.SignatureTypeLegacyED25519, sender).
+		Build()
 	s.dut.SubmitTxn(env)
 	s.dut.WaitForTxns(env.GetTxHash())
 
@@ -77,7 +78,8 @@ func (s *Suite) TestCreateLiteAccount() {
 			WithSigner(senderUrl, s.dut.GetRecordHeight(senderUrl.String())).
 			WithTimestamp(nonce).
 			WithBody(exch).
-			Initiate(protocol.SignatureTypeLegacyED25519, sender)
+			Initiate(protocol.SignatureTypeLegacyED25519, sender).
+			Build()
 		s.dut.SubmitTxn(tx)
 		txids = append(txids, tx.GetTxHash())
 	}

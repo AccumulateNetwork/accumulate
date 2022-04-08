@@ -25,26 +25,6 @@ type VoteType uint64
 // TxFetchMode specifies how much detail of the transactions should be included in the result set
 type TxFetchMode uint64
 
-type Account interface {
-	encoding.BinaryValue
-	Type() AccountType
-	Header() *AccountHeader
-	CopyAsInterface() interface{}
-}
-
-type SignerAccount interface {
-	Account
-	KeyHolder
-	CreditHolder
-	GetSignatureThreshold() uint64
-	GetVersion() uint64
-}
-
-type TokenHolderAccount interface {
-	Account
-	TokenHolder
-}
-
 type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType
@@ -55,10 +35,10 @@ type Signature interface {
 	GetVote() VoteType
 
 	GetSigner() *url.URL
-	GetSignerVersion() uint64 // TODO Rename to GetSignerVersion
+	GetSignerVersion() uint64
 	GetTimestamp() uint64
-	GetPublicKey() []byte
-	GetSignature() []byte // TODO Remove once the API is improved
+	GetPublicKeyHash() []byte
+	GetSignature() []byte
 }
 
 type TransactionBody interface {

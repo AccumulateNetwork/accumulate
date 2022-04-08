@@ -26,7 +26,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	account.Url, err = url.Parse("foo/bar/baz")
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
-	account.KeyBook = book
+	account.AddAuthority(book)
 	body := new(protocol.SyntheticCreateChain)
 	cause := [32]byte{1}
 	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
@@ -37,7 +37,8 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithTimestamp(1).
 		WithBody(body).
-		Initiate(protocol.SignatureTypeED25519, fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey).
+		Build()
 
 	st := NewStateManagerForTest(t, db, env)
 	defer st.Discard()
@@ -54,7 +55,8 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithCurrentTimestamp().
 		WithBody(receiptBody).
-		Initiate(protocol.SignatureTypeED25519, fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey).
+		Build()
 	_, err = SyntheticReceipt{}.Validate(st, env)
 	require.NoError(t, err)
 
@@ -76,7 +78,7 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	account.Url, err = url.Parse("foo/bar/baz")
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
-	account.KeyBook = book
+	account.AddAuthority(book)
 	body := new(protocol.SyntheticCreateChain)
 	cause := [32]byte{1}
 	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
@@ -87,7 +89,8 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
 		WithTimestamp(1).
 		WithBody(body).
-		Initiate(protocol.SignatureTypeED25519, fooKey)
+		Initiate(protocol.SignatureTypeED25519, fooKey).
+		Build()
 
 	st := NewStateManagerForTest(t, db, env)
 	defer st.Discard()

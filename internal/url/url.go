@@ -220,6 +220,18 @@ func (u *URL) Parent() (*URL, bool) {
 	return v, true
 }
 
+// ParentOf returns true if U is the parent of V
+func (u *URL) ParentOf(v *URL) bool {
+	v, ok := v.Parent()
+	return ok && u.Equal(v)
+}
+
+// LocalTo returns true if U is local to V, that is if they have the same root
+// identity.
+func (u *URL) LocalTo(v *URL) bool {
+	return u.RootIdentity().Equal(v.RootIdentity())
+}
+
 // IdentityAccountID constructs an account identifier from the lower case
 // hostname. The port is not included.
 //

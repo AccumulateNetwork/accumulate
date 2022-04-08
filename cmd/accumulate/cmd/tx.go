@@ -79,14 +79,16 @@ var txCmd = &cobra.Command{
 }
 
 var (
-	TxWait      time.Duration
-	TxNoWait    bool
-	TxWaitSynth time.Duration
+	TxWait          time.Duration
+	TxNoWait        bool
+	TxWaitSynth     time.Duration
+	TxIgnorePending bool
 )
 
 func init() {
 	txCmd.Flags().DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	txCmd.Flags().DurationVar(&TxWaitSynth, "wait-synth", 0, "Wait for synthetic transactions to complete")
+	txCmd.Flags().BoolVar(&TxIgnorePending, "ignore-pending", false, "Ignore pending transactions. Combined with --wait, this waits for transactions to be delivered.")
 }
 
 func PrintTXGet() {
@@ -200,6 +202,7 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 	params := new(api2.TxnQuery)
 	params.Txid = hash
 	params.Prove = Prove
+	params.IgnorePending = TxIgnorePending
 
 	if wait > 0 {
 		params.Wait = wait

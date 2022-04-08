@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var blocksCmd = &cobra.Command{
@@ -35,6 +35,10 @@ var blocksCmd = &cobra.Command{
 						return
 					}
 					err = GetMinorBlocks(cmd, args[1], args[2], args[3], txFetchMode, filterAnBlks)
+					if err != nil {
+						printError(cmd, err)
+						return
+					}
 				} else {
 					fmt.Println("Usage:")
 					PrintGetMinorBLocks()
@@ -128,10 +132,11 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 	}()
 
 	if err := Client.RequestAPIv2(context.Background(), "query-minor-blocks", json.RawMessage(data), &res); err != nil {
-		cmd.Println(PrintJsonRpcError(err))
+		rpcError, err := PrintJsonRpcError(err)
+		cmd.Println(rpcError)
 		return err
 	}
 
-	FPrintMultiResponse(cmd.OutOrStderr(), &res)
-	return nil
+	err = FPrintMultiResponse(cmd.OutOrStderr(), &res)
+	return err
 }

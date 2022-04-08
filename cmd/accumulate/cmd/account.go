@@ -36,6 +36,7 @@ func init() {
 	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch token account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch data account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
+	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
 }
 
 var flagAccount = struct {
@@ -247,6 +248,17 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.TokenUrl = tok
 	tac.KeyBookUrl = keybook
 	tac.Scratch = flagAccount.Scratch
+
+	if len(Authorities) > 1 {
+		return "", fmt.Errorf("currently adding more than one additional authority is unsupported")
+	}
+	for _, authUrlStr := range Authorities {
+		authUrl, err := url2.Parse(authUrlStr)
+		if err != nil {
+			return "", err
+		}
+		tac.Manager = authUrl
+	}
 
 	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, signer)
 	if err != nil {

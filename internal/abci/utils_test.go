@@ -20,7 +20,7 @@ func newTxn(origin string) acctesting.TransactionBuilder {
 	u := url.MustParse(origin)
 	tb := acctesting.NewTransaction().
 		WithPrincipal(u).
-		WithNonceVar(&globalNonce)
+		WithTimestampVar(&globalNonce)
 
 	if key, _, _ := protocol.ParseLiteTokenAddress(u); key != nil {
 		tb = tb.WithSigner(u, 1)

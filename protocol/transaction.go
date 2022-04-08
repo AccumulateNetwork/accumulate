@@ -1,25 +1,38 @@
 package protocol
 
 import (
+	"errors"
 	"math/big"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
+// SetHash sets the hash returned by GetHash. This will return an error if the
+// body type is not Remote.
+func (t *Transaction) SetHash(hash []byte) error {
+	if t.Body.Type() != TransactionTypeRemote {
+		return errors.New("cannot set the hash: not a remote transaction")
+	}
+	t.hash = hash
+	return nil
+}
+
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
-func (s *TransactionStatus) AddSigner(signer *url.URL) {
+func (s *TransactionStatus) AddSigner(signer Signer) {
+	signer = MakeLiteSigner(signer)
+
 	// Initial signer
 	if len(s.Signers) == 0 {
-		s.Initiator = signer
-		s.Signers = []*url.URL{signer}
+		s.Initiator = signer.GetUrl()
+		s.Signers = []Signer{signer}
 		return
 	}
 
 	// Find the matching entry
 	i := sort.Search(len(s.Signers), func(i int) bool {
-		return s.Signers[i].Compare(signer) >= 0
+		return s.Signers[i].GetUrl().Compare(signer.GetUrl()) >= 0
 	})
 
 	// Append to the list
@@ -28,8 +41,11 @@ func (s *TransactionStatus) AddSigner(signer *url.URL) {
 		return
 	}
 
-	// A matching entry exists
-	if signer.Equal(s.Signers[i]) {
+	// Update the existing entry
+	if s.Signers[i].GetUrl().Equal(signer.GetUrl()) {
+		if signer.GetVersion() > s.Signers[i].GetVersion() {
+			s.Signers[i] = signer
+		}
 		return
 	}
 
@@ -37,6 +53,59 @@ func (s *TransactionStatus) AddSigner(signer *url.URL) {
 	s.Signers = append(s.Signers, nil)
 	copy(s.Signers[i+1:], s.Signers[i:])
 	s.Signers[i] = signer
+}
+
+func (s *TransactionStatus) GetSigner(entry *url.URL) (Signer, bool) {
+	// Find the matching entry
+	i := sort.Search(len(s.Signers), func(i int) bool {
+		return s.Signers[i].GetUrl().Compare(entry) >= 0
+	})
+
+	// No match
+	if i > len(s.Signers) || !s.Signers[i].GetUrl().Equal(entry) {
+		return nil, false
+	}
+
+	return s.Signers[i], true
+}
+
+func (s *TransactionStatus) FindSigners(authority *url.URL) []Signer {
+	// Find the first signer for the given authority. This depends on the fact
+	// that signers are always children of authorities. Or in the case of lite
+	// token accounts, equal to (for now).
+	i := sort.Search(len(s.Signers), func(i int) bool {
+		return s.Signers[i].GetUrl().Compare(authority) >= 0
+	})
+
+	// Past the end of the list, no match
+	if i >= len(s.Signers) {
+		return nil
+	}
+
+	// Entry matches (lite token account)
+	if s.Signers[i].GetUrl().Equal(authority) {
+		return []Signer{s.Signers[i]}
+	}
+
+	// Authority is not the parent of the entry, no match
+	if !authority.ParentOf(s.Signers[i].GetUrl()) {
+		return nil
+	}
+
+	// Find the first signer that is not a child of the given authority
+	j := sort.Search(len(s.Signers), func(i int) bool {
+		// For some I, Search expects this function to return false for
+		// slice[:i] and true for slice[i:]. If the entry sorts before the
+		// authority, return false. If the entry is the child of the authority,
+		// return false. If the entry is not a child and sorts after, return
+		// true. That will return the end of the range of entries that are
+		// children of the signer.
+		if s.Signers[i].GetUrl().Compare(authority) < 0 {
+			return false
+		}
+		return !authority.ParentOf(s.Signers[i].GetUrl())
+	})
+	return s.Signers[i:j]
 }
 
 func NewTransaction(typ TransactionType) (TransactionBody, error) {

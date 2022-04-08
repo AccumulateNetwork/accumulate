@@ -48,6 +48,9 @@ SignatureType:
   Internal:
     value: 6
     description: is used when executing transactions internally
+  Forwarded:
+    value: 7
+    description: is used when forwarding signatures from one subnet to another
 
 KeyPageOperationType:
   Unknown:
@@ -173,9 +176,10 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
-  SignPending:
+  Remote:
     value: 0x30
-    description: is used to sign a pending transaction
+    aliases: [ signPending ]
+    description: is used to sign a remote transaction
 
   ##### SYNTHETIC TRANSACTIONS #####
   SyntheticCreateChain:
@@ -196,6 +200,9 @@ TransactionType:
   SyntheticBurnTokens:
     value: 0x36
     description: returns tokens to a token issuer's pool of issuable tokens
+  SyntheticForwardTransaction:
+    value: 0x37
+    description: forwards a transaction from one subnet to another
   SyntheticMirror:
     value: 0x38
     description: mirrors records from one network to another
@@ -252,6 +259,9 @@ AccountType:
   LiteDataAccount:
     value: 12
     description: is a Lite Data Account
+  UnknownSigner:
+    value: 13
+    description: represents an unknown signer account
   InternalLedger:
     value: 14
     description: is a ledger that tracks the state of internal operations

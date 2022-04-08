@@ -164,7 +164,7 @@ func getKey(urlStr string, key []byte) (*query.ResponseKeyPageIndex, error) {
 }
 
 func GetKey(url, key string) (string, error) {
-	keyb, err := resolvePublicKey(key)
+	keyb, _, _, err := resolvePublicKey(key)
 	if err != nil {
 		return "", err
 	}
@@ -184,7 +184,7 @@ func GetKey(url, key string) (string, error) {
 	}
 
 	var out string
-	out += fmt.Sprintf("Key book\t:\t%v\n", res.KeyBook)
-	out += fmt.Sprintf("Key page\t:\t%v (index=%v)\n", res.KeyPage, res.Index)
+	out += fmt.Sprintf("Key book\t:\t%v\n", res.Authority)
+	out += fmt.Sprintf("Key page\t:\t%v (index=%v)\n", res.Signer, res.Index)
 	return out, nil
 }

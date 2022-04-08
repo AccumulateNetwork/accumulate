@@ -23,8 +23,23 @@ import (
 
 const LogConsole = true
 
+func NewTestLogger(t testing.TB) log.Logger {
+	if !LogConsole {
+		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
+	}
+
+	w, err := logging.NewConsoleWriter("plain")
+	require.NoError(t, err)
+	level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
+	require.NoError(t, err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	require.NoError(t, err)
+	return logger
+}
+
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
+	// SetModule("block-executor", "debug").
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "info").
 	// SetModule("governor", "debug").
@@ -33,7 +48,6 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
 	// SetModule("fake-tendermint", "info").
-	SetModule("test-router", "debug").
 	String()
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {

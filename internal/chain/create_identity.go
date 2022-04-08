@@ -36,8 +36,14 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 
 	identity := new(protocol.ADI)
 	identity.Url = body.Url
-	identity.KeyBook = bookUrl
-	identity.ManagerKeyBook = body.Manager
+	identity.AddAuthority(bookUrl)
+
+	if body.Manager != nil {
+		err = st.AddAuthority(identity, body.Manager)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	accounts := []protocol.Account{identity}
 	var book *protocol.KeyBook
@@ -53,15 +59,15 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 		book = new(protocol.KeyBook)
 		book.Url = bookUrl
 		book.PageCount = 1
+		book.AddAuthority(bookUrl)
 		accounts = append(accounts, book)
 		if len(body.KeyHash) != 32 {
 			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
 		}
 		page := new(protocol.KeyPage)
-		page.KeyBook = bookUrl
 		page.Version = 1
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-		page.Threshold = 1 // Require one signature from the Key Page
+		page.AcceptThreshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
 		keySpec.PublicKeyHash = body.KeyHash
 		page.Keys = append(page.Keys, keySpec)

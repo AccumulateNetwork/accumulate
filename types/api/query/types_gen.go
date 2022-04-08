@@ -135,8 +135,8 @@ type ResponseDataEntrySet struct {
 
 type ResponseKeyPageIndex struct {
 	fieldsSet []bool
-	KeyBook   *url.URL `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
-	KeyPage   *url.URL `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	Signer    *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
 }
 
@@ -418,11 +418,11 @@ func (v *ResponseDataEntrySet) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 	u := new(ResponseKeyPageIndex)
 
-	if v.KeyBook != nil {
-		u.KeyBook = (v.KeyBook).Copy()
+	if v.Authority != nil {
+		u.Authority = (v.Authority).Copy()
 	}
-	if v.KeyPage != nil {
-		u.KeyPage = (v.KeyPage).Copy()
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
 	}
 	u.Index = v.Index
 
@@ -854,19 +854,19 @@ func (v *ResponseDataEntrySet) Equal(u *ResponseDataEntrySet) bool {
 
 func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	switch {
-	case v.KeyBook == u.KeyBook:
+	case v.Authority == u.Authority:
 		// equal
-	case v.KeyBook == nil || u.KeyBook == nil:
+	case v.Authority == nil || u.Authority == nil:
 		return false
-	case !((v.KeyBook).Equal(u.KeyBook)):
+	case !((v.Authority).Equal(u.Authority)):
 		return false
 	}
 	switch {
-	case v.KeyPage == u.KeyPage:
+	case v.Signer == u.Signer:
 		// equal
-	case v.KeyPage == nil || u.KeyPage == nil:
+	case v.Signer == nil || u.Signer == nil:
 		return false
-	case !((v.KeyPage).Equal(u.KeyPage)):
+	case !((v.Signer).Equal(u.Signer)):
 		return false
 	}
 	if !(v.Index == u.Index) {
@@ -1863,8 +1863,8 @@ func (v *ResponseDataEntrySet) IsValid() error {
 }
 
 var fieldNames_ResponseKeyPageIndex = []string{
-	1: "KeyBook",
-	2: "KeyPage",
+	1: "Authority",
+	2: "Signer",
 	3: "Index",
 }
 
@@ -1872,11 +1872,11 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.KeyBook == nil) {
-		writer.WriteUrl(1, v.KeyBook)
+	if !(v.Authority == nil) {
+		writer.WriteUrl(1, v.Authority)
 	}
-	if !(v.KeyPage == nil) {
-		writer.WriteUrl(2, v.KeyPage)
+	if !(v.Signer == nil) {
+		writer.WriteUrl(2, v.Signer)
 	}
 	writer.WriteUint(3, v.Index)
 
@@ -1888,14 +1888,14 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field KeyBook is missing")
-	} else if v.KeyBook == nil {
-		errs = append(errs, "field KeyBook is not set")
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field KeyPage is missing")
-	} else if v.KeyPage == nil {
-		errs = append(errs, "field KeyPage is not set")
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Index is missing")
@@ -2649,10 +2649,10 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUrl(1); ok {
-		v.KeyBook = x
+		v.Authority = x
 	}
 	if x, ok := reader.ReadUrl(2); ok {
-		v.KeyPage = x
+		v.Signer = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
 		v.Index = x
@@ -2973,6 +2973,22 @@ func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = v.Entry
+	return json.Marshal(&u)
+}
+
+func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Authority *url.URL `json:"authority,omitempty"`
+		KeyBook   *url.URL `json:"keyBook,omitempty"`
+		Signer    *url.URL `json:"signer,omitempty"`
+		KeyPage   *url.URL `json:"keyPage,omitempty"`
+		Index     uint64   `json:"index"`
+	}{}
+	u.Authority = v.Authority
+	u.KeyBook = v.Authority
+	u.Signer = v.Signer
+	u.KeyPage = v.Signer
+	u.Index = v.Index
 	return json.Marshal(&u)
 }
 
@@ -3318,6 +3334,36 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 		v.EntryHash = x
 	}
 	v.Entry = u.Entry
+	return nil
+}
+
+func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Authority *url.URL `json:"authority,omitempty"`
+		KeyBook   *url.URL `json:"keyBook,omitempty"`
+		Signer    *url.URL `json:"signer,omitempty"`
+		KeyPage   *url.URL `json:"keyPage,omitempty"`
+		Index     uint64   `json:"index"`
+	}{}
+	u.Authority = v.Authority
+	u.KeyBook = v.Authority
+	u.Signer = v.Signer
+	u.KeyPage = v.Signer
+	u.Index = v.Index
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Authority != nil {
+		v.Authority = u.Authority
+	} else {
+		v.Authority = u.KeyBook
+	}
+	if u.Signer != nil {
+		v.Signer = u.Signer
+	} else {
+		v.Signer = u.KeyPage
+	}
+	v.Index = u.Index
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package typegen
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -12,34 +13,57 @@ type MarshalAs int
 // Types is a list of struct types.
 type Types []*Type
 
-// TypesFrom builds a list of types from a map.
-func TypesFrom(m map[string]*Type) Types {
-	t := Types{}
-	for name, typ := range m {
-		typ.Name = name
-		t = append(t, typ)
-
-		if typ.Union.Type != "" && typ.Union.Value == "" {
-			typ.Union.Value = strings.TrimSuffix(name, strings.Title(typ.Union.Type))
-		}
-	}
-
+func (t Types) Sort() {
 	sort.Slice(t, func(i, j int) bool {
 		return t[i].Name < t[j].Name
 	})
+}
 
-	return t
+func (t *Types) DecodeFromFile(file string, dec Decoder) error {
+	var m map[string]*Type
+	err := dec.Decode(&m)
+	if err != nil {
+		return err
+	}
+
+	seen := map[string]bool{}
+	for _, t := range *t {
+		seen[t.Name] = true
+	}
+
+	if *t == nil {
+		*t = make(Types, 0, len(m))
+	} else {
+		*t = append(*t, make(Types, 0, len(m))...)
+	}
+	for name, typ := range m {
+		if seen[name] {
+			return fmt.Errorf("duplicate entries for %q", name)
+		}
+		seen[name] = true
+
+		typ.Name = name
+		typ.File = file
+		*t = append(*t, typ)
+
+		if typ.Union.Type != "" && typ.Union.Value == "" {
+			typ.Union.Value = strings.TrimSuffix(name, TitleCase(typ.Union.Type))
+		}
+	}
+	return nil
 }
 
 // Type is a struct type.
 type Type struct {
 	// Name is the name of the type.
 	Name string `yaml:"-"`
+	// File is the file the type was loaded from.
+	File string `yaml:"-"`
 	// Description is the description of the type.
 	Description string
 	// Union is the tagged union specifier for the type.
 	Union Union
-	// NonBinary specifies whether the type is not binary marshallable.
+	// NonBinary specifies whether the type is binary marshallable.
 	NonBinary bool `yaml:"non-binary"`
 	// Incomparable specifies whether two values of the type can be checked for equality.
 	Incomparable bool `yaml:"incomparable"`
@@ -83,6 +107,8 @@ type Field struct {
 	ZeroValue interface{} `yaml:"zero-value"`
 	// Virtual specifies whether the field is implemented as a method instead of an actual field.
 	Virtual bool
+	// NonBinary specifies whether the field is binary marshallable.
+	NonBinary bool `yaml:"non-binary"`
 }
 
 // API is an API with a set of methods.

@@ -8,20 +8,19 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type SignatureSet struct {
 	txn      *Transaction
-	signer   *url.URL
+	signer   protocol.Signer
 	writable bool
 	hashes   *sigSetData
 }
 
 // newSigSet creates a new SignatureSet.
-func newSigSet(txn *Transaction, signer *url.URL, signerVersion uint64, writable bool) (*SignatureSet, error) {
+func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*SignatureSet, error) {
 	s := new(SignatureSet)
 	s.txn = txn
 	s.signer = signer
@@ -33,15 +32,15 @@ func newSigSet(txn *Transaction, signer *url.URL, signerVersion uint64, writable
 		return nil, err
 	}
 
-	// If the version has changed, erase all previous signatures
-	if s.hashes.Version != signerVersion {
-		s.hashes.Reset(signerVersion)
+	// Reset if the set is writable and the version is different
+	if writable && s.hashes.Version != signer.GetVersion() {
+		s.hashes.Reset(signer.GetVersion())
 	}
 	return s, nil
 }
 
 func (s *SignatureSet) key() storage.Key {
-	return s.txn.key.Signatures(s.signer)
+	return s.txn.key.Signatures(s.signer.GetUrl())
 }
 
 func (s *SignatureSet) Count() int {
@@ -167,10 +166,10 @@ func signatureKeyHash(sig protocol.Signature) [32]byte {
 
 	default:
 		// Normal signatures must come from a unique key
-		key := sig.GetPublicKey()
-		if key == nil {
+		hash := sig.GetPublicKeyHash()
+		if hash == nil {
 			panic("attempted to add a signature that doesn't have a key!")
 		}
-		return sha256.Sum256(key)
+		return *(*[32]byte)(hash)
 	}
 }

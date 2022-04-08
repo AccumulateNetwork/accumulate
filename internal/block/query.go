@@ -558,30 +558,16 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	for _, signerUrl := range status.Signers {
-		// Load the signer (if it exists here)
-		var qset query.SignatureSet
-		signer, err := batch.Account(signerUrl).GetState()
-		switch {
-		case err == nil:
-			qset.Account = signer
-
-		case errors.Is(err, storage.ErrNotFound):
-			account := new(protocol.UnknownAccount)
-			account.Url = signerUrl
-			qset.Account = account
-
-		default:
-			return nil, err
-		}
-
+	for _, signer := range status.Signers {
 		// Load the signature set
-		sigset, err := tx.ReadSignatures(signerUrl)
+		sigset, err := tx.ReadSignaturesForSigner(signer)
 		if err != nil {
 			return nil, err
 		}
 
 		// Load all the signatures
+		var qset query.SignatureSet
+		qset.Account = signer
 		for _, entryHash := range sigset.EntryHashes() {
 			state, err := batch.Transaction(entryHash[:]).GetState()
 			if err != nil {
@@ -862,43 +848,52 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
-		if account.Type() != protocol.AccountTypeKeyBook {
-			account, err = batch.Account(account.Header().KeyBook).GetState()
-			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
-			}
-		}
-		k = []byte("key-page-index")
-		var found bool
-		keyBook, ok := account.(*protocol.KeyBook)
-		if !ok {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: fmt.Errorf("want %v, got %v", protocol.AccountTypeKeyBook, account.Type())}
-		}
-		response := query.ResponseKeyPageIndex{
-			KeyBook: keyBook.Url,
-		}
-		for index := uint64(0); index < keyBook.PageCount; index++ {
-			pageUrl := protocol.FormatKeyPageUrl(keyBook.Url, index)
-			var keyPage *protocol.KeyPage
-			err = batch.Account(pageUrl).GetStateAs(&keyPage)
-			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
-			}
-			_, _, ok := keyPage.EntryByKeyHash(chr.Key)
-			if ok || keyPage.FindKey(chr.Key) != nil {
-				response.KeyPage = keyPage.Url
-				response.Index = index
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: fmt.Errorf("key %X not found in keypage url %s", chr.Key, chr.Url)}
-		}
-		v, err = response.MarshalBinary()
+
+		auth, err := getAccountAuth(batch, account)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
+
+		// For each authority
+		for _, entry := range auth.Authorities {
+			var authority protocol.Authority
+			err = batch.Account(entry.Url).GetStateAs(&authority)
+			if err != nil {
+				return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+			}
+
+			// For each signer
+			for _, signerUrl := range authority.GetSigners() {
+				var signer protocol.Signer
+				err = batch.Account(signerUrl).GetStateAs(&signer)
+				if err != nil {
+					return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+				}
+
+				// Check for a matching entry
+				index, _, ok := signer.EntryByKeyHash(chr.Key)
+				if !ok {
+					index, _, ok = signer.EntryByKey(chr.Key)
+					if !ok {
+						continue
+					}
+				}
+
+				// Found it!
+				response := new(query.ResponseKeyPageIndex)
+				response.Authority = entry.Url
+				response.Signer = signerUrl
+				response.Index = uint64(index)
+
+				k = []byte("key-page-index")
+				v, err = response.MarshalBinary()
+				if err != nil {
+					return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
+				}
+				return k, v, nil
+			}
+		}
+		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: fmt.Errorf("no authority of %s holds %X", chr.Url, chr.Key)}
 	case types.QueryTypeMinorBlocks:
 		resp, pErr := m.queryMinorBlocks(batch, q)
 		if pErr != nil {
@@ -958,7 +953,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 			synthAnchorCount := uint64(0)
 			var lastTxid []byte
 			for _, updIdx := range chainUpdatesIndex.Entries {
-				if bytes.Compare(updIdx.Entry, lastTxid) == 0 { // There are like 4 ChainUpdates for each tx, we don't need duplicates
+				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
 					continue
 				}
 				minorEntry.TxCount++

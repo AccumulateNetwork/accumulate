@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"reflect"
+
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"io"
-	"reflect"
 )
 
 func PrintJsonRpcError(err error) (string, error) {
@@ -75,7 +76,7 @@ func printGeneralTransactionParameters(w io.Writer, res *api2.TransactionQueryRe
 				if sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
 				} else {
-					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
 				}
 			}
 		}
@@ -97,7 +98,7 @@ func FPrintJson(w io.Writer, v interface{}) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, string(data))
+	fmt.Fprint(w, string(data))
 	return nil
 }
 
@@ -217,7 +218,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", account.Header().Url, chainDesc)
+			out += fmt.Sprintf("\t%v (%s)\n", account.GetUrl(), chainDesc)
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
@@ -313,7 +314,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
+		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook().String())
 
 		return out, nil
 	case protocol.AccountTypeIdentity.String():
@@ -325,7 +326,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 		var out string
 		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.Url)
-		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
+		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook().String())
 
 		return out, nil
 	case protocol.AccountTypeKeyBook.String():
@@ -451,7 +452,7 @@ func outputForHumansTx(w io.Writer, res *api2.TransactionQueryResponse) error {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			fmt.Fprintf(w, "%s %v (%v)\n", verb, c.Header().Url, c.Type())
+			fmt.Fprintf(w, "%s %v (%v)\n", verb, c.GetUrl(), c.Type())
 		}
 		return nil
 	case *protocol.CreateIdentity:

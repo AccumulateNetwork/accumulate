@@ -13,21 +13,20 @@ import (
 var PackagePath string
 
 // convert converts typegen.Types to local Types.
-func convert(types typegen.Types, pkgName, pkgPath string) (*Types, error) {
+func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, error) {
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
 	PackagePath = pkgPath
-	ttypes.Types = make([]*Type, len(types))
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
 
 	// Convert types
-	for i, typ := range types {
+	for _, typ := range append(types, refTypes...) {
 		// Initialize
 		ttyp := new(Type)
 		ttyp.Type = *typ
-		ttypes.Types[i] = ttyp
+		ttypes.Types = append(ttypes.Types, ttyp)
 		lup[typ.Name] = ttyp
 		ttyp.Fields = make([]*Field, 0, len(typ.Fields)+len(typ.Embeddings))
 
@@ -50,25 +49,20 @@ func convert(types typegen.Types, pkgName, pkgPath string) (*Types, error) {
 		union.Members = append(union.Members, ttyp)
 	}
 
-	for i, typ := range types {
-		ttyp := ttypes.Types[i]
-		var num uint = 1
-
+	for _, typ := range ttypes.Types {
 		// Unions have a virtual field for the discriminator
-		if ttyp.IsUnion() {
+		if typ.IsUnion() {
 			field := new(Field)
-			field.Number = num
 			field.Name = "Type"
-			field.Type = ttyp.UnionSpec.Enumeration()
+			field.Type = typ.UnionSpec.Enumeration()
 			field.MarshalAs = "enum"
 			field.KeepEmpty = true
 			field.Virtual = true
-			ttyp.Fields = append(ttyp.Fields, field)
-			num++
+			typ.Fields = append(typ.Fields, field)
 		}
 
 		// Resolve embedded types
-		for _, name := range typ.Embeddings {
+		for _, name := range typ.Type.Embeddings {
 			etyp, ok := lup[name]
 			if !ok {
 				return nil, fmt.Errorf("unknown embedded type %s", name)
@@ -76,28 +70,50 @@ func convert(types typegen.Types, pkgName, pkgPath string) (*Types, error) {
 			field := new(Field)
 			field.Type = name
 			field.TypeRef = etyp
-			if field.IsMarshalled() {
-				field.Number = num
-				num++
-			}
-			ttyp.Fields = append(ttyp.Fields, field)
+			typ.Fields = append(typ.Fields, field)
 		}
 
 		// Convert fields
-		for _, field := range typ.Fields {
+		for _, field := range typ.Type.Fields {
 			tfield := new(Field)
 			tfield.Field = *field
 			if field.MarshalAs != "" {
 				tfield.TypeRef = lup[tfield.Type]
 			}
-			if tfield.IsMarshalled() {
-				tfield.Number = num
-				num++
-			}
-			ttyp.Fields = append(ttyp.Fields, tfield)
+			typ.Fields = append(typ.Fields, tfield)
 		}
 	}
 
+	// Make names for embedded fields
+	for _, typ := range ttypes.Types {
+		for _, field := range typ.Fields {
+			if field.Name != "" {
+				continue
+			}
+
+			field.IsEmbedded = true
+			bits := strings.Split(field.Type, ".")
+			if len(bits) == 1 {
+				field.Name = field.Type
+			} else {
+				field.Name = bits[1]
+			}
+		}
+	}
+
+	// Number the fields
+	for _, typ := range ttypes.Types {
+		var num uint = 1
+		for _, field := range typ.Fields {
+			if field.IsMarshalled() && field.IsBinary() {
+				field.Number = num
+				num++
+			}
+		}
+	}
+
+	// Slice out reference types
+	ttypes.Types = ttypes.Types[:len(types)]
 	return ttypes, nil
 }
 
@@ -120,8 +136,9 @@ type Type struct {
 
 type Field struct {
 	typegen.Field
-	TypeRef *Type
-	Number  uint
+	TypeRef    *Type
+	Number     uint
+	IsEmbedded bool
 }
 
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
@@ -162,7 +179,7 @@ func (u *UnionSpec) Interface() string {
 	case "transaction":
 		return "TransactionBody"
 	default:
-		return strings.Title(u.Type)
+		return typegen.TitleCase(u.Type)
 	}
 }
 
@@ -174,10 +191,10 @@ func (u *UnionSpec) Enumeration() string {
 	case "result":
 		return "TransactionType"
 	}
-	return strings.Title(u.Type) + "Type"
+	return typegen.TitleCase(u.Type) + "Type"
 }
 
-func (f *Field) IsEmbedded() bool        { return f.Name == "" }
+func (f *Field) IsBinary() bool          { return !f.NonBinary }
 func (f *Field) AlternativeName() string { return f.Alternative }
 func (f *Field) IsPointer() bool         { return f.Pointer }
 func (f *Field) IsMarshalled() bool      { return f.MarshalAs != "none" }

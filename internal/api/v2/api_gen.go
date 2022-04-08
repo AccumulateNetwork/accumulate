@@ -261,7 +261,7 @@ func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interfa
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryTx(req.Txid, req.Wait, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryTx(req.Txid, req.Wait, req.IgnorePending, req.QueryOptions))
 }
 
 // QueryTxHistory queries an account's transaction history.
