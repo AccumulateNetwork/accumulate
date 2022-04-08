@@ -88,11 +88,11 @@ func TestHexToBytes(t *testing.T) {
 	}
 }
 
-func TestInt64FixedBytes(t *testing.T){
+func TestInt64FixedBytes(t *testing.T) {
 	value := 0x0123456789987654
 	iBytes := Uint64FixedBytes(uint64(value))
-	require.Truef(t,len(iBytes)==8,"fail len = %d",len(iBytes))
+	require.Truef(t, len(iBytes) == 8, "fail len = %d", len(iBytes))
 	v, data := BytesFixedUint64(iBytes)
-	require.Truef(t,int(v)==value,"fail %x %x %x",iBytes,v,value)
-	require.True(t,len(data)==0,"fail")
+	require.Truef(t, int(v) == value, "fail %x %x %x", iBytes, v, value)
+	require.True(t, len(data) == 0, "fail")
 }
