@@ -22,11 +22,14 @@ type router struct {
 }
 
 func (r router) RouteAccount(account *url.URL) (string, error) {
+	if subnet, ok := r.routingOverrides[account.IdentityAccountID32()]; ok {
+		return subnet, nil
+	}
 	return routing.RouteAccount(&config.Network{Subnets: r.Subnets}, account)
 }
 
 func (r router) Route(envs ...*protocol.Envelope) (string, error) {
-	return routing.RouteEnvelopes(&config.Network{Subnets: r.Subnets}, envs...)
+	return routing.RouteEnvelopes(r.RouteAccount, envs...)
 }
 
 func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {

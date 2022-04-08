@@ -52,6 +52,34 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
 	return bytes.Equal(txnInitHash, sigInitHash) || bytes.Equal(txnInitHash, sigMetaHash)
 }
 
+func UnmarshalKeySignature(data []byte) (KeySignature, error) {
+	sig, err := UnmarshalSignature(data)
+	if err != nil {
+		return nil, err
+	}
+
+	keySig, ok := sig.(KeySignature)
+	if !ok {
+		return nil, fmt.Errorf("signature type %v is not a KeySignature", sig.Type())
+	}
+
+	return keySig, nil
+}
+
+func UnmarshalKeySignatureJSON(data []byte) (KeySignature, error) {
+	sig, err := UnmarshalSignatureJSON(data)
+	if err != nil {
+		return nil, err
+	}
+
+	keySig, ok := sig.(KeySignature)
+	if !ok {
+		return nil, fmt.Errorf("signature type %v is not a KeySignature", sig.Type())
+	}
+
+	return keySig, nil
+}
+
 /*
  * Legacy ED25519 Signature
  */
@@ -399,3 +427,19 @@ func (s *InternalSignature) GetVote() VoteType {
 func (s *InternalSignature) Verify(hash []byte) bool {
 	return true
 }
+
+/*
+ * Forwarded Signature
+ */
+
+func (s *ForwardedSignature) GetVote() VoteType              { return s.Signature.GetVote() }
+func (s *ForwardedSignature) GetSigner() *url.URL            { return s.Signature.GetSigner() }
+func (s *ForwardedSignature) GetSignerVersion() uint64       { return s.Signature.GetSignerVersion() }
+func (s *ForwardedSignature) GetTimestamp() uint64           { return s.Signature.GetTimestamp() }
+func (s *ForwardedSignature) GetSignature() []byte           { return s.Signature.GetSignature() }
+func (s *ForwardedSignature) GetPublicKeyHash() []byte       { return s.Signature.GetPublicKeyHash() }
+func (s *ForwardedSignature) Hash() []byte                   { return s.Signature.Hash() }
+func (s *ForwardedSignature) MetadataHash() []byte           { return s.Signature.MetadataHash() }
+func (s *ForwardedSignature) InitiatorHash() ([]byte, error) { return s.Signature.InitiatorHash() }
+func (s *ForwardedSignature) Verify(hash []byte) bool        { return s.Signature.Verify(hash) }
+func (s *ForwardedSignature) GetPublicKey() []byte           { return s.Signature.GetPublicKey() }

@@ -269,7 +269,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	app.block.Batch = app.DB.Begin(true)
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	_, err := app.Executor.BeginBlock(app.block)
+	err := app.Executor.BeginBlock(app.block)
 	if err != nil {
 		app.fatal(err, true)
 		return ret
