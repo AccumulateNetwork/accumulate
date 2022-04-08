@@ -38,8 +38,8 @@ func (b *BPT) SaveSnapshot(filename string) error {
 	}
 
 	file, e1 := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0600) //    Open the snapshot file
-	_, e2 := file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) //                    Safe Space to write number of nodes
-	values, e3 := os.CreateTemp("", "values") //             Collect the values here
+	_, e2 := file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0})            //                    Safe Space to write number of nodes
+	values, e3 := os.CreateTemp("", "values")                      //             Collect the values here
 
 	defer file.Close()
 	defer os.Remove(values.Name())
