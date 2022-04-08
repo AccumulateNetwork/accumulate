@@ -11,7 +11,7 @@ import (
 
 type TransactionBuilder struct {
 	*protocol.Envelope
-	signer signing.Signer
+	signer signing.Builder
 }
 
 func NewTransaction() TransactionBuilder {
@@ -87,7 +87,7 @@ func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte)
 		panic("cannot sign a transaction before setting the initiator")
 	}
 
-	tb.signer.PrivateKey = privateKey
+	tb.signer.SetPrivateKey(privateKey)
 	sig, err := tb.signer.Sign(tb.GetTxHash())
 	if err != nil {
 		panic(err)
@@ -106,7 +106,7 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 	}
 
 	tb.signer.Type = typ
-	tb.signer.PrivateKey = privateKey
+	tb.signer.SetPrivateKey(privateKey)
 	sig, err := tb.signer.Initiate(tb.Transaction)
 	if err != nil {
 		panic(err)
@@ -147,7 +147,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 }
 
 func (tb TransactionBuilder) Faucet() *protocol.Envelope {
-	sig, err := signing.Faucet(tb.Transaction)
+	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.Transaction)
 	if err != nil {
 		panic(err)
 	}

@@ -33,6 +33,25 @@ func runCmdFunc(fn func([]string) (string, error)) func(cmd *cobra.Command, args
 	}
 }
 
+func runTxnCmdFunc(fn func(*url2.URL, *signing.Builder, []string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		principal, err := url2.Parse(args[0])
+		if err != nil {
+			printOutput(cmd, "", err)
+			return
+		}
+
+		args, signer, err := prepareSigner(principal, args[1:])
+		if err != nil {
+			printOutput(cmd, "", err)
+			return
+		}
+
+		out, err := fn(principal, signer, args)
+		printOutput(cmd, out, err)
+	}
+}
+
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	u, err := url2.Parse(urlStr)
 	if err != nil {
@@ -50,13 +69,13 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, error) {
+func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder, error) {
 	ct := 0
 	if len(args) == 0 {
 		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	signer := new(signing.Signer)
+	signer := new(signing.Builder)
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
@@ -65,10 +84,14 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-
+		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
+		if err != nil {
+			return nil, nil, err
+		}
+		signer.Type = sigType
 		signer.Url = origin
 		signer.Version = 1
-		signer.PrivateKey = privKey
+		signer.SetPrivateKey(privKey)
 		return args, signer, nil
 	}
 
@@ -76,34 +99,40 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Signer, 
 	if err != nil {
 		return nil, nil, err
 	}
-	signer.PrivateKey = privKey
+	signer.SetPrivateKey(privKey)
 	ct++
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
+	sigType, keyHash, err := resolveKeyTypeAndHash(privKey[32:])
+	if err != nil {
+		return nil, nil, err
+	}
+	signer.Type = sigType
+
+	keyInfo, err := getKey(origin.String(), keyHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
 	if len(args) < 2 {
-		signer.Url = keyInfo.KeyPage
+		signer.Url = keyInfo.Signer
 	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
-		signer.Url = protocol.FormatKeyPageUrl(keyInfo.KeyBook, v)
+		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
 		ct++
 	} else {
-		signer.Url = keyInfo.KeyPage
+		signer.Url = keyInfo.Signer
 	}
 
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
+		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
 	signer.Version = page.Version
 
 	return args[ct:], signer, nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Signer, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Builder, error) {
 	principal, err := url2.Parse(args[0])
 	if err != nil {
 		return nil, nil, nil, err
@@ -195,16 +224,27 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (string, error) {
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
 	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
 	if err != nil {
 		return "", err
 	}
 
+	if !TxNoWait && TxWait > 0 {
+		_, err := waitForTxn(res.TransactionHash, TxWait)
+		if err != nil {
+			var rpcErr jsonrpc2.Error
+			if errors.As(err, &rpcErr) {
+				return PrintJsonRpcError(err)
+			}
+			return "", err
+		}
+	}
+
 	return ActionResponseFrom(res).Print()
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Signer) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
 	var env *protocol.Envelope
 	var sig protocol.Signature
 	var err error
@@ -215,6 +255,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 			return nil, err
 		}
 		sig, err = signer.Initiate(env.Transaction)
+		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
 		payload = new(protocol.SignPending)
 		env = new(protocol.Envelope)
@@ -231,12 +272,15 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	}
 	env.Signatures = append(env.Signatures, sig)
 
+	keySig := sig.(protocol.KeySignature)
+
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
 	req.Origin = env.Transaction.Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.GetPublicKey()
+	req.Signer.PublicKey = keySig.GetPublicKey()
+	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
 	req.Memo = env.Transaction.Header.Memo
@@ -631,7 +675,7 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 				if sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
 				} else {
-					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKey())
+					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
 				}
 			}
 		}
@@ -725,13 +769,13 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 				return "", err
 			}
 
-			chainDesc := account.GetType().String()
+			chainDesc := account.Type().String()
 			if err == nil {
-				if v, ok := ApiToString[account.GetType()]; ok {
+				if v, ok := ApiToString[account.Type()]; ok {
 					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", account.Header().Url, chainDesc)
+			out += fmt.Sprintf("\t%v (%s)\n", account.GetUrl(), chainDesc)
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
@@ -798,7 +842,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
+		for _, a := range ata.Authorities {
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", a.Url)
+		}
 
 		return out, nil
 	case protocol.AccountTypeIdentity.String():
@@ -810,7 +856,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 		var out string
 		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.Url)
-		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
+		for _, a := range adi.Authorities {
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", a.Url)
+		}
 
 		return out, nil
 	case protocol.AccountTypeKeyBook.String():
@@ -859,6 +907,27 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
 		return out, nil
+	case protocol.AccountTypeLiteIdentity.String():
+		li := protocol.LiteIdentity{}
+		err := Remarshal(res.Data, &li)
+		if err != nil {
+			return "", err
+		}
+		params := api2.DirectoryQuery{}
+		params.Url = li.Url
+		params.Start = uint64(0)
+		params.Count = uint64(10)
+		params.Expand = true
+
+		var adiRes api2.MultiResponse
+		if err := Client.RequestAPIv2(context.Background(), "query-directory", &params, &adiRes); err != nil {
+			ret, err := PrintJsonRpcError(err)
+			if err != nil {
+				return "", err
+			}
+			return "", fmt.Errorf("%v", ret)
+		}
+		return PrintMultiResponse(&adiRes)
 	default:
 		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
@@ -928,7 +997,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().Url, c.GetType())
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.GetUrl(), c.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:
@@ -1073,4 +1142,25 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 		return nil, err
 	}
 	return acmeOracle, err
+}
+
+func ValidateSigType(input string) (protocol.SignatureType, error) {
+	var sigtype protocol.SignatureType
+	var err error
+	input = strings.ToLower(input)
+	switch input {
+	case "rcd1":
+		sigtype = protocol.SignatureTypeRCD1
+		err = nil
+	case "ed25519":
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	case "legacyed25519":
+		sigtype = protocol.SignatureTypeLegacyED25519
+		err = nil
+	default:
+		sigtype = protocol.SignatureTypeED25519
+		err = nil
+	}
+	return sigtype, err
 }

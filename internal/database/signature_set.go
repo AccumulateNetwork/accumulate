@@ -33,8 +33,8 @@ func newSigSet(txn *Transaction, signer *url.URL, signerVersion uint64, writable
 		return nil, err
 	}
 
-	// If the version has changed, erase all previous signatures
-	if s.hashes.Version != signerVersion {
+	// Reset if the set is writable and the version is different
+	if writable && s.hashes.Version != signerVersion {
 		s.hashes.Reset(signerVersion)
 	}
 	return s, nil
@@ -167,10 +167,10 @@ func signatureKeyHash(sig protocol.Signature) [32]byte {
 
 	default:
 		// Normal signatures must come from a unique key
-		key := sig.GetPublicKey()
-		if key == nil {
+		hash := sig.GetPublicKeyHash()
+		if hash == nil {
 			panic("attempted to add a signature that doesn't have a key!")
 		}
-		return sha256.Sum256(key)
+		return *(*[32]byte)(hash)
 	}
 }

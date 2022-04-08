@@ -195,3 +195,32 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 
 	return prev.Source + 1, entry.Source, entry.Anchor, nil
 }
+
+func getAccountAuth(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+	switch account := account.(type) {
+	case *protocol.LiteDataAccount:
+		return &protocol.AccountAuth{
+			Authorities: []protocol.AuthorityEntry{
+				{Url: account.Url},
+			},
+		}, nil
+
+	case protocol.FullAccount:
+		return account.GetAuth(), nil
+
+	case *protocol.KeyPage:
+		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
+		if !ok {
+			return nil, fmt.Errorf("invalid key page URL: %v", account.Url)
+		}
+		var book *protocol.KeyBook
+		err := batch.Account(bookUrl).GetStateAs(&book)
+		if err != nil {
+			return nil, err
+		}
+		return book.GetAuth(), nil
+
+	default:
+		return &protocol.AccountAuth{}, nil
+	}
+}

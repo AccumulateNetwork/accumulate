@@ -12,6 +12,10 @@ func (SyntheticWriteData) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticWriteData
 }
 
+func (SyntheticWriteData) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticWriteData{}).Validate(st, tx)
+}
+
 func (SyntheticWriteData) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
 	if !ok {
@@ -43,7 +47,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *protocol.Envelope) (pro
 			result.AccountUrl = tx.Transaction.Header.Principal
 		default:
 			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
-				protocol.AccountTypeLiteDataAccount, origin.GetType())
+				protocol.AccountTypeLiteDataAccount, origin.Type())
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Header.Principal.String(), err)
@@ -60,7 +64,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *protocol.Envelope) (pro
 			return nil, fmt.Errorf("first entry doesnt match chain id")
 		}
 
-		lite := protocol.NewLiteDataAccount()
+		lite := new(protocol.LiteDataAccount)
 		lite.Url = u
 		//we store the tail of the lite data account id in the state. The first part
 		//of the lite data account can be obtained from the LiteDataAddress. When

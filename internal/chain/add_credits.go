@@ -15,6 +15,10 @@ type AddCredits struct{}
 
 func (AddCredits) Type() protocol.TransactionType { return protocol.TransactionTypeAddCredits }
 
+func (AddCredits) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (AddCredits{}).Validate(st, tx)
+}
+
 func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
 	if !ok {
@@ -66,7 +70,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		case *protocol.LiteTokenAccount, *protocol.KeyPage:
 			// OK
 		default:
-			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.GetType())
+			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.Type())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if body.Recipient.Routing() == tx.Transaction.Header.Principal.Routing() {
@@ -79,7 +83,7 @@ func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.Tr
 		return nil, fmt.Errorf("failed to load recipient: %v", err)
 	}
 
-	var account protocol.TokenHolderAccount
+	var account protocol.AccountWithTokens
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin

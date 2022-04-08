@@ -102,17 +102,6 @@ if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; t
    wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
 fi
 
-section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
-    RESULT=$(accumulate -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
-    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
-else
-    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
-    echo
-fi
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
@@ -126,7 +115,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..20}
+for i in {1..1}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
@@ -150,8 +139,11 @@ ensure-key keytest-1-0
 ensure-key keytest-2-0
 ensure-key keytest-2-1
 ensure-key keytest-2-2
+ensure-key keytest-2-3-orig
+ensure-key keytest-2-3-new
 ensure-key keytest-3-0
 ensure-key keytest-3-1
+ensure-key keytest-mgr
 echo
 
 section "Create an ADI"
@@ -175,7 +167,7 @@ success
 section "Add credits to the ADI's key page 1"
 wait-for cli-tx credits ${LITE} keytest/book/1 60000
 BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 60000 ] && success || die "keytest/book/1 should have 60000 credits but has ${BALANCE}"
+[ "$BALANCE" -ge 6000000 ] && success || die "keytest/book/1 should have 6000000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-1-0 keytest-2-0
@@ -215,12 +207,19 @@ BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 section "Add a key to page 2 using a key from page 3"
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-1
 wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-2
+wait-for cli-tx page key add keytest/book/2 keytest-2-0 1 keytest-2-3-orig
 success
 
 section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute keytest/book/2 keytest-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get keytest/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/book/2 threshold: want 2, got ${THRESHOLD}"
+
+section "Update a key with only that key's signature"
+wait-for cli-tx key update keytest/book/2 keytest-2-3-orig keytest-2-3-new || die "Failed to update key"
+accumulate -j get key keytest keytest-2-3-orig > /dev/null && die "Still found old key" || true
+accumulate -j get key keytest keytest-2-3-new | jq -C --indent 0 || die "Could not find new key"
+success
 
 section "Create an ADI Token Account"
 wait-for cli-tx account create token --scratch keytest keytest-1-0 0 keytest/tokens ACME keytest/book
@@ -412,19 +411,32 @@ section "Query data entry range by URL"
 RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
-section "Create keypage with manager"
-wait-for cli-tx tx execute keytest/book keytest-1-0 '{"type": "createKeyPage", "manager": "keytest/book", "keys": [{"publicKey": "c8e1028cad7b105814d4a2e0e292f5f7904aad7b6cbc46a5"}]}'
-RESULT=$(accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook)
-[ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
+section "Create manager key book"
+wait-for cli-tx  book create keytest keytest-1-0 keytest/manager keytest-mgr || die "Failed to create manager key book"
+wait-for cli-tx credits ${LITE} keytest/manager/1 1000
+success
 
-section "Update manager to keypage"
-wait-for cli-tx manager set keytest/tokens keytest-1-0 keytest/book
-RESULT=$(accumulate -j get keytest/tokens | jq -re .data.managerKeyBook)
-[ "$RESULT" == "acc://keytest/book" ] && success || die "chain manager not set"
+section "Create token account with manager"
+wait-for cli-tx account create token keytest keytest-1-0 --authority keytest/manager keytest/managed-tokens ACME || "Failed to create managed token account"
+RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
+[ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
+success
 
-section "Remove manager from keypage"
-wait-for cli-tx manager remove keytest/book/4 keytest-1-0
-accumulate -j get keytest/book/4 | jq -re .data.managerKeyBook &> /dev/null && die "chain manager not removed" || success
+section "Remove manager from token account"
+TXID=$(cli-tx auth remove keytest/managed-tokens keytest-1-0 keytest/manager) || die "Failed to initiate txn to remove manager"
+wait-for-tx $TXID
+accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+wait-for cli-tx-sig tx sign keytest/managed-tokens keytest-mgr $TXID
+accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
+RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
+[ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
+success
+
+section "Add manager to token account"
+wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 keytest/manager || die "Failed to add the manager"
+RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
+[ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
+success
 
 section "Query the lite identity"
 accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"
@@ -447,6 +459,17 @@ TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
 wait-for-tx $TXID
 MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
+
+section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
+    RESULT=$(accumulate -j data get dn/oracle)
+    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
+    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
+else
+    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+    echo
+fi
 
 section "Query votes chain"
 if [ -f "$NODE_PRIV_VAL" ]; then

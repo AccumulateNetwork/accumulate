@@ -67,7 +67,7 @@ func TestValidate(t *testing.T) {
 			txWait(t, japi, xr.TransactionHash)
 		}
 
-		account := NewLiteTokenAccount()
+		account := new(LiteTokenAccount)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
 		assert.Equal(t, int64(count*protocol.AcmeFaucetAmount*AcmePrecision), account.Balance.Int64())
 	})
@@ -82,7 +82,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		account := NewLiteTokenAccount()
+		account := new(LiteTokenAccount)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
 		assert.Equal(t, uint64(1e5), account.CreditBalance)
 
@@ -135,7 +135,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		page := NewKeyPage()
+		page := new(KeyPage)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: pageUrl}, page)
 		assert.Equal(t, uint64(1e5), page.CreditBalance)
 	})
@@ -158,7 +158,7 @@ func TestValidate(t *testing.T) {
 				Url: dataAccountUrl,
 			},
 		})
-		dataAccount := NewDataAccount()
+		dataAccount := new(DataAccount)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
 		assert.Equal(t, dataAccountUrl, dataAccount.Url)
 	})
@@ -172,7 +172,7 @@ func TestValidate(t *testing.T) {
 				Url: keyBookUrl,
 			},
 		})
-		keyBook := NewKeyBook()
+		keyBook := new(KeyBook)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
 		assert.Equal(t, keyBookUrl, keyBook.Url)
 	})
@@ -192,7 +192,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		keyPage := NewKeyPage()
+		keyPage := new(KeyPage)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, keyPageUrl, keyPage.Url)
 	})
@@ -207,7 +207,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		page := NewKeyPage()
+		page := new(KeyPage)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, page)
 		assert.Equal(t, uint64(1e5), page.CreditBalance)
 	})
@@ -228,7 +228,7 @@ func TestValidate(t *testing.T) {
 				}},
 			},
 		})
-		keyPage := NewKeyPage()
+		keyPage := new(KeyPage)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner.String())
 	})
@@ -244,7 +244,7 @@ func TestValidate(t *testing.T) {
 				KeyBookUrl: keyBookUrl,
 			},
 		})
-		tokenAccount := NewLiteTokenAccount()
+		tokenAccount := new(LiteTokenAccount)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
 		assert.Equal(t, tokenAccountUrl, tokenAccount.Url)
 	})
@@ -257,7 +257,7 @@ func TestValidate(t *testing.T) {
 			},
 			Key: adiKey[32:],
 		}, keyIndex)
-		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+		assert.Equal(t, keyPageUrl, keyIndex.Signer)
 	})
 }
 

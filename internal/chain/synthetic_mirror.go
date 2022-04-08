@@ -12,6 +12,10 @@ func (SyntheticMirror) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticMirror
 }
 
+func (SyntheticMirror) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (SyntheticMirror{}).Validate(st, tx)
+}
+
 func (SyntheticMirror) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticMirror)
 	if !ok {
@@ -28,7 +32,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *protocol.Envelope) (protoc
 		}
 
 		// TODO Save the merkle state somewhere?
-		st.logger.Debug("Mirroring", "url", record.Header().Url)
+		st.logger.Debug("Mirroring", "url", record.GetUrl())
 		st.Update(record)
 	}
 

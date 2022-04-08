@@ -91,6 +91,27 @@
       "args": ["${workspaceFolder}/.testdata/sdk.json"]
     },
     {
+      "name": "Generate Protocol Types",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-types",
+      "cwd": "${workspaceFolder}/protocol",
+      "args": [
+        "account_auth_operations.yml",
+        "accounts.yml",
+        "general.yml",
+        "internal.yml",
+        "key_page_operations.yml",
+        "query.yml",
+        "signatures.yml",
+        "synthetic_transactions.yml",
+        "transaction.yml",
+        "transaction_results.yml",
+        "user_transactions.yml",
+      ]
+    },
+    {
       "name": "Run CLI",
       "type": "go",
       "request": "launch",
@@ -123,6 +144,12 @@
         // "keytest/tokens",
         // "keytest-1-1",
         // "e05d44e9688d21556b67c0afc8c3c2493c930ac67a608701e22b7c98a421df8e"
+
+        // "auth",
+        // "remove",
+        // "keytest/managed-tokens",
+        // "keytest-1-0",
+        // "keytest/manager"
       ]
     }
   ]

@@ -10,6 +10,10 @@ type IssueTokens struct{}
 
 func (IssueTokens) Type() protocol.TransactionType { return protocol.TransactionTypeIssueTokens }
 
+func (IssueTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (IssueTokens{}).Validate(st, tx)
+}
+
 func (IssueTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.IssueTokens)
 	if !ok {
@@ -18,7 +22,7 @@ func (IssueTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 
 	issuer, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.GetType())
+		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
 	issuer.Issued.Add(&issuer.Issued, &body.Amount)
@@ -28,7 +32,7 @@ func (IssueTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.T
 	}
 
 	deposit := new(protocol.SyntheticDepositTokens)
-	deposit.Token = issuer.Header().Url
+	deposit.Token = issuer.GetUrl()
 	deposit.Amount = body.Amount
 	st.Submit(body.Recipient, deposit)
 

@@ -1,14 +1,12 @@
 package block
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -112,14 +110,8 @@ func (x *Executor) ProcessSignature(batch *database.Batch, transaction *protocol
 // validateInitialSignature verifies that the signature is a valid initial
 // signature for the transaction.
 func validateInitialSignature(transaction *protocol.Transaction, signature protocol.Signature) error {
-	// The initial signature must be able to create an initiator hash
-	initHash, err := signature.InitiatorHash()
-	if err != nil {
-		return protocol.NewError(protocol.ErrorCodeInvalidSignature, err)
-	}
-
-	// Verify the hash matches
-	if transaction.Header.Initiator != *(*[32]byte)(initHash) {
+	// Verify the initiator hash matches
+	if !protocol.SignatureDidInitiate(signature, transaction.Header.Initiator[:]) {
 		return protocol.Errorf(protocol.ErrorCodeInvalidSignature, "initiator signature does not match initiator hash")
 	}
 
@@ -141,20 +133,25 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 
 // validateSignature verifies that the signature matches the signer state and
 // that the signer is authorized to sign for the principal.
-func validateSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (protocol.SignerAccount, protocol.KeyEntry, error) {
-	// Load the signer
+func validateSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) (protocol.Signer, protocol.KeyEntry, error) {
+	// TODO Support remote signers
 	signerUrl := signature.GetSigner()
+	if !transaction.Header.Principal.RootIdentity().Equal(signerUrl.RootIdentity()) {
+		return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "remote signers are not supported")
+	}
+
+	// Load the signer
 	account, err := batch.Account(signerUrl).GetState()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load signer: %w", err)
 	}
-	if !account.Header().Url.Equal(signerUrl) {
+	if !account.GetUrl().Equal(signerUrl) {
 		// Sanity check
 		return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "invalid state: URL does not match")
 	}
 
 	// Validate type-specific rules
-	var signer protocol.SignerAccount
+	var signer protocol.Signer
 	switch account := account.(type) {
 	case *protocol.LiteTokenAccount:
 		signer = account
@@ -175,7 +172,7 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	}
 
 	// Find the key entry
-	_, entry, ok := signer.EntryByKey(signature.GetPublicKey())
+	_, entry, ok := signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
 		return nil, nil, fmt.Errorf("key does not belong to signer")
 	}
@@ -210,31 +207,10 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		return fmt.Errorf("load principal: %w", err)
 	}
 
-	// Determine the principal's key book URL
-	var principalBookUrl *url.URL
-	switch principal := principal.(type) {
-	case *protocol.KeyBook:
-		// Principal is a key book
-		principalBookUrl = principal.Url
-
-	case *protocol.KeyPage:
-		// Principal is a key page => get the book URL from the page URL
-		var ok bool
-		principalBookUrl, _, ok = protocol.ParseKeyPageUrl(signer.Url)
-		if !ok {
-			// If this happens, the database has bad data
-			return fmt.Errorf("invalid key page URL: %v", signer.Url)
-		}
-
-	default:
-		// Principal is something else => get the book URL from the header
-		principalBookUrl = principal.Header().KeyBook
-	}
-
-	// Verify the principal's key book exists
-	_, err = batch.Account(principalBookUrl).GetState()
+	// Get the principal's account auth
+	auth, err := getAccountAuth(batch, principal)
 	if err != nil {
-		return fmt.Errorf("invalid key book URL: %v, %v", principalBookUrl, err)
+		return fmt.Errorf("unable to load authority of %v: %w", transaction.Header.Principal, err)
 	}
 
 	// Verify that the key page is allowed to sign the transaction
@@ -250,19 +226,20 @@ func validatePageSignature(batch *database.Batch, transaction *protocol.Transact
 		return fmt.Errorf("invalid key page URL: %v", signer.Url)
 	}
 
+	_, foundAuthority := auth.GetAuthority(signerBook)
 	switch {
-	case principalBookUrl.Equal(signerBook):
+	case foundAuthority:
 		// Page belongs to book => authorized
 		return nil
 
-	case principal.Header().AuthDisabled && !transaction.Body.Type().RequireAuthorization():
+	case auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization():
 		// Authorization is disabled and the transaction type does not force authorization => authorized
 		return nil
 
 	default:
 		// Authorization is enabled => unauthorized
 		// Transaction type forces authorization => unauthorized
-		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.Header().Url)
+		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, principal.GetUrl())
 	}
 }
 
@@ -445,8 +422,7 @@ func getAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 			}
 
 			for _, sig := range state.Signatures {
-				sigInitHash, err := sig.InitiatorHash()
-				if err == nil && bytes.Equal(sigInitHash, txnInitHash) {
+				if protocol.SignatureDidInitiate(sig, txnInitHash) {
 					signatures[0] = sig
 				} else {
 					signatures = append(signatures, sig)

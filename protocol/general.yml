@@ -20,6 +20,22 @@ ChainMetadata:
       type: ChainType
       marshal-as: enum
 
+AccountAuth:
+  fields:
+    - name: Authorities
+      type: AuthorityEntry
+      marshal-as: reference
+      repeatable: true
+
+AuthorityEntry:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Disabled
+      description: disables auth checks for this authority, allowing anyone to sign for it
+      type: bool
+
 AnchorMetadata:
   embeddings:
     - ChainMetadata
@@ -69,33 +85,6 @@ DirectoryIndexMetadata:
     - name: Count
       type: uvarint
 
-TransactionStatus:
-  fields:
-    - name: Remote
-      type: bool
-    - name: Delivered
-      type: bool
-    - name: Pending
-      type: bool
-    - name: Code
-      type: uvarint
-    - name: Message
-      type: string
-    - name: Result
-      type: TransactionResult
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalTransactionResult
-    - name: Initiator
-      description: is the signer that initiated the transaction
-      type: url
-      pointer: true
-    - name: Signers
-      description: lists accounts that have signed the transaction
-      type: url
-      pointer: true
-      repeatable: true
-
 Receipt:
   fields:
     - name: Start
@@ -119,3 +108,46 @@ HashSet:
     - name: Hashes
       type: hash
       repeatable: true
+
+TokenRecipient:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+
+ChainParams:
+  fields:
+    - name: Data
+      type: bytes
+    - name: IsUpdate
+      type: bool
+
+KeySpecParams:
+  fields:
+    - name: KeyHash
+      type: bytes
+    - name: Owner
+      type: url
+      pointer: true
+      optional: true
+
+AnchoredRecord:
+  fields:
+    - name: Record
+      type: bytes
+    - name: Anchor
+      type: chain
+
+KeySpec:
+  fields:
+    - name: PublicKeyHash
+      type: bytes
+      alternative: PublicKey
+    - name: LastUsedOn
+      type: uvarint
+      alternative: Nonce
+    - name: Owner
+      type: url
+      pointer: true

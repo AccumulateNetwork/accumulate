@@ -13,6 +13,10 @@ type CreateIdentity struct{}
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
+func (CreateIdentity) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+	return (CreateIdentity{}).Validate(st, tx)
+}
+
 func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
@@ -30,10 +34,16 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 		return nil, err
 	}
 
-	identity := protocol.NewADI()
+	identity := new(protocol.ADI)
 	identity.Url = body.Url
-	identity.KeyBook = bookUrl
-	identity.ManagerKeyBook = body.Manager
+	identity.AddAuthority(bookUrl)
+
+	if body.Manager != nil {
+		err = st.AddAuthority(identity, body.Manager)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	accounts := []protocol.Account{identity}
 	var book *protocol.KeyBook
@@ -49,15 +59,15 @@ func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protoco
 		book = new(protocol.KeyBook)
 		book.Url = bookUrl
 		book.PageCount = 1
+		book.AddAuthority(bookUrl)
 		accounts = append(accounts, book)
 		if len(body.KeyHash) != 32 {
 			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
 		}
-		page := protocol.NewKeyPage()
-		page.KeyBook = bookUrl
+		page := new(protocol.KeyPage)
 		page.Version = 1
 		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-		page.Threshold = 1 // Require one signature from the Key Page
+		page.AcceptThreshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
 		keySpec.PublicKeyHash = body.KeyHash
 		page.Keys = append(page.Keys, keySpec)
@@ -87,7 +97,7 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) erro
 			}
 		}
 	default:
-		return fmt.Errorf("account type %d cannot be the origininator of ADIs", origin.GetType())
+		return fmt.Errorf("account type %d cannot be the origininator of ADIs", origin.Type())
 	}
 
 	return nil
