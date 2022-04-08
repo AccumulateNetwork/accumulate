@@ -359,6 +359,8 @@ func (c *Client) QueryKeyPageIndex(ctx context.Context, req *api.KeyPageIndexQue
 }
 
 // QueryMinorBlocks queries an account's minor blocks.
+//
+// WARNING: EXPERIMENTAL!
 func (c *Client) QueryMinorBlocks(ctx context.Context, req *api.MinorBlocksQuery) (*api.MultiResponse, error) {
 	var resp api.MultiResponse
 

@@ -116,15 +116,16 @@ type API map[string]Method
 
 // Method is a method of an API.
 type Method struct {
-	Kind        string
-	Description string
-	Deprecated  string
-	RPC         string
-	Input       string
-	Output      string
-	Call        string
-	CallParams  []string `yaml:"call-params"`
-	Validate    []string `yaml:"validate"`
+	Kind         string
+	Description  string
+	Deprecated   string
+	Experimental bool
+	RPC          string
+	Input        string
+	Output       string
+	Call         string
+	CallParams   []string `yaml:"call-params"`
+	Validate     []string `yaml:"validate"`
 }
 
 // Enum is an enumeration with a set of values.

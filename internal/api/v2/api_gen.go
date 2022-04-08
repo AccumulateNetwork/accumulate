@@ -243,6 +243,8 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 }
 
 // QueryMinorBlocks queries an account's minor blocks.
+//
+// WARNING: EXPERIMENTAL!
 func (m *JrpcMethods) QueryMinorBlocks(_ context.Context, params json.RawMessage) interface{} {
 	req := new(MinorBlocksQuery)
 	err := m.parse(params, req)

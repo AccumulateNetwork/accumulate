@@ -94,6 +94,7 @@ QueryKeyPageIndex:
 QueryMinorBlocks:
   description: queries an account's minor blocks
   kind: query
+  experimental: true
   rpc: query-minor-blocks
   input: MinorBlocksQuery
   output: MultiResponse
