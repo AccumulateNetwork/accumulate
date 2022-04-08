@@ -536,15 +536,7 @@ func outputForHumansTx(w io.Writer, res *api2.TransactionQueryResponse) error {
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "Source \t\t:%s\n", synthRcpt.Source)
 		fmt.Fprintf(w, "SynthTxHash \t:\t%s\n", hex.EncodeToString(synthRcpt.SynthTxHash[:]))
-		strStatus := "" // TODO refine
-		if synthRcpt.Status.Code > 0 {
-			strStatus = "error: " + synthRcpt.Status.Message
-		} else if synthRcpt.Status.Delivered {
-			strStatus = "delivered"
-		} else if synthRcpt.Status.Pending {
-			strStatus = "pending"
-		}
-		fmt.Fprintf(w, "Status \t\t:\t%s\n", strStatus)
+		fmt.Fprintf(w, "Status \t\t:\t%s\n", getTxStatus(synthRcpt.Status))
 
 		printGeneralTransactionParameters(w, res)
 		return nil
@@ -575,6 +567,18 @@ func outputForHumansTx(w io.Writer, res *api2.TransactionQueryResponse) error {
 		fmt.Fprintln(w, printReflection("", "", reflect.ValueOf(txn)))
 	}
 	return nil
+}
+
+func getTxStatus(status *protocol.TransactionStatus) string {
+	strStatus := ""
+	if status.Code > 0 {
+		strStatus = "error: " + status.Message
+	} else if status.Delivered {
+		strStatus = "delivered"
+	} else if status.Pending {
+		strStatus = "pending"
+	}
+	return strStatus
 }
 
 func printReflection(field, indent string, value reflect.Value) string {

@@ -470,7 +470,6 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 }
 
 func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode protocol.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
-	// TODO move to pagination.validate()
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New("count must be greater than 0"))

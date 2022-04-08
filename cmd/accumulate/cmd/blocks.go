@@ -22,7 +22,7 @@ var blocksCmd = &cobra.Command{
 		var filterAnBlks bool
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
-			case "minor": // TODO refine CLI syntax
+			case "minor":
 				if len(args) > 3 {
 					txFetchMode, err = parseFetchMode(args)
 					if err != nil {
