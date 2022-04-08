@@ -12,7 +12,8 @@ import (
 )
 
 func TestSaveState(t *testing.T) {
-	numberEntries := 50732 //               A pretty reasonable sized BPT
+
+	numberEntries := 4 //               A pretty reasonable sized BPT
 
 	DirName, err := ioutil.TempDir("", "AccDB")
 	require.Nil(t, err, "failed to create directory")
@@ -29,16 +30,22 @@ func TestSaveState(t *testing.T) {
 	values.SetSeed([]byte{1, 2, 3})      //     use a different sequence for values
 	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT
 		chainID := keys.NextAList() //      Get a key, keep a list
-		value := values.GetRandBuff(int(values.GetRandInt64() % 2048))
+		value := values.GetRandBuff(int(values.GetRandInt64() % 100))
 		hash := sha256.Sum256(value)
 		storeTx.Put(hash, value)
 		bpt.Insert(chainID, hash) //      Insert the Key with the value into the BPT
 	}
+	err = bptManager.Bpt.Update()
 	bptManager.DBManager.Commit()
+	require.NoError(t, err, "fail")
 	bpt.manager.DBManager = BDB.Begin(true)
 
 	err = bpt.SaveSnapshot(DirName + "/SnapShot")
 
-	Bpt := NewBPTManager()
+	bptMan := NewBPTManager(nil)
+	err = bptMan.Bpt.LoadSnapshot(DirName + "/SnapShot")
+	require.NoErrorf(t, err, "%v", err)
+	bptMan.Bpt.Update()
+	require.True(t, bpt.Root.Hash == bptMan.Bpt.RootHash, "fail")
 	require.Nil(t, err, "snapshot failed")
 }

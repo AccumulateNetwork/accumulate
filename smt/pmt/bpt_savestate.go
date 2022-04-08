@@ -1,8 +1,6 @@
 package pmt
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -38,7 +36,7 @@ func (b *BPT) SaveSnapshot(filename string) error {
 		return err
 	}
 	defer file.Close()
-	file.Write(common.Uint64FixedBytes(b.NumNodes)) //       Write up the number of nodes
+	file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) //                    Safe Space to write number of nodes
 
 	values, err := os.CreateTemp("", "values") //             Collect the values here
 	if err != nil {
@@ -55,24 +53,29 @@ func (b *BPT) SaveSnapshot(filename string) error {
 		255, 255, 255, 255, 255, 255, 255, 255,
 	}
 
-	vOffset := 8 + b.NumNodes*(32+8) //            8 bytes for the length, 32 bytes + 4 byte offset for every key
-
-	for { //
+	vOffset := uint64(0) //                                 Offset from the beginning of value section
+	NodeCnt := uint64(0) //                                 Recalculate number of nodes
+	for {                //
 		bptValues, next := b.GetRange(place, window) //     Read a thousand values from the BPT
-		if len(bptValues) == 0 {                     //     If there are none left, we break out
+		NodeCnt += uint64(len(bptValues))
+		if len(bptValues) == 0 { //                         If there are none left, we break out
 			break
 		}
 		place = next //                                     We will get the next 1000 after the last 1000
 
 		for _, v := range bptValues { //                    For all the key values we got (as many as 1000)
 			file.Write(v.Key[:])                         // Write the key out
+			file.Write(v.Hash[:])                        // Write the hash out
 			file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
 			value, e1 := b.manager.DBManager.Get(v.Hash)         // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e2 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e3 := values.Write(value)                         // write out the value
-			vOffset += uint64(len(value)) + 8                    // then set the offest past the end of the value
+
+			fmt.Printf("Writ k %x h %x off %x\n", v.Key[:4], v.Hash[:4], vOffset)
+
+			vOffset += uint64(len(value)) + 8 // then set the offest past the end of the value
 
 			switch { //                none of these errors are likely, but if
 			case e1 != nil: //         they occur, we should report at least
@@ -84,59 +87,104 @@ func (b *BPT) SaveSnapshot(filename string) error {
 			}
 		}
 	}
+
+	_, e1 := file.Seek(0, 0)
+	_, e2 := file.Write(common.Uint64FixedBytes(NodeCnt))
+
+	{
+		n, _ := file.Seek(0, 1)
+		fmt.Printf("\n\noffset to values %d\n\n", n)
+		file.Seek(0, 0)
+		buff := make([]byte, 256)
+		file.Read(buff)
+		fmt.Printf("Len %x\n", buff[:8])
+		fmt.Printf("key %x hash %x\n", buff[8:12], buff[40:44])
+	}
+
+	_, e3 := values.Seek(0, 0)
+	_, e4 := file.Seek(0, 2)
+	switch {
+	case e1 != nil:
+		return e1
+	case e2 != nil:
+		return e2
+	case e3 != nil:
+		return e3
+	case e4 != nil:
+		return e3
+	}
 	buff := make([]byte, 1024*128) //    A big buffer to read all the values and write them into the Snapshot
 	for {
 		n, e1 := values.Read(buff[:]) // Read a bunch
-		if n == 0 {                   // When we read nothing, we are done
-			break
-		}
-		if e1 != nil {
+		fmt.Printf("Values: %x\n", buff[:n])
+		switch {
+		case n == 0: // When we read nothing, we are done
+			return nil
+		case e1 != nil:
 			return e1
 		}
-		file.Write(buff[:n]) // Write a bunch
+
+		_, e2 := file.Write(buff[:n]) // Write a bunch
+
+		if e2 != nil {
+			return e2
+		}
 	}
-	return nil
 }
 
 // ReadSnapshot
 //
 func (b *BPT) LoadSnapshot(filename string) error {
-	if b.NumNodes != 0 {
+	fmt.Println("-----------------LoadSnapshot-------------------")
+	if b.MaxHeight != 0 {
 		return errors.New("A snapshot can only be read into a new BPT")
 	}
 
-	file, err := os.OpenFile(filename, os.O_RDWR, 0600)
+	file, err := os.OpenFile(filename, os.O_RDWR, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	buff := make([]byte, window*(32+8))
+	buff := make([]byte, window*(64+8))
+
+	file.Read(buff)
+	fmt.Printf("Len %x\n", buff[:8])
+	fmt.Printf("key %x hash %x\n", buff[8:12], buff[40:44])
+
 	valueBuff := make([]byte, 1024*128) // This needs to be the length of the longest state value; guessing 128k
+	file.Seek(0, 0)
 	_, err = file.Read(buff[:8])
 	if err != nil {
 		return err
 	}
 	numNodes, _ := common.BytesFixedUint64(buff)
-
+	fileOffset := uint64(8 + numNodes*(64+8))
 	index := uint64(0)
+
 	for {
 		n, err := file.Read(buff)
 		if err != nil {
 			return err
 		}
 
-		for n > 0 && index < window*(32+8) && index < numNodes {
-			hash := buff[:32]
-			offset, _ := common.BytesFixedUint64(buff[32:])
-			_, e1 := file.Seek(0, int(offset))
+		for n > 0 && index < window*(64+8) && index < numNodes {
+			var key [32]byte
+			var hash [32]byte
+			copy(key[:], buff[index:index+32])
+			copy(hash[:], buff[index+32:index+64])
+			offset, _ := common.BytesFixedUint64(buff[index+64 : index+64+8])
+			_, e1 := file.Seek(int64(fileOffset+offset), 0)
 			_, e2 := file.Read(valueBuff[:8])
 			valueLen, _ := common.BytesFixedUint64(valueBuff)
-			_, e3 := file.Read(valueBuff[:valueLen])
-			hash2 := sha256.Sum256(valueBuff[:valueLen])
-			if !bytes.Equal(hash, hash2[:]) {
-				return fmt.Errorf("Hash in snapshot does not match hash of data %x %x", hash, hash2)
-			}
+			_, e3 := file.Read(valueBuff[fileOffset+offset : fileOffset+offset+valueLen])
+			fmt.Printf("Read k %x h %x off %x val-len %x\n", key[:4], hash[:4], offset, valueBuff[:8])
+			//hash2 := sha256.Sum256(valueBuff[:valueLen])
+			//if hash != hash2 {
+			//	return fmt.Errorf("Hashes should match %x %x", hash[:8], hash2[:8])
+			//}
+			b.Insert(key, hash)
+
 			switch {
 			case e1 != nil:
 				return e1
