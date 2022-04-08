@@ -132,7 +132,7 @@ func RouteAccount(net *config.Network, account *url.URL) (string, error) {
 	return routeModulo(net, account)
 }
 
-func RouteEnvelopes(net *config.Network, envs ...*protocol.Envelope) (string, error) {
+func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protocol.Envelope) (string, error) {
 	if len(envs) == 0 {
 		return "", errors.New("nothing to route")
 	}
@@ -143,7 +143,7 @@ func RouteEnvelopes(net *config.Network, envs ...*protocol.Envelope) (string, er
 			return "", errors.New("cannot route envelope: no signatures")
 		}
 		for _, sig := range env.Signatures {
-			sigRoute, err := RouteAccount(net, sig.GetSigner())
+			sigRoute, err := routeAccount(sig.GetSigner())
 			if err != nil {
 				return "", err
 			}
@@ -168,7 +168,7 @@ func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
 
 // Route routes the account using modulo routing.
 func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
-	return RouteEnvelopes(r.Network, envs...)
+	return RouteEnvelopes(r.RouteAccount, envs...)
 }
 
 // Query queries the specified subnet. If the subnet matches this
