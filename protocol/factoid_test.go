@@ -25,7 +25,7 @@ func TestFactoidAddress(t *testing.T) {
 	faAddress := "FA2ybgFNYQiZFgTjkwQwp74uGsEUHJc6hGEh4YA3ai7FcssemapP"
 	rcdHash, err := protocol.GetRCDFromFactoidAddress(faAddress)
 	require.NoError(t, err)
-	u, err := protocol.LiteTokenAddress(rcdHash, protocol.ACME)
+	u, err := protocol.LiteTokenAddressFromHash(rcdHash, protocol.ACME)
 	require.NoError(t, err)
 	t.Logf("FACTOID LITE ACCOUNT ADDRESS FROM FACTOID ADDRESS: %s", u.String())
 
@@ -38,8 +38,12 @@ func TestRCD(t *testing.T) {
 	pub, _, _ := ed25519.GenerateKey(nil)
 	rcdHash := protocol.GetRCDHashFromPublicKey(pub, 0x01)
 
-	u, err := protocol.LiteTokenAddress(rcdHash, protocol.ACME)
+	u, err := protocol.LiteTokenAddressFromHash(rcdHash, protocol.ACME)
 	require.NoError(t, err)
+
+	u2, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeRCD1)
+	require.NoError(t, err)
+	require.Equal(t, u.String(), u2.String())
 	t.Logf("FACTOID LITE ACCOUNT ADDRESS FROM PUBLIC KEY: %s", u.String())
 }
 

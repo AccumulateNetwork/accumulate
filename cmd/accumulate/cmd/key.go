@@ -492,15 +492,7 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 		pk = token
 	}
 
-	var keyHash []byte
-	if signatureType == protocol.SignatureTypeRCD1 {
-		keyHash = protocol.GetRCDHashFromPublicKey(pk[32:], 1)
-	} else {
-		h := sha256.Sum256(pk[32:])
-		keyHash = h[:]
-	}
-
-	lt, err := protocol.LiteTokenAddressFromHash(keyHash, protocol.ACME)
+	lt, err := protocol.LiteTokenAddress(pk[32:], protocol.ACME, signatureType)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}

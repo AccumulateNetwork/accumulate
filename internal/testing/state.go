@@ -290,7 +290,7 @@ func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
 // USE ONLY.
 func AcmeLiteAddress(pubKey []byte) *url.URL {
-	u, err := protocol.LiteTokenAddress(pubKey, protocol.ACME)
+	u, err := protocol.LiteTokenAddress(pubKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		// LiteTokenAddress should only return an error if the token URL is invalid,
 		// so this should never return an error. But ignoring errors is a great

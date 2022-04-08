@@ -238,14 +238,7 @@ func ListADIs() (string, error) {
 			if err != nil {
 				out += fmt.Sprintf("%v\t:\t%x \n", u, v.Value)
 			} else {
-				out += fmt.Sprintf("%v\t:\t", u)
-				for i, l := range lab {
-					if i != 0 {
-						out += ", "
-					}
-					out += fmt.Sprintf("%s ", l)
-				}
-				out += "\n"
+				out += fmt.Sprintf("%v\t:\t%s\n", u, lab)
 			}
 		}
 	}

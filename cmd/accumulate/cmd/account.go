@@ -301,7 +301,11 @@ func ListAccounts() (string, error) {
 			return "", err
 		}
 
-		lt, err := protocol.LiteTokenAddress(pubKey, protocol.AcmeUrl().String())
+		_, hash, err := resolveKeyTypeAndHash(pubKey)
+		if err != nil {
+			return "", err
+		}
+		lt, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
 
 		if WantJsonOutput {
 			if i > 0 {

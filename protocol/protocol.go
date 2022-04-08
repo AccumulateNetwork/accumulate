@@ -163,7 +163,7 @@ func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 // The resulting URL is
 //
 //   "acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
-func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
+func LiteTokenAddress(pubKey []byte, tokenUrlStr string, signatureType SignatureType) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
 		return nil, err
@@ -190,7 +190,7 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	return liteTokenAddress(pubKey, tokenUrl), nil
+	return liteTokenAddress(pubKey, tokenUrl, signatureType), nil
 }
 func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
@@ -234,8 +234,14 @@ func liteAuthorityFromHash(pubKeyHash []byte) *url.URL {
 	return liteUrl
 }
 
-func liteTokenAddress(pubKey []byte, tokenUrl *url.URL) *url.URL {
-	keyHash := sha256.Sum256(pubKey)
+func liteTokenAddress(pubKey []byte, tokenUrl *url.URL, signatureType SignatureType) *url.URL {
+	var keyHash []byte
+	if signatureType == SignatureTypeRCD1 {
+		keyHash = GetRCDHashFromPublicKey(pubKey, 1)
+	} else {
+		h := sha256.Sum256(pubKey)
+		keyHash = h[:]
+	}
 	liteUrl := liteAuthorityFromHash(keyHash[:])
 	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
 	return liteUrl
