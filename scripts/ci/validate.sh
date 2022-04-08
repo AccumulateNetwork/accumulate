@@ -84,32 +84,58 @@ function success {
     echo
 }
 
+# Get number of signatures required using N of M factor
+function sigCount {
+   echo $(printf %.$2f $(echo $(bc -l <<< "($NUM_DNNS * $M_OF_N_FACTOR) - 0.5")))
+}
 
-NODE_PRIV_VAL0="${NODE_ROOT0:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-NODE_PRIV_VAL1="${NODE_ROOT1:-~/.accumulate/dn/Node1}/config/priv_validator_key.json"
-TEST_DN_NODE_DIR="${NODE_ROOT0:-~/.accumulate/dn/Node0}/.."
+# Format the path to priv_validator_key.json
+function nodePrivKey {
+  echo $DN_NODES_DIR/Node$1/config/priv_validator_key.json
+}
 
+section "Setup"
+if which go > /dev/null || ! which accumulate > /dev/null ; then
+    echo "Installing CLI"
+    go install ./cmd/accumulate
+    export PATH="${PATH}:$(go env GOPATH)/bin"
+fi
+if which go > /dev/null || ! which accumulated > /dev/null ; then
+    echo "Installing Daemon"
+    go install ./cmd/accumulated
+    export PATH="${PATH}:$(go env GOPATH)/bin"
+fi
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+echo
+
+
+declare -r M_OF_N_FACTOR=$(bc -l <<< '2/3')
+if [ -f "${NODE_ROOT0:-~/.accumulate/dn/Node0}/.." ]; then
+  declare -r DN_NODES_DIR=$(realpath "${NODE_ROOT0:-~/.accumulate/dn/Node0}/..")
+fi
+
+declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-section "Add a new DN validator"
-NUM_DNNS=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
-if [ -f "$NODE_PRIV_VAL0" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -le "3" ]; then
-  echo -e "We have only ${NUM_DNNS} DN validators, spinning up an extra DN."
-  echo
-  TEST_DN_NODE_DIR=$(realpath "$TEST_DN_NODE_DIR")
-  accumulated init node 3 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_DN_NODE_DIR" --skip-version-check --no-website
+# if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+if [ -f "$(nodePrivKey 0)" ] && [ "$NUM_DNNS" -ge "3" ]; then
+  section "Add a new DN validator"
+
+#  accumulated init node 3 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
+  accumulated init node 3 http://127.0.1.4:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
 
   # Register new validator
-  TXID=$(cli-tx validator add dn "$NODE_PRIV_VAL0" "$TEST_DN_NODE_DIR/Node3/config/priv_validator_key.json")
+  TXID=$(cli-tx validator add dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
   wait-for-tx $TXID
-  wait-for cli-tx-sig tx sign dn "$NODE_PRIV_VAL1" $TXID
 
-  # Start new validator
-  accumulated run -n 3 -w "$TEST_DN_NODE_DIR" &
+  # Sign the required number of times
+  for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+    wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+  done
+
+  # Start the new validator and increment NUM_DMNS
+  accumulated run -n 3 -w "$DN_NODES_DIR" &
   declare -g ACCPID=$!
-
-else
-    echo -e "We have ${NUM_DNNS} DN validators which is enough to run this test."
-    echo
+  NUM_DNNS=$((NUM_DNNS+1))
 fi
 
 section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
@@ -117,7 +143,10 @@ if [ -f "$NODE_PRIV_VAL0" ]; then
     TXID=$(cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}')
     wait-for-tx $TXID
 
-    wait-for cli-tx-sig tx sign dn/oracle "$NODE_PRIV_VAL1" $TXID
+    # Sign the required number of times
+    for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+      wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+    done
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
     accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
 
@@ -128,15 +157,6 @@ else
     echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
     echo
 fi
-
-section "Setup"
-if which go > /dev/null || ! which accumulate > /dev/null ; then
-    echo "Installing CLI"
-    go install ./cmd/accumulate
-    export PATH="${PATH}:$(go env GOPATH)/bin"
-fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
-echo
 
 section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
@@ -519,7 +539,16 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
     section "Shutdown dynamic validator"
-    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL0" $hexPubKey
+    TXID=$(cli-tx validator remove dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
+    wait-for-tx $TXID
+
+    # Sign the required number of times
+    for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+      wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+    done
+    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
+    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
+
     kill -9 $ACCPID
     rm -rf $TEST_NODE_WORK_DIR
 fi
