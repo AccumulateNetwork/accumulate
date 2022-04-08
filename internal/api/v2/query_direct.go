@@ -18,6 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
+const QueryMinorBlocksMaxCount = 1000 // Hardcoded ceiling for now
+
 type queryDirect struct {
 	Options
 	Subnet string
@@ -479,8 +481,8 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 		return nil, errors.New("start is too large")
 	}
 
-	if pagination.Count > math.MaxInt64 {
-		return nil, errors.New("count is too large")
+	if pagination.Count > QueryMinorBlocksMaxCount {
+		return nil, fmt.Errorf("count is too large, the ceiling is fixed to %d", QueryMinorBlocksMaxCount)
 	}
 
 	req := &query.RequestMinorBlocks{
