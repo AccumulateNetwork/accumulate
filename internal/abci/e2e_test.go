@@ -1402,7 +1402,8 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 4).
 			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()))
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
 	})
 
 	// Should not be removed yet, the tx is pending
@@ -1410,11 +1411,11 @@ func TestUpdateValidators(t *testing.T) {
 
 	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
-			WithNonceVar(&globalNonce).
 			WithSigner(validators, 4).
 			WithTxnHash(ids[0][:]).
-			WithBody(&protocol.SignPending{}).
-			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()))
+			WithBody(&protocol.RemoteTransactionBody{}).
+			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
+			Build())
 	})
 	n.MustWaitForTxns(convertIds32(envHashes...)...)
 
