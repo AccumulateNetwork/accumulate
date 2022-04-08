@@ -339,7 +339,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) error {
 		} else {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
 		}
-		res, err := n.api.QueryTx(id, 1*time.Second, api2.QueryOptions{})
+		res, err := n.api.QueryTx(id, 1*time.Second, false, api2.QueryOptions{})
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
@@ -397,7 +397,7 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 		Network: n.network,
 		Router:  n.router,
 	})
-	resp, err := q.QueryTx(txid, 0, api2.QueryOptions{})
+	resp, err := q.QueryTx(txid, 0, false, api2.QueryOptions{})
 	require.NoError(n.t, err)
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)

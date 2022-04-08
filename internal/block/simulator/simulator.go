@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -24,6 +25,8 @@ type Simulator struct {
 	Logger    log.Logger
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
+
+	routingOverrides map[[32]byte]string
 }
 
 func newLogger(t testing.TB) log.Logger {
@@ -45,6 +48,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 
 	// Initialize the simulartor and network
 	sim := new(Simulator)
+	sim.routingOverrides = map[[32]byte]string{}
 	sim.TB = t
 	sim.Logger = newLogger(t).With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
@@ -92,6 +96,23 @@ func New(t testing.TB, bvnCount int) *Simulator {
 	return sim
 }
 
+func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
+	// Make sure the account is a root identity
+	if !account.RootIdentity().Equal(account) {
+		s.Fatalf("Cannot set the route for a non-root: %v", account)
+	}
+
+	// Make sure the subnet exists
+	s.Subnet(subnet)
+
+	// Add/remove the override
+	if subnet == "" {
+		delete(s.routingOverrides, account.AccountID32())
+	} else {
+		s.routingOverrides[account.AccountID32()] = subnet
+	}
+}
+
 func (s *Simulator) Router() routing.Router {
 	return router{s}
 }
@@ -102,12 +123,23 @@ func (s *Simulator) Subnet(id string) *ExecEntry {
 	return e
 }
 
-func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{} {
+func (s *Simulator) SubnetFor(url *url.URL) *ExecEntry {
 	s.Helper()
 
 	subnet, err := s.Router().RouteAccount(url)
 	require.NoError(s, err)
-	x := s.Subnet(subnet)
+	return s.Subnet(subnet)
+}
+
+func (s *Simulator) QueryUrl(url *url.URL, req queryRequest, prove bool) interface{} {
+	x := s.SubnetFor(url)
+	return Query(s, x.Database, x.Executor, req, prove)
+}
+
+func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{} {
+	s.Helper()
+
+	x := s.SubnetFor(url)
 	return Query(s, x.Database, x.Executor, req, prove)
 }
 
@@ -118,24 +150,19 @@ func (s *Simulator) InitChain() {
 		x := s.Subnet(subnet.ID)
 		InitChain(s, x.Database, x.Executor)
 	}
-	s.WaitForGovernor()
-}
 
-func (s *Simulator) WaitForGovernor() {
+	// Wait for the governor
 	for _, subnet := range s.Subnets {
 		s.Subnet(subnet.ID).Executor.PingGovernor_TESTONLY()
 	}
 }
 
-func (s *Simulator) ExecuteBlock(envelopes ...*protocol.Envelope) {
+// ExecuteBlock executes a block after submitting envelopes. If a status channel
+// is provided, statuses will be sent to the channel as transactions are
+// executed. Once the block is complete, the status channel will be closed (if
+// provided).
+func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) {
 	s.Helper()
-
-	for _, envelope := range envelopes {
-		subnet, err := s.Router().Route(envelope)
-		require.NoError(s, err)
-		x := s.Subnet(subnet)
-		x.Submit(envelope)
-	}
 
 	wg := new(sync.WaitGroup)
 	wg.Add(len(s.Subnets))
@@ -143,15 +170,99 @@ func (s *Simulator) ExecuteBlock(envelopes ...*protocol.Envelope) {
 	for _, subnet := range s.Subnets {
 		go func(x *ExecEntry) {
 			defer wg.Done()
+
 			submitted := x.TakeSubmitted()
-			ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
+			status := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
+			if statusChan == nil {
+				return
+			}
+
+			for i, status := range status {
+				status.For = *(*[32]byte)(submitted[i].GetTxHash())
+				statusChan <- status
+			}
 		}(s.Subnet(subnet.ID))
 	}
 
+	// Wait for all subnets to complete
 	wg.Wait()
+
+	// Wait for the governor
+	for _, subnet := range s.Subnets {
+		s.Subnet(subnet.ID).Executor.PingGovernor_TESTONLY()
+	}
+
+	if statusChan != nil {
+		close(statusChan)
+	}
 }
 
-func (s *Simulator) findTxn(hash []byte) *ExecEntry {
+// ExecuteBlocks executes a number of blocks. This is useful for things like
+// waiting for a block to be anchored.
+func (s *Simulator) ExecuteBlocks(n int) {
+	for ; n > 0; n-- {
+		s.ExecuteBlock(nil)
+	}
+}
+
+func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelope, error) {
+	s.Helper()
+
+	for _, envelope := range envelopes {
+		// Route
+		subnet, err := s.Router().Route(envelope)
+		require.NoError(s, err)
+		x := s.Subnet(subnet)
+
+		// Check - check a copy so we don't cause strange errors by changing
+		// something
+		_, err = CheckTx(s, x.Database, x.Executor, envelope.Copy())
+		if err != nil {
+			return nil, err
+		}
+
+		// Enqueue
+		x.Submit(envelope)
+	}
+
+	return envelopes, nil
+}
+
+// MustSubmitAndExecuteBlock executes a block with the envelopes and fails the test if
+// any envelope fails.
+func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
+	s.Helper()
+
+	ch := make(chan *protocol.TransactionStatus)
+	ids := make(map[[32]byte]bool, len(envelopes))
+	for _, env := range envelopes {
+		ids[*(*[32]byte)(env.GetTxHash())] = true
+	}
+
+	_, err := s.Submit(envelopes...)
+	require.NoError(s, err)
+
+	go s.ExecuteBlock(ch)
+
+	var didFail bool
+	for status := range ch {
+		if status.Code == 0 || !ids[status.For] {
+			continue
+		}
+
+		assert.Zero(s, status.Code, status.Message)
+		didFail = true
+	}
+	if didFail {
+		s.FailNow()
+	}
+
+	return envelopes
+}
+
+func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash []byte) *ExecEntry {
+	s.Helper()
+
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
 
@@ -159,27 +270,33 @@ func (s *Simulator) findTxn(hash []byte) *ExecEntry {
 		defer batch.Discard()
 		obj, err := batch.Transaction(hash).GetStatus()
 		require.NoError(s, err)
-
-		if !obj.Delivered {
-			continue
+		if status(obj) {
+			return x
 		}
-
-		return x
 	}
 
 	return nil
 }
 
-func (s *Simulator) WaitForTransaction(txnHash []byte) {
+func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) {
+	s.Helper()
+
+	for _, envelope := range envelopes {
+		s.WaitForTransaction(status, envelope.GetTxHash())
+	}
+}
+
+func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) bool, txnHash []byte) {
+	s.Helper()
+
 	var x *ExecEntry
 	for i := 0; i < 50; i++ {
-		x = s.findTxn(txnHash)
+		x = s.findTxn(status, txnHash)
 		if x != nil {
 			break
 		}
 
-		s.ExecuteBlock()
-		s.WaitForGovernor()
+		s.ExecuteBlock(nil)
 	}
 	if x == nil {
 		s.Fatalf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
@@ -192,28 +309,34 @@ func (s *Simulator) WaitForTransaction(txnHash []byte) {
 	require.NoError(s, err)
 
 	for _, id := range synth.Hashes {
-		s.WaitForTransaction(id[:])
+		s.WaitForTransaction(status, id[:])
 	}
 }
 
 type ExecEntry struct {
-	mu    sync.Mutex
-	queue []*protocol.Envelope
+	mu                      sync.Mutex
+	nextBlock, currentBlock []*protocol.Envelope
 
 	Database *database.Database
 	Executor *block.Executor
 }
 
+// Submit adds the envelopes to the next block's queue.
+//
+// By adding transactions to the next block and swaping queues when a block is
+// executed, we roughly simulate the process Tendermint uses to build blocks.
 func (s *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.queue = append(s.queue, envelopes...)
+	s.nextBlock = append(s.nextBlock, envelopes...)
 }
 
+// TakeSubmitted returns the envelopes for the current block.
 func (s *ExecEntry) TakeSubmitted() []*protocol.Envelope {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	submitted := s.queue
-	s.queue = nil
+	submitted := s.currentBlock
+	s.currentBlock = s.nextBlock
+	s.nextBlock = nil
 	return submitted
 }
