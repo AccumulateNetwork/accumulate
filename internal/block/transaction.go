@@ -107,15 +107,6 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
-	// Load the initiator - do not use status.Initiator directly because that
-	// may be a modified version of the account
-	var signer protocol.Signer
-	err = batch.Account(status.Initiator).GetStateAs(&signer)
-	if err != nil {
-		err = fmt.Errorf("load initiator: %w", err)
-		return recordFailedTransaction(batch, transaction, nil, err)
-	}
-
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	switch {
@@ -123,16 +114,16 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		err = fmt.Errorf("load principal: %w", err)
-		return recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, err)
 	case !transactionAllowsMissingPrincipal(transaction):
 		err = fmt.Errorf("load principal: %w", err)
-		return recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, err)
 	}
 
 	// Check if the transaction is ready to be executed
 	ready, err := TransactionIsReady(batch, transaction, status)
 	if err != nil {
-		return recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, err)
 	}
 	if !ready {
 		return recordPendingTransaction(batch, transaction)
@@ -142,12 +133,15 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		// Verify that the synthetic transaction has all the right signatures
 		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
 		if err != nil {
-			return recordFailedTransaction(batch, transaction, signer, err)
+			return recordFailedTransaction(batch, transaction, err)
 		}
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signer.GetUrl(), signer, principal, transaction, x.logger.With("operation", "ProcessTransaction"))
+	st, err := chain.LoadStateManager(batch.Begin(true), x.Network.NodeUrl(), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
+	if err != nil {
+		return recordFailedTransaction(batch, transaction, err)
+	}
 	defer st.Discard()
 
 	// Execute the transaction
@@ -155,19 +149,19 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	if !ok {
 		// An invalid transaction should not make it to this point
 		err = protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", transaction.Body.Type())
-		return recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, err)
 	}
 
 	result, err := executor.Execute(st, &protocol.Envelope{Transaction: transaction})
 	if err != nil {
-		return recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, err)
 	}
 
 	// Commit changes, queue state creates for synthetic transactions
 	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
-		return recordFailedTransaction(batch, transaction, signer, err)
+		return recordFailedTransaction(batch, transaction, err)
 	}
 
 	return recordSuccessfulTransaction(batch, state, transaction, result)
@@ -342,7 +336,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 	return status, state, nil
 }
 
-func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		failure := protocol.NewError(protocol.ErrorCodeUnknownError, failure)
@@ -369,7 +363,12 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 	}
 
 	// Refund the signer
-	if signer == nil || !transaction.Body.Type().IsUser() {
+	if status.Initiator == nil || !transaction.Body.Type().IsUser() {
+		return status, state, nil
+	}
+
+	// TODO Send a refund for a failed remotely initiated transaction
+	if !transaction.Header.Principal.LocalTo(status.Initiator) {
 		return status, state, nil
 	}
 
@@ -382,11 +381,18 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 		return status, state, nil
 	}
 
+	var signer protocol.Signer
+	obj := batch.Account(status.Initiator)
+	err = obj.GetStateAs(&signer)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load initial signer: %w", err)
+	}
+
 	refund := paid - protocol.FeeFailedMaximum
 	signer.CreditCredits(refund.AsUInt64())
-	err = batch.Account(signer.GetUrl()).PutState(signer)
+	err = obj.PutState(signer)
 	if err != nil {
-		return nil, nil, fmt.Errorf("refund initial signer: %w", err)
+		return nil, nil, fmt.Errorf("store initial signer: %w", err)
 	}
 
 	return status, state, nil
