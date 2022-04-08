@@ -447,10 +447,11 @@ func FindLabelFromPublicKeyHash(pubKeyHash []byte) (lab string, err error) {
 		keyHash := sha256.Sum256(v.Value)
 		if bytes.Equal(keyHash[:], pubKeyHash) {
 			lab = string(v.Key)
+			break
 		}
 	}
 
-	if len(lab) == 0 {
+	if lab == "" {
 		err = fmt.Errorf("key name not found for key hash %x", pubKeyHash)
 	}
 	return lab, err
@@ -469,7 +470,7 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 		}
 	}
 
-	if len(lab) == 0 {
+	if lab == "" {
 		err = fmt.Errorf("key name not found for %x", pubKey)
 	}
 	return lab, err
