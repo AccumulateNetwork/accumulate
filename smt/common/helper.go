@@ -21,22 +21,16 @@ import (
 // Return []byte, big endian, of len 8 for the uint64
 // (Note casting an Int64 to uInt64 will give the same 8 bytes)
 func Uint64FixedBytes(i uint64) (data []byte) {
-	data = append(data, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-	return data
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], i)
+	return buf[:]
 }
 
 // BytesFixedUint64
 // Return a Uint64, for an 8 byte value,big endian
 // (Note casting to an Int64 will work fine)
 func BytesFixedUint64(data []byte) (i uint64, nextData []byte) {
-	i = (((((((uint64(data[0])<<8+
-		uint64(data[1]))<<8+
-		uint64(data[2]))<<8+
-		uint64(data[3]))<<8+
-		uint64(data[4]))<<8+
-		uint64(data[5]))<<8+
-		uint64(data[6]))<<8 +
-		uint64(data[7]))
+	i = binary.BigEndian.Uint64(data)
 	return i, data[8:]
 }
 
