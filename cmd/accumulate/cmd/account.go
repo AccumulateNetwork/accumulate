@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -293,7 +294,7 @@ func ListAccounts() (string, error) {
 	var out string
 
 	if WantJsonOutput {
-		out += fmt.Sprintf("{\"liteAccounts\":[")
+		out += "{\"liteAccounts\":["
 	}
 	for i, v := range b.KeyValueList {
 		pubKey, err := Db.Get(BucketLabel, v.Value)
@@ -301,23 +302,44 @@ func ListAccounts() (string, error) {
 			return "", err
 		}
 
+		st, err := Db.Get(BucketSigType, pubKey)
+		if err != nil {
+			return "", err
+		}
+		s, _ := common.BytesUint64(st)
+		var sigType protocol.SignatureType
+		if !sigType.SetEnumValue(s) {
+			return "", fmt.Errorf("invalid signature type")
+		}
+
 		_, hash, err := resolveKeyTypeAndHash(pubKey)
 		if err != nil {
 			return "", err
 		}
 		lt, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
-
+		if err != nil {
+			return "", err
+		}
+		kr := KeyResponse{}
+		kr.LiteAccount = lt
+		kr.KeyType = sigType
+		kr.PublicKey = pubKey
+		*kr.Label.AsString() = string(v.Value)
 		if WantJsonOutput {
 			if i > 0 {
-				out += fmt.Sprintf(",")
+				out += ","
 			}
-			out += fmt.Sprintf("{\"%s\":\"%s\"}", string(v.Value), lt)
+			d, err := json.Marshal(&kr)
+			if err != nil {
+				return "", err
+			}
+			out += string(d)
 		} else {
-			out += fmt.Sprintf("%s %s\n", lt, string(v.Value))
+			out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", kr.LiteAccount, kr.LiteAccount, pubKey, sigType)
 		}
 	}
 	if WantJsonOutput {
-		out += fmt.Sprintf("]}")
+		out += "]}"
 	}
 	//TODO: this probably should also list out adi accounts as well
 	return out, nil
@@ -417,6 +439,9 @@ func RestoreAccounts() (out string, err error) {
 	}
 	for _, v := range labelz.KeyValueList {
 		signatureType, hash, err := resolveKeyTypeAndHash(v.Value)
+		if err != nil {
+			return "", err
+		}
 		liteAccount, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
 		if err != nil {
 			return "", err

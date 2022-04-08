@@ -76,15 +76,12 @@ func testCase3_3(t *testing.T, tc *testCmd) {
 func testCase1_2(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	type FactoidPair struct {
-		Fs string
-		FA string
-	}
 	fs := "Fs1jQGc9GJjyWNroLPq7x6LbYQHveyjWNPXSqAvCEKpETNoTU5dP"
 	fa := "FA22de5NSG2FA2HmMaD4h8qSAZAJyztmmnwgLPghCQKoSekwYYct"
 
 	//quick check to make sure the factoid addresses are correct.
 	fa2, rcdHash, _, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(fs)
+	require.NoError(t, err)
 	_ = rcdHash
 	require.Equal(t, fa, fa2)
 
@@ -101,7 +98,7 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.Equal(t, *kr.Label.AsString(), fa)
 
 	//now faucet the rcd account
-	r, err = tc.executeTx(t, "faucet "+kr.LiteAccount.String())
+	_, err = tc.executeTx(t, "faucet "+kr.LiteAccount.String())
 	require.NoError(t, err)
 
 	//now make sure rcd account has the funds
@@ -109,7 +106,7 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 	require.Equal(t, bal, "200000000000000")
 
-	r, err = tc.execute(t, "get "+kr.LiteAccount.String())
+	_, err = tc.execute(t, "get "+kr.LiteAccount.String())
 	require.NoError(t, err)
 
 	r, err = tc.executeTx(t, "credits "+kr.LiteAccount.String()+" "+kr.LiteAccount.String()+" 100")
@@ -121,7 +118,7 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &legacyAccount))
 
 	//now transfer from an RCD based account to an ED25519 based account
-	r, err = tc.executeTx(t, "tx create "+kr.LiteAccount.String()+" "+legacyAccount.LiteAccount.String()+" "+"100.00")
+	_, err = tc.executeTx(t, "tx create "+kr.LiteAccount.String()+" "+legacyAccount.LiteAccount.String()+" "+"100.00")
 	require.NoError(t, err)
 
 	//now make sure it transferred

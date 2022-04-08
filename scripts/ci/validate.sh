@@ -112,8 +112,8 @@ fi
 echo
 
 section "Generate a Lite Token Account"
-accumulate account list | grep -q ACME || accumulate account generate
-LITE=$(accumulate account list | grep ACME | head -1)
+accumulate account list 2&>1 | grep -q ACME || accumulate account generate
+LITE=$(accumulate account list  | grep ACME | head -1)
 TXS=()
 for i in {1..1}
 do
