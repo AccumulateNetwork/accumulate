@@ -134,26 +134,6 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   NUM_DNNS=$((NUM_DNNS+1))
 fi
 
-section "Update oracle price to 1 dollar. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL0" ]; then
-    TXID=$(cli-tx data write dn/oracle "$NODE_PRIV_VAL0" '{"price":501}')
-    wait-for-tx $TXID
-
-    # Sign the required number of times
-    for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
-      wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
-    done
-    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
-    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
-
-    RESULT=$(accumulate -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
-    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
-else
-    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
-    echo
-fi
-
 section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
@@ -504,8 +484,17 @@ MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Fai
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
+if [ -f "$(nodePrivKey 0)" ]; then
+    TXID=$(cli-tx data write dn/oracle "$(nodePrivKey 0)" '{"price":501}')
+    wait-for-tx $TXID
+
+    # Sign the required number of times
+    for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+      wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+    done
+    accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
+    accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
+
     RESULT=$(accumulate -j data get dn/oracle)
     RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
     [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
@@ -515,11 +504,11 @@ else
 fi
 
 section "Query votes chain"
-if [ -f "$NODE_PRIV_VAL0" ]; then
+if [ -f "$(nodePrivKey 0)" ]; then
     #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
     RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
     #convert the node address to search for to base64
-    NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL0 | xxd -r -p | base64 )
+    NODE_ADDRESS=$(jq -re .address $(nodePrivKey 0) | xxd -r -p | base64 )
     VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
     FOUND=0
     for ((i = 0; i < $VOTE_COUNT; i++)); do
