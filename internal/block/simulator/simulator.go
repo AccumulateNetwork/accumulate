@@ -260,7 +260,7 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	return envelopes
 }
 
-func (s *Simulator) findTxn(hash []byte) *ExecEntry {
+func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash []byte) *ExecEntry {
 	s.Helper()
 
 	for _, subnet := range s.Subnets {
@@ -270,31 +270,28 @@ func (s *Simulator) findTxn(hash []byte) *ExecEntry {
 		defer batch.Discard()
 		obj, err := batch.Transaction(hash).GetStatus()
 		require.NoError(s, err)
-
-		if !obj.Delivered {
-			continue
+		if status(obj) {
+			return x
 		}
-
-		return x
 	}
 
 	return nil
 }
 
-func (s *Simulator) WaitForTransactions(envelopes ...*protocol.Envelope) {
+func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) {
 	s.Helper()
 
 	for _, envelope := range envelopes {
-		s.WaitForTransaction(envelope.GetTxHash())
+		s.WaitForTransaction(status, envelope.GetTxHash())
 	}
 }
 
-func (s *Simulator) WaitForTransaction(txnHash []byte) {
+func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) bool, txnHash []byte) {
 	s.Helper()
 
 	var x *ExecEntry
 	for i := 0; i < 50; i++ {
-		x = s.findTxn(txnHash)
+		x = s.findTxn(status, txnHash)
 		if x != nil {
 			break
 		}
@@ -312,7 +309,7 @@ func (s *Simulator) WaitForTransaction(txnHash []byte) {
 	require.NoError(s, err)
 
 	for _, id := range synth.Hashes {
-		s.WaitForTransaction(id[:])
+		s.WaitForTransaction(status, id[:])
 	}
 }
 
