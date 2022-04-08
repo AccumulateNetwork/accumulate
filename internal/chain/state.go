@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -8,6 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
@@ -19,6 +21,32 @@ type StateManager struct {
 
 	Signator    protocol.Signer
 	SignatorUrl *url.URL
+}
+
+func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+	var signer protocol.Signer
+	err := batch.Account(status.Initiator).GetStateAs(&signer)
+	switch {
+	case err == nil:
+		// Found it
+		return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
+
+	case !errors.Is(err, storage.ErrNotFound):
+		// Unknown error
+		return nil, fmt.Errorf("load signer: %w", err)
+
+	case transaction.Header.Principal.LocalTo(status.Initiator):
+		// If the signer is local, it must exist
+		return nil, fmt.Errorf("load signer: %w", err)
+	}
+
+	signer, ok := status.GetSigner(status.Initiator)
+	if !ok {
+		// This should never happen
+		return nil, fmt.Errorf("transaction signer set does not include the initiator")
+	}
+
+	return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
 }
 
 // NewStateManager creates a new state manager and loads the transaction's

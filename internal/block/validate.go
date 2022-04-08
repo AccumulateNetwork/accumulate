@@ -119,6 +119,11 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 		return nil, fmt.Errorf("load signer: %w", err)
 	}
 
+	// Do not validate remote transactions
+	if !transaction.Header.Principal.LocalTo(signer.GetUrl()) {
+		return new(protocol.EmptyResult), nil
+	}
+
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	switch {
