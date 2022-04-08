@@ -108,7 +108,7 @@ var txnTests = []*TCG{
 		txnTest("adi", &UpdateKeyPage{Operation: []protocol.KeyPageOperation{&AddKeyOperation{Entry: KeySpecParams{KeyHash: key[32:]}}}}),
 	}},
 	{Name: "SignPending", Cases: []*TC{
-		txnTest("adi", &SignPending{}),
+		txnTest("adi", &RemoteTransactionBody{}),
 	}},
 	{Name: "SyntheticCreateChain", Cases: []*TC{
 		txnTest("adi", &SyntheticCreateChain{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
