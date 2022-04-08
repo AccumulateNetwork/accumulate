@@ -103,6 +103,13 @@ func InitRootCmd(database db.DB) *cobra.Command {
 		Client.Timeout = ClientTimeout
 		Client.DebugRequest = ClientDebug
 
+		out, err := RestoreAccounts()
+		if err != nil {
+			return err
+		}
+		if out != "" {
+			return fmt.Errorf("Performaing\":\"%v]=\"}", out)
+		}
 		return nil
 	}
 
@@ -132,6 +139,7 @@ var (
 	BucketAdi      = []byte("adi")
 	BucketKeys     = []byte("keys")
 	BucketLabel    = []byte("label")
+	BucketLite     = []byte("lite")
 	BucketMnemonic = []byte("mnemonic")
 	BucketSigType  = []byte("sigtype")
 )

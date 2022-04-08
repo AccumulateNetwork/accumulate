@@ -116,14 +116,20 @@ const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
+	return LiteAuthorityAddressFromHash(chainId)
+}
 
-	chainStr := fmt.Sprintf("%x", chainId[:20])
+func LiteAuthorityAddress(publicKey []byte) (*url.URL, error) {
+	h := sha256.Sum256(publicKey)
+	return LiteAuthorityAddressFromHash(h[:])
+}
 
-	liteUrl := new(url.URL)
-	checkSum := sha256.Sum256([]byte(chainStr))
-	checkStr := fmt.Sprintf("%x", checkSum[28:])
-	liteUrl.Authority = chainStr + checkStr
-	return liteUrl, nil
+func LiteAuthorityAddressFromHash(keyHash []byte) (*url.URL, error) {
+	u := liteAuthorityFromHash(keyHash)
+	if u == nil {
+		return nil, fmt.Errorf("cannot create lite authority")
+	}
+	return u, nil
 }
 
 // ParseLiteDataAddress extracts the partial chain id from a lite chain URL.
@@ -196,13 +202,18 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	return liteTokenAddress(pubKey, tokenUrl), nil
 }
 
-func liteTokenAddress(pubKey []byte, tokenUrl *url.URL) *url.URL {
+func liteAuthorityFromHash(pubKeyHash []byte) *url.URL {
 	liteUrl := new(url.URL)
-	keyHash := sha256.Sum256(pubKey)
-	keyStr := fmt.Sprintf("%x", keyHash[:20])
+	keyStr := fmt.Sprintf("%x", pubKeyHash[:20])
 	checkSum := sha256.Sum256([]byte(keyStr))
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
 	liteUrl.Authority = keyStr + checkStr
+	return liteUrl
+}
+
+func liteTokenAddress(pubKey []byte, tokenUrl *url.URL) *url.URL {
+	keyHash := sha256.Sum256(pubKey)
+	liteUrl := liteAuthorityFromHash(keyHash[:])
 	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
 	return liteUrl
 }

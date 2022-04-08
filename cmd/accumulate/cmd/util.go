@@ -80,11 +80,14 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Timestamp = nonceFromTimeNow()
 
 	if IsLiteAccount(origin.String()) {
-		privKey, err := LookupByLabel(origin.String())
+		privKey, err := LookupByLite(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
-		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
+		sigType, rcd, err := resolveKeyTypeAndHash(privKey[32:])
+		fa, _ := protocol.GetFactoidAddressFromRCDHash(rcd)
+		la, _ := protocol.GetLiteAccountFromFactoidAddress(fa)
+		fmt.Printf("%s", la.String())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -883,9 +886,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name(s)\n")
 		for i, k := range ss.Keys {
 			keyName := ""
-			names, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
+			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
-				keyName = strings.Join(names, ", ")
+				keyName = name
 			}
 			out += fmt.Sprintf("\t%d\t%v\t\t%x\t%s\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), k.PublicKeyHash, keyName)
 		}
@@ -1006,11 +1009,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyNames, err := FindLabelFromPublicKeyHash(id.KeyHash)
+		keyName, err := FindLabelFromPublicKeyHash(id.KeyHash)
 		if err != nil {
 			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {
-			out += fmt.Sprintf("Public Key (name(s)) \t:\t%x (%s)\n", id.KeyHash, strings.Join(keyNames, ", "))
+			out += fmt.Sprintf("Public Key (name(s)) \t:\t%x (%s)\n", id.KeyHash, keyName)
 		}
 
 		out += printGeneralTransactionParameters(res)

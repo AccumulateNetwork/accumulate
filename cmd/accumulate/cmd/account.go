@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -280,54 +282,74 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 }
 
 func GenerateAccount() (string, error) {
-	return GenerateKey("")
+	tmp := WantJsonOutput
+	WantJsonOutput = true
+	out, err := GenerateKey("")
+	WantJsonOutput = tmp
+	if err != nil {
+		return "", err
+	}
+	type LiteAccount struct {
+		Name        string `json:"name"`
+		PublicKey   string `json:"publicKey"`
+		LiteAccount string `json:"liteAccount"`
+	}
+
+	var v LiteAccount
+	err = json.Unmarshal([]byte(out), &v)
+	if err != nil {
+		return "", err
+	}
+	publicKey, err := hex.DecodeString(v.PublicKey)
+
+	u, err := protocol.LiteTokenAddress(publicKey, protocol.ACME)
+	if err != nil {
+		return "", err
+	}
+	v.LiteAccount = u.String()
+	if WantJsonOutput {
+		data, err := json.Marshal(&v)
+		if err != nil {
+			return "", err
+		}
+
+		return string(data), nil
+	}
+	out = fmt.Sprintf("Lite Account\t\t\t\t\t\t\tPublic Key\n")
+	out += fmt.Sprintf("%s\t%s", v.LiteAccount, v.PublicKey)
+	return out, nil
 }
 
 func ListAccounts() (string, error) {
-	b, err := Db.GetBucket(BucketLabel)
+	b, err := Db.GetBucket(BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
-		return "", err
+		return "", fmt.Errorf("no lite accounts found, try again after executing \"accumulate account restore\"\n")
 	}
 	var out string
-	for _, v := range b.KeyValueList {
-		lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
 
+	if WantJsonOutput {
+		out += fmt.Sprintf("{\"liteAccounts\":[")
+	}
+	for i, v := range b.KeyValueList {
+		pubKey, err := Db.Get(BucketLabel, v.Value)
 		if err != nil {
-			println(string(v.Key))
-			continue
+			return "", err
 		}
-		l, _ := LabelForLiteTokenAccount(lt.String())
-		if l == string(v.Key) {
-			out += fmt.Sprintf("%s\n", lt)
+
+		lt, err := protocol.LiteTokenAddress(pubKey, protocol.AcmeUrl().String())
+
+		if WantJsonOutput {
+			if i > 0 {
+				out += fmt.Sprintf(",")
+			}
+			out += fmt.Sprintf("{\"%s\":\"%s\"}", string(v.Value), lt)
 		} else {
-			//now check to see if we are a factoid address
-			_, err := protocol.GetRCDFromFactoidAddress(string(v.Key))
-			if err != nil {
-				//if we aren't a factoid address move along
-				continue
-			}
-			//so we are potentially a RCD based account, now check to see if we own the keys
-			pk, _ := resolvePrivateKey(string(v.Key))
-			fs, err := protocol.GetFactoidSecretFromPrivKey(pk)
-			if err != nil {
-				continue
-			}
-			_, _, pk, err = protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(fs)
-			if err != nil {
-				continue
-			}
-
-			if bytes.Equal(pk[32:], v.Value) {
-				lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
-				if err != nil {
-					continue
-				}
-
-				out += fmt.Sprintf("%s (%s)\n", lt, string(v.Key))
-			}
-
+			out += fmt.Sprintf("%s %s\n", lt, string(v.Value))
 		}
+	}
+	if WantJsonOutput {
+		out += fmt.Sprintf("]}")
 	}
 	//TODO: this probably should also list out adi accounts as well
 	return out, nil
@@ -418,5 +440,32 @@ func RestoreAccounts() (out string, err error) {
 			}
 		}
 	}
+
+	//build the map of lite accounts to key labels
+	labelz, err = Db.GetBucket(BucketLabel)
+	if err != nil {
+		//nothing to do...
+		return
+	}
+	for _, v := range labelz.KeyValueList {
+		liteAccount, err := protocol.LiteTokenAddress(v.Value, protocol.ACME)
+		if err != nil {
+			return "", err
+		}
+
+		liteLabel, _ := LabelForLiteTokenAccount(liteAccount.String())
+		_, err = Db.Get(BucketLite, []byte(liteLabel))
+		if err == nil {
+			continue
+		}
+
+		out += fmt.Sprintf("lite identity %v mapped to key name %v\n", liteLabel, string(v.Key))
+
+		err = Db.Put(BucketLite, []byte(liteLabel), v.Key)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	return out, nil
 }
