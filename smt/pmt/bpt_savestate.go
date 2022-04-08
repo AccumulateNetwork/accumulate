@@ -3,6 +3,7 @@ package pmt
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -120,7 +121,7 @@ func (b *BPT) SaveSnapshot(filename string) error {
 	for {                          //                        so just blindly copy with a big buffer
 		n, e1 := values.Read(buff[:]) //                     Read a bunch
 		switch {                      //                     Check if done, or if an error
-		case e1 == nil && n == 0: //                         When we read nothing, we are done
+		case e1 == io.EOF && n == 0: //                         When we read nothing, we are done
 			return nil
 		case e1 != nil:
 			return e1
