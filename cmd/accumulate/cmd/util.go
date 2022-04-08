@@ -95,7 +95,17 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		return args, signer, nil
 	}
 
-	privKey, err := resolvePrivateKey(args[0])
+	var keyName string
+	keyHolder, err := url2.Parse(args[0])
+	if err == nil && keyHolder.UserInfo != "" {
+		keyName = keyHolder.UserInfo
+		keyHolder.UserInfo = ""
+	} else {
+		keyHolder = origin
+		keyName = args[0]
+	}
+
+	privKey, err := resolvePrivateKey(keyName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,7 +118,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	}
 	signer.Type = sigType
 
-	keyInfo, err := getKey(origin.String(), keyHash)
+	keyInfo, err := getKey(keyHolder.String(), keyHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
@@ -257,7 +267,7 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		sig, err = signer.Initiate(env.Transaction)
 		txHash = env.Transaction.GetHash()
 	case payload == nil && txHash != nil:
-		payload = new(protocol.SignPending)
+		payload = new(protocol.RemoteTransactionBody)
 		env = new(protocol.Envelope)
 		env.TxHash = txHash
 		env.Transaction = new(protocol.Transaction)
@@ -564,7 +574,7 @@ func PrintJsonRpcError(err error) (string, error) {
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
 		if WantJsonOutput {
-			cmd.PrintErrf("{\"error\":%v}", err)
+			cmd.PrintErrf("{\"error\":%v}\n", err)
 		} else {
 			cmd.PrintErrf("Error: %v\n", err)
 		}
@@ -1030,6 +1040,9 @@ func printReflection(field, indent string, value reflect.Value) string {
 
 	if typ.AssignableTo(reflect.TypeOf(new(url2.URL))) {
 		v := value.Interface().(*url2.URL)
+		if v == nil {
+			return out + " (nil)\n"
+		}
 		return out + " " + v.String() + "\n"
 	}
 

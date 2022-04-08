@@ -261,7 +261,7 @@ func processExecuteRequest(req *TxRequest, payload []byte) ([]*protocol.Envelope
 	}
 
 	var sig protocol.Signature
-	if env.Type() == protocol.TransactionTypeSignPending {
+	if env.Type() == protocol.TransactionTypeRemote {
 		sig, err = sigBuilder.Sign(env.GetTxHash())
 	} else {
 		sig, err = sigBuilder.Initiate(env.Transaction)

@@ -208,6 +208,8 @@ type TxnQuery struct {
 	QueryOptions
 	Txid []byte        `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 	Wait time.Duration `json:"wait,omitempty" form:"wait" query:"wait"`
+	// IgnorePending tells QueryTx to ignore pending transactions.
+	IgnorePending bool `json:"ignorePending,omitempty" form:"ignorePending" query:"ignorePending"`
 }
 
 type UrlQuery struct {
@@ -861,12 +863,13 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 
 func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Expand       bool        `json:"expand,omitempty"`
-		ExpandChains bool        `json:"expandChains,omitempty"`
-		Height       uint64      `json:"height,omitempty"`
-		Prove        bool        `json:"prove,omitempty"`
-		Txid         *string     `json:"txid,omitempty"`
-		Wait         interface{} `json:"wait,omitempty"`
+		Expand        bool        `json:"expand,omitempty"`
+		ExpandChains  bool        `json:"expandChains,omitempty"`
+		Height        uint64      `json:"height,omitempty"`
+		Prove         bool        `json:"prove,omitempty"`
+		Txid          *string     `json:"txid,omitempty"`
+		Wait          interface{} `json:"wait,omitempty"`
+		IgnorePending bool        `json:"ignorePending,omitempty"`
 	}{}
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
@@ -874,6 +877,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
+	u.IgnorePending = v.IgnorePending
 	return json.Marshal(&u)
 }
 
@@ -1641,12 +1645,13 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 
 func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Expand       bool        `json:"expand,omitempty"`
-		ExpandChains bool        `json:"expandChains,omitempty"`
-		Height       uint64      `json:"height,omitempty"`
-		Prove        bool        `json:"prove,omitempty"`
-		Txid         *string     `json:"txid,omitempty"`
-		Wait         interface{} `json:"wait,omitempty"`
+		Expand        bool        `json:"expand,omitempty"`
+		ExpandChains  bool        `json:"expandChains,omitempty"`
+		Height        uint64      `json:"height,omitempty"`
+		Prove         bool        `json:"prove,omitempty"`
+		Txid          *string     `json:"txid,omitempty"`
+		Wait          interface{} `json:"wait,omitempty"`
+		IgnorePending bool        `json:"ignorePending,omitempty"`
 	}{}
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
@@ -1654,6 +1659,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
+	u.IgnorePending = v.IgnorePending
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1674,5 +1680,6 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Wait = x
 	}
+	v.IgnorePending = u.IgnorePending
 	return nil
 }
