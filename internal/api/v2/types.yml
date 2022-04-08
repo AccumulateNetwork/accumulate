@@ -275,6 +275,10 @@ TxnQuery:
   - name: Wait
     type: duration
     optional: true
+  - name: IgnorePending
+    description: tells QueryTx to ignore pending transactions
+    type: bool
+    optional: true
 
 ChainIdQuery:
   non-binary: true

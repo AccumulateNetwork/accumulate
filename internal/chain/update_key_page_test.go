@@ -51,7 +51,8 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				WithSigner(protocol.FormatKeyPageUrl(bookUrl, idx), 1).
 				WithTimestamp(1).
 				WithBody(body).
-				Initiate(protocol.SignatureTypeED25519, testKey)
+				Initiate(protocol.SignatureTypeED25519, testKey).
+				Build()
 
 			st := NewStateManagerForTest(t, db, env)
 			defer st.Discard()
