@@ -86,7 +86,7 @@ function success {
 
 # Get number of signatures required using N of M factor
 function sigCount {
-   echo $(printf %.$2f $(echo $(bc -l <<< "($NUM_DNNS * $M_OF_N_FACTOR) - 0.5")))
+   echo $(printf %.$2f $(echo $(bc -l <<< "($NUM_DNNS * $M_OF_N_FACTOR) + 0.5")))
 }
 
 # Format the path to priv_validator_key.json
@@ -121,7 +121,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   wait-for-tx $TXID
 
   # Sign the required number of times
-  for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+  for (( sigNr=1; sigNr<$(sigCount); sigNr++ )); do
     wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
   done
 
@@ -486,7 +486,7 @@ if [ -f "$(nodePrivKey 0)" ]; then
     wait-for-tx $TXID
 
     # Sign the required number of times
-    for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+    for (( sigNr=1; sigNr<$(sigCount); sigNr++ )); do
       wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
     done
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
@@ -525,7 +525,7 @@ if [ ! -z "${ACCPID}" ]; then
     wait-for-tx $TXID
 
     # Sign the required number of times
-    for (( sigNr=1; sigNr<=$(sigCount); sigNr++ )); do
+    for (( sigNr=1; sigNr<$(sigCount); sigNr++ )); do
       wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
     done
     accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
