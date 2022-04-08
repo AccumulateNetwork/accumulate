@@ -106,6 +106,7 @@ func (b *BPT) SaveSnapshot(filename string) error {
 	_, e2 = file.Write(common.Uint64FixedBytes(NodeCnt)) //   and update number of nodes found
 	_, e3 = values.Seek(0, 0)                            // Go to front of values
 	_, e4 := file.Seek(0, 2)                             // Go to the end of file
+	_, e5 := io.Copy(file, values)                       // Copy values to file
 	switch {                                             // Not likely to fail, but report if it does
 	case e1 != nil:
 		return e1
@@ -114,24 +115,12 @@ func (b *BPT) SaveSnapshot(filename string) error {
 	case e3 != nil:
 		return e3
 	case e4 != nil:
-		return e3
+		return e4
+	case e5 != nil:
+		return e5
 	}
 
-	buff := make([]byte, 1024*128) //                        Just have to copy values onto the end of file
-	for {                          //                        so just blindly copy with a big buffer
-		n, e1 := values.Read(buff[:]) //                     Read a bunch
-		switch {                      //                     Check if done, or if an error
-		case e1 == io.EOF && n == 0: //                         When we read nothing, we are done
-			return nil
-		case e1 != nil:
-			return e1
-		}
-		_, e2 := file.Write(buff[:n]) //                     Write a bunch
-
-		if e2 != nil {
-			return e2
-		}
-	} //                                                     rinse and repeat until all values written
+	return nil
 }
 
 // ReadSnapshot
