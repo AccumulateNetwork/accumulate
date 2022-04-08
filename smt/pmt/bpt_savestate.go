@@ -130,7 +130,7 @@ func (b *BPT) LoadSnapshot(filename string) error {
 		return errors.New("A snapshot can only be read into a new BPT")
 	}
 
-	file, err := os.OpenFile(filename, os.O_RDWR, 0644)
+	file, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
