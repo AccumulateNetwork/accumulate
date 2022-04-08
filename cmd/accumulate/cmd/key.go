@@ -425,7 +425,7 @@ func GenerateKey(label string) (string, error) {
 }
 
 func ListKeyPublic() (out string, err error) {
-	out = fmt.Sprintf("Public Key\t\t\t\t\t\t\t\tKey name\n")
+	out = "Public Key\t\t\t\t\t\t\t\tKey name\n"
 	b, err := Db.GetBucket(BucketLabel)
 	if err != nil {
 		return "", err
