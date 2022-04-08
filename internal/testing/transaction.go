@@ -53,7 +53,7 @@ func (tb TransactionBuilder) WithTimestamp(nonce uint64) TransactionBuilder {
 	return tb
 }
 
-func (tb TransactionBuilder) WithNonceVar(nonce *uint64) TransactionBuilder {
+func (tb TransactionBuilder) WithTimestampVar(nonce *uint64) TransactionBuilder {
 	tb.signer.SetTimestampWithVar(nonce)
 	return tb
 }
@@ -77,7 +77,7 @@ func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
 	return tb
 }
 
-func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte) *protocol.Envelope {
+func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	switch {
 	case tb.TxHash != nil:
 		// OK
@@ -94,10 +94,10 @@ func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte)
 	}
 
 	tb.Signatures = append(tb.Signatures, sig)
-	return tb.Envelope
+	return tb
 }
 
-func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) *protocol.Envelope {
+func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	if tb.TxHash != nil {
 		panic("cannot initiate transaction: have hash instead of body")
 	}
@@ -113,6 +113,10 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 	}
 
 	tb.Signatures = append(tb.Signatures, sig)
+	return tb
+}
+
+func (tb TransactionBuilder) Build() *protocol.Envelope {
 	return tb.Envelope
 }
 

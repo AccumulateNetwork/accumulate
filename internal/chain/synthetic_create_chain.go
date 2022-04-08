@@ -99,6 +99,10 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (p
 
 		// Make sure the key book actually exists
 		for _, auth := range auth.Authorities {
+			if !record.GetUrl().LocalTo(auth.Url) {
+				continue
+			}
+
 			var book *protocol.KeyBook
 			err = st.LoadUrlAs(auth.Url, &book)
 			if err != nil {

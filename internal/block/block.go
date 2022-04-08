@@ -1,40 +1,13 @@
 package block
 
 import (
-	"time"
+	"fmt"
 
-	"github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-// BeginBlockRequest is the input parameter to Chain.BeginBlock.
-type BeginBlockRequest struct {
-	IsLeader   bool
-	Height     int64
-	Time       time.Time
-	CommitInfo *types.LastCommitInfo
-	Evidence   []types.Evidence
-}
-
-// BeginBlockResponse is the return value of Chain.BeginBlock.
-type BeginBlockResponse struct{}
-
-// SynthTxnReference is a reference to a produced synthetic transaction.
-type SynthTxnReference struct {
-	Type  uint64   `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Hash  [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	Url   string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	TxRef [32]byte `json:"txRef,omitempty" form:"txRef" query:"txRef" validate:"required"`
-}
-
-// EndBlockRequest is the input parameter to Chain.EndBlock
-type EndBlockRequest struct{}
-
-type EndBlockResponse struct {
-	ValidatorsUpdates []chain.ValidatorUpdate
-}
 
 type Block struct {
 	BlockMeta
@@ -43,51 +16,162 @@ type Block struct {
 	Batch  *database.Batch
 }
 
-// BlockMeta is metadata about a block.
-type BlockMeta struct {
-	IsLeader   bool
-	Index      int64
-	Time       time.Time
-	CommitInfo *types.LastCommitInfo
-	Evidence   []types.Evidence
+type Delivery struct {
+	parent      *Delivery
+	Signatures  []protocol.Signature
+	Transaction *protocol.Transaction
+	Remote      []protocol.KeySignature
+	State       chain.ProcessTransactionState
 }
 
-// BlockState tracks various metrics of a block of transactions as they are
-// executed.
-type BlockState struct {
-	Delivered         uint64
-	Signed            uint64
-	SynthSigned       uint64
-	SynthSent         uint64
-	ValidatorsUpdates []chain.ValidatorUpdate
-	ProducedTxns      []*protocol.Transaction
-	ChainUpdates      chain.ChainUpdates
+// IsForwarded returns true if the transaction was delivered within a
+// SyntheticForwardedTransaction.
+func (d *Delivery) IsForwarded() bool {
+	if d.parent == nil {
+		return false
+	}
+	return d.parent.Transaction.Body.Type() == protocol.TransactionTypeSyntheticForwardTransaction
 }
 
-// Empty returns true if nothing happened during the block.
-func (s *BlockState) Empty() bool {
-	return s.Delivered == 0 &&
-		s.Signed == 0 &&
-		s.SynthSigned == 0 &&
-		s.SynthSent == 0 &&
-		len(s.ValidatorsUpdates) == 0 &&
-		len(s.ProducedTxns) == 0 &&
-		len(s.ChainUpdates.Entries) == 0
+func (d *Delivery) prepare(block *Block, envelope *protocol.Envelope) (*Delivery, error) {
+	// Load the transaction using the block batch
+	transaction, err := loadTransaction(block.Batch, envelope)
+	if err != nil {
+		return nil, err
+	}
+
+	e := new(Delivery)
+	e.parent = d
+	e.Signatures = envelope.Signatures
+	e.Transaction = transaction
+	return e, nil
 }
 
-type ProcessSignatureState struct {
+func PrepareDelivery(block *Block, envelope *protocol.Envelope) (*Delivery, error) {
+	return (*Delivery)(nil).prepare(block, envelope)
 }
 
-func (s *ProcessSignatureState) Merge(r *ProcessSignatureState) {
-}
+func (x *Executor) ExecuteEnvelope(block *Block, delivery *Delivery) (*protocol.TransactionStatus, error) {
+	// Process signatures
+	var err error
+	{
+		batch := block.Batch.Begin(true)
+		defer batch.Discard()
 
-func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
-	s.Signed++
-}
+		for _, signature := range delivery.Signatures {
+			s, err := x.ProcessSignature(batch, delivery, signature)
+			if err != nil {
+				return nil, err
+			}
+			block.State.MergeSignature(s)
 
-func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
-	s.Delivered++
-	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
-	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
-	s.ChainUpdates.Merge(&r.ChainUpdates)
+			if !s.Remote {
+				continue
+			}
+
+			keySig, ok := signature.(protocol.KeySignature)
+			if !ok {
+				// This should never happen
+				return nil, fmt.Errorf("unexpected remote signature that is not a key signature: %T", signature)
+			}
+
+			if s.Remote {
+				delivery.Remote = append(delivery.Remote, keySig)
+			}
+		}
+
+		err = batch.Commit()
+		if err != nil {
+			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+		}
+	}
+
+	// Process remote signatures
+	if len(delivery.Remote) > 0 {
+		fwdTxn, err := x.ProcessRemoteSignatures(block, delivery.Transaction, delivery.Remote)
+		if err != nil {
+			return nil, err
+		}
+		delivery.State.DidProduceTxn(delivery.Transaction.Header.Principal, fwdTxn)
+	}
+
+	var status *protocol.TransactionStatus
+	if len(delivery.Remote) == len(delivery.Signatures) {
+		// All signatures are remote
+		status = &protocol.TransactionStatus{Remote: true}
+
+	} else {
+		// Process the transaction
+		batch := block.Batch.Begin(true)
+		defer batch.Discard()
+
+		var state *chain.ProcessTransactionState
+		status, state, err = x.ProcessTransaction(batch, delivery.Transaction)
+		if err != nil {
+			return nil, err
+		}
+
+		err = batch.Commit()
+		if err != nil {
+			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+		}
+
+		delivery.State.Merge(state)
+
+		if !delivery.Transaction.Type().IsInternal() && delivery.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
+			kv := []interface{}{
+				"module", "block-executor",
+				"block", block.Index,
+				"type", delivery.Transaction.Type(),
+				"pending", status.Pending,
+				"delivered", status.Delivered,
+				"remote", status.Remote,
+				"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+				"principal", delivery.Transaction.Header.Principal,
+			}
+			if status.Code != 0 {
+				kv = append(kv,
+					"code", status.Code,
+					"error", status.Message,
+				)
+				x.Logger.Info("Transaction failed", kv...)
+			} else {
+				x.Logger.Debug("Transaction succeeded", kv...)
+			}
+		}
+	}
+
+	block.State.MergeTransaction(&delivery.State)
+
+	// Process synthetic transactions generated by the validator
+	{
+		batch := block.Batch.Begin(true)
+		defer batch.Discard()
+
+		err = x.ProduceSynthetic(batch, delivery.Transaction, delivery.State.ProducedTxns)
+		if err != nil {
+			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		}
+
+		err = batch.Commit()
+		if err != nil {
+			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+		}
+	}
+
+	// Process additional transactions
+	for _, envelope := range delivery.State.AdditionalTransactions {
+		delivery, err := delivery.prepare(block, envelope)
+		if err != nil {
+			return nil, err
+		}
+
+		// Discard the status of additional transactions
+		_, err = x.ExecuteEnvelope(block, delivery)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return status, nil
 }

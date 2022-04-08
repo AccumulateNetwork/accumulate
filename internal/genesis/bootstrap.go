@@ -75,7 +75,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
 		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
-		oraclePrice := uint64(0.05 * protocol.AcmeOraclePrecision)
+		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
 
 		// Create the ledger
 		ledger := new(protocol.InternalLedger)
