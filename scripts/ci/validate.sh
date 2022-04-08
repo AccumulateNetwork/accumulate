@@ -114,10 +114,11 @@ declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
 if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
   section "Add a new DN validator"
-  accumulated init node 3 tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
+  declare NEXT_DNNS=$((NUM_DNNS+1))
+  accumulated init node "$NEXT_DNNS" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
 
   # Register new validator
-  TXID=$(cli-tx validator add dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
+  TXID=$(cli-tx validator add dn "$(nodePrivKey 0)" "$(nodePrivKey $NEXT_DNNS)")
   wait-for-tx $TXID
 
   # Sign the required number of times
@@ -128,7 +129,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   # Start the new validator and increment NUM_DMNS
   accumulated run -n 3 -w "$DN_NODES_DIR" &
   declare -g ACCPID=$!
-  NUM_DNNS=$((NUM_DNNS+1))
+  declare -g NUM_DNNS=$NUM_DNNS
 fi
 
 section "Generate a Lite Token Account"
@@ -524,7 +525,7 @@ if [ ! -z "${ACCPID}" ]; then
     TXID=$(cli-tx validator remove dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
     wait-for-tx $TXID
 
-    # Sign the required number of times
+    # Sign the required number of times (minus signature
     for (( sigNr=1; sigNr<$(sigCount); sigNr++ )); do
       wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
     done
