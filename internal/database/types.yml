@@ -29,9 +29,6 @@ merkleState:
     - name: Pending
       type: hash
       repeatable: true
-    - name: HashList
-      type: hash
-      repeatable: true
 
 exampleFullAccountState:
   fields:

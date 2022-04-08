@@ -1,3 +1,6 @@
+//go:build !example
+// +build !example
+
 package database
 
 import (
@@ -34,15 +37,25 @@ func (b *Batch) ExampleGetFullState(key storage.Key) ([]byte, error) {
 		ms2 := new(merkleState)
 		ms2.Count = uint64(ms1.Count)
 		ms2.Pending = make([][32]byte, len(ms1.Pending))
-		ms2.HashList = make([][32]byte, len(ms1.HashList))
 		for i, v := range ms1.Pending {
+			if len(v) == 0 {
+				continue
+			}
 			ms2.Pending[i] = v.Bytes32()
-		}
-		for i, v := range ms1.HashList {
-			ms2.HashList[i] = v.Bytes32()
 		}
 		fullState.Chains[i] = ms2
 	}
 
-	return fullState.MarshalBinary()
+	data, err := fullState.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(fullState.Chains) >= 2 {
+		test, _ := fullState.Chains[1].MarshalBinary()
+		fmt.Println(len(test))
+	}
+
+	fmt.Println(len(data))
+	return data, nil
 }

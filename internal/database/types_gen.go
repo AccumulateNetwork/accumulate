@@ -24,7 +24,6 @@ type merkleState struct {
 	fieldsSet []bool
 	Count     uint64     `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	HashList  [][32]byte `json:"hashList,omitempty" form:"hashList" query:"hashList" validate:"required"`
 }
 
 type sigSetData struct {
@@ -68,10 +67,6 @@ func (v *merkleState) Copy() *merkleState {
 	u.Pending = make([][32]byte, len(v.Pending))
 	for i, v := range v.Pending {
 		u.Pending[i] = v
-	}
-	u.HashList = make([][32]byte, len(v.HashList))
-	for i, v := range v.HashList {
-		u.HashList[i] = v
 	}
 
 	return u
@@ -143,14 +138,6 @@ func (v *merkleState) Equal(u *merkleState) bool {
 	}
 	for i := range v.Pending {
 		if !(v.Pending[i] == u.Pending[i]) {
-			return false
-		}
-	}
-	if len(v.HashList) != len(u.HashList) {
-		return false
-	}
-	for i := range v.HashList {
-		if !(v.HashList[i] == u.HashList[i]) {
 			return false
 		}
 	}
@@ -250,7 +237,6 @@ func (v *exampleFullAccountState) IsValid() error {
 var fieldNames_merkleState = []string{
 	1: "Count",
 	2: "Pending",
-	3: "HashList",
 }
 
 func (v *merkleState) MarshalBinary() ([]byte, error) {
@@ -263,11 +249,6 @@ func (v *merkleState) MarshalBinary() ([]byte, error) {
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
 			writer.WriteHash(2, &v)
-		}
-	}
-	if !(len(v.HashList) == 0) {
-		for _, v := range v.HashList {
-			writer.WriteHash(3, &v)
 		}
 	}
 
@@ -287,11 +268,6 @@ func (v *merkleState) IsValid() error {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field HashList is missing")
-	} else if len(v.HashList) == 0 {
-		errs = append(errs, "field HashList is not set")
 	}
 
 	switch len(errs) {
@@ -484,13 +460,6 @@ func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	for {
-		if x, ok := reader.ReadHash(3); ok {
-			v.HashList = append(v.HashList, *x)
-		} else {
-			break
-		}
-	}
 
 	seen, err := reader.Reset(fieldNames_merkleState)
 	v.fieldsSet = seen
@@ -578,18 +547,13 @@ func (v *exampleFullAccountState) MarshalJSON() ([]byte, error) {
 
 func (v *merkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Count    uint64   `json:"count,omitempty"`
-		Pending  []string `json:"pending,omitempty"`
-		HashList []string `json:"hashList,omitempty"`
+		Count   uint64   `json:"count,omitempty"`
+		Pending []string `json:"pending,omitempty"`
 	}{}
 	u.Count = v.Count
 	u.Pending = make([]string, len(v.Pending))
 	for i, x := range v.Pending {
 		u.Pending[i] = encoding.ChainToJSON(x)
-	}
-	u.HashList = make([]string, len(v.HashList))
-	for i, x := range v.HashList {
-		u.HashList[i] = encoding.ChainToJSON(x)
 	}
 	return json.Marshal(&u)
 }
@@ -643,18 +607,13 @@ func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
 
 func (v *merkleState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Count    uint64   `json:"count,omitempty"`
-		Pending  []string `json:"pending,omitempty"`
-		HashList []string `json:"hashList,omitempty"`
+		Count   uint64   `json:"count,omitempty"`
+		Pending []string `json:"pending,omitempty"`
 	}{}
 	u.Count = v.Count
 	u.Pending = make([]string, len(v.Pending))
 	for i, x := range v.Pending {
 		u.Pending[i] = encoding.ChainToJSON(x)
-	}
-	u.HashList = make([]string, len(v.HashList))
-	for i, x := range v.HashList {
-		u.HashList[i] = encoding.ChainToJSON(x)
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -666,14 +625,6 @@ func (v *merkleState) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("error decoding Pending: %w", err)
 		} else {
 			v.Pending[i] = x
-		}
-	}
-	v.HashList = make([][32]byte, len(u.HashList))
-	for i, x := range u.HashList {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding HashList: %w", err)
-		} else {
-			v.HashList[i] = x
 		}
 	}
 	return nil
