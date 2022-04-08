@@ -233,13 +233,13 @@ func (m *Executor) InitChain(block *Block, data []byte) ([]byte, error) {
 }
 
 // BeginBlock implements ./Chain
-func (m *Executor) BeginBlock(block *Block) (resp BeginBlockResponse, err error) {
+func (m *Executor) BeginBlock(block *Block) (err error) {
 	m.logDebug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
 	// Reset the block state
 	err = indexing.BlockState(block.Batch, m.Network.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
-		return BeginBlockResponse{}, nil
+		return err
 	}
 
 	// Load the ledger state
@@ -257,7 +257,7 @@ func (m *Executor) BeginBlock(block *Block) (resp BeginBlockResponse, err error)
 		// OK
 
 	default:
-		return BeginBlockResponse{}, fmt.Errorf("cannot load ledger: %w", err)
+		return fmt.Errorf("cannot load ledger: %w", err)
 	}
 
 	// Reset transient values
@@ -266,7 +266,7 @@ func (m *Executor) BeginBlock(block *Block) (resp BeginBlockResponse, err error)
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
-		return BeginBlockResponse{}, fmt.Errorf("cannot write ledger: %w", err)
+		return fmt.Errorf("cannot write ledger: %w", err)
 	}
 
 	//store votes from previous block, choosing to marshal as json to make it easily viewable by explorers
@@ -299,7 +299,7 @@ func (m *Executor) BeginBlock(block *Block) (resp BeginBlockResponse, err error)
 		}
 	}
 
-	return BeginBlockResponse{}, nil
+	return nil
 }
 
 func (m *Executor) processInternalDataTransaction(block *Block, internalAccountPath string, wd *protocol.WriteData) error {

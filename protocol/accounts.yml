@@ -7,6 +7,15 @@ UnknownAccount:
       type: url
       pointer: true
 
+UnknownSigner:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Version
+      type: uvarint
+
 LiteIdentity:
   union: { type: account }
   fields:
