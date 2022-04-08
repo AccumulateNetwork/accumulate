@@ -32,11 +32,13 @@ func TestSaveState(t *testing.T) {
 		chainID := keys.NextAList() //      Get a key, keep a list
 		value := values.GetRandBuff(int(values.GetRandInt64() % 100))
 		hash := sha256.Sum256(value)
-		storeTx.Put(hash, value)
+		err := storeTx.Put(hash, value)
+		require.NoError(t, err, "fail")
 		bpt.Insert(chainID, hash) //      Insert the Key with the value into the BPT
 	}
 	err = bptManager.Bpt.Update()
-	bptManager.DBManager.Commit()
+	require.NoError(t, err, "fail")
+	err = bptManager.DBManager.Commit()
 	require.NoError(t, err, "fail")
 	bpt.manager.DBManager = BDB.Begin(true)
 
@@ -45,7 +47,7 @@ func TestSaveState(t *testing.T) {
 	bptMan := NewBPTManager(nil)
 	err = bptMan.Bpt.LoadSnapshot(DirName + "/SnapShot")
 	require.NoErrorf(t, err, "%v", err)
-	bptMan.Bpt.Update()
+	err = bptMan.Bpt.Update()
 	require.True(t, bpt.Root.Hash == bptMan.Bpt.RootHash, "fail")
 	require.Nil(t, err, "snapshot failed")
 }

@@ -37,19 +37,22 @@ func (b *BPT) SaveSnapshot(filename string) error {
 		return fmt.Errorf("No manager found for BPT") //      return error
 	}
 
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0600) //    Open the snapshot file
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) //                    Safe Space to write number of nodes
+	file, e1 := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0600) //    Open the snapshot file
+	_, e2 := file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) //                    Safe Space to write number of nodes
+	values, e3 := os.CreateTemp("", "values") //             Collect the values here
 
-	values, err := os.CreateTemp("", "values") //             Collect the values here
-	if err != nil {
-		return err
-	}
+	defer file.Close()
 	defer os.Remove(values.Name())
 	defer values.Close()
+
+	switch { //        Unlikely errors, but report them if found
+	case e1 != nil:
+		return e1
+	case e2 != nil:
+		return e2
+	case e3 != nil:
+		return e3
+	}
 
 	// Start is the first possible key in a BPT
 	place := [32]byte{
@@ -70,14 +73,14 @@ func (b *BPT) SaveSnapshot(filename string) error {
 		place = next //                                     We will get the next 1000 after the last 1000
 
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
-			file.Write(v.Key[:])                         // Write the key out
-			file.Write(v.Hash[:])                        // Write the hash out
-			file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
+			_, e1 := file.Write(v.Key[:])                         // Write the key out
+			_, e2 := file.Write(v.Hash[:])                        // Write the hash out
+			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e1 := b.manager.DBManager.Get(v.Hash)         // Get that next value
+			value, e4 := b.manager.DBManager.Get(v.Hash)         // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
-			_, e2 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
-			_, e3 := values.Write(value)                         // write out the value
+			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
+			_, e6 := values.Write(value)                         // write out the value
 
 			vOffset += uint64(len(value)) + 8 // then set the offest past the end of the value
 
@@ -88,6 +91,12 @@ func (b *BPT) SaveSnapshot(filename string) error {
 				return e2
 			case e3 != nil:
 				return e3
+			case e4 != nil:
+				return e4
+			case e5 != nil:
+				return e5
+			case e6 != nil:
+				return e6
 			}
 		}
 	}
