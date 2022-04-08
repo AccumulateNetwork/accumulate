@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"runtime/debug"
 	"time"
 
@@ -42,6 +43,7 @@ type Accumulator struct {
 }
 
 type AccumulatorOptions struct {
+	DumpDir  string
 	Executor *block.Executor
 	DB       *database.Database
 	Logger   log.Logger
@@ -441,6 +443,9 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	// Commit the batch
 	err := app.block.Batch.Commit()
 	if err != nil {
+		if app.DumpDir != "" {
+			app.block.Batch.Dump(filepath.Join(app.DumpDir, "batch-core-dump.json"))
+		}
 		app.fatal(err, true)
 		return abci.ResponseCommit{}
 	}

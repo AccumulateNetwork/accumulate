@@ -2,8 +2,11 @@ package database
 
 import (
 	"encoding"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 
 	encoding2 "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -24,6 +27,60 @@ type Batch struct {
 	store       storage.KeyValueTxn
 	values      map[storage.Key]cachedValue
 	bptEntries  map[storage.Key][32]byte
+}
+
+// Dump dumps the batch to a file. Dump will panic if anything fails.
+func (b *Batch) Dump(filename string) {
+	f, err := os.Create(filename)
+	if err != nil {
+		panic(fmt.Errorf("dumping batch: open %q: %w", filename, err))
+	}
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			panic(fmt.Errorf("dumping batch: close %q: %w", filename, err))
+		}
+	}()
+
+	dump := struct {
+		Values map[string]json.RawMessage
+		BPT    map[string]string
+		Raw    map[string]string
+	}{
+		Values: map[string]json.RawMessage{},
+		BPT:    map[string]string{},
+		Raw:    map[string]string{},
+	}
+
+	for k, v := range b.values {
+		if !v.dirty {
+			continue
+		}
+		data, err := json.Marshal(v.value)
+		if err != nil {
+			data, _ = json.Marshal(err.Error())
+		}
+		dump.Values[k.String()] = data
+	}
+	for k, v := range b.bptEntries {
+		dump.BPT[k.String()] = hex.EncodeToString(v[:])
+	}
+
+	store := b.store
+	if dbg, ok := store.(*storage.DebugBatch); ok {
+		store = dbg.Batch
+	}
+
+	if exp, ok := store.(interface{ Export() map[storage.Key][]byte }); ok {
+		for k, v := range exp.Export() {
+			dump.Raw[k.String()] = hex.EncodeToString(v)
+		}
+	}
+
+	err = json.NewEncoder(f).Encode(dump)
+	if err != nil {
+		panic(fmt.Errorf("dumping batch: encode to %q: %w", filename, err))
+	}
 }
 
 // Begin starts a new batch.

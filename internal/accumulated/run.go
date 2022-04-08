@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -162,6 +163,7 @@ func (d *Daemon) Start() (err error) {
 		Executor: exec,
 		Logger:   d.Logger,
 		Network:  d.Config.Accumulate.Network,
+		DumpDir:  filepath.Join(d.Config.RootDir, "dump"),
 	})
 
 	// Create node

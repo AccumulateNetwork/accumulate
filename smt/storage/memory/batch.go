@@ -39,6 +39,15 @@ func NewBatch(get GetFunc, commit CommitFunc) storage.KeyValueTxn {
 	return b
 }
 
+// Export writes the batch to a map
+func (b *Batch) Export() map[storage.Key][]byte {
+	ex := make(map[storage.Key][]byte, len(b.values))
+	for k, v := range b.values {
+		ex[k] = v
+	}
+	return ex
+}
+
 func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	var b storage.KeyValueTxn
 	if writable {

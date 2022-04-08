@@ -161,7 +161,7 @@ func InitChain(t testing.TB, db *database.Database, exec *Executor) {
 	require.NoError(t, block.Batch.Commit())
 }
 
-func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
+func ExecuteBlockNoCommit(t testing.TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
 	if block == nil {
 		block = new(Block)
 		block.IsLeader = true
@@ -187,6 +187,17 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 	}
 
 	require.NoError(t, exec.EndBlock(block))
+
+	return results
+}
+
+func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
+	if block == nil {
+		block = new(Block)
+		block.IsLeader = true
+	}
+
+	results := ExecuteBlockNoCommit(t, db, exec, block, envelopes...)
 
 	// Is the block empty?
 	if block.State.Empty() {
