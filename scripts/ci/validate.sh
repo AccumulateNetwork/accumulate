@@ -113,6 +113,9 @@ declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
 if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
   section "Add a new DN validator"
+  echo Current keypage dn/validators/1
+  accumulate page get acc://dn/validators/1
+
   # NUM_DNNS already contains the next node number (which starts counting at 0)
   accumulated init node "$NUM_DNNS" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
 
@@ -131,6 +134,9 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
 
   # Increment NUM_DNNS so sigCount returns an updated result
   declare -g NUM_DNNS=$((NUM_DNNS + 1))
+
+  echo Updated keypage dn/validators/1
+  accumulate page get acc://dn/validators/1
 fi
 
 section "Generate a Lite Token Account"
