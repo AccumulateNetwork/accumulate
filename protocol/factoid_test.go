@@ -2,10 +2,10 @@ package protocol_test
 
 import (
 	"crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type FactoidPair struct {

@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
