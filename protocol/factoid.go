@@ -64,7 +64,7 @@ func GetLiteAccountFromFactoidAddress(fa string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	return LiteTokenAddress(rcdHash, ACME)
+	return LiteTokenAddressFromHash(rcdHash, ACME)
 }
 
 func GetFactoidAddressFromRCDHash(rcd []byte) (string, error) {

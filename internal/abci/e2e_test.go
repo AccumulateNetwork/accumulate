@@ -982,7 +982,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	liteKey, fooKey := generateKey(), generateKey()
 
-	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), "ACME")
+	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
@@ -1073,7 +1073,7 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
 	require.NoError(t, batch.Commit())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1146,9 +1146,9 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	issuer := n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
-	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], "acme")
+	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	underLimit := int64(1000 * fooPrecision)
@@ -1276,7 +1276,7 @@ func TestInvalidDeposit(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	liteKey := generateKey()
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
