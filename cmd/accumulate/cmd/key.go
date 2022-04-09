@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
@@ -34,12 +35,20 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
-		if len(args) > 0 {
+
+		//set the default signature type
+		sigType := protocol.SignatureTypeED25519
+		if SigType != "" {
+			sigType, err = ValidateSigType(SigType)
+		}
+
+		if len(args) > 0 && err == nil {
 			switch arg := args[0]; arg {
 			case "import":
 				if len(args) == 3 {
 					if args[1] == "lite" {
-						out, err = ImportKey(args[2], "")
+
+						out, err = ImportKey(args[2], "", sigType)
 					} else if args[1] == "factoid" {
 						out, err = ImportFactoidKey(args[2])
 					} else {
@@ -50,7 +59,7 @@ var keyCmd = &cobra.Command{
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
 					case "private":
-						out, err = ImportKey(args[2], args[3])
+						out, err = ImportKey(args[2], args[3], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -102,7 +111,7 @@ var keyCmd = &cobra.Command{
 }
 
 func init() {
-	keyCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
 }
 
 var keyUpdateCmd = &cobra.Command{
@@ -113,11 +122,13 @@ var keyUpdateCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label      types.String `json:"name,omitempty"`
-	PrivateKey types.Bytes  `json:"privateKey,omitempty"`
-	PublicKey  types.Bytes  `json:"publicKey,omitempty"`
-	Seed       types.Bytes  `json:"seed,omitempty"`
-	Mnemonic   types.String `json:"mnemonic,omitempty"`
+	Label       types.String           `json:"name,omitempty"`
+	PrivateKey  types.Bytes            `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes            `json:"publicKey,omitempty"`
+	KeyType     protocol.SignatureType `json:"keyType,omitempty"`
+	LiteAccount *url.URL               `json:"liteAccount,omitempty"`
+	Seed        types.Bytes            `json:"seed,omitempty"`
+	Mnemonic    types.String           `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -167,9 +178,10 @@ func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error
 		return 0, nil, err
 	}
 
-	sigType, err := ValidateSigType(string(sig))
-	if err != nil {
-		return 0, nil, err
+	t, _ := common.BytesUint64(sig)
+	var sigType protocol.SignatureType
+	if !sigType.SetEnumValue(t) {
+		return 0, nil, fmt.Errorf("unknown signature type %d", t)
 	}
 
 	switch sigType {
@@ -264,6 +276,20 @@ func pubKeyFromString(s string) ([]byte, error) {
 	return pubKey[:], nil
 }
 
+func LookupByLite(lite string) ([]byte, error) {
+	liteKey, isLite := LabelForLiteTokenAccount(lite)
+	if !isLite {
+		return nil, fmt.Errorf("invalid lite account %s", liteKey)
+	}
+
+	label, err := Db.Get(BucketLite, []byte(liteKey))
+	if err != nil {
+		return nil, fmt.Errorf("lite account not found %s", lite)
+	}
+
+	return LookupByLabel(string(label))
+}
+
 func LookupByLabel(label string) ([]byte, error) {
 	label, _ = LabelForLiteTokenAccount(label)
 
@@ -301,6 +327,27 @@ func GenerateKey(label string) (string, error) {
 		return "", fmt.Errorf("key name cannot be a number")
 	}
 
+	if label != "" {
+		_, _, _, errFs := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(label)
+		_, errFA := protocol.GetRCDFromFactoidAddress(label)
+		if errFs == nil || errFA == nil {
+			return "", fmt.Errorf("key name cannot be a factoid address")
+		}
+		u, err := url.Parse(label)
+		if err != nil {
+			return "", err
+		}
+		_, _, err = protocol.ParseLiteTokenAddress(u)
+		if err != nil {
+			return "", fmt.Errorf("key name cannot look like an account")
+		}
+	}
+
+	sigtype, err := ValidateSigType(SigType)
+	if err != nil {
+		return "", err
+	}
+
 	privKey, err := GeneratePrivateKey()
 	if err != nil {
 		return "", err
@@ -308,14 +355,31 @@ func GenerateKey(label string) (string, error) {
 
 	pubKey := privKey[32:]
 
-	if label == "" {
-		ltu, err := protocol.LiteTokenAddress(pubKey, protocol.AcmeUrl().String())
-		if err != nil {
-			return "", fmt.Errorf("unable to create lite token account")
+	var keyHash []byte
+	if sigtype == protocol.SignatureTypeRCD1 {
+		keyHash = protocol.GetRCDHashFromPublicKey(pubKey, 1)
+		if label == "" {
+			label, err = protocol.GetFactoidAddressFromRCDHash(keyHash)
+			if err != nil {
+				return "", err
+			}
 		}
-		label = ltu.String()
+	} else {
+		h := sha256.Sum256(pubKey)
+		keyHash = h[:]
 	}
 
+	lt, err := protocol.LiteTokenAddressFromHash(keyHash, protocol.ACME)
+	if err != nil {
+		return "", fmt.Errorf("no label specified and cannot import as lite token account")
+	}
+	liteLabel, _ := LabelForLiteTokenAccount(lt.String())
+
+	if label == "" {
+		label = liteLabel
+	}
+
+	//here will change the label if it is a lite account specified, otherwise just use the label
 	label, _ = LabelForLiteTokenAccount(label)
 
 	_, err = LookupByLabel(label)
@@ -333,11 +397,12 @@ func GenerateKey(label string) (string, error) {
 		return "", err
 	}
 
-	sigtype, err := ValidateSigType(SigType)
+	err = Db.Put(BucketLite, []byte(liteLabel), []byte(label))
 	if err != nil {
 		return "", err
 	}
-	err = Db.Put(BucketSigType, privKey[32:], []byte(sigtype.String()))
+
+	err = Db.Put(BucketSigType, privKey[32:], common.Uint64Bytes(sigtype.GetEnumValue()))
 	if err != nil {
 		return "", err
 	}
@@ -346,19 +411,21 @@ func GenerateKey(label string) (string, error) {
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
+		a.LiteAccount = lt
+		a.KeyType = sigtype
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		out += fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out += fmt.Sprintf("%s :\t%x", label, pubKey)
+		out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pubKey, sigtype)
 	}
 	return out, nil
 }
 
 func ListKeyPublic() (out string, err error) {
-	out = fmt.Sprintf("%s\t\t\t\t\t\t\t\tKey name\n", "Public Key")
+	out = "Public Key\t\t\t\t\t\t\t\tKey name\n"
 	b, err := Db.GetBucket(BucketLabel)
 	if err != nil {
 		return "", err
@@ -368,6 +435,26 @@ func ListKeyPublic() (out string, err error) {
 		out += fmt.Sprintf("%x\t%s\n", v.Value, v.Key)
 	}
 	return out, nil
+}
+
+func FindLabelFromPublicKeyHash(pubKeyHash []byte) (lab string, err error) {
+	b, err := Db.GetBucket(BucketLabel)
+	if err != nil {
+		return lab, err
+	}
+
+	for _, v := range b.KeyValueList {
+		keyHash := sha256.Sum256(v.Value)
+		if bytes.Equal(keyHash[:], pubKeyHash) {
+			lab = string(v.Key)
+			break
+		}
+	}
+
+	if lab == "" {
+		err = fmt.Errorf("key name not found for key hash %x", pubKeyHash)
+	}
+	return lab, err
 }
 
 func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
@@ -390,8 +477,9 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 // ImportKey will import the private key and assign it to the label
-func ImportKey(pkhex string, label string) (out string, err error) {
+func ImportKey(pkhex string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
+	var liteLabel string
 	var pk ed25519.PrivateKey
 
 	token, err := hex.DecodeString(pkhex)
@@ -405,13 +493,14 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 		pk = token
 	}
 
-	if label == "" {
+	lt, err := protocol.LiteTokenAddress(pk[32:], protocol.ACME, signatureType)
+	if err != nil {
+		return "", fmt.Errorf("no label specified and cannot import as lite token account")
+	}
+	liteLabel, _ = LabelForLiteTokenAccount(lt.String())
 
-		lt, err := protocol.LiteTokenAddress(pk[32:], protocol.AcmeUrl().String())
-		if err != nil {
-			return "", fmt.Errorf("no label specified and cannot import as lite token account")
-		}
-		label = lt.String()
+	if label == "" {
+		label = liteLabel
 	}
 
 	//here will change the label if it is a lite account specified, otherwise just use the label
@@ -437,7 +526,8 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 		}
 	}
 
-	err = Db.Put(BucketKeys, pk[32:], pk)
+	publicKey := pk[32:]
+	err = Db.Put(BucketKeys, publicKey, pk)
 	if err != nil {
 		return "", err
 	}
@@ -447,23 +537,36 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 		return "", err
 	}
 
+	err = Db.Put(BucketLite, []byte(liteLabel), []byte(label))
+	if err != nil {
+		return "", err
+	}
+
+	err = Db.Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
+	if err != nil {
+		return "", err
+	}
+
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
 		a.PublicKey = types.Bytes(pk[32:])
+		a.LiteAccount = lt
+		a.KeyType = signatureType
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:%s\n\tpublic key\t:%x\n", label, pk[32:])
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk[32:], signatureType)
 	}
 	return out, nil
 }
 
 func ExportKey(label string) (string, error) {
 	pk, err := LookupByLabel(label)
+	var sigType protocol.SignatureType
 	if err != nil {
 		pubk, err := pubKeyFromString(label)
 		if err != nil {
@@ -473,9 +576,13 @@ func ExportKey(label string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
-		label, err = FindLabelFromPubKey(pubk)
+		_, err = FindLabelFromPubKey(pubk)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
+		}
+		sigType, _, err = resolveKeyTypeAndHash(pubk)
+		if err != nil {
+			return "", fmt.Errorf("no key type found")
 		}
 	}
 
@@ -484,13 +591,14 @@ func ExportKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PrivateKey = pk[:32]
 		a.PublicKey = pk[32:]
+		a.KeyType = sigType
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s\n", string(dump)), nil
 	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:]), nil
+		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, pk[:32], pk[32:], sigType), nil
 	}
 }
 
@@ -596,6 +704,7 @@ func ExportKeys() (out string, err error) {
 				out += fmt.Sprintf("Error: Cannot find data for key %x\n", v.Key)
 			}
 		} else {
+
 			str, err := ExportKey(label)
 			if err != nil {
 				out += fmt.Sprintf("invalid key for key name %s (error %v)\n", label, err)
@@ -655,71 +764,14 @@ func ExportMnemonic() (string, error) {
 }
 
 func ImportFactoidKey(factoidkey string) (out string, err error) {
-
-	if strings.Contains(factoidkey, "Fs") {
-		label, rcdhash, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
-		if err != nil {
-			return "", err
-		}
-
-		label, _ = LabelForLiteTokenAccount(label)
-		_, err = LookupByLabel(label)
-		if err == nil {
-			return "", fmt.Errorf("key name is already being used")
-		}
-
-		_, err = LookupByPubKey(rcdhash)
-		lab := "not found"
-		if err == nil {
-			b, _ := Db.GetBucket(BucketLabel)
-			if b != nil {
-				for _, v := range b.KeyValueList {
-					if bytes.Equal(v.Value, rcdhash) {
-						lab = string(v.Key)
-						break
-					}
-				}
-				return "", fmt.Errorf("private key already exists in wallet by key name of %s", lab)
-			}
-		}
-
-		err = Db.Put(BucketKeys, rcdhash, privatekey)
-
-		if err != nil {
-			return "", err
-		}
-		err = Db.Put(BucketSigType, rcdhash, []byte(protocol.SignatureTypeRCD1.String()))
-
-		if err != nil {
-			return "", err
-		}
-		err = Db.Put(BucketSigType, privatekey[32:], []byte(protocol.SignatureTypeRCD1.String()))
-
-		if err != nil {
-			return "", err
-		}
-
-		err = Db.Put(BucketLabel, []byte(label), rcdhash)
-		if err != nil {
-			return "", err
-		}
-
-		if WantJsonOutput {
-			a := KeyResponse{}
-			a.Label = types.String(label)
-			a.PublicKey = types.Bytes(rcdhash)
-			dump, err := json.Marshal(&a)
-			if err != nil {
-				return "", err
-			}
-			out = fmt.Sprintf("%s\n", string(dump))
-		} else {
-			out = fmt.Sprintf("\tname\t\t:%s\n\trcd Hash\t:%x\n", label, rcdhash)
-		}
-	} else {
-		out, err = "", fmt.Errorf("invalid factoid key must begin with `Fs`")
+	if !strings.Contains(factoidkey, "Fs") {
+		return "", fmt.Errorf("key to import is not a factoid address")
 	}
-	return out, err
+	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
+	if err != nil {
+		return "", err
+	}
+	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
 }
 
 func UpdateKey(args []string) (string, error) {
