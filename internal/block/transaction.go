@@ -1,7 +1,6 @@
 package block
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -11,87 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
-
-func loadTransaction(batch *database.Batch, envelope *protocol.Envelope) (*protocol.Transaction, error) {
-	// An envelope with no signatures is invalid
-	if len(envelope.Signatures) == 0 {
-		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has no signatures")
-	}
-
-	// The transaction hash must be specified for signature transactions
-	if len(envelope.TxHash) == 0 && envelope.Type() == protocol.TransactionTypeRemote {
-		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "cannot sign pending transaction: missing transaction hash")
-	}
-
-	// The transaction hash and/or the transaction itself must be specified
-	if len(envelope.TxHash) == 0 && envelope.Transaction == nil {
-		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "envelope has neither transaction nor hash")
-	}
-
-	// The transaction hash must be the correct size
-	if len(envelope.TxHash) > 0 && len(envelope.TxHash) != sha256.Size {
-		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash is the wrong size")
-	}
-
-	// If a transaction and a hash are specified, they must match
-	if !envelope.VerifyTxHash() {
-		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction hash does not match transaction")
-	}
-
-	// Check the transaction status
-	status, err := batch.Transaction(envelope.GetTxHash()).GetStatus()
-	switch {
-	case err != nil:
-		// Unknown error
-		return nil, fmt.Errorf("load transaction status: %w", err)
-
-	case status.Delivered:
-		// Transaction has already been delivered
-		return nil, protocol.Errorf(protocol.ErrorCodeAlreadyDelivered, "transaction has already been delivered")
-	}
-
-	// Ignore produced synthetic transactions
-	if status.Remote && !status.Pending {
-		return envelope.Transaction, nil
-	}
-
-	// Load previous transaction state
-	txState, err := batch.Transaction(envelope.GetTxHash()).GetState()
-	if err == nil {
-		// Loaded existing the transaction from the database
-		return txState.Transaction, nil
-	} else if !errors.Is(err, storage.ErrNotFound) {
-		// Unknown error
-		return nil, fmt.Errorf("load transaction: %v", err)
-	}
-
-	// If the envelope does not include a transaction, the transaction must
-	// exist locally
-	if envelope.Transaction == nil {
-		return nil, fmt.Errorf("load transaction: %v", err)
-	}
-
-	if envelope.Transaction.Body.Type() != protocol.TransactionTypeRemote {
-		// Transaction is new
-		return envelope.Transaction, nil
-	}
-
-	// If any signature is local or forwarded, the transaction must exist
-	// locally
-	principal := envelope.Transaction.Header.Principal
-	for _, signature := range envelope.Signatures {
-		if signature.Type() == protocol.SignatureTypeForwarded || signature.GetSigner().LocalTo(principal) {
-			return nil, fmt.Errorf("load transaction: %v", err)
-		}
-	}
-
-	// Set the return value of GetHash
-	err = envelope.Transaction.SetHash(envelope.TxHash)
-	if err != nil {
-		return nil, err
-	}
-	return envelope.Transaction, nil
-}
 
 // ProcessTransaction processes a transaction. It will not return an error if
 // the transaction fails - in that case the status code will be non zero. It
@@ -152,7 +70,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return recordFailedTransaction(batch, transaction, err)
 	}
 
-	result, err := executor.Execute(st, &protocol.Envelope{Transaction: transaction})
+	result, err := executor.Execute(st, &chain.Delivery{Transaction: transaction})
 	if err != nil {
 		return recordFailedTransaction(batch, transaction, err)
 	}
@@ -250,10 +168,8 @@ outer:
 
 func recordTransaction(batch *database.Batch, transaction *protocol.Transaction, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
-	stateEnv := new(protocol.Envelope)
-	stateEnv.Transaction = transaction
 	db := batch.Transaction(transaction.GetHash())
-	err := db.PutState(stateEnv)
+	err := db.PutState(&database.SigOrTxn{Transaction: transaction})
 	if err != nil {
 		return nil, fmt.Errorf("store transaction: %w", err)
 	}

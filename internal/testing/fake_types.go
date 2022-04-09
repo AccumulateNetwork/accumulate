@@ -26,6 +26,7 @@ func (f *FakeSignature) GetSignerVersion() uint64       { return f.SignerVersion
 func (f *FakeSignature) GetTimestamp() uint64           { return f.Timestamp }
 func (f *FakeSignature) GetPublicKey() []byte           { return f.PublicKey }
 func (f *FakeSignature) GetSignature() []byte           { return make([]byte, 32) }
+func (f *FakeSignature) GetTransactionHash() [32]byte   { return [32]byte{} }
 
 func (f *FakeSignature) GetPublicKeyHash() []byte {
 	if f.Type() == protocol.SignatureTypeRCD1 {

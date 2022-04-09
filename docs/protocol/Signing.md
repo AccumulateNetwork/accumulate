@@ -6,6 +6,18 @@
 - An envelope is comprised of signatures and a transaction.
 - A transaction is comprised of a principal account, initiator hash, and body.
 
+## Transaction Hashes
+
+- If the envelope specifies a transaction hash it will be used by any signatures
+  and/or remote transactions that do not themselves include a transaction hash.
+- Otherwise, if the envelope only has a single transaction its hash will be used
+  by any signatures that do not themselves include a transaction hash.
+- All remote transactions in the envelope must themselves include a transaction
+  hash unless the envelope specifies a transaction hash.
+- All signatures in the envelope must themselves include a transaction hash
+  unless the envelope specifies a transaction hash or only has a single
+  transaction.
+
 ## Signing Transactions
 
 - Signatures for a transaction can be split across multiple envelopes.
