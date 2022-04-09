@@ -221,9 +221,9 @@ RemoveValidator:
 UpdateValidatorKey:
   union: { type: transaction }
   fields:
-    - name: KeyHash
+    - name: Key
       type: bytes
-    - name: NewKeyHash
+    - name: NewKey
       type: bytes
 
 UpdateKey:

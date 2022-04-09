@@ -3,7 +3,6 @@ package simulator
 import (
 	"fmt"
 	"sync"
-	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -22,7 +21,7 @@ import (
 )
 
 type Simulator struct {
-	testing.TB
+	tb
 	Logger    log.Logger
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
@@ -30,28 +29,28 @@ type Simulator struct {
 	routingOverrides map[[32]byte]string
 }
 
-func newLogger(t testing.TB) log.Logger {
+func (s *Simulator) newLogger() log.Logger {
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
+		return logging.NewTestLogger(s, "plain", acctesting.DefaultLogLevels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
-	require.NoError(t, err)
+	require.NoError(s, err)
 	level, writer, err := logging.ParseLogLevel(acctesting.DefaultLogLevels, w)
-	require.NoError(t, err)
+	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
-	require.NoError(t, err)
+	require.NoError(s, err)
 	return logger
 }
 
-func New(t testing.TB, bvnCount int) *Simulator {
+func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
 
 	// Initialize the simulartor and network
 	sim := new(Simulator)
 	sim.routingOverrides = map[[32]byte]string{}
 	sim.TB = t
-	sim.Logger = newLogger(t).With("module", "simulator")
+	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
 	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
@@ -64,7 +63,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 		subnet := &sim.Subnets[i]
 		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
 
-		logger := newLogger(t).With("subnet", subnet.ID)
+		logger := sim.newLogger().With("subnet", subnet.ID)
 		key := acctesting.GenerateKey(t.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
@@ -81,7 +80,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 			Network: network,
 			Router:  sim.Router(),
 		}, db)
-		require.NoError(t, err)
+		require.NoError(sim, err)
 
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database: db,
@@ -91,7 +90,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 
 	for _, subnet := range sim.Subnets {
 		x := sim.Subnet(subnet.ID)
-		require.NoError(t, x.Executor.Start())
+		require.NoError(sim, x.Executor.Start())
 	}
 
 	return sim
@@ -297,12 +296,12 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	}
 }
 
-func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) bool, txnHash []byte) {
+func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) (*protocol.TransactionStatus, *protocol.Transaction) {
 	s.Helper()
 
 	var x *ExecEntry
 	for i := 0; i < 50; i++ {
-		x = s.findTxn(status, txnHash)
+		x = s.findTxn(statusCheck, txnHash)
 		if x != nil {
 			break
 		}
@@ -310,7 +309,8 @@ func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) 
 		s.ExecuteBlock(nil)
 	}
 	if x == nil {
-		s.Fatalf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
+		s.Errorf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
+		s.FailNow()
 		panic("unreachable")
 	}
 
@@ -320,8 +320,16 @@ func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) 
 	require.NoError(s, err)
 
 	for _, id := range synth.Hashes {
-		s.WaitForTransaction(status, id[:])
+		s.WaitForTransaction(statusCheck, id[:])
 	}
+
+	batch = x.Database.Begin(false)
+	defer batch.Discard()
+	state, err := batch.Transaction(txnHash).GetState()
+	require.NoError(s, err)
+	status, err := batch.Transaction(txnHash).GetStatus()
+	require.NoError(s, err)
+	return status, state.Transaction
 }
 
 type ExecEntry struct {

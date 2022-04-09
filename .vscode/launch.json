@@ -39,6 +39,16 @@
       ]
     },
     {
+      "name": "Run Playbook",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/play-accumulate",
+      "args": [
+        "${workspaceFolder}/cmd/play-accumulate/examples/lite.play",
+      ]
+    },
+    {
       "name": "Init and run DevNet",
       "type": "go",
       "request": "launch",
