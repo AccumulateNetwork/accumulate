@@ -10,11 +10,11 @@ type WriteDataTo struct{}
 
 func (WriteDataTo) Type() protocol.TransactionType { return protocol.TransactionTypeWriteDataTo }
 
-func (WriteDataTo) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (WriteDataTo) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (WriteDataTo{}).Validate(st, tx)
 }
 
-func (WriteDataTo) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteDataTo)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)

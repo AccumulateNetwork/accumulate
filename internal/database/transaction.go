@@ -37,8 +37,8 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 }
 
 // GetState loads the transaction state.
-func (t *Transaction) GetState() (*protocol.Envelope, error) {
-	v := new(protocol.Envelope)
+func (t *Transaction) GetState() (*SigOrTxn, error) {
+	v := new(SigOrTxn)
 	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (t *Transaction) GetState() (*protocol.Envelope, error) {
 }
 
 // PutState stores the transaction state.
-func (t *Transaction) PutState(v *protocol.Envelope) error {
+func (t *Transaction) PutState(v *SigOrTxn) error {
 	t.batch.putValue(t.key.State(), v)
 	return nil
 }

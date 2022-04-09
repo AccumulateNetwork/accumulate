@@ -10,6 +10,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmtypes "github.com/tendermint/tendermint/types"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -71,9 +72,13 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 	err := exec.BeginBlock(block)
 	require.NoError(t, err)
 
-	results := make([]*protocol.TransactionStatus, len(envelopes))
-	for i, envelope := range envelopes {
-		results[i] = DeliverTx(t, exec, block, envelope)
+	var results []*protocol.TransactionStatus
+	for _, envelope := range envelopes {
+		for _, delivery := range NormalizeEnvelope(t, envelope) {
+			st := DeliverTx(t, exec, block, delivery)
+			st.For = *(*[32]byte)(delivery.Transaction.GetHash())
+			results = append(results, st)
+		}
 	}
 
 	require.NoError(t, exec.EndBlock(block))
@@ -94,13 +99,13 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 	return results
 }
 
-func CheckTx(t testing.TB, db *database.Database, exec *Executor, envelope *protocol.Envelope) (protocol.TransactionResult, error) {
+func CheckTx(t testing.TB, db *database.Database, exec *Executor, delivery *chain.Delivery) (protocol.TransactionResult, error) {
 	t.Helper()
 
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	result, err := exec.ValidateEnvelope(batch, envelope)
+	result, err := exec.ValidateEnvelope(batch, delivery)
 	if err != nil {
 		return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 	}
@@ -110,10 +115,18 @@ func CheckTx(t testing.TB, db *database.Database, exec *Executor, envelope *prot
 	return result, nil
 }
 
-func DeliverTx(t testing.TB, exec *Executor, block *Block, envelope *protocol.Envelope) *protocol.TransactionStatus {
+func NormalizeEnvelope(t testing.TB, envelope *protocol.Envelope) []*chain.Delivery {
 	t.Helper()
 
-	delivery, err := PrepareDelivery(block, envelope)
+	deliveries, err := chain.NormalizeEnvelope(envelope)
+	require.NoError(t, err)
+	return deliveries
+}
+
+func DeliverTx(t testing.TB, exec *Executor, block *Block, delivery *chain.Delivery) *protocol.TransactionStatus {
+	t.Helper()
+
+	err := delivery.LoadTransaction(block.Batch)
 	if err != nil {
 		var perr *protocol.Error
 		if !errors.As(err, &perr) {

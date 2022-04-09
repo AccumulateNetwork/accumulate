@@ -13,11 +13,11 @@ type CreateIdentity struct{}
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (CreateIdentity) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateIdentity{}).Validate(st, tx)
 }
 
-func (CreateIdentity) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)

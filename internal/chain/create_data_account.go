@@ -12,11 +12,11 @@ func (CreateDataAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateDataAccount
 }
 
-func (CreateDataAccount) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateDataAccount) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateDataAccount{}).Validate(st, tx)
 }
 
-func (CreateDataAccount) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateDataAccount)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), tx.Transaction.Body)

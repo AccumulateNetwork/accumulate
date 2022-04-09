@@ -17,13 +17,13 @@ import (
 //
 // ValidateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
-func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.Envelope) (protocol.TransactionResult, error) {
+func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
-	txnType := envelope.Type()
+	txnType := delivery.Transaction.Body.Type()
 	if txnType != protocol.TransactionTypeRemote {
-		txnType = envelope.Transaction.Body.Type()
+		txnType = delivery.Transaction.Body.Type()
 		_, ok := x.executors[txnType]
 		if !ok {
 			return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "unsupported transaction type: %v", txnType)
@@ -31,40 +31,40 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Load the transaction
-	transaction, err := loadTransaction(batch, envelope)
+	err := delivery.LoadTransaction(batch)
 	if err != nil {
 		return nil, err
 	}
 
 	// Check that the signatures are valid
-	for i, signature := range envelope.Signatures {
+	for i, signature := range delivery.Signatures {
 		isInitiator := i == 0 && txnType != protocol.TransactionTypeRemote
 		if isInitiator {
 			// Verify that the initiator signature matches the transaction
-			err = validateInitialSignature(transaction, signature)
+			err = validateInitialSignature(delivery.Transaction, signature)
 			if err != nil {
 				return nil, err
 			}
 		}
 
 		// Basic validation
-		if !signature.Verify(transaction.GetHash()) {
+		if !signature.Verify(delivery.Transaction.GetHash()) {
 			return nil, protocol.Errorf(protocol.ErrorCodeInvalidSignature, "signature %d: invalid", i)
 		}
 
 		// Stateful validation (mostly for synthetic transactions)
 		switch signature := signature.(type) {
 		case *protocol.SyntheticSignature:
-			err = verifySyntheticSignature(&x.Network, batch, transaction, signature, isInitiator)
+			err = verifySyntheticSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
 
 		case *protocol.ReceiptSignature:
-			err = verifyReceiptSignature(&x.Network, batch, transaction, signature, isInitiator)
+			err = verifyReceiptSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
 
 		case *protocol.InternalSignature:
-			err = validateInternalSignature(&x.Network, batch, transaction, signature, isInitiator)
+			err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
 
 		default:
-			err = validateNormalSignature(batch, transaction, signature, isInitiator)
+			err = validateNormalSignature(batch, delivery.Transaction, signature, isInitiator)
 		}
 		if err != nil {
 			return nil, protocol.Errorf(protocol.ErrorCodeInvalidSignature, "signature %d: %w", i, err)
@@ -73,10 +73,9 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 
 	switch {
 	case txnType.IsUser():
-		// The envelope is validated by loadTransaction
 		err = nil
 	case txnType.IsSynthetic():
-		err = validateSyntheticEnvelope(&x.Network, batch, envelope)
+		err = validateSyntheticEnvelope(&x.Network, batch, delivery)
 	case txnType.IsInternal():
 		// TODO Validate internal transactions
 		err = nil
@@ -89,7 +88,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Only validate the transaction when we first receive it
-	if envelope.Type() == protocol.TransactionTypeRemote {
+	if delivery.Transaction.Body.Type() == protocol.TransactionTypeRemote {
 		return new(protocol.EmptyResult), nil
 	}
 
@@ -103,12 +102,12 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	// CheckTx, it does not get recorded. If the synthetic transaction is not
 	// recorded, the BVN that sent it and the client that sent the original
 	// transaction cannot verify that the synthetic transaction was received.
-	if envelope.Type().IsSynthetic() {
+	if delivery.Transaction.Body.Type().IsSynthetic() {
 		return new(protocol.EmptyResult), nil
 	}
 
 	// Load the first signer
-	firstSig := envelope.Signatures[0]
+	firstSig := delivery.Signatures[0]
 	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
 		return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "invalid transaction: initiated by receipt signature")
 	}
@@ -120,32 +119,32 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, envelope *protocol.En
 	}
 
 	// Do not validate remote transactions
-	if !transaction.Header.Principal.LocalTo(signer.GetUrl()) {
+	if !delivery.Transaction.Header.Principal.LocalTo(signer.GetUrl()) {
 		return new(protocol.EmptyResult), nil
 	}
 
 	// Load the principal
-	principal, err := batch.Account(transaction.Header.Principal).GetState()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
 	switch {
 	case err == nil:
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, fmt.Errorf("load principal: %w", err)
-	case !transactionAllowsMissingPrincipal(transaction):
+	case !transactionAllowsMissingPrincipal(delivery.Transaction):
 		return nil, fmt.Errorf("load principal: %w", err)
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.GetUrl(), signer, principal, transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.GetUrl(), signer, principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 
 	// Execute the transaction
-	executor, ok := x.executors[transaction.Body.Type()]
+	executor, ok := x.executors[delivery.Transaction.Body.Type()]
 	if !ok {
-		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", transaction.Body.Type())
+		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", delivery.Transaction.Body.Type())
 	}
 
-	result, err := executor.Validate(st, &protocol.Envelope{Transaction: transaction})
+	result, err := executor.Validate(st, delivery)
 	if err != nil {
 		return nil, err
 	}

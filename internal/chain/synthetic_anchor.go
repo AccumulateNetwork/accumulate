@@ -18,11 +18,11 @@ func (SyntheticAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticAnchor
 }
 
-func (SyntheticAnchor) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticAnchor{}).Validate(st, tx)
 }
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
 	if !ok {
@@ -176,6 +176,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *protocol.Envelope) (prot
 
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = st.nodeUrl
+		sig.TransactionHash = synth.TransactionHash
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
 		st.SignTransaction(synth.TransactionHash[:], sig)
 		synth.NeedsReceipt = false
