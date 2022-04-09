@@ -60,7 +60,6 @@ func run(_ *cobra.Command, filenames []string) {
 			Filename: filepath.Base(filenames[i]),
 			Stdout:   os.Stdout,
 			Stderr:   os.Stderr,
-			Stdin:    os.Stdin,
 		}
 		if C == nil {
 			S.UseSimulator(3)
@@ -68,7 +67,8 @@ func run(_ *cobra.Command, filenames []string) {
 			S.SetStartTime(time.Now())
 			S.UseNetwork(C)
 		}
-		I := NewInterpreter(S)
+		I := interp.New(interp.Options{})
+		InterpUseSession(S, I)
 
 		var level int
 		var heading string
