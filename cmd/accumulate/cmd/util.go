@@ -80,7 +80,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Timestamp = nonceFromTimeNow()
 
 	if IsLiteAccount(origin.String()) {
-		privKey, err := LookupByLabel(origin.String())
+		privKey, err := LookupByLite(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
@@ -833,8 +833,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 
-		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
-		out += fmt.Sprintf("\tLast Used On\t:\t%d\n", ata.LastUsedOn)
+		out += fmt.Sprintf("\tCredits\t\t:\t%v\n", protocol.FormatAmount(ata.CreditBalance, protocol.CreditPrecisionPower))
+		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(ata.LastUsedOn*uint64(time.Microsecond))))
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
@@ -889,15 +889,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
-		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%v\n", protocol.FormatAmount(ss.CreditBalance, protocol.CreditPrecisionPower))
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name(s)\n")
 		for i, k := range ss.Keys {
 			keyName := ""
-			name, err := FindLabelFromPubKey(k.PublicKeyHash)
+			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%v\t\t%x\t%s\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -1016,11 +1016,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyName, err := FindLabelFromPubKey(id.KeyHash)
+		keyName, err := FindLabelFromPublicKeyHash(id.KeyHash)
 		if err != nil {
 			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {
-			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.KeyHash, keyName)
+			out += fmt.Sprintf("Public Key (name(s)) \t:\t%x (%s)\n", id.KeyHash, keyName)
 		}
 
 		out += printGeneralTransactionParameters(res)
