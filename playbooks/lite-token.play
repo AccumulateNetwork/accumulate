@@ -1,29 +1,29 @@
+---
+foo: 1
+---
+
 # Lite Token Accounts
 
 ### Generate a lite address
 
-```go
+```go{ id: 1 }
 alice := GenerateKey("alice")
 aliceAddr := LiteAddress(alice, ACME)
 Show(aliceAddr)
 ```
 
-Result:
-
-```result
+```{ result_of: 1, id: 0, mime: text/plain }
 acc://544c73aba05e0d8693e7afb96dbc029ef6bcd582b4a298c8/ACME
 ```
 
 ### Get tokens
 
-```go
+```go{ id: 2 }
 Show(Faucet(aliceAddr).Wait())
 Show(Get(aliceAddr))
 ```
 
-Result:
-
-```result
+```{ result_of: 2, id: 0, mime: text/plain }
 ACME Faucet Transaction
     Hash:     FEB7DD5BC2F6BF65DEF19D0280126C3528EDC2CBBD71D4D33638E1FC070552FD
     To:       acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
@@ -37,7 +37,7 @@ Lite Token Account
 
 ### Make credits
 
-```go
+```go{ id: 3 }
 Show(Transaction(aliceAddr).
     WithSigner(aliceAddr).
     AddCredits(aliceAddr, 10).
@@ -48,9 +48,7 @@ Show(Transaction(aliceAddr).
 Show(Get(aliceAddr))
 ```
 
-Result:
-
-```result
+```{ result_of: 3, id: 0, mime: text/plain }
 Add Credits Transaction
     Hash:    3BC64CCC30010876BD7EB798526C9C28786CB9D198BE63BA14916463DEC111D9
     From:    acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
@@ -65,7 +63,7 @@ Lite Token Account
 
 ### Send tokens
 
-```go
+```go{ id: 4 }
 bob, charlie := GenerateKey("bob"), GenerateKey("charlie")
 bobAddr, charlieAddr := LiteAddress(bob, ACME), LiteAddress(charlie, ACME)
 
@@ -82,9 +80,7 @@ Show(Get(bobAddr))
 Show(Get(charlieAddr))
 ```
 
-Result:
-
-```result
+```{ result_of: 4, id: 0, mime: text/plain }
 Send Tokens Transaction
     Hash:   105BC8607F7D25A3EE361E8644CE30A6844AB38317936896ABA843DFA70253B9
     From:   acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
@@ -106,3 +102,4 @@ Lite Token Account
     Balance:    42 ACME
     Credits:    0
 ```
+
