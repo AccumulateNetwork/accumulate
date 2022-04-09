@@ -371,9 +371,9 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 	// Deliver never fails, unless the batch cannot be decoded
 	app.txct += int64(len(envelopes))
-	//write after each transaction
-	_ = app.block.Batch.Commit()
-	app.block.Batch = app.DB.Begin(true)
+	////write after each transaction
+	//_ = app.block.Batch.Commit()
+	//app.block.Batch = app.DB.Begin(true)
 
 	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK), Data: respData}
 }
