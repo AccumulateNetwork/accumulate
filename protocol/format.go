@@ -30,6 +30,9 @@ func formatAmount(amount string, precision int) string {
 		ipart = "0"
 	}
 
+	// Trim trailing zeros from the fractional part
+	fpart = strings.TrimRight(fpart, "0")
+
 	// If the fractional part is not empty, add a decimal point
 	if fpart != "" {
 		fpart = "." + fpart

@@ -3,7 +3,6 @@ package simulator
 import (
 	"encoding"
 	"errors"
-	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -19,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitChain(t testing.TB, db *database.Database, exec *Executor) {
+func InitChain(t TB, db *database.Database, exec *Executor) {
 	t.Helper()
 
 	block := new(Block)
@@ -39,18 +38,18 @@ func InitChain(t testing.TB, db *database.Database, exec *Executor) {
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
 	})
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 
 	state, err := temp.MarshalJSON()
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 
 	_, err = exec.InitChain(block, state)
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 
-	require.NoError(t, block.Batch.Commit())
+	require.NoError(tb{t}, block.Batch.Commit())
 }
 
-func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
+func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
 	t.Helper()
 
 	if block == nil {
@@ -60,7 +59,7 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 	block.Batch = db.Begin(true)
 
 	var ledger *protocol.InternalLedger
-	require.NoError(t, block.Batch.Account(exec.Network.Ledger()).GetStateAs(&ledger))
+	require.NoError(tb{t}, block.Batch.Account(exec.Network.Ledger()).GetStateAs(&ledger))
 
 	if block.Index == 0 {
 		block.Index = ledger.Index + 1
@@ -70,7 +69,7 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 	}
 
 	err := exec.BeginBlock(block)
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 
 	var results []*protocol.TransactionStatus
 	for _, envelope := range envelopes {
@@ -81,7 +80,7 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 		}
 	}
 
-	require.NoError(t, exec.EndBlock(block))
+	require.NoError(tb{t}, exec.EndBlock(block))
 
 	// Is the block empty?
 	if block.State.Empty() {
@@ -89,17 +88,17 @@ func ExecuteBlock(t testing.TB, db *database.Database, exec *Executor, block *Bl
 	}
 
 	// Commit the batch
-	require.NoError(t, block.Batch.Commit())
+	require.NoError(tb{t}, block.Batch.Commit())
 
 	// Notify the executor that we comitted
 	batch := db.Begin(false)
 	defer batch.Discard()
-	require.NoError(t, exec.DidCommit(block, batch))
+	require.NoError(tb{t}, exec.DidCommit(block, batch))
 
 	return results
 }
 
-func CheckTx(t testing.TB, db *database.Database, exec *Executor, delivery *chain.Delivery) (protocol.TransactionResult, error) {
+func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delivery) (protocol.TransactionResult, error) {
 	t.Helper()
 
 	batch := db.Begin(false)
@@ -115,26 +114,26 @@ func CheckTx(t testing.TB, db *database.Database, exec *Executor, delivery *chai
 	return result, nil
 }
 
-func NormalizeEnvelope(t testing.TB, envelope *protocol.Envelope) []*chain.Delivery {
+func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 	t.Helper()
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 	return deliveries
 }
 
-func DeliverTx(t testing.TB, exec *Executor, block *Block, delivery *chain.Delivery) *protocol.TransactionStatus {
+func DeliverTx(t TB, exec *Executor, block *Block, delivery *chain.Delivery) *protocol.TransactionStatus {
 	t.Helper()
 
 	err := delivery.LoadTransaction(block.Batch)
 	if err != nil {
 		var perr *protocol.Error
 		if !errors.As(err, &perr) {
-			require.NoError(t, err)
+			require.NoError(tb{t}, err)
 		}
 
 		if perr.Code != protocol.ErrorCodeAlreadyDelivered {
-			require.NoError(t, err)
+			require.NoError(tb{t}, err)
 		}
 
 		return &protocol.TransactionStatus{
@@ -145,13 +144,13 @@ func DeliverTx(t testing.TB, exec *Executor, block *Block, delivery *chain.Deliv
 	}
 
 	status, err := exec.ExecuteEnvelope(block, delivery)
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 	return status
 }
 
-func RequireSuccess(t testing.TB, results ...*protocol.TransactionStatus) {
+func RequireSuccess(t TB, results ...*protocol.TransactionStatus) {
 	for i, r := range results {
-		require.Zerof(t, r.Code, "Transaction %d failed with code %d: %s", i, r.Code, r.Message)
+		require.Zerof(tb{t}, r.Code, "Transaction %d failed with code %d: %s", i, r.Code, r.Message)
 	}
 }
 
@@ -160,20 +159,20 @@ type queryRequest interface {
 	Type() types.QueryType
 }
 
-func Query(t testing.TB, db *database.Database, exec *Executor, req queryRequest, prove bool) interface{} {
+func Query(t TB, db *database.Database, exec *Executor, req queryRequest, prove bool) interface{} {
 	t.Helper()
 
 	var err error
 	qr := new(query.Query)
 	qr.Type = req.Type()
 	qr.Content, err = req.MarshalBinary()
-	require.NoError(t, err)
+	require.NoError(tb{t}, err)
 
 	batch := db.Begin(false)
 	defer batch.Discard()
 	key, value, perr := exec.Query(batch, qr, 0, prove)
 	if perr != nil {
-		require.NoError(t, perr)
+		require.NoError(tb{t}, perr)
 	}
 
 	var resp encoding.BinaryUnmarshaler
@@ -203,9 +202,9 @@ func Query(t testing.TB, db *database.Database, exec *Executor, req queryRequest
 		resp = new(query.ResponsePending)
 
 	default:
-		t.Fatalf("Unknown response type %s", key)
+		tb{t}.Fatalf("Unknown response type %s", key)
 	}
 
-	require.NoError(t, resp.UnmarshalBinary(value))
+	require.NoError(tb{t}, resp.UnmarshalBinary(value))
 	return resp
 }
