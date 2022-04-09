@@ -20,11 +20,11 @@ import (
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // FakeTendermint is a test harness that facilitates testing the ABCI
@@ -54,7 +54,7 @@ type FakeTendermint struct {
 }
 
 type txStatus struct {
-	Envelopes     []*protocol.Envelope
+	Envelopes     []*chain.Delivery
 	Tx            []byte
 	Hash          [32]byte
 	Height        int64
@@ -139,17 +139,25 @@ func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx, check bool) 
 }
 
 func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
-	envelopes, err := transactions.UnmarshalAll(tx)
+	env := new(protocol.Envelope)
+	err := env.UnmarshalBinary(tx)
 	if err != nil {
 		c.onError(err)
 		c.logger.Error("Rejecting invalid transaction", "error", err)
 		return nil
 	}
 
-	txids := make([][32]byte, len(envelopes))
-	c.logTxns("Submitting", envelopes...)
-	for i, env := range envelopes {
-		copy(txids[i][:], env.GetTxHash())
+	deliveries, err := chain.NormalizeEnvelope(env)
+	if err != nil {
+		c.onError(err)
+		c.logger.Error("Rejecting invalid transaction", "error", err)
+		return nil
+	}
+
+	txids := make([][32]byte, len(deliveries))
+	c.logTxns("Submitting", deliveries...)
+	for i, env := range deliveries {
+		copy(txids[i][:], env.Transaction.GetHash())
 	}
 
 	c.txMu.Lock()
@@ -170,7 +178,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	for _, txid := range txids {
 		c.txStatus[txid] = st
 	}
-	st.Envelopes = envelopes
+	st.Envelopes = deliveries
 	st.Tx = tx
 	st.Hash = txh
 	c.txActive++
@@ -460,11 +468,11 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}, nil
 }
 
-func (c *FakeTendermint) logTxns(msg string, env ...*protocol.Envelope) {
+func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
 	for _, env := range env {
-		txnType := env.Type()
+		txnType := env.Transaction.Body.Type()
 		if !txnType.IsInternal() && txnType != protocol.TransactionTypeSyntheticAnchor {
-			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.GetTxHash()).Slice(0, 4), "env", logging.AsHex(env.EnvHash()).Slice(0, 4))
+			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.Transaction.GetHash()).Slice(0, 4))
 		}
 	}
 }

@@ -15,7 +15,7 @@ func (AddValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeAddValidator
 }
 
-func (AddValidator) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AddValidator) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (AddValidator{}).Validate(st, tx)
 }
 
@@ -23,7 +23,7 @@ func (RemoveValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeRemoveValidator
 }
 
-func (RemoveValidator) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (RemoveValidator) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (RemoveValidator{}).Validate(st, tx)
 }
 
@@ -31,11 +31,11 @@ func (UpdateValidatorKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateValidatorKey
 }
 
-func (UpdateValidatorKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateValidatorKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (UpdateValidatorKey{}).Validate(st, tx)
 }
 
-func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
 	body := env.Transaction.Body.(*protocol.AddValidator)
 
 	page, err := checkValidatorTransaction(st, env)
@@ -63,7 +63,7 @@ func (AddValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol
 	return nil, nil
 }
 
-func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (protocol.TransactionResult, error) {
+func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
 	body := env.Transaction.Body.(*protocol.RemoveValidator)
 
 	page, err := checkValidatorTransaction(st, env)
@@ -100,7 +100,7 @@ func (RemoveValidator) Validate(st *StateManager, env *protocol.Envelope) (proto
 	return nil, nil
 }
 
-func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
 	body := env.Transaction.Body.(*protocol.UpdateValidatorKey)
 
 	page, err := checkValidatorTransaction(st, env)
@@ -137,7 +137,7 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *protocol.Envelope) (pr
 
 // checkValidatorTransaction implements common checks for validator
 // transactions.
-func checkValidatorTransaction(st *StateManager, env *protocol.Envelope) (*protocol.KeyPage, error) {
+func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
 	if !st.nodeUrl.Equal(env.Transaction.Header.Principal) {
 		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, env.Transaction.Header.Principal)
 	}

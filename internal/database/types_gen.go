@@ -14,6 +14,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type SigOrTxn struct {
+	fieldsSet   []bool
+	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Hash        [32]byte              `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+}
+
 type exampleFullAccountState struct {
 	fieldsSet []bool
 	State     protocol.Account `json:"state,omitempty" form:"state" query:"state" validate:"required"`
@@ -43,6 +50,20 @@ type txSyntheticTxns struct {
 	fieldsSet []bool
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 }
+
+func (v *SigOrTxn) Copy() *SigOrTxn {
+	u := new(SigOrTxn)
+
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+	u.Signature = v.Signature
+	u.Hash = v.Hash
+
+	return u
+}
+
+func (v *SigOrTxn) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *exampleFullAccountState) Copy() *exampleFullAccountState {
 	u := new(exampleFullAccountState)
@@ -112,6 +133,25 @@ func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
 }
 
 func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
+		return false
+	}
+	if !(v.Signature == u.Signature) {
+		return false
+	}
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
 
 func (v *exampleFullAccountState) Equal(u *exampleFullAccountState) bool {
 	if !(v.State == u.State) {
@@ -186,6 +226,59 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 	}
 
 	return true
+}
+
+var fieldNames_SigOrTxn = []string{
+	1: "Transaction",
+	2: "Signature",
+	3: "Hash",
+}
+
+func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Transaction == nil) {
+		writer.WriteValue(1, v.Transaction)
+	}
+	if !(v.Signature == (nil)) {
+		writer.WriteValue(2, v.Signature)
+	}
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(3, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SigOrTxn)
+	return buffer.Bytes(), err
+}
+
+func (v *SigOrTxn) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Transaction is missing")
+	} else if v.Transaction == nil {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if v.Signature == (nil) {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_exampleFullAccountState = []string{
@@ -416,6 +509,32 @@ func (v *txSyntheticTxns) IsValid() error {
 	}
 }
 
+func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
+		v.Transaction = x
+	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := protocol.UnmarshalSignature(b)
+		if err == nil {
+			v.Signature = x
+		}
+		return err
+	})
+	if x, ok := reader.ReadHash(3); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_SigOrTxn)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *exampleFullAccountState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -531,30 +650,48 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		Hash        string                                         `json:"hash,omitempty"`
+	}{}
+	u.Transaction = v.Transaction
+	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	return json.Marshal(&u)
+}
+
 func (v *exampleFullAccountState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		State  json.RawMessage `json:"state,omitempty"`
-		Chains []*merkleState  `json:"chains,omitempty"`
+		State  encoding.JsonUnmarshalWith[protocol.Account] `json:"state,omitempty"`
+		Chains encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
 	}{}
-	if x, err := json.Marshal(v.State); err != nil {
-		return nil, fmt.Errorf("error encoding State: %w", err)
-	} else {
-		u.State = x
-	}
+	u.State = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.State, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	return json.Marshal(&u)
 }
 
 func (v *merkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Count   uint64   `json:"count,omitempty"`
-		Pending []string `json:"pending,omitempty"`
+		Count   uint64                    `json:"count,omitempty"`
+		Pending encoding.JsonList[string] `json:"pending,omitempty"`
 	}{}
 	u.Count = v.Count
-	u.Pending = make([]string, len(v.Pending))
+	u.Pending = make(encoding.JsonList[string], len(v.Pending))
 	for i, x := range v.Pending {
 		u.Pending[i] = encoding.ChainToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *sigSetData) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Version uint64                           `json:"version,omitempty"`
+		Entries encoding.JsonList[sigSetKeyData] `json:"entries,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
 
@@ -572,34 +709,49 @@ func (v *sigSetKeyData) MarshalJSON() ([]byte, error) {
 
 func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txids []string `json:"txids,omitempty"`
+		Txids encoding.JsonList[string] `json:"txids,omitempty"`
 	}{}
-	u.Txids = make([]string, len(v.Txids))
+	u.Txids = make(encoding.JsonList[string], len(v.Txids))
 	for i, x := range v.Txids {
 		u.Txids[i] = encoding.ChainToJSON(x)
 	}
 	return json.Marshal(&u)
 }
 
+func (v *SigOrTxn) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+		Hash        string                                         `json:"hash,omitempty"`
+	}{}
+	u.Transaction = v.Transaction
+	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Transaction = u.Transaction
+	v.Signature = u.Signature.Value
+
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	return nil
+}
+
 func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		State  json.RawMessage `json:"state,omitempty"`
-		Chains []*merkleState  `json:"chains,omitempty"`
+		State  encoding.JsonUnmarshalWith[protocol.Account] `json:"state,omitempty"`
+		Chains encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
 	}{}
-	if x, err := json.Marshal(v.State); err != nil {
-		return fmt.Errorf("error encoding State: %w", err)
-	} else {
-		u.State = x
-	}
+	u.State = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.State, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := protocol.UnmarshalAccountJSON(u.State); err != nil {
-		return fmt.Errorf("error decoding State: %w", err)
-	} else {
-		v.State = x
-	}
+	v.State = u.State.Value
 
 	v.Chains = u.Chains
 	return nil
@@ -607,11 +759,11 @@ func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
 
 func (v *merkleState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Count   uint64   `json:"count,omitempty"`
-		Pending []string `json:"pending,omitempty"`
+		Count   uint64                    `json:"count,omitempty"`
+		Pending encoding.JsonList[string] `json:"pending,omitempty"`
 	}{}
 	u.Count = v.Count
-	u.Pending = make([]string, len(v.Pending))
+	u.Pending = make(encoding.JsonList[string], len(v.Pending))
 	for i, x := range v.Pending {
 		u.Pending[i] = encoding.ChainToJSON(x)
 	}
@@ -627,6 +779,21 @@ func (v *merkleState) UnmarshalJSON(data []byte) error {
 			v.Pending[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *sigSetData) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Version uint64                           `json:"version,omitempty"`
+		Entries encoding.JsonList[sigSetKeyData] `json:"entries,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Version = u.Version
+	v.Entries = u.Entries
 	return nil
 }
 
@@ -658,9 +825,9 @@ func (v *sigSetKeyData) UnmarshalJSON(data []byte) error {
 
 func (v *txSyntheticTxns) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txids []string `json:"txids,omitempty"`
+		Txids encoding.JsonList[string] `json:"txids,omitempty"`
 	}{}
-	u.Txids = make([]string, len(v.Txids))
+	u.Txids = make(encoding.JsonList[string], len(v.Txids))
 	for i, x := range v.Txids {
 		u.Txids[i] = encoding.ChainToJSON(x)
 	}

@@ -331,7 +331,7 @@ func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
 			return nil, err
 		}
 		hash := sha256.Sum256(data)
-		err = st.batch.Transaction(hash[:]).PutState(&protocol.Envelope{Signatures: []protocol.Signature{sig}, TxHash: op.txid})
+		err = st.batch.Transaction(hash[:]).PutState(&database.SigOrTxn{Signature: sig, Hash: *(*[32]byte)(op.txid)})
 		if err != nil {
 			return nil, err
 		}

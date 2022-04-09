@@ -1446,9 +1446,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
 			Build())
 	})
@@ -1464,9 +1461,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
 	})
@@ -1485,9 +1479,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
 	})

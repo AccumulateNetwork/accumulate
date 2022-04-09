@@ -10,22 +10,17 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-type txBatch []byte
-
-func (b *txBatch) Append(tx []byte) {
-	*b = append(*b, tx...)
-}
 
 // dispatcher is responsible for dispatching outgoing synthetic transactions to
 // their recipients.
 type dispatcher struct {
 	ExecutorOptions
 	isDirectory bool
-	batches     map[string]txBatch
+	batches     map[string]*protocol.Envelope
 }
 
 // newDispatcher creates a new dispatcher.
@@ -33,25 +28,47 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
 	d.isDirectory = opts.Network.Type == config.Directory
-	d.batches = map[string]txBatch{}
+	d.batches = map[string]*protocol.Envelope{}
 	return d
 }
 
+func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
+	deliveries, err := chain.NormalizeEnvelope(env)
+	if err != nil {
+		return err
+	}
+
+	for _, d := range deliveries {
+		if d.Transaction.Type() == protocol.TransactionTypeRemote {
+			print("")
+		}
+	}
+
+	batch := d.batches[subnet]
+	if batch == nil {
+		batch = new(protocol.Envelope)
+	}
+	for _, delivery := range deliveries {
+		batch.Signatures = append(batch.Signatures, delivery.Signatures...)
+		batch.Transaction = append(batch.Transaction, delivery.Transaction)
+	}
+	d.batches[subnet] = batch
+	return nil
+}
+
 // BroadcastTx dispatches the txn to the appropriate client.
-func (d *dispatcher) BroadcastTx(ctx context.Context, u *url.URL, tx []byte) error {
+func (d *dispatcher) BroadcastTx(ctx context.Context, u *url.URL, tx *protocol.Envelope) error {
 	subnet, err := d.Router.RouteAccount(u)
 	if err != nil {
 		return err
 	}
 
-	d.batches[subnet] = append(d.batches[subnet], tx...)
-	return nil
+	return d.push(subnet, tx)
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
-func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx []byte) {
-	subnet := d.Network.LocalSubnetID
-	d.batches[subnet] = append(d.batches[subnet], tx...)
+func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope) error {
+	return d.push(d.Network.LocalSubnetID, tx)
 }
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
@@ -64,7 +81,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	// Send transactions to each destination in parallel
 	for subnet, batch := range d.batches {
-		if len(batch) == 0 {
+		if len(batch.Transaction) == 0 {
 			continue
 		}
 
