@@ -13,11 +13,11 @@ func (InternalTransactionsSigned) Type() protocol.TransactionType {
 	return protocol.TransactionTypeInternalTransactionsSigned
 }
 
-func (InternalTransactionsSigned) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (InternalTransactionsSigned) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (InternalTransactionsSigned{}).Validate(st, tx)
 }
 
-func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (InternalTransactionsSigned) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalTransactionsSigned)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.InternalTransactionsSigned), tx.Transaction.Body)
@@ -54,12 +54,12 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *protocol.Envelo
 		}
 
 		// Add the signature
-		env := new(protocol.Envelope)
+		env := new(Delivery)
 		env.Transaction = txn
 		env.Signatures = []protocol.Signature{sig}
 
 		// Validate it
-		if !env.Verify() {
+		if !env.VerifySignatures() {
 			return nil, fmt.Errorf("invalid signature for txn %X", id)
 		}
 

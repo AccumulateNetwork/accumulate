@@ -21,7 +21,7 @@ type Router interface {
 	RouteAccount(*url.URL) (string, error)
 	Route(...*protocol.Envelope) (string, error)
 	Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
-	Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*ResponseSubmit, error)
+	Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
 }
 
 // ResponseSubmit is the response from a call to Submit.
@@ -206,10 +206,14 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 // Submit submits the transaction to the specified subnet. If the subnet matches
 // this network's ID, the transaction is broadcasted via the local client.
 // Otherwise the transaction is broadcasted via an RPC client.
-func (r *RouterInstance) Submit(ctx context.Context, subnetId string, tx []byte, pretend, async bool) (*ResponseSubmit, error) {
+func (r *RouterInstance) Submit(ctx context.Context, subnetId string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error) {
+	raw, err := tx.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
 	if pretend {
-		return submitPretend(ctx, r.ConnectionManager, subnetId, tx)
+		return submitPretend(ctx, r.ConnectionManager, subnetId, raw)
 	} else {
-		return submit(ctx, r.ConnectionManager, subnetId, tx, async)
+		return submit(ctx, r.ConnectionManager, subnetId, raw, async)
 	}
 }

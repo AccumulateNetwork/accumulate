@@ -36,6 +36,7 @@ type Signature interface {
 	GetTimestamp() uint64
 	GetPublicKeyHash() []byte
 	GetSignature() []byte
+	GetTransactionHash() [32]byte
 }
 
 type TransactionBody interface {

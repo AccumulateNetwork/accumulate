@@ -12,11 +12,11 @@ type SendTokens struct{}
 
 func (SendTokens) Type() protocol.TransactionType { return protocol.TransactionTypeSendTokens }
 
-func (SendTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SendTokens{}).Validate(st, tx)
 }
 
-func (SendTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SendTokens), tx.Transaction.Body)
