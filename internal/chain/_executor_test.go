@@ -65,7 +65,7 @@ func BenchmarkHighTps(b *testing.B) {
 	require.NoError(b, err)
 
 	liteKey := acctesting.GenerateKey(b.Name(), "Lite")
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME)
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(b, err)
 
 	deposit := new(protocol.SyntheticDepositTokens)

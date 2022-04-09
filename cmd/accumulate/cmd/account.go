@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -15,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 func init() {
@@ -36,7 +38,7 @@ func init() {
 	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch token account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch data account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
-	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "legacyed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
 }
 
 var flagAccount = struct {
@@ -130,10 +132,10 @@ var accountQrCmd = &cobra.Command{
 }
 
 var accountGenerateCmd = &cobra.Command{
-	Use:   "generate",
-	Short: "Generate random lite token account",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
+	Use:   "generate [key name (optional)]",
+	Short: "Generate a random lite token account or a lite account derived previously imported/created key",
+	Args:  cobra.MinimumNArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
 		out, err := GenerateAccount()
 		printOutput(cmd, out, err)
 	},
@@ -284,21 +286,60 @@ func GenerateAccount() (string, error) {
 }
 
 func ListAccounts() (string, error) {
-	b, err := Db.GetBucket(BucketLabel)
+	b, err := Db.GetBucket(BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
-		return "", err
+		return "", fmt.Errorf("no lite accounts found, try again after executing \"accumulate account restore\"\n")
 	}
 	var out string
-	for _, v := range b.KeyValueList {
-		lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
+
+	if WantJsonOutput {
+		out += "{\"liteAccounts\":["
+	}
+	for i, v := range b.KeyValueList {
+		pubKey, err := Db.Get(BucketLabel, v.Value)
 		if err != nil {
-			continue
+			return "", err
 		}
-		l, _ := LabelForLiteTokenAccount(lt.String())
-		if l == string(v.Key) {
-			out += fmt.Sprintf("%s\n", lt)
+
+		st, err := Db.Get(BucketSigType, pubKey)
+		if err != nil {
+			return "", err
 		}
+		s, _ := common.BytesUint64(st)
+		var sigType protocol.SignatureType
+		if !sigType.SetEnumValue(s) {
+			return "", fmt.Errorf("invalid signature type")
+		}
+
+		_, hash, err := resolveKeyTypeAndHash(pubKey)
+		if err != nil {
+			return "", err
+		}
+		lt, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
+		if err != nil {
+			return "", err
+		}
+		kr := KeyResponse{}
+		kr.LiteAccount = lt
+		kr.KeyType = sigType
+		kr.PublicKey = pubKey
+		*kr.Label.AsString() = string(v.Value)
+		if WantJsonOutput {
+			if i > 0 {
+				out += ","
+			}
+			d, err := json.Marshal(&kr)
+			if err != nil {
+				return "", err
+			}
+			out += string(d)
+		} else {
+			out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", kr.LiteAccount, kr.LiteAccount, pubKey, sigType)
+		}
+	}
+	if WantJsonOutput {
+		out += "]}"
 	}
 	//TODO: this probably should also list out adi accounts as well
 	return out, nil
@@ -389,5 +430,41 @@ func RestoreAccounts() (out string, err error) {
 			}
 		}
 	}
+
+	//build the map of lite accounts to key labels
+	labelz, err = Db.GetBucket(BucketLabel)
+	if err != nil {
+		//nothing to do...
+		return
+	}
+	for _, v := range labelz.KeyValueList {
+		signatureType, hash, err := resolveKeyTypeAndHash(v.Value)
+		if err != nil {
+			return "", err
+		}
+		liteAccount, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
+		if err != nil {
+			return "", err
+		}
+
+		liteLabel, _ := LabelForLiteTokenAccount(liteAccount.String())
+		_, err = Db.Get(BucketLite, []byte(liteLabel))
+		if err == nil {
+			continue
+		}
+
+		out += fmt.Sprintf("lite identity %v mapped to key name %v\n", liteLabel, string(v.Key))
+
+		err = Db.Put(BucketLite, []byte(liteLabel), v.Key)
+		if err != nil {
+			return "", err
+		}
+
+		err = Db.Put(BucketSigType, v.Value, common.Uint64Bytes(signatureType.GetEnumValue()))
+		if err != nil {
+			return "", err
+		}
+	}
+
 	return out, nil
 }
