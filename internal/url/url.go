@@ -117,6 +117,11 @@ func (u *URL) String() string {
 	return u.URL().String()
 }
 
+// ShortString returns String without the scheme prefix.
+func (u *URL) ShortString() string {
+	return u.String()[6:]
+}
+
 // RawString concatenates all of the URL parts. Does not percent-encode
 // anything. Primarily used for validation.
 func (u *URL) RawString() string {
