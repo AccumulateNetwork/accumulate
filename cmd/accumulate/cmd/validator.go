@@ -91,7 +91,7 @@ func updateValidatorKey(args []string) (string, error) {
 	oldKeyHash := sha256.Sum256(oldKey)
 	newKeyHash := sha256.Sum256(newKey)
 	txn := new(protocol.UpdateValidatorKey)
-	txn.KeyHash = oldKeyHash[:]
-	txn.NewKeyHash = newKeyHash[:]
+	txn.Key = oldKeyHash[:]
+	txn.NewKey = newKeyHash[:]
 	return dispatchTxAndPrintResponse("update-validator-key", txn, nil, principal, signer)
 }

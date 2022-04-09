@@ -5,7 +5,6 @@ import (
 	"io"
 	"reflect"
 	"strings"
-	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -13,7 +12,7 @@ import (
 )
 
 type testLogger struct {
-	Test testing.TB
+	Test TB
 }
 
 var _ io.Writer = (*testLogger)(nil)
@@ -25,7 +24,16 @@ func (l *testLogger) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
+type TB interface {
+	Name() string
+	Log(...interface{})
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+	FailNow()
+	Helper()
+}
+
+func TestLogWriter(t TB) func(string) (io.Writer, error) {
 	return func(format string) (io.Writer, error) {
 		var w io.Writer = &testLogger{Test: t}
 		switch strings.ToLower(format) {
@@ -42,7 +50,7 @@ func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
 	}
 }
 
-func NewTestLogger(t testing.TB, format, level string, trace bool) log.Logger {
+func NewTestLogger(t TB, format, level string, trace bool) log.Logger {
 	writer, _ := TestLogWriter(t)(format)
 	level, writer, err := ParseLogLevel(level, writer)
 	require.NoError(t, err)
