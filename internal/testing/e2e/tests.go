@@ -29,7 +29,7 @@ func (s *Suite) TestCreateLiteAccount() {
 		WithBody(&protocol.AcmeFaucet{Url: senderUrl}).
 		Faucet()
 	s.dut.SubmitTxn(env)
-	s.dut.WaitForTxns(env.GetTxHash())
+	s.dut.WaitForTxns(env.Transaction[0].GetHash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
@@ -45,7 +45,7 @@ func (s *Suite) TestCreateLiteAccount() {
 		Initiate(protocol.SignatureTypeLegacyED25519, sender).
 		Build()
 	s.dut.SubmitTxn(env)
-	s.dut.WaitForTxns(env.GetTxHash())
+	s.dut.WaitForTxns(env.Transaction[0].GetHash())
 
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
@@ -81,7 +81,7 @@ func (s *Suite) TestCreateLiteAccount() {
 			Initiate(protocol.SignatureTypeLegacyED25519, sender).
 			Build()
 		s.dut.SubmitTxn(tx)
-		txids = append(txids, tx.GetTxHash())
+		txids = append(txids, tx.Transaction[0].GetHash())
 	}
 	total += amtAcmeToBuyCredits
 

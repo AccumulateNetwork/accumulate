@@ -13,11 +13,11 @@ type AcmeFaucet struct{}
 
 func (AcmeFaucet) Type() protocol.TransactionType { return protocol.TransactionTypeAcmeFaucet }
 
-func (AcmeFaucet) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AcmeFaucet) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (AcmeFaucet{}).Validate(st, tx)
 }
 
-func (AcmeFaucet) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unmarshal the TX payload
 	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
 	if !ok {

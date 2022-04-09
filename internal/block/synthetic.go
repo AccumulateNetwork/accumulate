@@ -108,14 +108,14 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	return txn, nil
 }
 
-func validateSyntheticEnvelope(net *config.Network, batch *database.Batch, envelope *protocol.Envelope) error {
+func validateSyntheticEnvelope(net *config.Network, batch *database.Batch, envelope *chain.Delivery) error {
 	// TODO Get rid of this hack and actually check the nonce. But first we have
 	// to implement transaction batching.
-	v := batch.Account(net.NodeUrl()).Index("SeenSynth", envelope.GetTxHash())
+	v := batch.Account(net.NodeUrl()).Index("SeenSynth", envelope.Transaction.GetHash())
 	_, err := v.Get()
 	switch {
 	case err == nil:
-		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", envelope.GetTxHash())
+		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", envelope.Transaction.GetHash())
 	case errors.Is(err, storage.ErrNotFound):
 		// Ok
 	default:
@@ -154,7 +154,7 @@ func processSyntheticTransaction(net *config.Network, batch *database.Batch, tra
 func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature protocol.Signature) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
-	err := obj.PutState(&protocol.Envelope{Transaction: transaction})
+	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
 	if err != nil {
 		return fmt.Errorf("store transaction: %w", err)
 	}
@@ -179,9 +179,9 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 	sigHash := sha256.Sum256(sigData)
 
 	// Store the signature
-	err = batch.Transaction(sigHash[:]).PutState(&protocol.Envelope{
-		TxHash:     transaction.GetHash(),
-		Signatures: []protocol.Signature{signature},
+	err = batch.Transaction(sigHash[:]).PutState(&database.SigOrTxn{
+		Hash:      *(*[32]byte)(transaction.GetHash()),
+		Signature: signature,
 	})
 	if err != nil {
 		return fmt.Errorf("store signature: %w", err)

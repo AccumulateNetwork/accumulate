@@ -164,7 +164,7 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
 	case TransactionTypeRemote:
-		return new(RemoteTransactionBody), nil
+		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
 		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:

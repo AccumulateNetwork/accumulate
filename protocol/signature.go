@@ -110,14 +110,18 @@ func (s *LegacyED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 // GetSignature returns Signature.
 func (s *LegacyED25519Signature) GetSignature() []byte { return s.Signature }
 
+// GetTransactionHash returns TransactionHash.
+func (s *LegacyED25519Signature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
 // Hash returns the hash of the signature.
 func (s *LegacyED25519Signature) Hash() []byte { return signatureHash(s) }
 
 // MetadataHash hashes the signature metadata.
 func (s *LegacyED25519Signature) MetadataHash() []byte {
-	r := *s           // Copy the struct
-	r.Signature = nil // Clear the signature
-	return r.Hash()   // Hash it
+	r := *s                        // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r.Hash()                // Hash it
 }
 
 // InitiatorHash calculates the Merkle hash of the signature.
@@ -181,14 +185,18 @@ func (s *ED25519Signature) GetPublicKey() []byte { return s.PublicKey }
 // GetSignature returns Signature.
 func (s *ED25519Signature) GetSignature() []byte { return s.Signature }
 
+// GetTransactionHash returns TransactionHash.
+func (s *ED25519Signature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
 // Hash returns the hash of the signature.
 func (s *ED25519Signature) Hash() []byte { return signatureHash(s) }
 
 // MetadataHash hashes the signature metadata.
 func (s *ED25519Signature) MetadataHash() []byte {
-	r := *s           // Copy the struct
-	r.Signature = nil // Clear the signature
-	return r.Hash()   // Hash it
+	r := *s                        // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r.Hash()                // Hash it
 }
 
 // InitiatorHash calculates the Merkle hash of the signature.
@@ -260,18 +268,20 @@ func (e *RCD1Signature) Verify(txnHash []byte) bool {
 }
 
 // GetSignature returns Signature.
-func (s *RCD1Signature) GetSignature() []byte {
-	return s.Signature
-}
+func (s *RCD1Signature) GetSignature() []byte { return s.Signature }
+
+// GetTransactionHash returns TransactionHash.
+func (s *RCD1Signature) GetTransactionHash() [32]byte { return s.TransactionHash }
 
 // Hash returns the hash of the signature.
 func (s *RCD1Signature) Hash() []byte { return signatureHash(s) }
 
 // MetadataHash hashes the signature metadata.
 func (s *RCD1Signature) MetadataHash() []byte {
-	r := *s           // Copy the struct
-	r.Signature = nil // Clear the signature
-	return r.Hash()   // Hash it
+	r := *s                        // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // And the transaction hash
+	return r.Hash()                // Hash it
 }
 
 // InitiatorHash calculates the Merkle hash of the signature.
@@ -315,11 +325,18 @@ func (s *ReceiptSignature) GetSignature() []byte {
 	return b
 }
 
+// GetTransactionHash returns TransactionHash.
+func (s *ReceiptSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
 // Hash returns the hash of the signature.
 func (s *ReceiptSignature) Hash() []byte { return signatureHash(s) }
 
 // MetadataHash hashes the signature metadata.
-func (s *ReceiptSignature) MetadataHash() []byte { return s.Hash() }
+func (s *ReceiptSignature) MetadataHash() []byte {
+	r := *s                        // Copy the struct
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
+	return r.Hash()                // Hash it
+}
 
 // InitiatorHash returns an error.
 func (s *ReceiptSignature) InitiatorHash() ([]byte, error) {
@@ -355,11 +372,18 @@ func (s *SyntheticSignature) GetPublicKeyHash() []byte { return nil }
 // GetSignature returns nil.
 func (s *SyntheticSignature) GetSignature() []byte { return nil }
 
+// GetTransactionHash returns TransactionHash.
+func (s *SyntheticSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
 // Hash returns the hash of the signature.
 func (s *SyntheticSignature) Hash() []byte { return signatureHash(s) }
 
 // MetadataHash hashes the signature metadata.
-func (s *SyntheticSignature) MetadataHash() []byte { return s.Hash() }
+func (s *SyntheticSignature) MetadataHash() []byte {
+	r := *s                        // Copy the struct
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
+	return r.Hash()                // Hash it
+}
 
 // InitiatorHash calculates the Merkle hash of the signature.
 func (s *SyntheticSignature) InitiatorHash() ([]byte, error) {
@@ -403,11 +427,18 @@ func (s *InternalSignature) GetPublicKeyHash() []byte { return nil }
 // GetSignature returns nil.
 func (s *InternalSignature) GetSignature() []byte { return nil }
 
+// GetTransactionHash returns TransactionHash.
+func (s *InternalSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
 // Hash returns the hash of the signature.
 func (s *InternalSignature) Hash() []byte { return signatureHash(s) }
 
 // MetadataHash hashes the signature metadata.
-func (s *InternalSignature) MetadataHash() []byte { return s.Hash() }
+func (s *InternalSignature) MetadataHash() []byte {
+	r := *s                        // Copy the struct
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
+	return r.Hash()                // Hash it
+}
 
 // InitiatorHash returns the network account ID.
 func (s *InternalSignature) InitiatorHash() ([]byte, error) {
@@ -438,6 +469,7 @@ func (s *ForwardedSignature) GetSignerVersion() uint64       { return s.Signatur
 func (s *ForwardedSignature) GetTimestamp() uint64           { return s.Signature.GetTimestamp() }
 func (s *ForwardedSignature) GetSignature() []byte           { return s.Signature.GetSignature() }
 func (s *ForwardedSignature) GetPublicKeyHash() []byte       { return s.Signature.GetPublicKeyHash() }
+func (s *ForwardedSignature) GetTransactionHash() [32]byte   { return s.Signature.GetTransactionHash() }
 func (s *ForwardedSignature) Hash() []byte                   { return s.Signature.Hash() }
 func (s *ForwardedSignature) MetadataHash() []byte           { return s.Signature.MetadataHash() }
 func (s *ForwardedSignature) InitiatorHash() ([]byte, error) { return s.Signature.InitiatorHash() }
