@@ -17,28 +17,17 @@ type TransactionBuilder struct {
 func NewTransaction() TransactionBuilder {
 	var tb TransactionBuilder
 	tb.Envelope = new(protocol.Envelope)
+	tb.Transaction = []*protocol.Transaction{new(protocol.Transaction)}
 	return tb
 }
 
-func (tb *TransactionBuilder) ensureTxn() {
-	if tb.Transaction != nil {
-		return
-	}
-	// if tb.TxHash != nil {
-	// 	panic("can't have both a transaction hash and body")
-	// }
-	tb.Transaction = new(protocol.Transaction)
-}
-
 func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) TransactionBuilder {
-	tb.ensureTxn()
-	tb.Transaction.Header = *hdr
+	tb.Transaction[0].Header = *hdr
 	return tb
 }
 
 func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
-	tb.ensureTxn()
-	tb.Transaction.Header.Principal = origin
+	tb.Transaction[0].Header.Principal = origin
 	return tb
 }
 
@@ -64,31 +53,26 @@ func (tb TransactionBuilder) WithCurrentTimestamp() TransactionBuilder {
 }
 
 func (tb TransactionBuilder) WithBody(body protocol.TransactionBody) TransactionBuilder {
-	tb.ensureTxn()
-	tb.Transaction.Body = body
+	tb.Transaction[0].Body = body
 	return tb
 }
 
 func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
-	// if tb.Transaction != nil {
-	// 	panic("can't have both a transaction hash and body")
-	// }
-	tb.TxHash = hash
-	return tb
+	body := new(protocol.RemoteTransaction)
+	body.Hash = *(*[32]byte)(hash)
+	return tb.WithBody(body)
 }
 
 func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	switch {
-	case tb.TxHash != nil:
-		// OK
-	case tb.Transaction == nil:
+	case tb.Transaction[0].Body == nil:
 		panic("cannot sign a transaction without the transaction body or transaction hash")
-	case tb.Transaction.Header.Initiator == ([32]byte{}):
+	case tb.Transaction[0].Header.Initiator == ([32]byte{}) && tb.Transaction[0].Body.Type() != protocol.TransactionTypeRemote:
 		panic("cannot sign a transaction before setting the initiator")
 	}
 
 	tb.signer.SetPrivateKey(privateKey)
-	sig, err := tb.signer.Sign(tb.GetTxHash())
+	sig, err := tb.signer.Sign(tb.Transaction[0].GetHash())
 	if err != nil {
 		panic(err)
 	}
@@ -98,16 +82,18 @@ func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte)
 }
 
 func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
-	if tb.TxHash != nil {
+	switch {
+	case tb.Transaction[0].Body == nil:
+		panic("cannot initiate transaction without a body")
+	case tb.Transaction[0].Body.Type() == protocol.TransactionTypeRemote:
 		panic("cannot initiate transaction: have hash instead of body")
-	}
-	if tb.Transaction.Header.Initiator != ([32]byte{}) {
+	case tb.Transaction[0].Header.Initiator != ([32]byte{}):
 		panic("cannot initiate transaction: already initiated")
 	}
 
 	tb.signer.Type = typ
 	tb.signer.SetPrivateKey(privateKey)
-	sig, err := tb.signer.Initiate(tb.Transaction)
+	sig, err := tb.signer.Initiate(tb.Transaction[0])
 	if err != nil {
 		panic(err)
 	}
@@ -124,7 +110,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 	if tb.TxHash != nil {
 		panic("cannot initiate transaction: have hash instead of body")
 	}
-	if tb.Transaction.Header.Initiator != ([32]byte{}) {
+	if tb.Transaction[0].Header.Initiator != ([32]byte{}) {
 		panic("cannot initiate transaction: already initiated")
 	}
 	if tb.signer.Url == nil {
@@ -145,13 +131,14 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 		panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
 	}
 
-	tb.Transaction.Header.Initiator = *(*[32]byte)(initHash)
+	tb.Transaction[0].Header.Initiator = *(*[32]byte)(initHash)
+	initSig.TransactionHash = *(*[32]byte)(tb.Transaction[0].GetHash())
 	tb.Signatures = append(tb.Signatures, initSig)
 	return tb
 }
 
 func (tb TransactionBuilder) Faucet() *protocol.Envelope {
-	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.Transaction)
+	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.Transaction[0])
 	if err != nil {
 		panic(err)
 	}

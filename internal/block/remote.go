@@ -6,13 +6,8 @@ import (
 
 func (x *Executor) ProcessRemoteSignatures(block *Block, transaction *protocol.Transaction, signatures []protocol.KeySignature) (*protocol.SyntheticForwardTransaction, error) {
 	body := new(protocol.SyntheticForwardTransaction)
+	body.Transaction = transaction
 	body.Signatures = make([]protocol.ForwardedSignature, len(signatures))
-
-	if transaction.Body.Type() == protocol.TransactionTypeRemote {
-		body.TransactionHash = transaction.GetHash()
-	} else {
-		body.Transaction = transaction
-	}
 
 	for i, signature := range signatures {
 		var signer protocol.Signer

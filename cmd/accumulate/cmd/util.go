@@ -264,15 +264,18 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		if err != nil {
 			return nil, err
 		}
-		sig, err = signer.Initiate(env.Transaction)
-		txHash = env.Transaction.GetHash()
+		sig, err = signer.Initiate(env.Transaction[0])
+		txHash = env.Transaction[0].GetHash()
 	case payload == nil && txHash != nil:
-		payload = new(protocol.RemoteTransactionBody)
+		body := new(protocol.RemoteTransaction)
+		body.Hash = *(*[32]byte)(txHash)
+		payload = body
+		txn := new(protocol.Transaction)
+		txn.Body = body
+		txn.Header.Principal = origin
 		env = new(protocol.Envelope)
 		env.TxHash = txHash
-		env.Transaction = new(protocol.Transaction)
-		env.Transaction.Body = payload
-		env.Transaction.Header.Principal = origin
+		env.Transaction = []*protocol.Transaction{txn}
 		sig, err = signer.Sign(txHash)
 	default:
 		panic("cannot specify a transaction hash and a payload")
@@ -286,15 +289,15 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
-	req.Origin = env.Transaction.Header.Principal
+	req.Origin = env.Transaction[0].Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = keySig.GetPublicKey()
 	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
-	req.Memo = env.Transaction.Header.Memo
-	req.Metadata = env.Transaction.Header.Metadata
+	req.Memo = env.Transaction[0].Header.Memo
+	req.Metadata = env.Transaction[0].Header.Metadata
 
 	if TxPretend {
 		req.CheckOnly = true
@@ -323,18 +326,19 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 }
 
 func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
+	txn := new(protocol.Transaction)
+	txn.Body = payload
+	txn.Header.Principal = origin
+	txn.Header.Memo = Memo
 	env := new(protocol.Envelope)
-	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Body = payload
-	env.Transaction.Header.Principal = origin
-	env.Transaction.Header.Memo = Memo
+	env.Transaction = []*protocol.Transaction{txn}
 
 	if Metadata == "" {
 		return env, nil
 	}
 
 	if !strings.Contains(Metadata, ":") {
-		env.Transaction.Header.Metadata = []byte(Metadata)
+		txn.Header.Metadata = []byte(Metadata)
 		return env, nil
 	}
 
@@ -345,15 +349,15 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 		if err != nil {
 			return nil, err
 		}
-		env.Transaction.Header.Metadata = bytes
+		txn.Header.Metadata = bytes
 	case "base64":
 		bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
 		if err != nil {
 			return nil, err
 		}
-		env.Transaction.Header.Metadata = bytes
+		txn.Header.Metadata = bytes
 	default:
-		env.Transaction.Header.Metadata = []byte(dataSet[1])
+		txn.Header.Metadata = []byte(dataSet[1])
 	}
 	return env, nil
 }

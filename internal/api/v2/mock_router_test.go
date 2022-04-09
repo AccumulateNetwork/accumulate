@@ -89,7 +89,7 @@ func (mr *MockRouterMockRecorder) RouteAccount(arg0 interface{}) *gomock.Call {
 }
 
 // Submit mocks base method.
-func (m *MockRouter) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (m *MockRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Submit", ctx, subnet, tx, pretend, async)
 	ret0, _ := ret[0].(*routing.ResponseSubmit)
