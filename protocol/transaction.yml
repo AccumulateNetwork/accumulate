@@ -16,9 +16,7 @@ Envelope:
       marshal-as: reference
       pointer: true
       optional: true
-    - name: hash
-      type: bytes
-      marshal-as: none
+      repeatable: true
 
 TransactionHeader:
   fields:

@@ -232,6 +232,9 @@ UpdateKey:
     - name: NewKeyHash
       type: bytes
 
-RemoteTransactionBody:
-  union: { type: transaction, value: Remote }
-  fields: []
+RemoteTransaction:
+  union: { type: transaction }
+  fields:
+    - name: Hash
+      type: hash
+      optional: true

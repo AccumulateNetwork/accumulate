@@ -27,6 +27,6 @@ func (NullRouter) Query(ctx context.Context, subnet string, query []byte, opts c
 	return nil, storage.ErrNotFound
 }
 
-func (NullRouter) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (NullRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	return new(routing.ResponseSubmit), nil
 }

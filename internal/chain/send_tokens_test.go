@@ -34,10 +34,10 @@ func TestLiteTokenTransactions(t *testing.T) {
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 	require.NoError(t, err)
 
-	st := NewStateManagerForTest(t, db, gtx)
+	st, d := NewStateManagerForTest(t, db, gtx)
 	defer st.Discard()
 
-	_, err = SendTokens{}.Validate(st, gtx)
+	_, err = SendTokens{}.Validate(st, d)
 	require.NoError(t, err)
 
 	//pull the chains again
