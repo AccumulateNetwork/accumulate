@@ -15,6 +15,39 @@ type RandHash struct {
 	List [][]byte
 }
 
+// GetRandInt64
+func (n *RandHash) GetRandInt64() int64 {
+	next := n.Next()
+	return (((((((int64(next[7]) << 8) +
+		int64(next[6])<<8) +
+		int64(next[5])<<8) +
+		int64(next[4])<<8) +
+		int64(next[3])<<8) +
+		int64(next[2])<<8) +
+		int64(next[1])<<8) +
+		int64(next[7])
+}
+
+// GetRandBuff
+// return a buffer of random data of the given size.
+// Okay, we could do this much more efficiently, but meh!
+func (n *RandHash) GetRandBuff(size int) (buff []byte) {
+	for {
+		next := n.Next()          //      Random values come from hashing
+		if size-len(buff) >= 32 { //      do all the 32 byte lengths
+			buff = append(buff, next...)
+			continue
+		}
+		for _, b := range next { //       once less than 32 bytes, do it a byte at time
+			if len(buff) == size {
+				return buff
+			}
+			buff = append(buff, b)
+		}
+
+	}
+}
+
 // GetAElement
 // Get an Array of an element out of the list of hashes
 func (n *RandHash) GetAElement(i int) (A [32]byte) {
