@@ -22,7 +22,7 @@ const defaultNodeCnt = 1000
 // Note that the same seed value yields the same BPT tree.
 func LoadBptCnt(seed int64, NodeCnt int64) *BPT {
 	rnd := rand.New(rand.NewSource(seed)) //                            Using our own instance of rand makes us concurrency safe
-	bpt := NewBPT()                       //                            Allocate a new bpt
+	bpt := NewBPTManager(nil).Bpt         //                            Build a BPT
 
 	rnd.Seed(seed)               //                                     seed our rand structure
 	b := rnd.Int63()             //                                     Create an 8 byte random key seed
@@ -73,9 +73,9 @@ func TestInsert(t *testing.T) {
 
 	const numElements = 100 // Choose a number of transactions to process
 
-	bpt := NewBPT()            //                 Allocate a BPT
-	var rh common.RandHash     //                 Provides a sequence of hashes
-	for i := 0; i < 100; i++ { //                 Process the elements some number of times
+	bpt := NewBPTManager(nil).Bpt //                 Build a BPT
+	var rh common.RandHash        //                 Provides a sequence of hashes
+	for i := 0; i < 100; i++ {    //                 Process the elements some number of times
 		for j := 0; j < numElements; j++ { //     For each element
 			bpt.Insert(rh.NextA(), rh.NextA()) //   Insert the key value pair
 		}
@@ -139,14 +139,14 @@ func TestInsertOrder(t *testing.T) {
 		valSeed = sha256.Sum256(valSeed[:]) //   move the value
 	} // loop and continue
 
-	b := NewBPT() //        Get a BPT
-	//start := time.Now()      //        Set the clock
-	for _, v := range pair { //        for every pair in the slice, insert them
-		b.Insert(v.key, v.value) //    into the PBT
+	b := NewBPTManager(nil).Bpt //               Build a BPT
+	//start := time.Now()      //                Set the clock
+	for _, v := range pair { //                  for every pair in the slice, insert them
+		b.Insert(v.key, v.value) //              into the PBT
 	}
-	require.NoError(t, b.Update()) // update the BPT to get the correct summary hash
+	require.NoError(t, b.Update()) //            update the BPT to get the correct summary hash
 	one := b.GetRoot().Hash        //
-	//tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
+	//tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 //   Get my time in seconds in a float64
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
 	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
 
@@ -154,12 +154,12 @@ func TestInsertOrder(t *testing.T) {
 		return rand.Int()&1 == 1 //                                       Randimize using the low order bit of the random number generator
 	})
 
-	b = NewBPT() //                                         Get a fresh BPT
+	b = NewBPTManager(nil).Bpt //                                         Build a BPT
 	//start = time.Now()       //                                         Reset the clock
-	for _, v := range pair { //                                         Insert the scrambled pairs
-		b.Insert(v.key, v.value) //                                     into the BPT
+	for _, v := range pair { //                                           Insert the scrambled pairs
+		b.Insert(v.key, v.value) //                                       into the BPT
 	} //
-	require.NoError(t, b.Update()) // Update the summary hash
+	require.NoError(t, b.Update()) //                                     Update the summary hash
 	two := b.GetRoot().Hash        //
 	//tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
@@ -175,7 +175,7 @@ func TestInsertOrder(t *testing.T) {
 
 	var last, now [32]byte
 	_ = last
-	b = NewBPT() //                                         Get a fresh BPT
+	b = NewBPTManager(nil).Bpt //                                         Get a fresh BPT
 	//start = time.Now()       //                                         Reset the clock
 	for _, v := range pair { //                                         Insert the scrambled pairs
 		b.Insert(v.key, v.value) //                                     into the BPT
@@ -227,7 +227,7 @@ func TestUpdateValues(t *testing.T) {
 		valSeed = sha256.Sum256(valSeed[:]) //   move the value
 	} // loop and continue
 
-	b := NewBPT() //                Get a BPT
+	b := NewBPTManager(nil).Bpt //                 Get a BPT
 	//	start := time.Now()      //                Set the clock
 	for _, v := range pair { //                for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //  it into the PBT
@@ -278,7 +278,7 @@ func TestUpdateValue(t *testing.T) {
 func TestMarshalByteBlock(t *testing.T) {
 	bpt1 := LoadBptCnt(1, 100000) // Get a loaded Bpt
 	rootData1 := bpt1.Marshal()
-	bpt2 := NewBPT() // Get an empty Bpt
+	bpt2 := NewBPTManager(nil).Bpt // Get an empty Bpt
 	bpt2.UnMarshal(rootData1)
 	data1 := bpt1.MarshalByteBlock(bpt1.GetRoot())
 	bpt2.UnMarshalByteBlock(bpt2.GetRoot(), data1)
@@ -396,7 +396,7 @@ func TestBPTByteSizes(t *testing.T) {
 func LoadBptCnt1(t testing.TB, seed int64, NodeCnt int64, freq int64) *BPT {
 
 	rnd := rand.New(rand.NewSource(seed)) //                            Using our own instance of rand makes us concurrency safe
-	bpt := NewBPT()                       //                            Allocate a new bpt
+	bpt := NewBPTManager(nil).Bpt         //                            Allocate a new bpt
 
 	rnd.Seed(seed)               //                                     seed our rand structure
 	b := rnd.Int63()             //                                     Create an 8 byte random key seed
