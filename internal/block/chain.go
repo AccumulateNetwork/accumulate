@@ -100,8 +100,8 @@ type TransactionExecutor interface {
 	Type() protocol.TransactionType
 
 	// Validate validates the transaction for acceptance.
-	Validate(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
+	Validate(*StateManager, *Delivery) (protocol.TransactionResult, error)
 
 	// Execute fully validates and executes the transaction.
-	Execute(*StateManager, *protocol.Envelope) (protocol.TransactionResult, error)
+	Execute(*StateManager, *Delivery) (protocol.TransactionResult, error)
 }

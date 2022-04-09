@@ -29,7 +29,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 		Faucet()
 	sim.MustSubmitAndExecuteBlock(env)
-	sim.WaitForTransaction(delivered, env.GetTxHash())
+	sim.WaitForTransaction(delivered, env.Transaction[0].GetHash())
 
 	// Get a proof of the account state
 	req := new(query.RequestByUrl)

@@ -14,11 +14,11 @@ func (SyntheticDepositTokens) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
 }
 
-func (SyntheticDepositTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticDepositTokens{}).Validate(st, tx)
 }
 
-func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// *big.Int, tokenChain, *url.URL
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
 	if !ok {

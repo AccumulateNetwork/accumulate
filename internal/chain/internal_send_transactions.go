@@ -12,11 +12,11 @@ func (InternalSendTransactions) Type() protocol.TransactionType {
 	return protocol.TransactionTypeInternalSendTransactions
 }
 
-func (InternalSendTransactions) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (InternalSendTransactions) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (InternalSendTransactions{}).Validate(st, tx)
 }
 
-func (InternalSendTransactions) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (InternalSendTransactions) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.InternalSendTransactions)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.InternalSendTransactions), tx.Transaction.Body)

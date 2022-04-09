@@ -10,11 +10,11 @@ type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyPage }
 
-func (CreateKeyPage) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateKeyPage{}).Validate(st, tx)
 }
 
-func (CreateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	var book *protocol.KeyBook
 	switch origin := st.Origin.(type) {
 	case *protocol.KeyBook:

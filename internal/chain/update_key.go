@@ -13,7 +13,7 @@ func (UpdateKey) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKey
 }
 
-func (UpdateKey) validate(st *StateManager, tx *protocol.Envelope) (*protocol.UpdateKey, *protocol.KeyPage, error) {
+func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, *protocol.KeyPage, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKey)
 	if !ok {
 		return nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
@@ -30,12 +30,12 @@ func (UpdateKey) validate(st *StateManager, tx *protocol.Envelope) (*protocol.Up
 	return body, page, nil
 }
 
-func (UpdateKey) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKey) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	_, _, err := UpdateKey{}.validate(st, tx)
 	return nil, err
 }
 
-func (UpdateKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, page, err := UpdateKey{}.validate(st, tx)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (UpdateKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.Tran
 	// Do not update the key page version. Do not reset LastUsedOn.
 
 	// Find the first signature
-	txObj := st.batch.Transaction(tx.GetTxHash())
+	txObj := st.batch.Transaction(tx.Transaction.GetHash())
 	status, err := txObj.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
@@ -68,16 +68,16 @@ func (UpdateKey) Execute(st *StateManager, tx *protocol.Envelope) (protocol.Tran
 	}
 
 	sigHash := sigs.EntryHashes()[0][:]
-	sigEnv, err := st.batch.Transaction(sigHash).GetState()
+	sigOrTxn, err := st.batch.Transaction(sigHash).GetState()
 	if err != nil {
 		return nil, fmt.Errorf("load first signature from %v: %w", status.Initiator, err)
 	}
-	if len(sigEnv.Signatures) == 0 {
+	if sigOrTxn.Signature == nil {
 		// This should be impossible
 		return nil, fmt.Errorf("invalid signature state")
 	}
 
-	_, entry, ok := page.EntryByKeyHash(sigEnv.Signatures[0].GetPublicKeyHash())
+	_, entry, ok := page.EntryByKeyHash(sigOrTxn.Signature.GetPublicKeyHash())
 	if !ok {
 		return nil, fmt.Errorf("the signing key does not exist on %v", st.OriginUrl)
 	}
