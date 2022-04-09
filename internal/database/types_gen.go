@@ -11,7 +11,20 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type exampleFullAccountState struct {
+	fieldsSet []bool
+	State     protocol.Account `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	Chains    []*merkleState   `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+}
+
+type merkleState struct {
+	fieldsSet []bool
+	Count     uint64     `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+}
 
 type sigSetData struct {
 	fieldsSet []bool
@@ -30,6 +43,36 @@ type txSyntheticTxns struct {
 	fieldsSet []bool
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 }
+
+func (v *exampleFullAccountState) Copy() *exampleFullAccountState {
+	u := new(exampleFullAccountState)
+
+	u.State = v.State
+	u.Chains = make([]*merkleState, len(v.Chains))
+	for i, v := range v.Chains {
+		if v != nil {
+			u.Chains[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *exampleFullAccountState) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *merkleState) Copy() *merkleState {
+	u := new(merkleState)
+
+	u.Count = v.Count
+	u.Pending = make([][32]byte, len(v.Pending))
+	for i, v := range v.Pending {
+		u.Pending[i] = v
+	}
+
+	return u
+}
+
+func (v *merkleState) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *sigSetData) Copy() *sigSetData {
 	u := new(sigSetData)
@@ -69,6 +112,38 @@ func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
 }
 
 func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *exampleFullAccountState) Equal(u *exampleFullAccountState) bool {
+	if !(v.State == u.State) {
+		return false
+	}
+	if len(v.Chains) != len(u.Chains) {
+		return false
+	}
+	for i := range v.Chains {
+		if !((v.Chains[i]).Equal(u.Chains[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *merkleState) Equal(u *merkleState) bool {
+	if !(v.Count == u.Count) {
+		return false
+	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !(v.Pending[i] == u.Pending[i]) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func (v *sigSetData) Equal(u *sigSetData) bool {
 	if !(v.Version == u.Version) {
@@ -111,6 +186,98 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 	}
 
 	return true
+}
+
+var fieldNames_exampleFullAccountState = []string{
+	1: "State",
+	2: "Chains",
+}
+
+func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.State == (nil)) {
+		writer.WriteValue(1, v.State)
+	}
+	if !(len(v.Chains) == 0) {
+		for _, v := range v.Chains {
+			writer.WriteValue(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_exampleFullAccountState)
+	return buffer.Bytes(), err
+}
+
+func (v *exampleFullAccountState) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field State is missing")
+	} else if v.State == (nil) {
+		errs = append(errs, "field State is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Chains is missing")
+	} else if len(v.Chains) == 0 {
+		errs = append(errs, "field Chains is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_merkleState = []string{
+	1: "Count",
+	2: "Pending",
+}
+
+func (v *merkleState) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Count == 0) {
+		writer.WriteUint(1, v.Count)
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteHash(2, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_merkleState)
+	return buffer.Bytes(), err
+}
+
+func (v *merkleState) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Count is missing")
+	} else if v.Count == 0 {
+		errs = append(errs, "field Count is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_sigSetData = []string{
@@ -249,6 +416,56 @@ func (v *txSyntheticTxns) IsValid() error {
 	}
 }
 
+func (v *exampleFullAccountState) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, func(b []byte) error {
+		x, err := protocol.UnmarshalAccount(b)
+		if err == nil {
+			v.State = x
+		}
+		return err
+	})
+	for {
+		if x := new(merkleState); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Chains = append(v.Chains, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_exampleFullAccountState)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *merkleState) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Count = x
+	}
+	for {
+		if x, ok := reader.ReadHash(2); ok {
+			v.Pending = append(v.Pending, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_merkleState)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *sigSetData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -314,6 +531,33 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *exampleFullAccountState) MarshalJSON() ([]byte, error) {
+	u := struct {
+		State  json.RawMessage `json:"state,omitempty"`
+		Chains []*merkleState  `json:"chains,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.State); err != nil {
+		return nil, fmt.Errorf("error encoding State: %w", err)
+	} else {
+		u.State = x
+	}
+	u.Chains = v.Chains
+	return json.Marshal(&u)
+}
+
+func (v *merkleState) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Count   uint64   `json:"count,omitempty"`
+		Pending []string `json:"pending,omitempty"`
+	}{}
+	u.Count = v.Count
+	u.Pending = make([]string, len(v.Pending))
+	for i, x := range v.Pending {
+		u.Pending[i] = encoding.ChainToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *sigSetKeyData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		System    bool   `json:"system,omitempty"`
@@ -335,6 +579,55 @@ func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 		u.Txids[i] = encoding.ChainToJSON(x)
 	}
 	return json.Marshal(&u)
+}
+
+func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
+	u := struct {
+		State  json.RawMessage `json:"state,omitempty"`
+		Chains []*merkleState  `json:"chains,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.State); err != nil {
+		return fmt.Errorf("error encoding State: %w", err)
+	} else {
+		u.State = x
+	}
+	u.Chains = v.Chains
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := protocol.UnmarshalAccountJSON(u.State); err != nil {
+		return fmt.Errorf("error decoding State: %w", err)
+	} else {
+		v.State = x
+	}
+
+	v.Chains = u.Chains
+	return nil
+}
+
+func (v *merkleState) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Count   uint64   `json:"count,omitempty"`
+		Pending []string `json:"pending,omitempty"`
+	}{}
+	u.Count = v.Count
+	u.Pending = make([]string, len(v.Pending))
+	for i, x := range v.Pending {
+		u.Pending[i] = encoding.ChainToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Count = u.Count
+	v.Pending = make([][32]byte, len(u.Pending))
+	for i, x := range u.Pending {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Pending: %w", err)
+		} else {
+			v.Pending[i] = x
+		}
+	}
+	return nil
 }
 
 func (v *sigSetKeyData) UnmarshalJSON(data []byte) error {
