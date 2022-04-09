@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"sort"
-
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 // BPT
@@ -21,7 +19,6 @@ type BPT struct {
 	Root      *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
 	DirtyMap  map[[32]byte]*BptNode // Map of dirty nodes.
 	MaxHeight int                   // Highest height of any node in the BPT
-	NumNodes  uint64                // number of nodes in the BPT
 	power     int                   // Power
 	mask      int                   // Mask used to detect Byte Block boundaries
 	manager   *Manager              // Pointer to the manager for access to the database
@@ -59,9 +56,6 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 	if b.MaxHeight != b2.MaxHeight {
 		return false
 	}
-	if b.NumNodes != b2.NumNodes {
-		return false
-	}
 	return true
 }
 
@@ -70,7 +64,6 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, common.Uint64Bytes(b.NumNodes)...)
 	data = append(data, byte(b.power>>8), byte(b.power))
 	data = append(data, byte(b.mask>>8), byte(b.mask))
 	data = append(data, b.RootHash[:]...)
@@ -83,7 +76,6 @@ func (b *BPT) Marshal() (data []byte) {
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.DirtyMap = make(map[[32]byte]*BptNode)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.NumNodes, data = common.BytesUint64(data)
 	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
 	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
 	copy(b.RootHash[:], data[:32])
@@ -334,8 +326,9 @@ func (b *BPT) EnsureRootHash() {
 // New BPT
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.
-func NewBPT() *BPT {
+func NewBPT(manager *Manager) *BPT {
 	b := new(BPT)                                 // Get a Binary Patrica Tree
+	b.manager = manager                           // Point the BPT to the manager
 	b.power = 8                                   // using 4 bits to persist BPTs to disk
 	b.mask = b.power - 1                          // Take the bits to the power of 2 -1
 	b.Root = new(BptNode)                         // Allocate summary node (contributes nothing to BPT summary Hash
