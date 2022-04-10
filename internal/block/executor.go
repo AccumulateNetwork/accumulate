@@ -586,6 +586,8 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 		// This should be the second signature (SyntheticSignature should be first)
 		sig := new(protocol.ReceiptSignature)
+		sig.SourceNetwork = m.Network.NodeUrl()
+		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
 		if err != nil {
