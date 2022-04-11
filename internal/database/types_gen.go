@@ -57,7 +57,7 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
 	}
-	u.Signature = v.Signature
+	u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
 	u.Hash = v.Hash
 
 	return u
@@ -68,7 +68,7 @@ func (v *SigOrTxn) CopyAsInterface() interface{} { return v.Copy() }
 func (v *exampleFullAccountState) Copy() *exampleFullAccountState {
 	u := new(exampleFullAccountState)
 
-	u.State = v.State
+	u.State = (v.State).CopyAsInterface().(protocol.Account)
 	u.Chains = make([]*merkleState, len(v.Chains))
 	for i, v := range v.Chains {
 		if v != nil {
@@ -241,7 +241,7 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == nil) {
 		writer.WriteValue(1, v.Transaction)
 	}
-	if !(v.Signature == (nil)) {
+	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
 	if !(v.Hash == ([32]byte{})) {
@@ -262,7 +262,7 @@ func (v *SigOrTxn) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == (nil) {
+	} else if v.Signature == nil {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -290,7 +290,7 @@ func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.State == (nil)) {
+	if !(v.State == nil) {
 		writer.WriteValue(1, v.State)
 	}
 	if !(len(v.Chains) == 0) {
@@ -308,7 +308,7 @@ func (v *exampleFullAccountState) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field State is missing")
-	} else if v.State == (nil) {
+	} else if v.State == nil {
 		errs = append(errs, "field State is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {

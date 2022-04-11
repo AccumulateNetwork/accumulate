@@ -181,7 +181,7 @@ func (v *DirectoryQueryResult) Copy() *DirectoryQueryResult {
 	}
 	u.ExpandedEntries = make([]protocol.Account, len(v.ExpandedEntries))
 	for i, v := range v.ExpandedEntries {
-		u.ExpandedEntries[i] = v
+		u.ExpandedEntries[i] = (v).CopyAsInterface().(protocol.Account)
 	}
 	u.Total = v.Total
 
@@ -261,7 +261,7 @@ func (v *RequestTxHistory) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponseAccount) Copy() *ResponseAccount {
 	u := new(ResponseAccount)
 
-	u.Account = v.Account
+	u.Account = (v.Account).CopyAsInterface().(protocol.Account)
 	u.ChainState = make([]ChainState, len(v.ChainState))
 	for i, v := range v.ChainState {
 		u.ChainState[i] = *(&v).Copy()
@@ -416,10 +416,10 @@ func (v *ResponseTxHistory) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SignatureSet) Copy() *SignatureSet {
 	u := new(SignatureSet)
 
-	u.Account = v.Account
+	u.Account = (v.Account).CopyAsInterface().(protocol.Account)
 	u.Signatures = make([]protocol.Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
-		u.Signatures[i] = v
+		u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
 	}
 
 	return u
@@ -1264,7 +1264,7 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Account == (nil)) {
+	if !(v.Account == nil) {
 		writer.WriteValue(1, v.Account)
 	}
 	if !(len(v.ChainState) == 0) {
@@ -1285,7 +1285,7 @@ func (v *ResponseAccount) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == (nil) {
+	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -1766,7 +1766,7 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Account == (nil)) {
+	if !(v.Account == nil) {
 		writer.WriteValue(1, v.Account)
 	}
 	if !(len(v.Signatures) == 0) {
@@ -1784,7 +1784,7 @@ func (v *SignatureSet) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == (nil) {
+	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {

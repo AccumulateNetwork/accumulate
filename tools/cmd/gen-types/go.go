@@ -22,6 +22,13 @@ const (
 	BigInt   = typegen.TypeCodeBigInt
 	Any      = typegen.TypeCodeAny
 	RawJson  = typegen.TypeCodeRawJson
+
+	// Basic     = typegen.MarshalAsBasic
+	// None      = typegen.MarshalAsNone
+	Enum      = typegen.MarshalAsEnum
+	Value     = typegen.MarshalAsValue
+	Reference = typegen.MarshalAsReference
+	Union     = typegen.MarshalAsUnion
 )
 
 //go:embed go.go.tmpl
@@ -122,6 +129,14 @@ func GoFieldError(op, name string, args ...string) string {
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
 }
 
+func goUnionMethod(field *Field, name string) string {
+	parts := strings.SplitN(field.Type.String(), ".", 2)
+	if len(parts) == 1 {
+		return name + parts[0]
+	}
+	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
+}
+
 func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type.Code {
 	case Bool, String, Duration, Time, Bytes, Uint, Int:
@@ -135,11 +150,11 @@ func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	}
 
 	switch field.MarshalAs {
-	case typegen.MarshalAsReference:
+	case Reference:
 		return "Value", true
-	case typegen.MarshalAsValue:
+	case Value, Union:
 		return "Value", false
-	case typegen.MarshalAsEnum:
+	case Enum:
 		return "Enum", false
 	}
 
@@ -205,7 +220,7 @@ func goJsonTypeSingle(field *Field) string {
 		return "interface{}"
 	}
 
-	if field.UnmarshalWith == "" {
+	if field.MarshalAs != Union && field.UnmarshalWith == "" {
 		return ""
 	}
 
@@ -213,7 +228,7 @@ func goJsonTypeSingle(field *Field) string {
 }
 
 func GoJsonType(field *Field) string {
-	if field.Repeatable && field.UnmarshalWith != "" {
+	if field.Repeatable && (field.MarshalAs == Union || field.UnmarshalWith != "") {
 		return "encoding.JsonUnmarshalListWith[" + GoResolveType(field, false, true) + "]"
 	}
 
@@ -259,10 +274,12 @@ func GoIsZero(field *Field, varName string) (string, error) {
 	}
 
 	switch field.MarshalAs {
-	case typegen.MarshalAsReference:
+	case Reference:
 		return fmt.Sprintf("(%s).Equal(new(%s))", varName, field.Type), nil
-	case typegen.MarshalAsEnum:
+	case Enum:
 		return fmt.Sprintf("%s == 0", varName), nil
+	case Union:
+		return fmt.Sprintf("%s == nil", varName), nil
 	}
 
 	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
@@ -285,9 +302,11 @@ func GoJsonZeroValue(field *Field) (string, error) {
 	}
 
 	switch field.MarshalAs {
-	case typegen.MarshalAsEnum:
+	case Enum:
 		return "0", nil
-	case typegen.MarshalAsReference, typegen.MarshalAsValue:
+	case Union:
+		return "nil", nil
+	case Reference, Value:
 		if field.Pointer {
 			return "nil", nil
 		}
@@ -311,9 +330,12 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
 	default:
 		switch field.MarshalAs {
-		case typegen.MarshalAsReference:
+		case Union:
+			// TODO Fix
+			expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
+		case Reference:
 			expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
-		case typegen.MarshalAsValue, typegen.MarshalAsEnum:
+		case Value, Enum:
 			expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 		default:
 			return "", fmt.Errorf("field %q: cannot determine how to compare %s", field.Name, GoResolveType(field, false, false))
@@ -357,6 +379,9 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 }
 
 func GoCopy(field *Field, dstName, srcName string) (string, error) {
+	if field.Name == "BlockTime" {
+		print("")
+	}
 	if !field.Repeatable {
 		return goCopy(field, dstName, srcName)
 	}
@@ -387,21 +412,25 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 	}
 
 	switch field.MarshalAs {
-	case typegen.MarshalAsReference:
+	case Union:
+		return goCopyNonPointer(field, "%s = (%s).CopyAsInterface().(%s)", dstName, srcName, GoResolveType(field, false, true)), nil
+	case Reference:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
-	case typegen.MarshalAsValue, typegen.MarshalAsEnum:
+	case Value, Enum:
 		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
 	default:
 		return "", fmt.Errorf("field %q: cannot determine how to copy %s", field.Name, GoResolveType(field, false, false))
 	}
 }
 
-func goCopyNonPointer(field *Field, expr, dstName, srcName string) string {
+func goCopyNonPointer(field *Field, expr, dstName, srcName string, exprArgs ...interface{}) string {
 	if !field.Pointer {
-		return fmt.Sprintf(expr, dstName, srcName)
+		exprArgs = append([]interface{}{dstName, srcName}, exprArgs...)
+		return fmt.Sprintf(expr, exprArgs...)
 	}
 
-	expr = fmt.Sprintf(expr, "*"+dstName, "*"+srcName)
+	exprArgs = append([]interface{}{"*" + dstName, "*" + srcName}, exprArgs...)
+	expr = fmt.Sprintf(expr, exprArgs...)
 	return fmt.Sprintf("if %s != nil { %s = new(%s); %s }", srcName, dstName, GoResolveType(field, true, true), expr)
 }
 
@@ -447,7 +476,7 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 
 	var ptrPrefix string
 	switch {
-	case field.UnmarshalWith != "":
+	case field.MarshalAs == Union || field.UnmarshalWith != "":
 		// OK
 	case wantPtr && !field.Pointer:
 		ptrPrefix = "*"
@@ -465,6 +494,8 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	var expr string
 	var hasIf bool
 	switch {
+	case field.MarshalAs == Union:
+		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s(b); if err == nil { %s }; return err })", readerName, field.Number, goUnionMethod(field, "Unmarshal"), set), false
 	case field.UnmarshalWith != "":
 		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s(b); if err == nil { %s }; return err })", readerName, field.Number, field.UnmarshalWith, set), false
 	case method == "Value":
@@ -493,6 +524,12 @@ func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 		}
 		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
 	}
+	if field.MarshalAs == Union {
+		if !field.Repeatable {
+			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, goUnionMethod(field, "Unmarshal")), nil
+		}
+		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, goUnionMethod(field, "Unmarshal")), nil
+	}
 
 	method, wantPtr := goJsonMethod(field)
 	var ptrPrefix string
@@ -514,7 +551,7 @@ func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 
 func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) (string, error) {
 	err := GoFieldError("decoding", errName, errArgs...)
-	if field.UnmarshalWith != "" {
+	if field.MarshalAs == Union || field.UnmarshalWith != "" {
 		if !field.Repeatable {
 			return fmt.Sprintf("\t%s = %s.Value\n", tgtName, srcName), nil
 		}

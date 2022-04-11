@@ -181,19 +181,15 @@ UpdateKeyPage:
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: value
+      marshal-as: union
       repeatable: true
-      unmarshal-with: UnmarshalKeyPageOperation
-      zero-value: nil
 
 UpdateAccountAuth:
   union: { type: transaction }
   fields:
     - name: Operations
       type: AccountAuthOperation
-      marshal-as: value
-      unmarshal-with: UnmarshalAccountAuthOperation
-      zero-value: nil
+      marshal-as: union
       repeatable: true
 
 AddValidator:

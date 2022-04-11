@@ -224,7 +224,7 @@ func processExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, 
 		return env, err
 	}
 
-	body, err := protocol.UnmarshalTransaction(payload)
+	body, err := protocol.UnmarshalTransactionBody(payload)
 	if err != nil {
 		return nil, accumulateError(err)
 	}
