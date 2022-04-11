@@ -319,6 +319,13 @@ func validateRemotePageSignature(_ *database.Batch, transaction *protocol.Transa
 //
 // Otherwise, the fee is the base signature fee + signature data surcharge.
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
+	// Don't charge fees for internal administrative functions
+	signer := signature.GetSigner()
+	_, isBvn := protocol.ParseBvnUrl(signer)
+	if isBvn || protocol.IsDnUrl(signer) {
+		return 0, nil
+	}
+
 	// Compute the signature fee
 	fee, err := protocol.ComputeSignatureFee(signature)
 	if err != nil {

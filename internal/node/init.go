@@ -27,6 +27,7 @@ type InitOptions struct {
 	Version    int
 	WorkDir    string
 	Port       int
+	NodeNr     *uint64
 	GenesisDoc *types.GenesisDoc
 	Config     []*cfg.Config
 	RemoteIP   []string
@@ -75,7 +76,12 @@ func initV1(opts InitOptions) (err error) {
 			return errors.New("Cannot initialize multiple networks at once")
 		}
 
-		nodeDirName := fmt.Sprintf("Node%d", i)
+		var nodeDirName string
+		if opts.NodeNr != nil {
+			nodeDirName = fmt.Sprintf("Node%d", *opts.NodeNr)
+		} else {
+			nodeDirName = fmt.Sprintf("Node%d", i)
+		}
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
