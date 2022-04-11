@@ -13,6 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+const minorBlockApiTimeout = 2 * time.Minute
+
 var blocksCmd = &cobra.Command{
 	Use:   "blocks",
 	Short: "Create and get blocks",
@@ -126,7 +128,7 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 
 	// Temporary increase timeout, we may get a large result set which takes a while to construct
 	globalTimeout := Client.Timeout
-	Client.Timeout = 2 * time.Minute // TODO configuration option or param?
+	Client.Timeout = minorBlockApiTimeout
 	defer func() {
 		Client.Timeout = globalTimeout
 	}()

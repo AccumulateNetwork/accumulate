@@ -923,11 +923,11 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
 	idxChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 	idxEntries, err := idxChain.Entries(int64(req.Start), int64(req.Start+req.Limit))
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 	}
 
 	resp := query.ResponseMinorBlocks{}
@@ -946,7 +946,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < protocol.TxFetchModeOmit || req.FilterSynthAnchorsOnlyBlocks) {
 			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, idxEntry.BlockIndex).Get()
 			if err != nil {
-				return nil, &protocol.Error{Code: protocol.ErrorCodeUnknownError, Message: err} // TODO create error
+				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
 			minorEntry.TxCount = uint64(0)
 			internalTxCount := uint64(0)
