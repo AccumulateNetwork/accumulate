@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -44,7 +45,7 @@ func (s *Session) UseSimulator(bvnCount int) {
 	s.Engine = &SimEngine{sim}
 }
 
-func (s *SimEngine) GetAccount(url *URL) (protocol.Account, error) {
+func (s SimEngine) GetAccount(url *URL) (protocol.Account, error) {
 	subnet, err := s.Router().RouteAccount(url)
 	if err != nil {
 		return nil, err
@@ -55,7 +56,30 @@ func (s *SimEngine) GetAccount(url *URL) (protocol.Account, error) {
 	return batch.Account(url).GetState()
 }
 
-func (s *SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) {
+func (s SimEngine) GetDirectory(account *URL) ([]*URL, error) {
+	subnet, err := s.Router().RouteAccount(account)
+	if err != nil {
+		return nil, err
+	}
+
+	batch := s.Subnet(subnet).Database.Begin(false)
+	defer batch.Discard()
+	dir := indexing.Directory(batch, account)
+	n, err := dir.Count()
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]*URL, n)
+	for i := range urls {
+		urls[i], err = dir.Get(uint64(i))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return urls, nil
+}
+
+func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) {
 	for _, subnet := range s.Subnets {
 		batch := s.Subnet(subnet.ID).Database.Begin(false)
 		defer batch.Discard()
@@ -71,7 +95,7 @@ func (s *SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error)
 	return nil, fmt.Errorf("transaction %X %w", hash, storage.ErrNotFound)
 }
 
-func (s *SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
+func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
 	envelope = envelope.Copy()
 	subnet, err := s.Router().Route(envelope)
 	if err != nil {
@@ -93,7 +117,7 @@ func (s *SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSt
 	return status, nil
 }
 
-func (s *SimEngine) WaitFor(hash [32]byte) (*protocol.TransactionStatus, *protocol.Transaction, error) {
+func (s SimEngine) WaitFor(hash [32]byte) (*protocol.TransactionStatus, *protocol.Transaction, error) {
 	status, txn := s.WaitForTransaction(func(status *protocol.TransactionStatus) bool {
 		return status.Delivered || status.Pending
 	}, hash[:])
