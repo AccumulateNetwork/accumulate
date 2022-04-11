@@ -2,12 +2,12 @@ module gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
 
 go 1.18
 
-replace gitlab.com/accumulatenetwork/accumulate => ../../
+// replace gitlab.com/accumulatenetwork/accumulate => ../../
 
 require (
 	github.com/spf13/cobra v1.4.0
 	github.com/traefik/yaegi v0.11.3
-	gitlab.com/accumulatenetwork/accumulate v0.5.1-rc5.0.20220411040720-a3557d523335
+	gitlab.com/accumulatenetwork/accumulate v0.5.1-rc5.0.20220411041439-6905f8fad24e
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220411040148-e45e8d546353
 )
 
