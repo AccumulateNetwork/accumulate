@@ -26,7 +26,6 @@ type Session struct {
 	Filename string
 	Stdout   io.Writer
 	Stderr   io.Writer
-	Stdin    io.Reader
 	Engine   Engine
 
 	timestamp uint64
