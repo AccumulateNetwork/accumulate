@@ -430,7 +430,7 @@ func (b bldTxn) AddValidator(key Keyish) bldAddValidator {
 	var c bldAddValidator
 	c.body = new(protocol.AddValidator)
 	c.bldTxn = b.WithBody(c.body)
-	c.body.Key = b.s.pubkey(key)
+	c.body.PubKey = b.s.pubkey(key)
 	return c
 }
 
@@ -438,7 +438,7 @@ func (b bldTxn) RemoveValidator(key Keyish) bldRemoveValidator {
 	var c bldRemoveValidator
 	c.body = new(protocol.RemoveValidator)
 	c.bldTxn = b.WithBody(c.body)
-	c.body.Key = b.s.pubkey(key)
+	c.body.PubKey = b.s.pubkey(key)
 	return c
 }
 
@@ -446,8 +446,8 @@ func (b bldTxn) UpdateValidatorKey(oldKey, newKey Keyish) bldUpdateValidatorKey 
 	var c bldUpdateValidatorKey
 	c.body = new(protocol.UpdateValidatorKey)
 	c.bldTxn = b.WithBody(c.body)
-	c.body.Key = b.s.pubkey(oldKey)
-	c.body.NewKey = b.s.pubkey(newKey)
+	c.body.PubKey = b.s.pubkey(oldKey)
+	c.body.NewPubKey = b.s.pubkey(newKey)
 	return c
 }
 

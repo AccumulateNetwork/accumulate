@@ -1416,7 +1416,6 @@ func TestUpdateValidators(t *testing.T) {
 		send(acctesting.NewTransaction().
 			WithSigner(validators, 4).
 			WithTxnHash(ids[0][:]).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
 			Build())
 	})
