@@ -34,6 +34,7 @@ type Session struct {
 
 type Engine interface {
 	GetAccount(*URL) (protocol.Account, error)
+	GetDirectory(*URL) ([]*url.URL, error)
 	GetTransaction([32]byte) (*protocol.Transaction, error)
 	Submit(*protocol.Envelope) (*protocol.TransactionStatus, error)
 	WaitFor([32]byte) (*protocol.TransactionStatus, *protocol.Transaction, error)

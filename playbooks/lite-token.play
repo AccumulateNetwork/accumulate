@@ -1,7 +1,7 @@
 ---
 engine:
   name: play-accumulate-kernel
-  description: 'Accumulate Kernel'
+  description: Accumulate Kernel
   modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
   importPath: gitlab.com/accumulatenetwork/accumulate
 ---
