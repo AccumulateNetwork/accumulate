@@ -24,7 +24,7 @@ FILESIZE=$(stat -c%s "/tmp/minor.txt")
 echo File size is ${FILESIZE}
 
 section "Test minor block API count-only on DN"
-accumulate blocks minor acc://bvn-dn 10 5 countOnly >/tmp/minor.txt
+accumulate blocks minor acc://dn 10 5 countOnly >/tmp/minor.txt
 FILESIZE=$(stat -c%s "/tmp/minor.txt")
 echo File size is ${FILESIZE}
 
@@ -34,6 +34,6 @@ FILESIZE=$(stat -c%s "/tmp/minor.txt")
 echo File size is ${FILESIZE}
 
 section "Test minor block API expand on DN"
-accumulate blocks minor acc://bvn-dn 10 5 expand true >/tmp/minor.txt
+accumulate blocks minor acc://dn 10 5 expand true >/tmp/minor.txt
 FILESIZE=$(stat -c%s "/tmp/minor.txt")
 echo File size is ${FILESIZE}
