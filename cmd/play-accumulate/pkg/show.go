@@ -20,45 +20,17 @@ func (s *Session) Print(v interface{}) {
 	fmt.Fprint(s.Stdout, v)
 }
 
-func (s *Session) tryGetTokenAccount(url Urlish) protocol.AccountWithTokens {
-	account, err := s.Engine.GetAccount(s.url(url))
-	if err != nil {
-		return nil
-	}
-
-	token, ok := account.(protocol.AccountWithTokens)
-	if !ok {
-		return nil
-	}
-
-	return token
-}
-
-func (s *Session) tryGetTokenIssuer(url Urlish) *protocol.TokenIssuer {
-	account, err := s.Engine.GetAccount(s.url(url))
-	if err != nil {
-		return nil
-	}
-
-	token, ok := account.(*protocol.TokenIssuer)
-	if !ok {
-		return nil
-	}
-
-	return token
-}
-
 func (s *Session) formatBalanceForIssuer(url Urlish, balance *big.Int) string {
-	issuer := s.tryGetTokenIssuer(s.url(url))
-	if issuer == nil {
+	var issuer *protocol.TokenIssuer
+	if !s.TryGetAccountAs(url, &issuer) {
 		return balance.String()
 	}
 	return protocol.FormatBigAmount(balance, int(issuer.Precision)) + " " + issuer.Symbol
 }
 
 func (s *Session) formatBalanceForAccount(url Urlish, balance *big.Int) string {
-	account := s.tryGetTokenAccount(s.url(url))
-	if account == nil {
+	var account protocol.AccountWithTokens
+	if !s.TryGetAccountAs(url, &account) {
 		return balance.String()
 	}
 	return s.formatBalanceForIssuer(account.GetTokenUrl(), balance)
@@ -81,6 +53,17 @@ func (s *Session) Show(v interface{}) {
 		s.Print(v.String())
 
 	// Accounts
+	case *protocol.LiteIdentity:
+		dir, _ := s.TryGetDirectory(v.Url)
+		str := fmt.Sprintf(
+			"Lite Identity\n"+
+				"    Url:       %v\n",
+			v.Url,
+		)
+		for i, url := range dir {
+			str += fmt.Sprintf("    Entry %d:   %s\n", i, url)
+		}
+		s.Print(str)
 	case *protocol.LiteTokenAccount:
 		s.Print(fmt.Sprintf(
 			"Lite Token Account\n"+
@@ -93,6 +76,81 @@ func (s *Session) Show(v interface{}) {
 			s.formatBalanceForIssuer(v.TokenUrl, &v.Balance),
 			protocol.FormatAmount(v.CreditBalance, protocol.CreditPrecisionPower),
 		))
+	case *protocol.ADI:
+		dir, _ := s.TryGetDirectory(v.Url)
+		str := fmt.Sprintf(
+			"Identity (ADI)\n"+
+				"    Url:       %v\n",
+			v.Url,
+		)
+		for i, url := range dir {
+			str += fmt.Sprintf("    Entry %d:   %s\n", i, url)
+		}
+		s.Print(str)
+	case *protocol.TokenAccount:
+		s.Print(fmt.Sprintf(
+			"Lite Token Account\n"+
+				"    Url:        %v\n"+
+				"    Issuer:     %v\n"+
+				"    Balance:    %v\n"+
+				"    Scratch:    %v\n",
+			v.Url,
+			v.TokenUrl.ShortString(),
+			s.formatBalanceForIssuer(v.TokenUrl, &v.Balance),
+			v.Scratch,
+		))
+	case *protocol.KeyBook:
+		str := fmt.Sprintf(
+			"Key Book\n"+
+				"    Url:      %v\n",
+			v.Url,
+		)
+		for i := uint64(0); i < v.PageCount; i++ {
+			str += fmt.Sprintf("    Page %d:   %s\n", i, protocol.FormatKeyPageUrl(v.Url, i))
+		}
+		s.Print(str)
+	case *protocol.KeyPage:
+		str := fmt.Sprintf(
+			"Key Page\n"+
+				"    Url:          %v\n"+
+				"    Credits:      %v\n"+
+				"    Version:      %v\n"+
+				"    Thresholds:   accept=%d, reject=%d, response=%d, block=%d\n",
+			v.Url.Authority,
+			protocol.FormatAmount(v.CreditBalance, protocol.CreditPrecisionPower),
+			v.Version,
+			v.AcceptThreshold, v.RejectThreshold, v.ResponseThreshold, v.BlockThreshold,
+		)
+		for i, key := range v.Keys {
+			switch {
+			case key.Owner == nil:
+				str += fmt.Sprintf("    Key %d:        %X\n", i, key.PublicKeyHash)
+			case key.PublicKeyHash == nil:
+				str += fmt.Sprintf("    Key %d:        %v\n", i, key.Owner)
+			default:
+				str += fmt.Sprintf("    Key %d:        %X (%v)\n", i, key.PublicKeyHash, key.Owner)
+			}
+		}
+		s.Print(str)
+	case *protocol.TokenIssuer:
+		str := fmt.Sprintf(
+			"Token Issuer\n"+
+				"    Url:         %v\n"+
+				"    Symbol:      %v\n"+
+				"    Precision:   %v\n"+
+				"    Issued:      %v\n",
+			v.Url,
+			v.Symbol,
+			v.Precision,
+			protocol.FormatBigAmount(&v.Issued, int(v.Precision)),
+		)
+		if v.SupplyLimit != nil {
+			str += fmt.Sprintf(
+				"    Limit:       %v\n",
+				protocol.FormatBigAmount(v.SupplyLimit, int(v.Precision)),
+			)
+		}
+		s.Print(str)
 	case protocol.Account:
 		s.Print(fmt.Sprintf(
 			"Account %v (%v)\n",

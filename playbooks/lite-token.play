@@ -1,33 +1,40 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+---
+
 # Lite Token Accounts
 
 ### Generate a lite address
 
-```go
+```go{ id: 1 }
 alice := GenerateKey("alice")
 aliceAddr := LiteAddress(alice, ACME)
 Show(aliceAddr)
 ```
 
-Result:
-
-```result
-acc://544c73aba05e0d8693e7afb96dbc029ef6bcd582b4a298c8/ACME
+```{ result_of: 1, id: 1, mime: "application/vnd.code.notebook.stdout" }
+acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
 ```
 
 ### Get tokens
 
-```go
+```go{ id: 2 }
 Show(Faucet(aliceAddr).Wait())
 Show(Get(aliceAddr))
 ```
 
-Result:
-
-```result
+```{ result_of: 2, id: 1, mime: "application/vnd.code.notebook.stdout" }
 ACME Faucet Transaction
     Hash:     FEB7DD5BC2F6BF65DEF19D0280126C3528EDC2CBBD71D4D33638E1FC070552FD
     To:       acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
     Amount:   2000000 ACME
+```
+
+```{ result_of: 2, id: 2, mime: "application/vnd.code.notebook.stdout" }
 Lite Token Account
     Identity:   53232cfe088f4c2dc74f1d055b285b61b0066248146fac67
     Issuer:     ACME
@@ -37,7 +44,7 @@ Lite Token Account
 
 ### Make credits
 
-```go
+```go{ id: 3 }
 Show(Transaction(aliceAddr).
     WithSigner(aliceAddr).
     AddCredits(aliceAddr, 10).
@@ -48,14 +55,15 @@ Show(Transaction(aliceAddr).
 Show(Get(aliceAddr))
 ```
 
-Result:
-
-```result
+```{ result_of: 3, id: 1, mime: "application/vnd.code.notebook.stdout" }
 Add Credits Transaction
     Hash:    3BC64CCC30010876BD7EB798526C9C28786CB9D198BE63BA14916463DEC111D9
     From:    acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
     To:      acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
     Spent:   10
+```
+
+```{ result_of: 3, id: 2, mime: "application/vnd.code.notebook.stdout" }
 Lite Token Account
     Identity:   53232cfe088f4c2dc74f1d055b285b61b0066248146fac67
     Issuer:     ACME
@@ -65,7 +73,7 @@ Lite Token Account
 
 ### Send tokens
 
-```go
+```go{ id: 4 }
 bob, charlie := GenerateKey("bob"), GenerateKey("charlie")
 bobAddr, charlieAddr := LiteAddress(bob, ACME), LiteAddress(charlie, ACME)
 
@@ -82,24 +90,31 @@ Show(Get(bobAddr))
 Show(Get(charlieAddr))
 ```
 
-Result:
-
-```result
+```{ result_of: 4, id: 1, mime: "application/vnd.code.notebook.stdout" }
 Send Tokens Transaction
     Hash:   105BC8607F7D25A3EE361E8644CE30A6844AB38317936896ABA843DFA70253B9
     From:   acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
     Send:   68 ACME to acc://1fcce69d0a02be2543b193893166958e6bf05dce67aa961e/ACME
     Send:   42 ACME to acc://829a9ebc3db34dc622707324fd80676d3eb7964f32bae080/ACME
+```
+
+```{ result_of: 4, id: 2, mime: "application/vnd.code.notebook.stdout" }
 Lite Token Account
     Identity:   53232cfe088f4c2dc74f1d055b285b61b0066248146fac67
     Issuer:     ACME
     Balance:    1999880 ACME
     Credits:    47
+```
+
+```{ result_of: 4, id: 3, mime: "application/vnd.code.notebook.stdout" }
 Lite Token Account
     Identity:   1fcce69d0a02be2543b193893166958e6bf05dce67aa961e
     Issuer:     ACME
     Balance:    68 ACME
     Credits:    0
+```
+
+```{ result_of: 4, id: 4, mime: "application/vnd.code.notebook.stdout" }
 Lite Token Account
     Identity:   829a9ebc3db34dc622707324fd80676d3eb7964f32bae080
     Issuer:     ACME
