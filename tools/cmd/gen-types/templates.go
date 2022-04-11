@@ -54,8 +54,8 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 		if typ.IsUnion() {
 			field := new(Field)
 			field.Name = "Type"
-			field.Type = typ.UnionSpec.Enumeration()
-			field.MarshalAs = "enum"
+			field.Type.SetNamed(typ.UnionSpec.Enumeration())
+			field.MarshalAs = typegen.MarshalAsEnum
 			field.KeepEmpty = true
 			field.Virtual = true
 			typ.Fields = append(typ.Fields, field)
@@ -68,7 +68,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 				return nil, fmt.Errorf("unknown embedded type %s", name)
 			}
 			field := new(Field)
-			field.Type = name
+			field.Type.SetNamed(name)
 			field.TypeRef = etyp
 			typ.Fields = append(typ.Fields, field)
 		}
@@ -77,8 +77,8 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 		for _, field := range typ.Type.Fields {
 			tfield := new(Field)
 			tfield.Field = *field
-			if field.MarshalAs != "" {
-				tfield.TypeRef = lup[tfield.Type]
+			if field.MarshalAs != typegen.MarshalAsBasic {
+				tfield.TypeRef = lup[tfield.Type.String()]
 			}
 			typ.Fields = append(typ.Fields, tfield)
 		}
@@ -92,9 +92,9 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			}
 
 			field.IsEmbedded = true
-			bits := strings.Split(field.Type, ".")
+			bits := strings.Split(field.Type.String(), ".")
 			if len(bits) == 1 {
-				field.Name = field.Type
+				field.Name = field.Type.String()
 			} else {
 				field.Name = bits[1]
 			}
@@ -197,10 +197,10 @@ func (u *UnionSpec) Enumeration() string {
 func (f *Field) IsBinary() bool          { return !f.NonBinary }
 func (f *Field) AlternativeName() string { return f.Alternative }
 func (f *Field) IsPointer() bool         { return f.Pointer }
-func (f *Field) IsMarshalled() bool      { return f.MarshalAs != "none" }
-func (f *Field) AsReference() bool       { return f.MarshalAs == "reference" }
-func (f *Field) AsValue() bool           { return f.MarshalAs == "value" }
-func (f *Field) AsEnum() bool            { return f.MarshalAs == "enum" }
+func (f *Field) IsMarshalled() bool      { return f.MarshalAs != typegen.MarshalAsNone }
+func (f *Field) AsReference() bool       { return f.MarshalAs == typegen.MarshalAsReference }
+func (f *Field) AsValue() bool           { return f.MarshalAs == typegen.MarshalAsValue }
+func (f *Field) AsEnum() bool            { return f.MarshalAs == typegen.MarshalAsEnum }
 func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }

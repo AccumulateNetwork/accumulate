@@ -9,6 +9,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
+const (
+	Int      = typegen.TypeCodeInt
+	Uint     = typegen.TypeCodeUint
+	Bool     = typegen.TypeCodeBool
+	String   = typegen.TypeCodeString
+	Hash     = typegen.TypeCodeHash
+	Bytes    = typegen.TypeCodeBytes
+	Url      = typegen.TypeCodeUrl
+	Time     = typegen.TypeCodeTime
+	Duration = typegen.TypeCodeDuration
+	BigInt   = typegen.TypeCodeBigInt
+	Any      = typegen.TypeCodeAny
+	RawJson  = typegen.TypeCodeRawJson
+)
+
 //go:embed go.go.tmpl
 var goSrc string
 
@@ -108,29 +123,23 @@ func GoFieldError(op, name string, args ...string) string {
 }
 
 func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
-	switch field.Type {
-	case "bool", "string", "duration", "time", "bytes", "uint", "int":
-		return typegen.TitleCase(field.Type), false
-	case "url", "hash":
-		return typegen.TitleCase(field.Type), true
-	case "rawJson":
+	switch field.Type.Code {
+	case Bool, String, Duration, Time, Bytes, Uint, Int:
+		return typegen.TitleCase(field.Type.String()), false
+	case Url, Hash:
+		return typegen.TitleCase(field.Type.String()), true
+	case RawJson:
 		return "Bytes", false
-	case "bigint":
+	case BigInt:
 		return "BigInt", true
-	case "chain":
-		return "Hash", true
-	case "uvarint":
-		return "Uint", false
-	case "varint":
-		return "Int", false
 	}
 
 	switch field.MarshalAs {
-	case "reference":
+	case typegen.MarshalAsReference:
 		return "Value", true
-	case "value":
+	case typegen.MarshalAsValue:
 		return "Value", false
-	case "enum":
+	case typegen.MarshalAsEnum:
 		return "Enum", false
 	}
 
@@ -138,40 +147,40 @@ func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 }
 
 func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
-	switch field.Type {
-	case "bytes", "chain", "duration", "any":
-		return typegen.TitleCase(field.Type), false
-	case "hash":
+	switch field.Type.Code {
+	case Bytes, Duration, Any:
+		return field.Type.Title(), false
+	case Hash:
 		return "Chain", false
-	case "bigint":
-		return typegen.TitleCase(field.Type), true
+	case BigInt:
+		return "Bigint", true
 	}
 
 	return "", false
 }
 
 func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
-	typ := field.Type
-	switch typ {
-	case "bytes":
+	typ := field.Type.String()
+	switch field.Type.Code {
+	case Bytes:
 		typ = "[]byte"
-	case "rawJson":
+	case RawJson:
 		typ = "json.RawMessage"
-	case "url":
+	case Url:
 		typ = "url.URL"
-	case "bigint":
+	case BigInt:
 		typ = "big.Int"
-	case "uvarint", "uint":
+	case Uint:
 		typ = "uint64"
-	case "varint", "int":
+	case Int:
 		typ = "int64"
-	case "chain", "hash":
+	case Hash:
 		typ = "[32]byte"
-	case "duration":
+	case Duration:
 		typ = "time.Duration"
-	case "time":
+	case Time:
 		typ = "time.Time"
-	case "any":
+	case Any:
 		typ = "interface{}"
 	}
 
@@ -185,14 +194,14 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 }
 
 func goJsonTypeSingle(field *Field) string {
-	switch field.Type {
-	case "bytes":
+	switch field.Type.Code {
+	case Bytes:
 		return "*string"
-	case "bigint":
+	case BigInt:
 		return "*string"
-	case "chain", "hash":
+	case Hash:
 		return "string"
-	case "duration", "any":
+	case Duration, Any:
 		return "interface{}"
 	}
 
@@ -234,25 +243,25 @@ func GoIsZero(field *Field, varName string) (string, error) {
 		return fmt.Sprintf("%s == (%v)", varName, field.ZeroValue), nil
 	}
 
-	switch field.Type {
-	case "bytes", "rawJson", "string":
+	switch field.Type.Code {
+	case Bytes, RawJson, String:
 		return fmt.Sprintf("len(%s) == 0", varName), nil
-	case "any":
+	case Any:
 		return fmt.Sprintf("%s == nil", varName), nil
-	case "bool":
+	case Bool:
 		return fmt.Sprintf("!%s", varName), nil
-	case "uvarint", "varint", "uint", "int", "duration":
+	case Uint, Int, Duration:
 		return fmt.Sprintf("%s == 0", varName), nil
-	case "bigint":
+	case BigInt:
 		return fmt.Sprintf("(%s).Cmp(new(big.Int)) == 0", varName), nil
-	case "url", "chain", "hash", "time":
+	case Url, Hash, Time:
 		return fmt.Sprintf("%s == (%s{})", varName, GoResolveType(field, false, false)), nil
 	}
 
 	switch field.MarshalAs {
-	case "reference":
+	case typegen.MarshalAsReference:
 		return fmt.Sprintf("(%s).Equal(new(%s))", varName, field.Type), nil
-	case "enum":
+	case typegen.MarshalAsEnum:
 		return fmt.Sprintf("%s == 0", varName), nil
 	}
 
@@ -264,21 +273,21 @@ func GoJsonZeroValue(field *Field) (string, error) {
 		return "nil", nil
 	}
 
-	switch field.Type {
-	case "bytes", "bigint", "duration", "any", "slice", "rawJson":
+	switch field.Type.Code {
+	case Bytes, BigInt, Duration, Any, RawJson:
 		return "nil", nil
-	case "bool":
+	case Bool:
 		return "false", nil
-	case "string", "chain", "hash":
+	case String, Hash:
 		return `""`, nil
-	case "uvarint", "varint", "uint", "int":
+	case Uint, Int:
 		return "0", nil
 	}
 
 	switch field.MarshalAs {
-	case "enum":
+	case typegen.MarshalAsEnum:
 		return "0", nil
-	case "reference", "value":
+	case typegen.MarshalAsReference, typegen.MarshalAsValue:
 		if field.Pointer {
 			return "nil", nil
 		}
@@ -291,20 +300,20 @@ func GoJsonZeroValue(field *Field) (string, error) {
 func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, error) {
 	var expr string
 	var wantPtr bool
-	switch field.Type {
-	case "bool", "string", "chain", "hash", "uvarint", "varint", "uint", "int", "duration", "time":
+	switch field.Type.Code {
+	case Bool, String, Hash, Uint, Int, Duration, Time:
 		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
-	case "bytes", "rawJson":
+	case Bytes, RawJson:
 		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false
-	case "bigint":
+	case BigInt:
 		expr, wantPtr = "(%[1]s%[2]s).Cmp(%[1]s%[3]s) == 0", true
-	case "url":
+	case Url:
 		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
 	default:
 		switch field.MarshalAs {
-		case "reference":
+		case typegen.MarshalAsReference:
 			expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
-		case "value", "enum":
+		case typegen.MarshalAsValue, typegen.MarshalAsEnum:
 			expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 		default:
 			return "", fmt.Errorf("field %q: cannot determine how to compare %s", field.Name, GoResolveType(field, false, false))
@@ -363,26 +372,24 @@ func GoCopy(field *Field, dstName, srcName string) (string, error) {
 }
 
 func goCopy(field *Field, dstName, srcName string) (string, error) {
-	switch field.Type {
-	case "bool", "string", "duration", "time",
-		"uint", "int", "uvarint", "varint",
-		"chain", "hash":
+	switch field.Type.Code {
+	case Bool, String, Duration, Time, Uint, Int, Hash:
 		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
 
-	case "bytes", "rawJson":
+	case Bytes, RawJson:
 		return goCopyNonPointer(field, "%s = encoding.BytesCopy(%s)", dstName, srcName), nil
 
-	case "url":
+	case Url:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
 
-	case "bigint":
+	case BigInt:
 		return goCopyPointer(field, "encoding.BigintCopy(%s)", dstName, srcName), nil
 	}
 
 	switch field.MarshalAs {
-	case "reference":
+	case typegen.MarshalAsReference:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
-	case "value", "enum":
+	case typegen.MarshalAsValue, typegen.MarshalAsEnum:
 		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
 	default:
 		return "", fmt.Errorf("field %q: cannot determine how to copy %s", field.Name, GoResolveType(field, false, false))
