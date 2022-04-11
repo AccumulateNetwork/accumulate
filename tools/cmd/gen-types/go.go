@@ -220,7 +220,7 @@ func goJsonTypeSingle(field *Field) string {
 		return "interface{}"
 	}
 
-	if field.MarshalAs != Union && field.UnmarshalWith == "" {
+	if field.MarshalAs != Union {
 		return ""
 	}
 
@@ -228,7 +228,7 @@ func goJsonTypeSingle(field *Field) string {
 }
 
 func GoJsonType(field *Field) string {
-	if field.Repeatable && (field.MarshalAs == Union || field.UnmarshalWith != "") {
+	if field.Repeatable && field.MarshalAs == Union {
 		return "encoding.JsonUnmarshalListWith[" + GoResolveType(field, false, true) + "]"
 	}
 
@@ -476,7 +476,7 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 
 	var ptrPrefix string
 	switch {
-	case field.MarshalAs == Union || field.UnmarshalWith != "":
+	case field.MarshalAs == Union:
 		// OK
 	case wantPtr && !field.Pointer:
 		ptrPrefix = "*"
@@ -496,8 +496,6 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	switch {
 	case field.MarshalAs == Union:
 		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s(b); if err == nil { %s }; return err })", readerName, field.Number, goUnionMethod(field, "Unmarshal"), set), false
-	case field.UnmarshalWith != "":
-		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s(b); if err == nil { %s }; return err })", readerName, field.Number, field.UnmarshalWith, set), false
 	case method == "Value":
 		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinary) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
 	case method == "Enum":
@@ -518,12 +516,6 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 }
 
 func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
-	if field.UnmarshalWith != "" {
-		if !field.Repeatable {
-			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
-		}
-		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, field.UnmarshalWith), nil
-	}
 	if field.MarshalAs == Union {
 		if !field.Repeatable {
 			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, goUnionMethod(field, "Unmarshal")), nil
@@ -551,7 +543,7 @@ func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 
 func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) (string, error) {
 	err := GoFieldError("decoding", errName, errArgs...)
-	if field.MarshalAs == Union || field.UnmarshalWith != "" {
+	if field.MarshalAs == Union {
 		if !field.Repeatable {
 			return fmt.Sprintf("\t%s = %s.Value\n", tgtName, srcName), nil
 		}

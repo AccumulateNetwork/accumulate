@@ -158,8 +158,6 @@ type Field struct {
 	Type FieldType
 	// MarshalAs specifies how to marshal the field.
 	MarshalAs MarshalAs `yaml:"marshal-as"`
-	// UnmarshalWith specifies a function to use to unmarshal the field.
-	UnmarshalWith string `yaml:"unmarshal-with"`
 	// Repeatable specifies whether the the field is repeatable (represented as a slice).
 	Repeatable bool
 	// Pointer specifies whether the field is a pointer.
