@@ -64,7 +64,7 @@ type AddKeyOperation struct {
 
 type AddValidator struct {
 	fieldsSet []bool
-	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
 	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
 }
@@ -428,7 +428,7 @@ type RemoveKeyOperation struct {
 
 type RemoveValidator struct {
 	fieldsSet []bool
-	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
 	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
 }
@@ -677,8 +677,8 @@ type UpdateKeyPage struct {
 
 type UpdateValidatorKey struct {
 	fieldsSet []bool
-	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	NewKey    []byte `json:"newKey,omitempty" form:"newKey" query:"newKey" validate:"required"`
+	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
+	NewPubKey []byte `json:"newPubKey,omitempty" form:"newPubKey" query:"newPubKey" validate:"required"`
 }
 
 type WriteData struct {
@@ -952,7 +952,7 @@ func (v *AddKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
 func (v *AddValidator) Copy() *AddValidator {
 	u := new(AddValidator)
 
-	u.Key = encoding.BytesCopy(v.Key)
+	u.PubKey = encoding.BytesCopy(v.PubKey)
 	if v.Owner != nil {
 		u.Owner = (v.Owner).Copy()
 	}
@@ -1661,7 +1661,7 @@ func (v *RemoveKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
 func (v *RemoveValidator) Copy() *RemoveValidator {
 	u := new(RemoveValidator)
 
-	u.Key = encoding.BytesCopy(v.Key)
+	u.PubKey = encoding.BytesCopy(v.PubKey)
 	if v.Owner != nil {
 		u.Owner = (v.Owner).Copy()
 	}
@@ -2120,8 +2120,8 @@ func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
 func (v *UpdateValidatorKey) Copy() *UpdateValidatorKey {
 	u := new(UpdateValidatorKey)
 
-	u.Key = encoding.BytesCopy(v.Key)
-	u.NewKey = encoding.BytesCopy(v.NewKey)
+	u.PubKey = encoding.BytesCopy(v.PubKey)
+	u.NewPubKey = encoding.BytesCopy(v.NewPubKey)
 
 	return u
 }
@@ -2270,7 +2270,7 @@ func (v *AddKeyOperation) Equal(u *AddKeyOperation) bool {
 }
 
 func (v *AddValidator) Equal(u *AddValidator) bool {
-	if !(bytes.Equal(v.Key, u.Key)) {
+	if !(bytes.Equal(v.PubKey, u.PubKey)) {
 		return false
 	}
 	switch {
@@ -3207,7 +3207,7 @@ func (v *RemoveKeyOperation) Equal(u *RemoveKeyOperation) bool {
 }
 
 func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
-	if !(bytes.Equal(v.Key, u.Key)) {
+	if !(bytes.Equal(v.PubKey, u.PubKey)) {
 		return false
 	}
 	switch {
@@ -3797,10 +3797,10 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 }
 
 func (v *UpdateValidatorKey) Equal(u *UpdateValidatorKey) bool {
-	if !(bytes.Equal(v.Key, u.Key)) {
+	if !(bytes.Equal(v.PubKey, u.PubKey)) {
 		return false
 	}
-	if !(bytes.Equal(v.NewKey, u.NewKey)) {
+	if !(bytes.Equal(v.NewPubKey, u.NewPubKey)) {
 		return false
 	}
 
@@ -4200,7 +4200,7 @@ func (v *AddKeyOperation) IsValid() error {
 
 var fieldNames_AddValidator = []string{
 	1: "Type",
-	2: "Key",
+	2: "PubKey",
 	3: "Owner",
 }
 
@@ -4209,8 +4209,8 @@ func (v *AddValidator) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Key) == 0) {
-		writer.WriteBytes(2, v.Key)
+	if !(len(v.PubKey) == 0) {
+		writer.WriteBytes(2, v.PubKey)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
@@ -4227,9 +4227,9 @@ func (v *AddValidator) IsValid() error {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Key is missing")
-	} else if len(v.Key) == 0 {
-		errs = append(errs, "field Key is not set")
+		errs = append(errs, "field PubKey is missing")
+	} else if len(v.PubKey) == 0 {
+		errs = append(errs, "field PubKey is not set")
 	}
 
 	switch len(errs) {
@@ -6766,7 +6766,7 @@ func (v *RemoveKeyOperation) IsValid() error {
 
 var fieldNames_RemoveValidator = []string{
 	1: "Type",
-	2: "Key",
+	2: "PubKey",
 	3: "Owner",
 }
 
@@ -6775,8 +6775,8 @@ func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Key) == 0) {
-		writer.WriteBytes(2, v.Key)
+	if !(len(v.PubKey) == 0) {
+		writer.WriteBytes(2, v.PubKey)
 	}
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
@@ -6793,9 +6793,9 @@ func (v *RemoveValidator) IsValid() error {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Key is missing")
-	} else if len(v.Key) == 0 {
-		errs = append(errs, "field Key is not set")
+		errs = append(errs, "field PubKey is missing")
+	} else if len(v.PubKey) == 0 {
+		errs = append(errs, "field PubKey is not set")
 	}
 
 	switch len(errs) {
@@ -8502,8 +8502,8 @@ func (v *UpdateKeyPage) IsValid() error {
 
 var fieldNames_UpdateValidatorKey = []string{
 	1: "Type",
-	2: "Key",
-	3: "NewKey",
+	2: "PubKey",
+	3: "NewPubKey",
 }
 
 func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
@@ -8511,11 +8511,11 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(len(v.Key) == 0) {
-		writer.WriteBytes(2, v.Key)
+	if !(len(v.PubKey) == 0) {
+		writer.WriteBytes(2, v.PubKey)
 	}
-	if !(len(v.NewKey) == 0) {
-		writer.WriteBytes(3, v.NewKey)
+	if !(len(v.NewPubKey) == 0) {
+		writer.WriteBytes(3, v.NewPubKey)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
@@ -8529,14 +8529,14 @@ func (v *UpdateValidatorKey) IsValid() error {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Key is missing")
-	} else if len(v.Key) == 0 {
-		errs = append(errs, "field Key is not set")
+		errs = append(errs, "field PubKey is missing")
+	} else if len(v.PubKey) == 0 {
+		errs = append(errs, "field PubKey is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field NewKey is missing")
-	} else if len(v.NewKey) == 0 {
-		errs = append(errs, "field NewKey is not set")
+		errs = append(errs, "field NewPubKey is missing")
+	} else if len(v.NewPubKey) == 0 {
+		errs = append(errs, "field NewPubKey is not set")
 	}
 
 	switch len(errs) {
@@ -8898,7 +8898,7 @@ func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 	if x, ok := reader.ReadBytes(2); ok {
-		v.Key = x
+		v.PubKey = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
@@ -10253,7 +10253,7 @@ func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 	if x, ok := reader.ReadBytes(2); ok {
-		v.Key = x
+		v.PubKey = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
@@ -11184,10 +11184,10 @@ func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 	if x, ok := reader.ReadBytes(2); ok {
-		v.Key = x
+		v.PubKey = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
-		v.NewKey = x
+		v.NewPubKey = x
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateValidatorKey)
@@ -11357,12 +11357,12 @@ func (v *AddKeyOperation) MarshalJSON() ([]byte, error) {
 
 func (v *AddValidator) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  TransactionType `json:"type"`
-		Key   *string         `json:"key,omitempty"`
-		Owner *url.URL        `json:"owner,omitempty"`
+		Type   TransactionType `json:"type"`
+		PubKey *string         `json:"pubKey,omitempty"`
+		Owner  *url.URL        `json:"owner,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Key = encoding.BytesToJSON(v.Key)
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
@@ -12006,12 +12006,12 @@ func (v *RemoveKeyOperation) MarshalJSON() ([]byte, error) {
 
 func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  TransactionType `json:"type"`
-		Key   *string         `json:"key,omitempty"`
-		Owner *url.URL        `json:"owner,omitempty"`
+		Type   TransactionType `json:"type"`
+		PubKey *string         `json:"pubKey,omitempty"`
+		Owner  *url.URL        `json:"owner,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Key = encoding.BytesToJSON(v.Key)
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
 	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
@@ -12464,13 +12464,13 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   TransactionType `json:"type"`
-		Key    *string         `json:"key,omitempty"`
-		NewKey *string         `json:"newKey,omitempty"`
+		Type      TransactionType `json:"type"`
+		PubKey    *string         `json:"pubKey,omitempty"`
+		NewPubKey *string         `json:"newPubKey,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Key = encoding.BytesToJSON(v.Key)
-	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.NewPubKey = encoding.BytesToJSON(v.NewPubKey)
 	return json.Marshal(&u)
 }
 
@@ -12653,12 +12653,12 @@ func (v *AddKeyOperation) UnmarshalJSON(data []byte) error {
 
 func (v *AddValidator) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  TransactionType `json:"type"`
-		Key   *string         `json:"key,omitempty"`
-		Owner *url.URL        `json:"owner,omitempty"`
+		Type   TransactionType `json:"type"`
+		PubKey *string         `json:"pubKey,omitempty"`
+		Owner  *url.URL        `json:"owner,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Key = encoding.BytesToJSON(v.Key)
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -12666,10 +12666,10 @@ func (v *AddValidator) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
-		return fmt.Errorf("error decoding Key: %w", err)
+	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
 	} else {
-		v.Key = x
+		v.PubKey = x
 	}
 	v.Owner = u.Owner
 	return nil
@@ -13870,12 +13870,12 @@ func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 
 func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  TransactionType `json:"type"`
-		Key   *string         `json:"key,omitempty"`
-		Owner *url.URL        `json:"owner,omitempty"`
+		Type   TransactionType `json:"type"`
+		PubKey *string         `json:"pubKey,omitempty"`
+		Owner  *url.URL        `json:"owner,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Key = encoding.BytesToJSON(v.Key)
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
 	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -13883,10 +13883,10 @@ func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
-		return fmt.Errorf("error decoding Key: %w", err)
+	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
 	} else {
-		v.Key = x
+		v.PubKey = x
 	}
 	v.Owner = u.Owner
 	return nil
@@ -14734,28 +14734,28 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   TransactionType `json:"type"`
-		Key    *string         `json:"key,omitempty"`
-		NewKey *string         `json:"newKey,omitempty"`
+		Type      TransactionType `json:"type"`
+		PubKey    *string         `json:"pubKey,omitempty"`
+		NewPubKey *string         `json:"newPubKey,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Key = encoding.BytesToJSON(v.Key)
-	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.NewPubKey = encoding.BytesToJSON(v.NewPubKey)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
-		return fmt.Errorf("error decoding Key: %w", err)
+	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
 	} else {
-		v.Key = x
+		v.PubKey = x
 	}
-	if x, err := encoding.BytesFromJSON(u.NewKey); err != nil {
-		return fmt.Errorf("error decoding NewKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.NewPubKey); err != nil {
+		return fmt.Errorf("error decoding NewPubKey: %w", err)
 	} else {
-		v.NewKey = x
+		v.NewPubKey = x
 	}
 	return nil
 }

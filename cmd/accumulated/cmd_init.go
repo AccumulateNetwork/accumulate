@@ -57,10 +57,10 @@ var cmdInitDualNode = &cobra.Command{
 }
 
 var cmdInitNode = &cobra.Command{
-	Use:   "node <network-name|url>",
+	Use:   "node <node nr> <network-name|url>",
 	Short: "Initialize a node",
 	Run:   initNode,
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(2),
 }
 
 var cmdInitNetwork = &cobra.Command{
@@ -269,7 +269,10 @@ func nodeReset() {
 }
 
 func initNode(cmd *cobra.Command, args []string) {
-	netAddr, netPort, err := networks.ResolveAddr(args[0], true)
+	nodeNr, err := strconv.ParseUint(args[0], 10, 16)
+	checkf(err, "invalid node number")
+
+	netAddr, netPort, err := networks.ResolveAddr(args[1], true)
 	checkf(err, "invalid network name or URL")
 
 	u, err := url.Parse(flagInitNode.ListenIP)
@@ -386,6 +389,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	check(node.Init(node.InitOptions{
+		NodeNr:     &nodeNr,
 		Version:    1,
 		WorkDir:    flagMain.WorkDir,
 		Port:       nodePort,
