@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -73,6 +74,9 @@ const (
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
+
+	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
+	ValidatorMofNFactor = 2.0 / 3.0
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
@@ -411,6 +415,11 @@ func IndexChain(name string, major bool) string {
 		return "major-" + name + "-index"
 	}
 	return "minor-" + name + "-index"
+}
+
+func GetValidatorsMOfN(nrOfValidators int) uint64 {
+	threshold := float64(nrOfValidators) * ValidatorMofNFactor
+	return uint64(math.Round(threshold))
 }
 
 // AnchorChain returns the name of the intermediate anchor chain for the given
