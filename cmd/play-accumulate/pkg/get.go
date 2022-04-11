@@ -30,7 +30,7 @@ func (s *Session) Get(query interface{}, subquery ...interface{}) interface{} {
 	return s.GetAccount(query)
 }
 
-func (s *Session) GetAccount(query interface{}) protocol.Account {
+func (s *Session) GetAccount(query Urlish) protocol.Account {
 	url := s.url(query)
 	acct, err := s.Engine.GetAccount(url)
 	if err != nil {
@@ -39,10 +39,42 @@ func (s *Session) GetAccount(query interface{}) protocol.Account {
 	return acct
 }
 
-func (s *Session) GetAccountAs(query interface{}, target interface{}) {
+func (s *Session) GetDirectory(query Urlish) []*URL {
+	url := s.url(query)
+	urls, err := s.Engine.GetDirectory(url)
+	if err != nil {
+		s.Abortf("Get directory %v: %v", url, err)
+	}
+	return urls
+}
+
+func (s *Session) GetAccountAs(query Urlish, target interface{}) {
 	account := s.GetAccount(query)
 	err := encoding.SetPtr(account, target)
 	if err != nil {
 		s.Abortf("Get %v: %v", account.GetUrl(), err)
 	}
+}
+
+func (s *Session) TryGetAccount(query Urlish) (protocol.Account, bool) {
+	url := s.url(query)
+	acct, err := s.Engine.GetAccount(url)
+	if err != nil {
+		return nil, false
+	}
+	return acct, true
+}
+
+func (s *Session) TryGetDirectory(query Urlish) ([]*URL, bool) {
+	url := s.url(query)
+	urls, err := s.Engine.GetDirectory(url)
+	if err != nil {
+		return nil, false
+	}
+	return urls, true
+}
+
+func (s *Session) TryGetAccountAs(query Urlish, target interface{}) bool {
+	account, ok := s.TryGetAccount(query)
+	return ok && encoding.SetPtr(account, target) == nil
 }
