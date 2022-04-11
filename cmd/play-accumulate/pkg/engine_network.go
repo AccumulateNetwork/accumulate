@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -30,6 +31,25 @@ func (e NetEngine) GetAccount(accountUrl *URL) (protocol.Account, error) {
 	}
 
 	return protocol.UnmarshalAccountJSON(raw)
+}
+
+func (e NetEngine) GetDirectory(account *URL) ([]*URL, error) {
+	req := new(api.DirectoryQuery)
+	req.Url = account
+	req.Count = 1000
+	resp, err := e.QueryDirectory(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+
+	urls := make([]*URL, len(resp.Items))
+	for i, str := range resp.Items {
+		urls[i], err = url.Parse(str.(string))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return urls, nil
 }
 
 func (e NetEngine) GetTransaction(txid [32]byte) (*protocol.Transaction, error) {

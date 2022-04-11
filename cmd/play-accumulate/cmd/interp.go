@@ -9,9 +9,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func NewInterpreter(s *pkg.Session) *interp.Interpreter {
-	I := interp.New(interp.Options{})
-
+func InterpUseSession(s *pkg.Session, I interface {
+	Use(values interp.Exports) error
+	Eval(src string) (res reflect.Value, err error)
+}) {
 	err := I.Use(stdlib.Symbols)
 	if err != nil {
 		panic(err)
@@ -73,6 +74,4 @@ func NewInterpreter(s *pkg.Session) *interp.Interpreter {
 	if err != nil {
 		panic(err)
 	}
-
-	return I
 }
