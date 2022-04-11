@@ -689,6 +689,24 @@ func (v *FakeSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FakeSigner) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TheType       protocol.AccountType                 `json:"theType,omitempty"`
+		Url           *url.URL                             `json:"url,omitempty"`
+		CreditBalance uint64                               `json:"creditBalance,omitempty"`
+		Threshold     uint64                               `json:"threshold,omitempty"`
+		Version       uint64                               `json:"version,omitempty"`
+		Keys          encoding.JsonList[*protocol.KeySpec] `json:"keys,omitempty"`
+	}{}
+	u.TheType = v.FakeLiteAccount.TheType
+	u.Url = v.FakeLiteAccount.Url
+	u.CreditBalance = v.CreditBalance
+	u.Threshold = v.Threshold
+	u.Version = v.Version
+	u.Keys = v.Keys
+	return json.Marshal(&u)
+}
+
 func (v *FakeSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		TheType       protocol.SignatureType `json:"theType,omitempty"`
@@ -717,5 +735,32 @@ func (v *FakeSignature) UnmarshalJSON(data []byte) error {
 	v.Signer = u.Signer
 	v.SignerVersion = u.SignerVersion
 	v.Timestamp = u.Timestamp
+	return nil
+}
+
+func (v *FakeSigner) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TheType       protocol.AccountType                 `json:"theType,omitempty"`
+		Url           *url.URL                             `json:"url,omitempty"`
+		CreditBalance uint64                               `json:"creditBalance,omitempty"`
+		Threshold     uint64                               `json:"threshold,omitempty"`
+		Version       uint64                               `json:"version,omitempty"`
+		Keys          encoding.JsonList[*protocol.KeySpec] `json:"keys,omitempty"`
+	}{}
+	u.TheType = v.FakeLiteAccount.TheType
+	u.Url = v.FakeLiteAccount.Url
+	u.CreditBalance = v.CreditBalance
+	u.Threshold = v.Threshold
+	u.Version = v.Version
+	u.Keys = v.Keys
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.FakeLiteAccount.TheType = u.TheType
+	v.FakeLiteAccount.Url = u.Url
+	v.CreditBalance = u.CreditBalance
+	v.Threshold = u.Threshold
+	v.Version = u.Version
+	v.Keys = u.Keys
 	return nil
 }

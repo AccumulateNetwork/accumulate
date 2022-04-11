@@ -80,7 +80,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Timestamp = nonceFromTimeNow()
 
 	if IsLiteAccount(origin.String()) {
-		privKey, err := LookupByLabel(origin.String())
+		privKey, err := LookupByLite(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
@@ -264,15 +264,18 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 		if err != nil {
 			return nil, err
 		}
-		sig, err = signer.Initiate(env.Transaction)
-		txHash = env.Transaction.GetHash()
+		sig, err = signer.Initiate(env.Transaction[0])
+		txHash = env.Transaction[0].GetHash()
 	case payload == nil && txHash != nil:
-		payload = new(protocol.RemoteTransactionBody)
+		body := new(protocol.RemoteTransaction)
+		body.Hash = *(*[32]byte)(txHash)
+		payload = body
+		txn := new(protocol.Transaction)
+		txn.Body = body
+		txn.Header.Principal = origin
 		env = new(protocol.Envelope)
 		env.TxHash = txHash
-		env.Transaction = new(protocol.Transaction)
-		env.Transaction.Body = payload
-		env.Transaction.Header.Principal = origin
+		env.Transaction = []*protocol.Transaction{txn}
 		sig, err = signer.Sign(txHash)
 	default:
 		panic("cannot specify a transaction hash and a payload")
@@ -286,15 +289,15 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 
 	req := new(api2.TxRequest)
 	req.TxHash = txHash
-	req.Origin = env.Transaction.Header.Principal
+	req.Origin = env.Transaction[0].Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
 	req.Signer.PublicKey = keySig.GetPublicKey()
 	req.Signer.SignatureType = sig.Type()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Signature = sig.GetSignature()
-	req.Memo = env.Transaction.Header.Memo
-	req.Metadata = env.Transaction.Header.Metadata
+	req.Memo = env.Transaction[0].Header.Memo
+	req.Metadata = env.Transaction[0].Header.Metadata
 
 	if TxPretend {
 		req.CheckOnly = true
@@ -323,18 +326,19 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 }
 
 func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
+	txn := new(protocol.Transaction)
+	txn.Body = payload
+	txn.Header.Principal = origin
+	txn.Header.Memo = Memo
 	env := new(protocol.Envelope)
-	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Body = payload
-	env.Transaction.Header.Principal = origin
-	env.Transaction.Header.Memo = Memo
+	env.Transaction = []*protocol.Transaction{txn}
 
 	if Metadata == "" {
 		return env, nil
 	}
 
 	if !strings.Contains(Metadata, ":") {
-		env.Transaction.Header.Metadata = []byte(Metadata)
+		txn.Header.Metadata = []byte(Metadata)
 		return env, nil
 	}
 
@@ -345,15 +349,15 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 		if err != nil {
 			return nil, err
 		}
-		env.Transaction.Header.Metadata = bytes
+		txn.Header.Metadata = bytes
 	case "base64":
 		bytes, err := base64.RawStdEncoding.DecodeString(dataSet[1])
 		if err != nil {
 			return nil, err
 		}
-		env.Transaction.Header.Metadata = bytes
+		txn.Header.Metadata = bytes
 	default:
-		env.Transaction.Header.Metadata = []byte(dataSet[1])
+		txn.Header.Metadata = []byte(dataSet[1])
 	}
 	return env, nil
 }
@@ -833,8 +837,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 
-		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
-		out += fmt.Sprintf("\tLast Used On\t:\t%d\n", ata.LastUsedOn)
+		out += fmt.Sprintf("\tCredits\t\t:\t%v\n", protocol.FormatAmount(ata.CreditBalance, protocol.CreditPrecisionPower))
+		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(ata.LastUsedOn*uint64(time.Microsecond))))
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
@@ -889,15 +893,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
-		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%v\n", protocol.FormatAmount(ss.CreditBalance, protocol.CreditPrecisionPower))
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name(s)\n")
 		for i, k := range ss.Keys {
 			keyName := ""
-			name, err := FindLabelFromPubKey(k.PublicKeyHash)
+			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%v\t\t%x\t%s\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -1016,11 +1020,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyName, err := FindLabelFromPubKey(id.KeyHash)
+		keyName, err := FindLabelFromPublicKeyHash(id.KeyHash)
 		if err != nil {
 			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {
-			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.KeyHash, keyName)
+			out += fmt.Sprintf("Public Key (name(s)) \t:\t%x (%s)\n", id.KeyHash, keyName)
 		}
 
 		out += printGeneralTransactionParameters(res)

@@ -96,6 +96,7 @@ var PriceOracleAuthority = PriceOracle().String()
 
 // AcmePrecision is the precision of ACME token amounts.
 const AcmePrecision = 1e8
+const AcmePrecisionPower = 8
 
 // AcmeOraclePrecision is the precision of the oracle in 100 * USD of one ACME token.
 const AcmeOraclePrecision = 10000
@@ -126,14 +127,11 @@ const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
-
-	chainStr := fmt.Sprintf("%x", chainId[:20])
-
-	liteUrl := new(url.URL)
-	checkSum := sha256.Sum256([]byte(chainStr))
-	checkStr := fmt.Sprintf("%x", checkSum[28:])
-	liteUrl.Authority = chainStr + checkStr
-	return liteUrl, nil
+	u := liteAuthorityFromHash(chainId)
+	if u == nil {
+		return nil, fmt.Errorf("cannot create lite authority")
+	}
+	return u, nil
 }
 
 // ParseLiteDataAddress extracts the partial chain id from a lite chain URL.
@@ -176,7 +174,7 @@ func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 // The resulting URL is
 //
 //   "acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
-func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
+func LiteTokenAddress(pubKey []byte, tokenUrlStr string, signatureType SignatureType) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
 		return nil, err
@@ -203,16 +201,59 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	return liteTokenAddress(pubKey, tokenUrl), nil
+	return liteTokenAddress(pubKey, tokenUrl, signatureType), nil
+}
+func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, error) {
+	tokenUrl, err := url.Parse(tokenUrlStr)
+	if err != nil {
+		return nil, err
+	}
+
+	if !AcmeUrl().Equal(tokenUrl) {
+		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
+			return nil, errors.New("invalid adi in token URL")
+		}
+		if tokenUrl.Path == "" {
+			return nil, errors.New("must have a path in token URL")
+		}
+	}
+	if tokenUrl.UserInfo != "" {
+		return nil, errors.New("token URLs cannot include user info")
+	}
+	if tokenUrl.Port() != "" {
+		return nil, errors.New("token URLs cannot include a port number")
+	}
+	if tokenUrl.Query != "" {
+		return nil, errors.New("token URLs cannot include a query")
+	}
+	if tokenUrl.Fragment != "" {
+		return nil, errors.New("token URLs cannot include a fragment")
+	}
+
+	liteUrl := liteAuthorityFromHash(pubKeyHash)
+	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
+
+	return liteUrl, nil
 }
 
-func liteTokenAddress(pubKey []byte, tokenUrl *url.URL) *url.URL {
+func liteAuthorityFromHash(pubKeyHash []byte) *url.URL {
 	liteUrl := new(url.URL)
-	keyHash := sha256.Sum256(pubKey)
-	keyStr := fmt.Sprintf("%x", keyHash[:20])
+	keyStr := fmt.Sprintf("%x", pubKeyHash[:20])
 	checkSum := sha256.Sum256([]byte(keyStr))
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
 	liteUrl.Authority = keyStr + checkStr
+	return liteUrl
+}
+
+func liteTokenAddress(pubKey []byte, tokenUrl *url.URL, signatureType SignatureType) *url.URL {
+	var keyHash []byte
+	if signatureType == SignatureTypeRCD1 {
+		keyHash = GetRCDHashFromPublicKey(pubKey, 1)
+	} else {
+		h := sha256.Sum256(pubKey)
+		keyHash = h[:]
+	}
+	liteUrl := liteAuthorityFromHash(keyHash[:])
 	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
 	return liteUrl
 }

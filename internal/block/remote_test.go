@@ -162,8 +162,8 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	// Sign with the remote authority
 	sig := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
-		WithBody(&RemoteTransactionBody{}).
-		WithTxnHash(env.GetTxHash()).
+		WithBody(&RemoteTransaction{}).
+		WithTxnHash(env.Transaction[0].GetHash()).
 		WithSigner(charlieUrl.JoinPath("book", "1"), 1).
 		WithTimestamp(0).
 		Sign(SignatureTypeED25519, charlieKey).
@@ -218,8 +218,8 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	// Sign with the remote authority
 	sig := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
-		WithBody(&RemoteTransactionBody{}).
-		WithTxnHash(env.GetTxHash()).
+		WithBody(&RemoteTransaction{}).
+		WithTxnHash(env.Transaction[0].GetHash()).
 		WithSigner(charlieUrl.JoinPath("book", "1"), 1).
 		WithTimestamp(0).
 		Sign(SignatureTypeED25519, charlieKey).
@@ -278,8 +278,8 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	envs = sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
-			WithBody(&RemoteTransactionBody{}).
-			WithTxnHash(envs[0].GetTxHash()).
+			WithBody(&RemoteTransaction{}).
+			WithTxnHash(envs[0].Transaction[0].GetHash()).
 			WithTimestamp(0).
 			WithSigner(bobUrl.JoinPath("book", "1"), 1).
 			Sign(SignatureTypeED25519, bobKey).

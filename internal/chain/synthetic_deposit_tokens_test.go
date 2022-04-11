@@ -15,7 +15,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 
 	tokenUrl := protocol.AcmeUrl().String()
 
-	var gtx *protocol.Envelope
+	var gtx *Delivery
 	// _, _, gtx, err := testing2.BuildTestSynthDepositGenTx()
 	// require.NoError(t, err)
 
@@ -25,10 +25,10 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	defer batch.Discard()
 	require.NoError(t, testing2.CreateTokenAccount(batch, protocol.FaucetUrl.String(), protocol.ACME, 1e9, true))
 
-	st := NewStateManagerForTest(t, db, gtx)
+	st, d := NewStateManagerForTest(t, db, nil)
 	defer st.Discard()
 
-	_, err := SyntheticDepositTokens{}.Validate(st, gtx)
+	_, err := SyntheticDepositTokens{}.Validate(st, d)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account

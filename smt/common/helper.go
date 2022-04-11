@@ -17,6 +17,23 @@ import (
 	"time"
 )
 
+// Uint64FixedBytes
+// Return []byte, big endian, of len 8 for the uint64
+// (Note casting an Int64 to uInt64 will give the same 8 bytes)
+func Uint64FixedBytes(i uint64) (data []byte) {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], i)
+	return buf[:]
+}
+
+// BytesFixedUint64
+// Return a Uint64, for an 8 byte value,big endian
+// (Note casting to an Int64 will work fine)
+func BytesFixedUint64(data []byte) (i uint64, nextData []byte) {
+	i = binary.BigEndian.Uint64(data)
+	return i, data[8:]
+}
+
 // Uint64Bytes
 // Marshal a uint64 (big endian)
 func Uint64Bytes(i uint64) (data []byte) {

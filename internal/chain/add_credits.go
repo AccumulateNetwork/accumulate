@@ -15,11 +15,11 @@ type AddCredits struct{}
 
 func (AddCredits) Type() protocol.TransactionType { return protocol.TransactionTypeAddCredits }
 
-func (AddCredits) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AddCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (AddCredits{}).Validate(st, tx)
 }
 
-func (AddCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.AddCredits)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)

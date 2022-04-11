@@ -54,10 +54,10 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				Initiate(protocol.SignatureTypeED25519, testKey).
 				Build()
 
-			st := NewStateManagerForTest(t, db, env)
+			st, d := NewStateManagerForTest(t, db, env)
 			defer st.Discard()
 
-			_, err := UpdateKeyPage{}.Validate(st, env)
+			_, err := UpdateKeyPage{}.Validate(st, d)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {

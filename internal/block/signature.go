@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -26,7 +27,7 @@ func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) 
 	return status.Initiator != nil, nil
 }
 
-func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
+func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
 	// Is this the initial signature?
 	initiated, err := hasBeenInitiated(batch, delivery.Transaction)
 	if err != nil {
@@ -76,7 +77,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, s
 	// as local
 	remote := delivery.Transaction.Body.Type().IsUser() && !delivery.Transaction.Header.Principal.LocalTo(signature.GetSigner())
 	if !initiated && (!remote || forwarded) {
-		stateEnv := new(protocol.Envelope)
+		stateEnv := new(database.SigOrTxn)
 		stateEnv.Transaction = delivery.Transaction
 		db := batch.Transaction(delivery.Transaction.GetHash())
 		err = db.PutState(stateEnv)
@@ -93,9 +94,9 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, s
 	sigHash := sha256.Sum256(sigData)
 
 	// Store the signature as an envelope
-	env := new(protocol.Envelope)
-	env.TxHash = delivery.Transaction.GetHash()
-	env.Signatures = []protocol.Signature{signature}
+	env := new(database.SigOrTxn)
+	env.Hash = *(*[32]byte)(delivery.Transaction.GetHash())
+	env.Signature = signature
 	err = batch.Transaction(sigHash[:]).PutState(env)
 	if err != nil {
 		return nil, fmt.Errorf("store envelope: %w", err)
@@ -373,7 +374,7 @@ func validateNormalSignature(batch *database.Batch, transaction *protocol.Transa
 }
 
 // processForwardedSignature validates a forwarded private key signature.
-func processForwardedSignature(batch *database.Batch, delivery *Delivery, signature *protocol.ForwardedSignature, _ bool) error {
+func processForwardedSignature(batch *database.Batch, delivery *chain.Delivery, signature *protocol.ForwardedSignature, _ bool) error {
 	// TODO If the forwarded signature paid the full fee unnecessarily, refund
 	// it
 
@@ -518,12 +519,15 @@ func getAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
 			}
 
-			for _, sig := range state.Signatures {
-				if protocol.SignatureDidInitiate(sig, txnInitHash) {
-					signatures[0] = sig
-				} else {
-					signatures = append(signatures, sig)
-				}
+			if state.Signature == nil {
+				// This should not happen
+				continue
+			}
+
+			if protocol.SignatureDidInitiate(state.Signature, txnInitHash) {
+				signatures[0] = state.Signature
+			} else {
+				signatures = append(signatures, state.Signature)
 			}
 		}
 	}

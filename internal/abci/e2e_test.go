@@ -47,9 +47,10 @@ func TestCreateLiteAccount(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
-	var count = 11
-	credits := 100.0
-	originAddr, balances := n.testLiteTx(count, credits)
+	const N, M = 11, 1
+	const count = N * M
+	credits := 10000.0
+	originAddr, balances := n.testLiteTx(N, M, credits)
 	amountSent := float64(count * 1000)
 	initialAmount := protocol.AcmeFaucetAmount * protocol.AcmePrecision
 	currentBalance := n.GetLiteTokenAccount(originAddr).Balance.Int64()
@@ -74,7 +75,7 @@ func TestEvilNode(t *testing.T) {
 
 	var count = 11
 	credits := 100.0
-	originAddr, balances := n.testLiteTx(count, credits)
+	originAddr, balances := n.testLiteTx(count, 1, credits)
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
@@ -96,11 +97,11 @@ func TestEvilNode(t *testing.T) {
 
 }
 
-func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]int64) {
+func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int64) {
 	sender := generateKey()
 	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
 
-	recipients := make([]string, count)
+	recipients := make([]string, N)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key).String()
@@ -123,19 +124,21 @@ func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]in
 	n.require.NoError(batch.Commit())
 
 	balance := map[string]int64{}
-	n.MustExecuteAndWait(func(send func(*Tx)) {
-		for i := 0; i < count; i++ {
-			recipient := recipients[rand.Intn(len(recipients))]
-			balance[recipient] += 1000
+	for i := 0; i < M; i++ {
+		n.MustExecuteAndWait(func(send func(*Tx)) {
+			for i := 0; i < N; i++ {
+				recipient := recipients[rand.Intn(len(recipients))]
+				balance[recipient] += 1000
 
-			exch := new(protocol.SendTokens)
-			exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
-			send(newTxn(senderUrl.String()).
-				WithBody(exch).
-				Initiate(protocol.SignatureTypeLegacyED25519, sender).
-				Build())
-		}
-	})
+				exch := new(protocol.SendTokens)
+				exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
+				send(newTxn(senderUrl.String()).
+					WithBody(exch).
+					Initiate(protocol.SignatureTypeLegacyED25519, sender).
+					Build())
+			}
+		})
+	}
 
 	return senderUrl.String(), balance
 }
@@ -982,7 +985,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	liteKey, fooKey := generateKey(), generateKey()
 
-	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), "ACME")
+	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
@@ -1073,7 +1076,7 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
 	require.NoError(t, batch.Commit())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1146,9 +1149,9 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	issuer := n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
-	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], "acme")
+	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	underLimit := int64(1000 * fooPrecision)
@@ -1276,7 +1279,7 @@ func TestInvalidDeposit(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	liteKey := generateKey()
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1468,9 +1471,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
 			Build())
 	})
@@ -1486,9 +1486,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
 	})
@@ -1507,9 +1504,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
 	})

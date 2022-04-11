@@ -48,7 +48,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	serverAddr := os.Getenv("ACC_API")
 	if serverAddr == "" {
-		serverAddr = "https://bvn0.testnet.accumulatenetwork.io/v2"
+		serverAddr = "https://testnet2.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
@@ -103,6 +103,14 @@ func InitRootCmd(database db.DB) *cobra.Command {
 		Client.Timeout = ClientTimeout
 		Client.DebugRequest = ClientDebug
 
+		out, err := RestoreAccounts()
+		if err != nil && err != db.ErrNoBucket {
+			return err
+		}
+		if out != "" {
+			cmd.Println("performing account database update")
+			cmd.Println(out)
+		}
 		return nil
 	}
 
@@ -132,6 +140,7 @@ var (
 	BucketAdi      = []byte("adi")
 	BucketKeys     = []byte("keys")
 	BucketLabel    = []byte("label")
+	BucketLite     = []byte("lite")
 	BucketMnemonic = []byte("mnemonic")
 	BucketSigType  = []byte("sigtype")
 )

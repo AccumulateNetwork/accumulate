@@ -315,30 +315,18 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 
 		// Convert it back to a transaction
 		env := new(protocol.Envelope)
-		env.Transaction = pending.Transaction
+		env.Transaction = []*protocol.Transaction{pending.Transaction}
 		env.Signatures = signatures
 
-		if env.Type() != protocol.TransactionTypeSyntheticAnchor {
-			print("")
-		}
-
-		// Marshal it
-		raw, err := env.MarshalBinary()
-		if err != nil {
-			g.logger.Error("Failed to marshal pending transaction", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
-			continue
-		}
-
-		typ := env.Transaction.Type()
-		txid32 := *(*[32]byte)(env.GetTxHash())
+		typ := pending.Transaction.Type()
+		txid32 := *(*[32]byte)(pending.Transaction.GetHash())
 		if g.sent[txid32] {
-			g.logger.Info("Resending synth txn", "origin", env.Transaction.Header.Principal, "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
+			g.logger.Info("Resending synth txn", "origin", pending.Transaction.Header.Principal, "txid", logging.AsHex(pending.Transaction.GetHash()).Slice(0, 4), "type", typ, "block", msg.block.Index)
 		} else {
 			if debugSendAnchor || typ != protocol.TransactionTypeSyntheticAnchor {
 				g.logger.Debug("Sending synth txn",
-					"origin", env.Transaction.Header.Principal,
-					"txn-hash", logging.AsHex(env.GetTxHash()).Slice(0, 4),
-					"env-hash", logging.AsHex(env.EnvHash()).Slice(0, 4),
+					"origin", pending.Transaction.Header.Principal,
+					"txn-hash", logging.AsHex(pending.Transaction.GetHash()).Slice(0, 4),
 					"type", typ,
 					"block", msg.block.Index)
 			}
@@ -346,7 +334,7 @@ func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, un
 		}
 
 		// Send it
-		err = g.dispatcher.BroadcastTx(context.Background(), env.Transaction.Header.Principal, raw)
+		err = g.dispatcher.BroadcastTx(context.Background(), pending.Transaction.Header.Principal, env)
 		if err != nil {
 			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id).Slice(0, 4), "error", err)
 			continue
@@ -477,10 +465,11 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = g.Network.Ledger()
+	txn.Body = body
 	env := new(protocol.Envelope)
-	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Header.Principal = g.Network.Ledger()
-	env.Transaction.Body = body
+	env.Transaction = []*protocol.Transaction{txn}
 
 	// Sign it
 	ed, err := new(signing.Builder).
@@ -489,21 +478,18 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 		SetUrl(g.Network.ValidatorPage(0)).
 		SetVersion(1).
 		SetTimestamp(uint64(ledgerState.Index) + 1).
-		Initiate(env.Transaction)
+		Initiate(txn)
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return
 	}
 	env.Signatures = append(env.Signatures, ed)
 
-	// Marshal it
-	data, err := env.MarshalBinary()
+	// Send it
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(txn.GetHash()).Slice(0, 4), "type", body.Type())
+	err = g.dispatcher.BroadcastTxLocal(context.TODO(), env)
 	if err != nil {
-		g.logger.Error("Failed to marshal internal transaction", "error", err)
+		g.logger.Error("Failed to send internal transaction", "error", err)
 		return
 	}
-
-	// Send it
-	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()).Slice(0, 4), "type", body.Type())
-	g.dispatcher.BroadcastTxLocal(context.TODO(), data)
 }

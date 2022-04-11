@@ -14,13 +14,13 @@ func (SyntheticReceipt) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticReceipt
 }
 
-func (SyntheticReceipt) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticReceipt) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticReceipt{}).Validate(st, tx)
 }
 
 /* === Receipt executor === */
 
-func (SyntheticReceipt) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticReceipt)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
