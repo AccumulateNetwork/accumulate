@@ -8,12 +8,11 @@ import (
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
-	"golang.org/x/crypto/ripemd160"
-	"golang.org/x/crypto/sha3"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"golang.org/x/crypto/ripemd160"
+	"golang.org/x/crypto/sha3"
 )
 
 var ErrCannotInitiate = errors.New("signature cannot initiate a transaction: values are missing")
