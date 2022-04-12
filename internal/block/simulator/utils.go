@@ -18,21 +18,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitChain(t TB, db *database.Database, exec *Executor) {
+func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
 	t.Helper()
 
-	block := new(Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = time.Unix(0, 0)
-	block.IsLeader = true
-	block.Batch = db.Begin(true)
-	defer block.Batch.Discard()
+	batch := db.Begin(true)
+	defer batch.Discard()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
 	_, err := genesis.Init(temp, genesis.InitOpts{
 		Network:     exec.Network,
-		GenesisTime: block.Time,
+		GenesisTime: time.Unix(0, 0),
 		Logger:      exec.Logger,
 		Router:      exec.Router,
 		Validators: []tmtypes.GenesisValidator{
@@ -44,10 +40,17 @@ func InitChain(t TB, db *database.Database, exec *Executor) {
 	state, err := temp.MarshalJSON()
 	require.NoError(tb{t}, err)
 
-	_, err = exec.InitChain(block, state)
-	require.NoError(tb{t}, err)
+	require.NoError(tb{t}, exec.InitFromGenesis(batch, state))
+	require.NoError(tb{t}, batch.Commit())
+}
 
-	require.NoError(tb{t}, block.Batch.Commit())
+func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
+	t.Helper()
+
+	batch := db.Begin(true)
+	defer batch.Discard()
+	require.NoError(tb{t}, exec.InitFromSnapshot(batch, filename))
+	require.NoError(tb{t}, batch.Commit())
 }
 
 func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {

@@ -24,7 +24,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // FakeTendermint is a test harness that facilitates testing the ABCI
@@ -46,9 +45,7 @@ type FakeTendermint struct {
 
 	txCh     chan *txStatus
 	txStatus map[[32]byte]*txStatus
-	txPend   map[[32]byte]bool
 	txMu     *sync.RWMutex
-	txCond   *sync.Cond
 	txActive int
 	isEvil   bool
 }
@@ -77,9 +74,7 @@ func NewFakeTendermint(app <-chan abci.Application, db *database.Database, netwo
 	c.txCh = make(chan *txStatus)
 	c.stopped = new(sync.WaitGroup)
 	c.txStatus = map[[32]byte]*txStatus{}
-	c.txPend = map[[32]byte]bool{}
 	c.txMu = new(sync.RWMutex)
-	c.txCond = sync.NewCond(c.txMu.RLocker())
 	c.isEvil = isEvil
 
 	c.validators = []crypto.PubKey{pubKey}
@@ -163,10 +158,6 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	c.txMu.Lock()
 	defer c.txMu.Unlock()
 
-	for _, txid := range txids {
-		delete(c.txPend, txid)
-	}
-
 	st, ok := c.txStatus[txh]
 	if ok {
 		// Ignore duplicate transactions
@@ -183,70 +174,6 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	st.Hash = txh
 	c.txActive++
 	return st
-}
-
-func (c *FakeTendermint) getSynthHeight() int64 {
-	batch := c.db.Begin(false)
-	defer batch.Discard()
-
-	// Load the ledger state
-	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.InternalLedger
-	err := ledger.GetStateAs(&ledgerState)
-	if err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			return 0
-		}
-		panic(err)
-	}
-
-	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
-	if err != nil {
-		panic(err)
-	}
-
-	return synthChain.Height()
-}
-
-func (c *FakeTendermint) addSynthTxns(blockIndex, lastHeight int64) (int64, bool) {
-	batch := c.db.Begin(false)
-	defer batch.Discard()
-
-	// Load the ledger state
-	ledger := batch.Account(c.network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.InternalLedger
-	err := ledger.GetStateAs(&ledgerState)
-	if err != nil {
-		c.onError(err)
-		return 0, false
-	}
-
-	if ledgerState.Index != blockIndex {
-		return 0, false
-	}
-
-	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
-	if err != nil {
-		c.onError(err)
-		return 0, false
-	}
-
-	height := synthChain.Height()
-	txns, err := synthChain.Entries(height-lastHeight, height)
-	if err != nil {
-		c.onError(err)
-		return 0, false
-	}
-
-	c.txMu.Lock()
-	defer c.txMu.Unlock()
-	for _, h := range txns {
-		var h32 [32]byte
-		copy(h32[:], h)
-		c.txPend[h32] = true
-	}
-
-	return height, true
 }
 
 // execute accepts incoming transactions and queues them up for the next block
@@ -272,11 +199,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		}
 
 		c.txActive = 0
-		c.txPend = map[[32]byte]bool{}
-		c.txCond.Broadcast()
 	}()
-
-	synthHeight := c.getSynthHeight()
 
 	for {
 		// Collect transactions, submit at 1Hz
@@ -349,6 +272,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
 				continue
 			}
+			c.checkResultSet(cr.Data)
 
 			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
 			sub.DeliverResult = &dr
@@ -356,6 +280,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			if dr.Code != 0 {
 				c.onError(fmt.Errorf("DeliverTx failed: %v\n", dr.Log))
 			}
+			c.checkResultSet(dr.Data)
 		}
 
 		endBlockResp := c.app.EndBlock(abci.RequestEndBlock{})
@@ -370,20 +295,27 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			c.logTxns("Committed", sub.Envelopes...)
 		}
 
-		// Ensure Wait waits for synthetic transactions
-		if h, ok := c.addSynthTxns(height, synthHeight); ok {
-			synthHeight = h
-		}
-
 		c.txActive -= len(queue)
 		c.txMu.RLock()
-		c.txCond.Broadcast()
 		c.txMu.RUnlock()
 
 		// Clear the queue (reuse the memory)
 		queue = queue[:0]
+	}
+}
 
-		c.logger.Info("Completed block", "height", height, "tx-pending", c.txActive+len(c.txPend))
+func (c *FakeTendermint) checkResultSet(data []byte) {
+	rs := new(protocol.TransactionResultSet)
+	err := rs.UnmarshalBinary(data)
+	if err != nil {
+		c.onError(fmt.Errorf("failed to unmarshal results: %v", err))
+		return
+	}
+
+	for _, r := range rs.Results {
+		if r.Code != 0 {
+			c.onError(fmt.Errorf("DeliverTx failed: %v", r.Message))
+		}
 	}
 }
 

@@ -22,9 +22,9 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.NoError(t, e2, "should be able to open a database")
 	err := m.SetKey(storage.MakeKey("try"))
 	require.NoError(t, err, "should be able to set base key")
-	err = m.WriteChainHead(m.key)
+	err = m.WriteChainHead(m.Key)
 	require.NoError(t, err, "should be able to write to the chain head")
-	head, err := m.ReadChainHead(m.key)
+	head, err := m.ReadChainHead(m.Key)
 	require.NoError(t, err, "should be able to read the chain head")
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
@@ -36,7 +36,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		err = ms.UnMarshal(mState)
 		require.NoError(t, err, "must be able to unmarshal a MerkleState")
 		require.True(t, ms.Equal(m.MS), " should get the same state back")
-		cState, e2 := m.GetChainState(m.key)
+		cState, e2 := m.GetChainState(m.Key)
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
 		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
 	}

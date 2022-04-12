@@ -134,7 +134,7 @@ echo
 section "Generate a Lite Token Account"
 accumulate account list 2>&1 | grep -q ACME || accumulate account generate
 LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
-LITE_ID=$(sed 's/.\{5\}$//' <<< "$LITE_ACME")
+LITE_ID=$(cut -d/ -f-3 <<< "$LITE_ACME")
 TXS=()
 for i in {1..1}
 do
