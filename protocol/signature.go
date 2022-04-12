@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcutil/base58"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -54,7 +55,7 @@ func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
 	return privKey, pubKey
 }
 
-func SECP256K1LegacyKeypair() (privKey []byte, pubKey []byte) {
+func SECP256K1UncompressedKeypair() (privKey []byte, pubKey []byte) {
 	priv, _ := btc.NewPrivateKey(btc.S256())
 
 	privKey = priv.Serialize()
@@ -68,24 +69,18 @@ func BTCHash(pubKey []byte) []byte {
 	hash := sha256.Sum256(pubKey[:])
 	hasher.Write(hash[:])
 	pubRip := hasher.Sum(nil)
-	versionedPayload := append([]byte{0x00}, pubRip...)
-	newhash := sha256.Sum256(versionedPayload)
-	newhash = sha256.Sum256(newhash[:])
-	return newhash[:]
+	return pubRip[:]
 }
 
 func BTCaddress(pubKey []byte) []byte {
-	hasher := ripemd160.New()
-	hash := sha256.Sum256(pubKey[:])
-	hasher.Write(hash[:])
-	pubRip := hasher.Sum(nil)
+	pubRip := BTCHash(pubKey)
 	versionedPayload := append([]byte{0x00}, pubRip...)
 	newhash := sha256.Sum256(versionedPayload)
 	newhash = sha256.Sum256(newhash[:])
 	checkSum := newhash[:4]
 	fullpayload := append(versionedPayload, checkSum...)
-	address := Base58Encode(fullpayload)
-	return address
+	address := base58.Encode(fullpayload)
+	return []byte(address)
 }
 
 func ETHhash(pubKey []byte) []byte {
@@ -387,7 +382,7 @@ func (s *BTCSignature) GetSignerVersion() uint64 { return s.SignerVersion }
 func (s *BTCSignature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKeyHash returns the hash of PublicKey.
-func (s *BTCSignature) GetPublicKeyHash() []byte { return BTCaddress(s.PublicKey) }
+func (s *BTCSignature) GetPublicKeyHash() []byte { return BTCHash(s.PublicKey) }
 
 // GetPublicKey returns PublicKey.
 func (s *BTCSignature) GetPublicKey() []byte { return s.PublicKey }
@@ -472,7 +467,7 @@ func (s *BTCLegacySignature) GetSignerVersion() uint64 { return s.SignerVersion 
 func (s *BTCLegacySignature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKeyHash returns the hash of PublicKey.
-func (s *BTCLegacySignature) GetPublicKeyHash() []byte { return BTCaddress(s.PublicKey) }
+func (s *BTCLegacySignature) GetPublicKeyHash() []byte { return BTCHash(s.PublicKey) }
 
 // GetPublicKey returns PublicKey.
 func (s *BTCLegacySignature) GetPublicKey() []byte { return s.PublicKey }

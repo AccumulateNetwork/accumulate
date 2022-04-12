@@ -33,7 +33,7 @@ func TestBTCLegacySignature(t *testing.T) {
 
 	message := "ACME will rule DEFI"
 	hash := sha256.Sum256([]byte(message))
-	secp := new(BTCSignature)
+	secp := new(BTCLegacySignature)
 
 	pk, err := btc.NewPrivateKey(btc.S256())
 	pkBytes := pk.Serialize()
@@ -43,7 +43,7 @@ func TestBTCLegacySignature(t *testing.T) {
 
 	require.NoError(t, err)
 
-	SignBTC(secp, privkey.Serialize(), hash[:])
+	SignBTCLegacy(secp, privkey.Serialize(), hash[:])
 	res := secp.Verify(hash[:])
 
 	require.Equal(t, res, true)

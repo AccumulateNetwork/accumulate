@@ -354,7 +354,7 @@ func GenerateKey(label string) (string, error) {
 	var pubKey []byte
 
 	if sigtype == protocol.SignatureTypeBTCLegacy || sigtype == protocol.SignatureTypeETH {
-		privKey, pubKey = protocol.SECP256K1LegacyKeypair()
+		privKey, pubKey = protocol.SECP256K1UncompressedKeypair()
 	} else if sigtype == protocol.SignatureTypeBTC {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
