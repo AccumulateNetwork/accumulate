@@ -33,6 +33,10 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 
 	case *protocol.BTCSignature:
 		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
+		sig.PublicKey = pubKey.SerializeCompressed()
+
+	case *protocol.BTCLegacySignature:
+		_, pubKey := btc.PrivKeyFromBytes(btc.S256(), k)
 		sig.PublicKey = pubKey.SerializeUncompressed()
 
 	case *protocol.ETHSignature:
@@ -63,6 +67,9 @@ func (k PrivateKey) Sign(sig protocol.Signature, message []byte) error {
 
 	case *protocol.BTCSignature:
 		protocol.SignBTC(sig, k, message)
+
+	case *protocol.BTCLegacySignature:
+		protocol.SignBTCLegacy(sig, k, message)
 
 	case *protocol.ETHSignature:
 		protocol.SignETH(sig, k, message)

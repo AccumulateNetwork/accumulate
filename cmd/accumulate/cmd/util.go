@@ -1178,6 +1178,9 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 	case "btc":
 		sigtype = protocol.SignatureTypeBTC
 		err = nil
+	case "btclegacy":
+		sigtype = protocol.SignatureTypeBTCLegacy
+		err = nil
 	case "eth":
 		sigtype = protocol.SignatureTypeETH
 		err = nil

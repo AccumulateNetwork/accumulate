@@ -18,6 +18,27 @@ func TestBTCSignature(t *testing.T) {
 	pkBytes := pk.Serialize()
 	privkey, pbkey := btc.PrivKeyFromBytes(btc.S256(), pkBytes)
 
+	secp.PublicKey = pbkey.SerializeCompressed()
+
+	require.NoError(t, err)
+
+	SignBTC(secp, privkey.Serialize(), hash[:])
+	res := secp.Verify(hash[:])
+
+	require.Equal(t, res, true)
+
+}
+
+func TestBTCLegacySignature(t *testing.T) {
+
+	message := "ACME will rule DEFI"
+	hash := sha256.Sum256([]byte(message))
+	secp := new(BTCSignature)
+
+	pk, err := btc.NewPrivateKey(btc.S256())
+	pkBytes := pk.Serialize()
+	privkey, pbkey := btc.PrivKeyFromBytes(btc.S256(), pkBytes)
+
 	secp.PublicKey = pbkey.SerializeUncompressed()
 
 	require.NoError(t, err)

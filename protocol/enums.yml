@@ -42,20 +42,23 @@ SignatureType:
   BTC:
     value: 4
     description: represents an BTC signature
-  ETH:
+  BTCLegacy:
     value: 5
+    description: represents an BTC signature with uncompressed public key
+  ETH:
+    value: 6
     description: represents an ETH signature
   Receipt:
-    value: 6
+    value: 7
     description: represents a Merkle tree receipt
   Synthetic:
-    value: 7
+    value: 8
     description: is used when sending synthetic transactions
   Internal:
-    value: 8
+    value: 9
     description: is used when executing transactions internally
   Forwarded:
-    value: 9
+    value: 10
     description: is used when forwarding signatures from one subnet to another
 
 KeyPageOperationType:

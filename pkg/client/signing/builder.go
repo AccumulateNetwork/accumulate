@@ -115,7 +115,7 @@ func (s *Builder) prepare(init bool) (protocol.Signature, error) {
 
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519,
-		protocol.SignatureTypeRCD1, protocol.SignatureTypeBTC, protocol.SignatureTypeETH:
+		protocol.SignatureTypeRCD1, protocol.SignatureTypeBTC, protocol.SignatureTypeETH, protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeInternal:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
@@ -154,6 +154,13 @@ func (s *Builder) prepare(init bool) (protocol.Signature, error) {
 		sig.Timestamp = s.Timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
+	case protocol.SignatureTypeBTCLegacy:
+		sig := new(protocol.BTCLegacySignature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = s.Timestamp
+		return sig, s.Signer.SetPublicKey(sig)
+
 	case protocol.SignatureTypeETH:
 		sig := new(protocol.ETHSignature)
 		sig.Signer = s.Url
@@ -175,6 +182,8 @@ func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
 	case *protocol.RCD1Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.BTCSignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.BTCLegacySignature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.ETHSignature:
 		sig.TransactionHash = *(*[32]byte)(hash)

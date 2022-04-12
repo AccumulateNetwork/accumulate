@@ -27,7 +27,7 @@ import (
 
 func init() {
 	keyCmd.AddCommand(keyUpdateCmd)
-	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
 }
 
 var keyCmd = &cobra.Command{
@@ -190,11 +190,11 @@ func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error
 	case protocol.SignatureTypeRCD1:
 		hash := protocol.GetRCDHashFromPublicKey(pubKey, 1)
 		return sigType, hash, nil
-	case protocol.SignatureTypeBTC:
-		hash := protocol.BTCaddress(pubKey)
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
+		hash := protocol.BTCHash(pubKey)
 		return sigType, hash, nil
 	case protocol.SignatureTypeETH:
-		hash := protocol.ETHaddress(pubKey)
+		hash := protocol.ETHhash(pubKey)
 		return sigType, hash, nil
 	default:
 		return 0, nil, fmt.Errorf("unsupported signature type %v", sigType)
@@ -353,7 +353,9 @@ func GenerateKey(label string) (string, error) {
 	var privKey []byte
 	var pubKey []byte
 
-	if sigtype == protocol.SignatureTypeBTC || sigtype == protocol.SignatureTypeETH {
+	if sigtype == protocol.SignatureTypeBTCLegacy || sigtype == protocol.SignatureTypeETH {
+		privKey, pubKey = protocol.SECP256K1LegacyKeypair()
+	} else if sigtype == protocol.SignatureTypeBTC {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
 
@@ -374,10 +376,16 @@ func GenerateKey(label string) (string, error) {
 				return "", err
 			}
 		}
-	} else if sigtype == protocol.SignatureTypeBTC {
-		keyHash = protocol.BTCaddress(pubKey)
+	} else if sigtype == protocol.SignatureTypeBTC || sigtype == protocol.SignatureTypeBTCLegacy {
+		keyHash = protocol.BTCHash(pubKey)
+		if label == "" {
+			label = hex.EncodeToString(protocol.BTCaddress(pubKey))
+		}
 	} else if sigtype == protocol.SignatureTypeETH {
-		keyHash = protocol.ETHaddress(pubKey)
+		keyHash = protocol.ETHhash(pubKey)
+		if label == "" {
+			label = hex.EncodeToString(protocol.ETHaddress(pubKey))
+		}
 	} else {
 		h := sha256.Sum256(pubKey)
 		keyHash = h[:]

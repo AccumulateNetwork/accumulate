@@ -127,6 +127,9 @@ func (r txRequestSigner) SetPublicKey(sig protocol.Signature) error {
 	case *protocol.BTCSignature:
 		sig.PublicKey = r.Signer.PublicKey
 
+	case *protocol.BTCLegacySignature:
+		sig.PublicKey = r.Signer.PublicKey
+
 	case *protocol.ETHSignature:
 		sig.PublicKey = r.Signer.PublicKey
 
@@ -149,6 +152,9 @@ func (r txRequestSigner) Sign(sig protocol.Signature, message []byte) error {
 		sig.Signature = r.Signature
 
 	case *protocol.BTCSignature:
+		sig.Signature = r.Signature
+
+	case *protocol.BTCLegacySignature:
 		sig.Signature = r.Signature
 
 	case *protocol.ETHSignature:
