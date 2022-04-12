@@ -1187,8 +1187,8 @@ github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
 gitlab.com/bosi/decorder v0.2.1 h1:ehqZe8hI4w7O4b1vgsDZw1YU1PE7iJXrQWFMsocbQ1w=
 gitlab.com/bosi/decorder v0.2.1/go.mod h1:6C/nhLSbF6qZbYD8bRmISBwc6vcWdNsiIBkRvjJFrH0=
-gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220411040148-e45e8d546353 h1:wtSbr9BDWrIBsbQdqPE00SqYAfI5wNr2Mm0E0Ad025E=
-gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220411040148-e45e8d546353/go.mod h1:s7PeU01SyKLYsntZIiKWPp2qn3DznJ9WSHblDHulSqQ=
+gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220412014705-3ecf60556e07 h1:oYFAWf6YaLfgz1R/Zy7Wp9izJlfnfnTKhK6RDiqHAGs=
+gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220412014705-3ecf60556e07/go.mod h1:s7PeU01SyKLYsntZIiKWPp2qn3DznJ9WSHblDHulSqQ=
 go.etcd.io/bbolt v1.3.2/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/bbolt v1.3.3/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/bbolt v1.3.4/go.mod h1:G5EMThwa9y8QZGBClrRx5EY+Yw9kAhnjy3bSjsnlVTQ=
