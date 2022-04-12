@@ -379,9 +379,6 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 }
 
 func GoCopy(field *Field, dstName, srcName string) (string, error) {
-	if field.Name == "BlockTime" {
-		print("")
-	}
 	if !field.Repeatable {
 		return goCopy(field, dstName, srcName)
 	}
