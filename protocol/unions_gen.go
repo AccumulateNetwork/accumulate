@@ -492,8 +492,12 @@ func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
 // NewSignature creates a new Signature for the specified SignatureType.
 func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
+	case SignatureTypeBTC:
+		return new(BTCSignature), nil
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
+	case SignatureTypeETH:
+		return new(ETHSignature), nil
 	case SignatureTypeForwarded:
 		return new(ForwardedSignature), nil
 	case SignatureTypeInternal:

@@ -39,17 +39,23 @@ SignatureType:
   RCD1:
     value: 3
     description: represents an RCD1 signature
-  Receipt:
+  BTC:
     value: 4
+    description: represents an BTC signature
+  ETH:
+    value: 5
+    description: represents an ETH signature
+  Receipt:
+    value: 6
     description: represents a Merkle tree receipt
   Synthetic:
-    value: 5
+    value: 7
     description: is used when sending synthetic transactions
   Internal:
-    value: 6
+    value: 8
     description: is used when executing transactions internally
   Forwarded:
-    value: 7
+    value: 9
     description: is used when forwarding signatures from one subnet to another
 
 KeyPageOperationType:
