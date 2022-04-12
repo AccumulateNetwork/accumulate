@@ -29,7 +29,7 @@ require (
 	github.com/tendermint/tendermint v0.35.0-rc1
 	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
-	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220411040148-e45e8d546353
+	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220412014705-3ecf60556e07
 	go.etcd.io/etcd/client/v3 v3.5.2
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
