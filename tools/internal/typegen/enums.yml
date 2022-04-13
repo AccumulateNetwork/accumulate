@@ -45,7 +45,6 @@ TypeCode:
     value: 9
   BigInt:
     value: 10
-    aliases: [ bigint ]
   Any:
     value: 11
   RawJson:

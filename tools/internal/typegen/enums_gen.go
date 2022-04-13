@@ -192,7 +192,7 @@ func (v TypeCode) String() string {
 
 // TypeCodeByName returns the named Type Code.
 func TypeCodeByName(name string) (TypeCode, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return TypeCodeUnknown, true
 	case "int":
@@ -221,13 +221,11 @@ func TypeCodeByName(name string) (TypeCode, bool) {
 		return TypeCodeTime, true
 	case "duration":
 		return TypeCodeDuration, true
-	case "bigInt":
-		return TypeCodeBigInt, true
 	case "bigint":
 		return TypeCodeBigInt, true
 	case "any":
 		return TypeCodeAny, true
-	case "rawJson":
+	case "rawjson":
 		return TypeCodeRawJson, true
 	default:
 		return 0, false
