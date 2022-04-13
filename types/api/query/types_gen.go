@@ -181,7 +181,9 @@ func (v *DirectoryQueryResult) Copy() *DirectoryQueryResult {
 	}
 	u.ExpandedEntries = make([]protocol.Account, len(v.ExpandedEntries))
 	for i, v := range v.ExpandedEntries {
-		u.ExpandedEntries[i] = (v).CopyAsInterface().(protocol.Account)
+		if v != nil {
+			u.ExpandedEntries[i] = (v).CopyAsInterface().(protocol.Account)
+		}
 	}
 	u.Total = v.Total
 
@@ -261,7 +263,9 @@ func (v *RequestTxHistory) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponseAccount) Copy() *ResponseAccount {
 	u := new(ResponseAccount)
 
-	u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+	if v.Account != nil {
+		u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+	}
 	u.ChainState = make([]ChainState, len(v.ChainState))
 	for i, v := range v.ChainState {
 		u.ChainState[i] = *(&v).Copy()
@@ -416,10 +420,14 @@ func (v *ResponseTxHistory) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SignatureSet) Copy() *SignatureSet {
 	u := new(SignatureSet)
 
-	u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+	if v.Account != nil {
+		u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+	}
 	u.Signatures = make([]protocol.Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
-		u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
+		if v != nil {
+			u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
+		}
 	}
 
 	return u

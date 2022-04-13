@@ -410,7 +410,7 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 
 	switch field.MarshalAs {
 	case Union:
-		return goCopyNonPointer(field, "%s = (%s).CopyAsInterface().(%s)", dstName, srcName, GoResolveType(field, false, true)), nil
+		return goCopyNonPointer(field, "if %[1]s != nil { %[2]s = (%[1]s).CopyAsInterface().(%[3]s) }", srcName, dstName, GoResolveType(field, false, true)), nil
 	case Reference:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
 	case Value, Enum:

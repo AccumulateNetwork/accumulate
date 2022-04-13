@@ -1260,7 +1260,9 @@ func (v *Envelope) Copy() *Envelope {
 
 	u.Signatures = make([]Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
-		u.Signatures[i] = (v).CopyAsInterface().(Signature)
+		if v != nil {
+			u.Signatures[i] = (v).CopyAsInterface().(Signature)
+		}
 	}
 	u.TxHash = encoding.BytesCopy(v.TxHash)
 	u.Transaction = make([]*Transaction, len(v.Transaction))
@@ -1278,8 +1280,12 @@ func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ForwardedSignature) Copy() *ForwardedSignature {
 	u := new(ForwardedSignature)
 
-	u.Signature = (v.Signature).CopyAsInterface().(KeySignature)
-	u.Signer = (v.Signer).CopyAsInterface().(Signer)
+	if v.Signature != nil {
+		u.Signature = (v.Signature).CopyAsInterface().(KeySignature)
+	}
+	if v.Signer != nil {
+		u.Signer = (v.Signer).CopyAsInterface().(Signer)
+	}
 
 	return u
 }
@@ -1718,7 +1724,9 @@ func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SendTransaction) Copy() *SendTransaction {
 	u := new(SendTransaction)
 
-	u.Payload = (v.Payload).CopyAsInterface().(TransactionBody)
+	if v.Payload != nil {
+		u.Payload = (v.Payload).CopyAsInterface().(TransactionBody)
+	}
 	if v.Recipient != nil {
 		u.Recipient = (v.Recipient).Copy()
 	}
@@ -1984,7 +1992,9 @@ func (v *Transaction) Copy() *Transaction {
 	u := new(Transaction)
 
 	u.Header = *(&v.Header).Copy()
-	u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+	if v.Body != nil {
+		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+	}
 
 	return u
 }
@@ -2025,7 +2035,9 @@ func (v *TransactionSignature) Copy() *TransactionSignature {
 	u := new(TransactionSignature)
 
 	u.Transaction = v.Transaction
-	u.Signature = (v.Signature).CopyAsInterface().(Signature)
+	if v.Signature != nil {
+		u.Signature = (v.Signature).CopyAsInterface().(Signature)
+	}
 
 	return u
 }
@@ -2040,13 +2052,17 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
-	u.Result = (v.Result).CopyAsInterface().(TransactionResult)
+	if v.Result != nil {
+		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
+	}
 	if v.Initiator != nil {
 		u.Initiator = (v.Initiator).Copy()
 	}
 	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
-		u.Signers[i] = (v).CopyAsInterface().(Signer)
+		if v != nil {
+			u.Signers[i] = (v).CopyAsInterface().(Signer)
+		}
 	}
 
 	return u
@@ -2084,7 +2100,9 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 
 	u.Operations = make([]AccountAuthOperation, len(v.Operations))
 	for i, v := range v.Operations {
-		u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
+		if v != nil {
+			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
+		}
 	}
 
 	return u
@@ -2135,7 +2153,9 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 
 	u.Operation = make([]KeyPageOperation, len(v.Operation))
 	for i, v := range v.Operation {
-		u.Operation[i] = (v).CopyAsInterface().(KeyPageOperation)
+		if v != nil {
+			u.Operation[i] = (v).CopyAsInterface().(KeyPageOperation)
+		}
 	}
 
 	return u

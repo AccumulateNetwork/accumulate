@@ -57,7 +57,9 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
 	}
-	u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
+	if v.Signature != nil {
+		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
+	}
 	u.Hash = v.Hash
 
 	return u
@@ -68,7 +70,9 @@ func (v *SigOrTxn) CopyAsInterface() interface{} { return v.Copy() }
 func (v *exampleFullAccountState) Copy() *exampleFullAccountState {
 	u := new(exampleFullAccountState)
 
-	u.State = (v.State).CopyAsInterface().(protocol.Account)
+	if v.State != nil {
+		u.State = (v.State).CopyAsInterface().(protocol.Account)
+	}
 	u.Chains = make([]*merkleState, len(v.Chains))
 	for i, v := range v.Chains {
 		if v != nil {
