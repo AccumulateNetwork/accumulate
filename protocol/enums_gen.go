@@ -227,26 +227,26 @@ const SignatureTypeED25519 SignatureType = 2
 // SignatureTypeRCD1 represents an RCD1 signature.
 const SignatureTypeRCD1 SignatureType = 3
 
-// SignatureTypeBTC represents an BTC signature.
-const SignatureTypeBTC SignatureType = 4
-
-// SignatureTypeBTCLegacy represents an BTC signature with uncompressed public key.
-const SignatureTypeBTCLegacy SignatureType = 5
-
-// SignatureTypeETH represents an ETH signature.
-const SignatureTypeETH SignatureType = 6
-
 // SignatureTypeReceipt represents a Merkle tree receipt.
-const SignatureTypeReceipt SignatureType = 7
+const SignatureTypeReceipt SignatureType = 4
 
 // SignatureTypeSynthetic is used when sending synthetic transactions.
-const SignatureTypeSynthetic SignatureType = 8
+const SignatureTypeSynthetic SignatureType = 5
 
 // SignatureTypeInternal is used when executing transactions internally.
-const SignatureTypeInternal SignatureType = 9
+const SignatureTypeInternal SignatureType = 6
 
 // SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
-const SignatureTypeForwarded SignatureType = 10
+const SignatureTypeForwarded SignatureType = 7
+
+// SignatureTypeBTC represents an BTC signature.
+const SignatureTypeBTC SignatureType = 8
+
+// SignatureTypeBTCLegacy represents an BTC signature with uncompressed public key.
+const SignatureTypeBTCLegacy SignatureType = 9
+
+// SignatureTypeETH represents an ETH signature.
+const SignatureTypeETH SignatureType = 10
 
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
@@ -1023,7 +1023,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH:
 		*v = u
 		return true
 	default:
@@ -1042,12 +1042,6 @@ func (v SignatureType) String() string {
 		return "eD25519"
 	case SignatureTypeRCD1:
 		return "rCD1"
-	case SignatureTypeBTC:
-		return "bTC"
-	case SignatureTypeBTCLegacy:
-		return "bTCLegacy"
-	case SignatureTypeETH:
-		return "eTH"
 	case SignatureTypeReceipt:
 		return "receipt"
 	case SignatureTypeSynthetic:
@@ -1056,6 +1050,12 @@ func (v SignatureType) String() string {
 		return "internal"
 	case SignatureTypeForwarded:
 		return "forwarded"
+	case SignatureTypeBTC:
+		return "bTC"
+	case SignatureTypeBTCLegacy:
+		return "bTCLegacy"
+	case SignatureTypeETH:
+		return "eTH"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -1072,12 +1072,6 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeED25519, true
 	case "rCD1":
 		return SignatureTypeRCD1, true
-	case "bTC":
-		return SignatureTypeBTC, true
-	case "bTCLegacy":
-		return SignatureTypeBTCLegacy, true
-	case "eTH":
-		return SignatureTypeETH, true
 	case "receipt":
 		return SignatureTypeReceipt, true
 	case "synthetic":
@@ -1086,6 +1080,12 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeInternal, true
 	case "forwarded":
 		return SignatureTypeForwarded, true
+	case "bTC":
+		return SignatureTypeBTC, true
+	case "bTCLegacy":
+		return SignatureTypeBTCLegacy, true
+	case "eTH":
+		return SignatureTypeETH, true
 	default:
 		return 0, false
 	}

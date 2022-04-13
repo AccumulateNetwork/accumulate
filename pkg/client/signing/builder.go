@@ -115,7 +115,10 @@ func (s *Builder) prepare(init bool) (protocol.Signature, error) {
 
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519,
-		protocol.SignatureTypeRCD1, protocol.SignatureTypeBTC, protocol.SignatureTypeETH, protocol.SignatureTypeBTCLegacy:
+		protocol.SignatureTypeRCD1,
+		protocol.SignatureTypeBTC,
+		protocol.SignatureTypeETH,
+		protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeInternal:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense

@@ -74,7 +74,7 @@ func BTCHash(pubKey []byte) []byte {
 	return pubRip[:]
 }
 
-func BTCaddress(pubKey []byte) []byte {
+func BTCaddress(pubKey []byte) string {
 	pubRip := BTCHash(pubKey)
 	versionedPayload := append([]byte{0x00}, pubRip...)
 	newhash := sha256.Sum256(versionedPayload)
@@ -82,7 +82,7 @@ func BTCaddress(pubKey []byte) []byte {
 	checkSum := newhash[:4]
 	fullpayload := append(versionedPayload, checkSum...)
 	address := base58.Encode(fullpayload)
-	return []byte(address)
+	return address
 }
 
 func ETHhash(pubKey []byte) []byte {
@@ -91,9 +91,9 @@ func ETHhash(pubKey []byte) []byte {
 	return hash.Sum(nil)
 }
 
-func ETHaddress(pubKey []byte) []byte {
+func ETHaddress(pubKey []byte) string {
 	address := ETHhash(pubKey)
-	return address[12:]
+	return fmt.Sprintf("0x%x", address[12:])
 }
 
 func netVal(u *url.URL) *url.URL {

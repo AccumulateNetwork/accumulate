@@ -379,12 +379,12 @@ func GenerateKey(label string) (string, error) {
 	} else if sigtype == protocol.SignatureTypeBTC || sigtype == protocol.SignatureTypeBTCLegacy {
 		keyHash = protocol.BTCHash(pubKey)
 		if label == "" {
-			label = hex.EncodeToString(protocol.BTCaddress(pubKey))
+			label = protocol.BTCaddress(pubKey)
 		}
 	} else if sigtype == protocol.SignatureTypeETH {
 		keyHash = protocol.ETHhash(pubKey)
 		if label == "" {
-			label = hex.EncodeToString(protocol.ETHaddress(pubKey))
+			label = protocol.ETHaddress(pubKey)
 		}
 	} else {
 		h := sha256.Sum256(pubKey)
