@@ -46,6 +46,7 @@ func doSha256(data []byte) []byte {
 	return hash[:]
 }
 
+//generates privatekey and compressed public key
 func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
 	priv, _ := btc.NewPrivateKey(btc.S256())
 
@@ -55,6 +56,7 @@ func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
 	return privKey, pubKey
 }
 
+//generates privatekey and Un-compressed public key
 func SECP256K1UncompressedKeypair() (privKey []byte, pubKey []byte) {
 	priv, _ := btc.NewPrivateKey(btc.S256())
 
