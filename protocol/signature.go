@@ -552,7 +552,7 @@ func (s *ETHSignature) GetSignerVersion() uint64 { return s.SignerVersion }
 func (s *ETHSignature) GetTimestamp() uint64 { return s.Timestamp }
 
 // GetPublicKeyHash returns the hash of PublicKey.
-func (s *ETHSignature) GetPublicKeyHash() []byte { return ETHaddress(s.PublicKey) }
+func (s *ETHSignature) GetPublicKeyHash() []byte { return ETHhash(s.PublicKey) }
 
 // GetPublicKey returns PublicKey.
 func (s *ETHSignature) GetPublicKey() []byte { return s.PublicKey }
