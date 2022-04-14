@@ -421,7 +421,7 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	var typ protocol.TransactionType
 	require.NoError(n.t, typ.UnmarshalJSON([]byte(strconv.Quote(resp.Type))))
 
-	resp.Data, err = protocol.NewTransaction(typ)
+	resp.Data, err = protocol.NewTransactionBody(typ)
 	require.NoError(n.t, err)
 	require.NoError(n.t, json.Unmarshal(data, resp.Data))
 

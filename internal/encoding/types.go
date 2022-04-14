@@ -19,6 +19,7 @@ type EnumValueSetter interface {
 type BinaryValue interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
+	CopyAsInterface() interface{}
 	UnmarshalBinaryFrom(io.Reader) error
 }
 

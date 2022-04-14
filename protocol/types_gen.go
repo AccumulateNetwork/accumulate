@@ -1353,7 +1353,9 @@ func (v *Envelope) Copy() *Envelope {
 
 	u.Signatures = make([]Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
-		u.Signatures[i] = v
+		if v != nil {
+			u.Signatures[i] = (v).CopyAsInterface().(Signature)
+		}
 	}
 	u.TxHash = encoding.BytesCopy(v.TxHash)
 	u.Transaction = make([]*Transaction, len(v.Transaction))
@@ -1371,8 +1373,12 @@ func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ForwardedSignature) Copy() *ForwardedSignature {
 	u := new(ForwardedSignature)
 
-	u.Signature = v.Signature
-	u.Signer = v.Signer
+	if v.Signature != nil {
+		u.Signature = (v.Signature).CopyAsInterface().(KeySignature)
+	}
+	if v.Signer != nil {
+		u.Signer = (v.Signer).CopyAsInterface().(Signer)
+	}
 
 	return u
 }
@@ -1434,6 +1440,19 @@ func (v *InternalLedger) Copy() *InternalLedger {
 }
 
 func (v *InternalLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalSendTransactions) Copy() *InternalSendTransactions {
+	u := new(InternalSendTransactions)
+
+	u.Transactions = make([]SendTransaction, len(v.Transactions))
+	for i, v := range v.Transactions {
+		u.Transactions[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *InternalSendTransactions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *InternalSignature) Copy() *InternalSignature {
 	u := new(InternalSignature)
@@ -1795,6 +1814,21 @@ func (v *SendTokens) Copy() *SendTokens {
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SendTransaction) Copy() *SendTransaction {
+	u := new(SendTransaction)
+
+	if v.Payload != nil {
+		u.Payload = (v.Payload).CopyAsInterface().(TransactionBody)
+	}
+	if v.Recipient != nil {
+		u.Recipient = (v.Recipient).Copy()
+	}
+
+	return u
+}
+
+func (v *SendTransaction) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
 	u := new(SetThresholdKeyPageOperation)
 
@@ -2051,7 +2085,9 @@ func (v *Transaction) Copy() *Transaction {
 	u := new(Transaction)
 
 	u.Header = *(&v.Header).Copy()
-	u.Body = v.Body
+	if v.Body != nil {
+		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+	}
 
 	return u
 }
@@ -2092,7 +2128,9 @@ func (v *TransactionSignature) Copy() *TransactionSignature {
 	u := new(TransactionSignature)
 
 	u.Transaction = v.Transaction
-	u.Signature = v.Signature
+	if v.Signature != nil {
+		u.Signature = (v.Signature).CopyAsInterface().(Signature)
+	}
 
 	return u
 }
@@ -2107,13 +2145,17 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
-	u.Result = v.Result
+	if v.Result != nil {
+		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
+	}
 	if v.Initiator != nil {
 		u.Initiator = (v.Initiator).Copy()
 	}
 	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
-		u.Signers[i] = v
+		if v != nil {
+			u.Signers[i] = (v).CopyAsInterface().(Signer)
+		}
 	}
 
 	return u
@@ -2151,7 +2193,9 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 
 	u.Operations = make([]AccountAuthOperation, len(v.Operations))
 	for i, v := range v.Operations {
-		u.Operations[i] = v
+		if v != nil {
+			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
+		}
 	}
 
 	return u
@@ -2202,7 +2246,9 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 
 	u.Operation = make([]KeyPageOperation, len(v.Operation))
 	for i, v := range v.Operation {
-		u.Operation[i] = v
+		if v != nil {
+			u.Operation[i] = (v).CopyAsInterface().(KeyPageOperation)
+		}
 	}
 
 	return u
@@ -2983,6 +3029,19 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 	return true
 }
 
+func (v *InternalSendTransactions) Equal(u *InternalSendTransactions) bool {
+	if len(v.Transactions) != len(u.Transactions) {
+		return false
+	}
+	for i := range v.Transactions {
+		if !((&v.Transactions[i]).Equal(&u.Transactions[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *InternalSignature) Equal(u *InternalSignature) bool {
 	switch {
 	case v.Network == u.Network:
@@ -3441,6 +3500,22 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		if !((v.To[i]).Equal(u.To[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SendTransaction) Equal(u *SendTransaction) bool {
+	if !(v.Payload == u.Payload) {
+		return false
+	}
+	switch {
+	case v.Recipient == u.Recipient:
+		// equal
+	case v.Recipient == nil || u.Recipient == nil:
+		return false
+	case !((v.Recipient).Equal(u.Recipient)):
+		return false
 	}
 
 	return true
@@ -5709,10 +5784,10 @@ func (v *ForwardedSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Signature == (nil)) {
+	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
-	if !(v.Signer == (nil)) {
+	if !(v.Signer == nil) {
 		writer.WriteValue(3, v.Signer)
 	}
 
@@ -5728,12 +5803,12 @@ func (v *ForwardedSignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == (nil) {
+	} else if v.Signature == nil {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Signer is missing")
-	} else if v.Signer == (nil) {
+	} else if v.Signer == nil {
 		errs = append(errs, "field Signer is not set")
 	}
 
@@ -7344,7 +7419,7 @@ func (v *SendTransaction) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Payload == (nil)) {
+	if !(v.Payload == nil) {
 		writer.WriteValue(1, v.Payload)
 	}
 	if !(v.Recipient == nil) {
@@ -7360,7 +7435,7 @@ func (v *SendTransaction) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Payload is missing")
-	} else if v.Payload == (nil) {
+	} else if v.Payload == nil {
 		errs = append(errs, "field Payload is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -8353,7 +8428,7 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	if !((v.Header).Equal(new(TransactionHeader))) {
 		writer.WriteValue(1, &v.Header)
 	}
-	if !(v.Body == (nil)) {
+	if !(v.Body == nil) {
 		writer.WriteValue(2, v.Body)
 	}
 
@@ -8371,7 +8446,7 @@ func (v *Transaction) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Body is missing")
-	} else if v.Body == (nil) {
+	} else if v.Body == nil {
 		errs = append(errs, "field Body is not set")
 	}
 
@@ -8486,7 +8561,7 @@ func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == ([32]byte{})) {
 		writer.WriteHash(1, &v.Transaction)
 	}
-	if !(v.Signature == (nil)) {
+	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
 
@@ -8504,7 +8579,7 @@ func (v *TransactionSignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == (nil) {
+	} else if v.Signature == nil {
 		errs = append(errs, "field Signature is not set")
 	}
 
@@ -8548,7 +8623,7 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(len(v.Message) == 0) {
 		writer.WriteString(5, v.Message)
 	}
-	if !(v.Result == (nil)) {
+	if !(v.Result == nil) {
 		writer.WriteValue(6, v.Result)
 	}
 	if !(v.Initiator == nil) {
@@ -8594,7 +8669,7 @@ func (v *TransactionStatus) IsValid() error {
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Result is missing")
-	} else if v.Result == (nil) {
+	} else if v.Result == nil {
 		errs = append(errs, "field Result is not set")
 	}
 	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
@@ -10878,7 +10953,7 @@ func (v *SendTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	reader.ReadValue(1, func(b []byte) error {
-		x, err := UnmarshalTransaction(b)
+		x, err := UnmarshalTransactionBody(b)
 		if err == nil {
 			v.Payload = x
 		}
@@ -11389,7 +11464,7 @@ func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Header = *x
 	}
 	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalTransaction(b)
+		x, err := UnmarshalTransactionBody(b)
 		if err == nil {
 			v.Body = x
 		}
@@ -12663,7 +12738,7 @@ func (v *SendTransaction) MarshalJSON() ([]byte, error) {
 		Payload   encoding.JsonUnmarshalWith[TransactionBody] `json:"payload,omitempty"`
 		Recipient *url.URL                                    `json:"recipient,omitempty"`
 	}{}
-	u.Payload = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Payload, Func: UnmarshalTransactionJSON}
+	u.Payload = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Payload, Func: UnmarshalTransactionBodyJSON}
 	u.Recipient = v.Recipient
 	return json.Marshal(&u)
 }
@@ -12938,7 +13013,7 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 		Body   encoding.JsonUnmarshalWith[TransactionBody] `json:"body,omitempty"`
 	}{}
 	u.Header = v.Header
-	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionJSON}
+	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
 	return json.Marshal(&u)
 }
 
@@ -14711,7 +14786,7 @@ func (v *SendTransaction) UnmarshalJSON(data []byte) error {
 		Payload   encoding.JsonUnmarshalWith[TransactionBody] `json:"payload,omitempty"`
 		Recipient *url.URL                                    `json:"recipient,omitempty"`
 	}{}
-	u.Payload = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Payload, Func: UnmarshalTransactionJSON}
+	u.Payload = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Payload, Func: UnmarshalTransactionBodyJSON}
 	u.Recipient = v.Recipient
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -15233,7 +15308,7 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 		Body   encoding.JsonUnmarshalWith[TransactionBody] `json:"body,omitempty"`
 	}{}
 	u.Header = v.Header
-	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionJSON}
+	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
