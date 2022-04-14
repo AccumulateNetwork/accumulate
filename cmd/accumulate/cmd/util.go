@@ -1162,22 +1162,9 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 }
 
 func ValidateSigType(input string) (protocol.SignatureType, error) {
-	var sigtype protocol.SignatureType
-	var err error
-	input = strings.ToLower(input)
-	switch input {
-	case "rcd1":
-		sigtype = protocol.SignatureTypeRCD1
-		err = nil
-	case "ed25519":
+	sigtype, ok := protocol.SignatureTypeByName(input)
+	if !ok {
 		sigtype = protocol.SignatureTypeED25519
-		err = nil
-	case "legacyed25519":
-		sigtype = protocol.SignatureTypeLegacyED25519
-		err = nil
-	default:
-		sigtype = protocol.SignatureTypeED25519
-		err = nil
 	}
-	return sigtype, err
+	return sigtype, nil
 }

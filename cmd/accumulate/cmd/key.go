@@ -27,6 +27,7 @@ import (
 
 func init() {
 	keyCmd.AddCommand(keyUpdateCmd)
+	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
 }
 
 var keyCmd = &cobra.Command{
@@ -110,10 +111,6 @@ var keyCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519")
-}
-
 var keyUpdateCmd = &cobra.Command{
 	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
 	Short: "Self-update a key",
@@ -193,7 +190,12 @@ func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error
 	case protocol.SignatureTypeRCD1:
 		hash := protocol.GetRCDHashFromPublicKey(pubKey, 1)
 		return sigType, hash, nil
-
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
+		hash := protocol.BTCHash(pubKey)
+		return sigType, hash, nil
+	case protocol.SignatureTypeETH:
+		hash := protocol.ETHhash(pubKey)
+		return sigType, hash, nil
 	default:
 		return 0, nil, fmt.Errorf("unsupported signature type %v", sigType)
 	}
@@ -348,12 +350,22 @@ func GenerateKey(label string) (string, error) {
 		return "", err
 	}
 
-	privKey, err := GeneratePrivateKey()
-	if err != nil {
-		return "", err
-	}
+	var privKey []byte
+	var pubKey []byte
 
-	pubKey := privKey[32:]
+	if sigtype == protocol.SignatureTypeBTCLegacy || sigtype == protocol.SignatureTypeETH {
+		privKey, pubKey = protocol.SECP256K1UncompressedKeypair()
+	} else if sigtype == protocol.SignatureTypeBTC {
+		privKey, pubKey = protocol.SECP256K1Keypair()
+	} else {
+
+		privKey, err = GeneratePrivateKey()
+		if err != nil {
+			return "", err
+		}
+
+		pubKey = privKey[32:]
+	}
 
 	var keyHash []byte
 	if sigtype == protocol.SignatureTypeRCD1 {
@@ -363,6 +375,16 @@ func GenerateKey(label string) (string, error) {
 			if err != nil {
 				return "", err
 			}
+		}
+	} else if sigtype == protocol.SignatureTypeBTC || sigtype == protocol.SignatureTypeBTCLegacy {
+		keyHash = protocol.BTCHash(pubKey)
+		if label == "" {
+			label = protocol.BTCaddress(pubKey)
+		}
+	} else if sigtype == protocol.SignatureTypeETH {
+		keyHash = protocol.ETHhash(pubKey)
+		if label == "" {
+			label = protocol.ETHaddress(pubKey)
 		}
 	} else {
 		h := sha256.Sum256(pubKey)
