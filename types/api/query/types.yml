@@ -107,14 +107,10 @@ SignatureSet:
   fields:
     - name: Account
       type: protocol.Account
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalAccount
-      zero-value: nil
+      marshal-as: union
     - name: Signatures
       type: protocol.Signature
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalSignature
-      zero-value: nil
+      marshal-as: union
       repeatable: true
 
 GeneralReceipt:
@@ -181,11 +177,10 @@ DirectoryQueryResult:
       type: string
       optional: true
     - name: ExpandedEntries
-      repeatable: true
       type: protocol.Account
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalAccount
+      marshal-as: union
       optional: true
+      repeatable: true
     - name: Total
       type: uvarint
       keep-empty: true
@@ -247,9 +242,7 @@ ResponseAccount:
   fields:
     - name: Account
       type: protocol.Account
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalAccount
-      zero-value: nil
+      marshal-as: union
     - name: ChainState
       type: ChainState
       marshal-as: reference
