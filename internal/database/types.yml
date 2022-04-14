@@ -30,9 +30,7 @@ SigOrTxn:
       pointer: true
     - name: Signature
       type: protocol.Signature
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalSignature
-      zero-value: nil
+      marshal-as: union
     - name: Hash
       type: hash
 
@@ -48,9 +46,7 @@ exampleFullAccountState:
   fields:
     - name: State
       type: protocol.Account
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalAccount
-      zero-value: nil
+      marshal-as: union
     - name: Chains
       type: merkleState
       marshal-as: reference

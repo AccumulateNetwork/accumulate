@@ -4,11 +4,78 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 //go:generate go run ../../cmd/gen-enum --package typegen --out enums_gen.go enums.yml
 
 type MarshalAs int
+
+type TypeCode int
+
+type FieldType struct {
+	Code TypeCode
+	Name string
+}
+
+func (f *FieldType) Title() string {
+	return TitleCase(f.String())
+}
+
+func (f *FieldType) SetKnown(code TypeCode) {
+	*f = FieldType{Code: code}
+}
+
+func (f *FieldType) SetNamed(name string) {
+	*f = FieldType{Name: name}
+}
+
+func (f FieldType) String() string {
+	if f.Name != "" {
+		return f.Name
+	}
+	return f.Code.String()
+}
+
+func (f FieldType) MarshalYAML() (interface{}, error) {
+	return f.String(), nil
+}
+
+func (f *FieldType) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	err := value.Decode(&s)
+	if err != nil {
+		return err
+	}
+
+	code, ok := TypeCodeByName(s)
+	if ok {
+		f.SetKnown(code)
+	} else {
+		f.SetNamed(s)
+	}
+	return nil
+}
+
+func (m *MarshalAs) MarshalYAML() (interface{}, error) {
+	return m.String(), nil
+}
+
+func (m *MarshalAs) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	err := value.Decode(&s)
+	if err != nil {
+		return err
+	}
+
+	v, ok := MarshalAsByName(s)
+	if !ok {
+		return fmt.Errorf("cannot unmarshal %q as MarshalAs", s)
+	}
+	*m = v
+	return nil
+}
 
 // Types is a list of struct types.
 type Types []*Type
@@ -88,11 +155,9 @@ type Field struct {
 	// Description is the description of the field.
 	Description string
 	// Type is the type of the field.
-	Type string
+	Type FieldType
 	// MarshalAs specifies how to marshal the field.
-	MarshalAs string `yaml:"marshal-as"`
-	// UnmarshalWith specifies a function to use to unmarshal the field.
-	UnmarshalWith string `yaml:"unmarshal-with"`
+	MarshalAs MarshalAs `yaml:"marshal-as"`
 	// Repeatable specifies whether the the field is repeatable (represented as a slice).
 	Repeatable bool
 	// Pointer specifies whether the field is a pointer.
