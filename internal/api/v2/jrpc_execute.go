@@ -124,6 +124,15 @@ func (r txRequestSigner) SetPublicKey(sig protocol.Signature) error {
 	case *protocol.RCD1Signature:
 		sig.PublicKey = r.Signer.PublicKey
 
+	case *protocol.BTCSignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.BTCLegacySignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.ETHSignature:
+		sig.PublicKey = r.Signer.PublicKey
+
 	default:
 		return fmt.Errorf("cannot set the public key on a %T", sig)
 	}
@@ -140,6 +149,15 @@ func (r txRequestSigner) Sign(sig protocol.Signature, message []byte) error {
 		sig.Signature = r.Signature
 
 	case *protocol.RCD1Signature:
+		sig.Signature = r.Signature
+
+	case *protocol.BTCSignature:
+		sig.Signature = r.Signature
+
+	case *protocol.BTCLegacySignature:
+		sig.Signature = r.Signature
+
+	case *protocol.ETHSignature:
 		sig.Signature = r.Signature
 
 	default:

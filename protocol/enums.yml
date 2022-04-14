@@ -51,7 +51,16 @@ SignatureType:
   Forwarded:
     value: 7
     description: is used when forwarding signatures from one subnet to another
-
+  BTC:
+    value: 8
+    description: represents an BTC signature
+  BTCLegacy:
+    value: 9
+    description: represents an BTC signature with uncompressed public key
+  ETH:
+    value: 10
+    description: represents an ETH signature
+    
 KeyPageOperationType:
   Unknown:
     value: 0
