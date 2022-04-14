@@ -98,6 +98,28 @@ type AuthorityEntry struct {
 	Disabled bool `json:"disabled,omitempty" form:"disabled" query:"disabled" validate:"required"`
 }
 
+type BTCLegacySignature struct {
+	fieldsSet       []bool
+	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+}
+
+type BTCSignature struct {
+	fieldsSet       []bool
+	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+}
+
 type BurnTokens struct {
 	fieldsSet []bool
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
@@ -188,6 +210,17 @@ type DisableAccountAuthOperation struct {
 }
 
 type ED25519Signature struct {
+	fieldsSet       []bool
+	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Signer          *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+}
+
+type ETHSignature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Signature       []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
@@ -717,6 +750,10 @@ func (*AddValidator) Type() TransactionType { return TransactionTypeAddValidator
 
 func (*Anchor) Type() AccountType { return AccountTypeAnchor }
 
+func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy }
+
+func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
+
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
 func (*CreateDataAccount) Type() TransactionType { return TransactionTypeCreateDataAccount }
@@ -738,6 +775,8 @@ func (*DisableAccountAuthOperation) Type() AccountAuthOperationType {
 }
 
 func (*ED25519Signature) Type() SignatureType { return SignatureTypeED25519 }
+
+func (*ETHSignature) Type() SignatureType { return SignatureTypeETH }
 
 func (*EmptyResult) Type() TransactionType { return TransactionTypeUnknown }
 
@@ -1016,6 +1055,42 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 
 func (v *AuthorityEntry) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
+	u := new(BTCLegacySignature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+
+	return u
+}
+
+func (v *BTCLegacySignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BTCSignature) Copy() *BTCSignature {
+	u := new(BTCSignature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+
+	return u
+}
+
+func (v *BTCSignature) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *BurnTokens) Copy() *BurnTokens {
 	u := new(BurnTokens)
 
@@ -1234,6 +1309,24 @@ func (v *ED25519Signature) Copy() *ED25519Signature {
 }
 
 func (v *ED25519Signature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ETHSignature) Copy() *ETHSignature {
+	u := new(ETHSignature)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	if v.Signer != nil {
+		u.Signer = (v.Signer).Copy()
+	}
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = v.TransactionHash
+
+	return u
+}
+
+func (v *ETHSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *EmptyResult) Copy() *EmptyResult {
 	u := new(EmptyResult)
@@ -2356,6 +2449,68 @@ func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 	return true
 }
 
+func (v *BTCLegacySignature) Equal(u *BTCLegacySignature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BTCSignature) Equal(u *BTCSignature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
 func (v *BurnTokens) Equal(u *BurnTokens) bool {
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
@@ -2640,6 +2795,37 @@ func (v *DisableAccountAuthOperation) Equal(u *DisableAccountAuthOperation) bool
 }
 
 func (v *ED25519Signature) Equal(u *ED25519Signature) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	switch {
+	case v.Signer == u.Signer:
+		// equal
+	case v.Signer == nil || u.Signer == nil:
+		return false
+	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ETHSignature) Equal(u *ETHSignature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
@@ -4451,6 +4637,164 @@ func (v *AuthorityEntry) IsValid() error {
 	}
 }
 
+var fieldNames_BTCLegacySignature = []string{
+	1: "Type",
+	2: "PublicKey",
+	3: "Signature",
+	4: "Signer",
+	5: "SignerVersion",
+	6: "Timestamp",
+	7: "Vote",
+	8: "TransactionHash",
+}
+
+func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(8, &v.TransactionHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BTCLegacySignature)
+	return buffer.Bytes(), err
+}
+
+func (v *BTCLegacySignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BTCSignature = []string{
+	1: "Type",
+	2: "PublicKey",
+	3: "Signature",
+	4: "Signer",
+	5: "SignerVersion",
+	6: "Timestamp",
+	7: "Vote",
+	8: "TransactionHash",
+}
+
+func (v *BTCSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(8, &v.TransactionHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BTCSignature)
+	return buffer.Bytes(), err
+}
+
+func (v *BTCSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_BurnTokens = []string{
 	1: "Type",
 	2: "Amount",
@@ -5121,6 +5465,85 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 }
 
 func (v *ED25519Signature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signer is missing")
+	} else if v.Signer == nil {
+		errs = append(errs, "field Signer is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field SignerVersion is missing")
+	} else if v.SignerVersion == 0 {
+		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ETHSignature = []string{
+	1: "Type",
+	2: "PublicKey",
+	3: "Signature",
+	4: "Signer",
+	5: "SignerVersion",
+	6: "Timestamp",
+	7: "Vote",
+	8: "TransactionHash",
+}
+
+func (v *ETHSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(3, v.Signature)
+	}
+	if !(v.Signer == nil) {
+		writer.WriteUrl(4, v.Signer)
+	}
+	if !(v.SignerVersion == 0) {
+		writer.WriteUint(5, v.SignerVersion)
+	}
+	if !(v.Timestamp == 0) {
+		writer.WriteUint(6, v.Timestamp)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(7, v.Vote)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(8, &v.TransactionHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ETHSignature)
+	return buffer.Bytes(), err
+}
+
+func (v *ETHSignature) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -9000,6 +9423,88 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *BTCLegacySignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BTCLegacySignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(8); ok {
+		v.TransactionHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_BTCLegacySignature)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *BTCSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(8); ok {
+		v.TransactionHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_BTCSignature)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *BurnTokens) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -9383,6 +9888,47 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ED25519Signature)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *ETHSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ETHSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Signer = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.SignerVersion = x
+	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Timestamp = x
+	}
+	if x := new(VoteType); reader.ReadEnum(7, x) {
+		v.Vote = *x
+	}
+	if x, ok := reader.ReadHash(8); ok {
+		v.TransactionHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_ETHSignature)
 	v.fieldsSet = seen
 	return err
 }
@@ -11409,6 +11955,50 @@ func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	return json.Marshal(&u)
+}
+
+func (v *BTCSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	return json.Marshal(&u)
+}
+
 func (v *BurnTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   TransactionType `json:"type"`
@@ -11567,6 +12157,28 @@ func (v *DisableAccountAuthOperation) MarshalJSON() ([]byte, error) {
 }
 
 func (v *ED25519Signature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	return json.Marshal(&u)
+}
+
+func (v *ETHSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
@@ -12752,6 +13364,100 @@ func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BTCLegacySignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
+	}
+	return nil
+}
+
+func (v *BTCSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
+	}
+	return nil
+}
+
 func (v *BurnTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type   TransactionType `json:"type"`
@@ -13030,6 +13736,53 @@ func (v *DisableAccountAuthOperation) UnmarshalJSON(data []byte) error {
 }
 
 func (v *ED25519Signature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		PublicKey       *string       `json:"publicKey,omitempty"`
+		Signature       *string       `json:"signature,omitempty"`
+		Signer          *url.URL      `json:"signer,omitempty"`
+		SignerVersion   uint64        `json:"signerVersion,omitempty"`
+		Timestamp       uint64        `json:"timestamp,omitempty"`
+		Vote            VoteType      `json:"vote,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Signer = v.Signer
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+	u.Vote = v.Vote
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Signer = u.Signer
+	v.SignerVersion = u.SignerVersion
+	v.Timestamp = u.Timestamp
+	v.Vote = u.Vote
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
+	}
+	return nil
+}
+
+func (v *ETHSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
