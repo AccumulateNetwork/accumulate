@@ -49,9 +49,7 @@ TransactionQueryResponse:
     - name: Signatures
       repeatable: true
       type: protocol.Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: protocol.UnmarshalSignature
+      marshal-as: union
     - name: Status
       type: protocol.TransactionStatus
       pointer: true
@@ -91,9 +89,7 @@ SignaturePage:
       marshal-as: reference
     - name: Signatures
       type: protocol.Signature
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalSignature
-      zero-value: nil
+      marshal-as: union
       repeatable: true
 
 SignerMetadata:
