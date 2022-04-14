@@ -406,7 +406,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 1: %v", err)
 	}
 
-	txn, err := protocol.NewTransaction(typ.Type)
+	txn, err := protocol.NewTransactionBody(typ.Type)
 	if err != nil {
 		return "", fmt.Errorf("invalid payload 2: %v", err)
 	}

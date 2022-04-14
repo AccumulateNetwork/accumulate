@@ -47,7 +47,6 @@ InternalGenesis:
 
 InternalSendTransactions:
   union: { type: transaction }
-  incomparable: true
   fields:
     - name: Transactions
       repeatable: true
@@ -86,13 +85,10 @@ SyntheticLedger:
       repeatable: true
 
 SendTransaction:
-  incomparable: true
   fields:
     - name: Payload
       type: TransactionBody
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalTransaction
+      marshal-as: union
     - name: Recipient
       type: url
       pointer: true
@@ -103,9 +99,7 @@ TransactionSignature:
       type: chain
     - name: Signature
       type: Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSignature
+      marshal-as: union
 
 SyntheticLedgerEntry:
   description: contains the information needed to produce a receipt for a synthetic transaction that was produced in some block
