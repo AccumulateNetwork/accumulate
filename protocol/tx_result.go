@@ -17,7 +17,7 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 	}
 
 	// Is the transaction type valid?
-	_, err := NewTransaction(typ)
+	_, err := NewTransactionBody(typ)
 	if err != nil {
 		return nil, err
 	}

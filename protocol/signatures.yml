@@ -188,11 +188,7 @@ ForwardedSignature:
   fields:
     - name: Signature
       type: KeySignature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalKeySignature
+      marshal-as: union
     - name: Signer
       type: Signer
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSigner
+      marshal-as: union
