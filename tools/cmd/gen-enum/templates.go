@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -26,9 +27,12 @@ type TypeValue struct {
 	typegen.EnumValue
 }
 
+var reCamel = regexp.MustCompile(`^\p{Lu}+`)
+
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lower":   lower,
-	"natural": natural,
+	"lower":      strings.ToLower,
+	"lowerCamel": func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
+	"natural":    natural,
 })
 
 func convert(types map[string]typegen.Enum, pkgName string) *Types {
@@ -59,13 +63,6 @@ func convert(types map[string]typegen.Enum, pkgName string) *Types {
 	})
 
 	return &Types{Package: pkgName, Types: ttypes}
-}
-
-func lower(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToLower(s[:1]) + s[1:]
 }
 
 func natural(name string) string {
