@@ -5,9 +5,7 @@ Envelope:
     - name: Signatures
       repeatable: true
       type: Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSignature
+      marshal-as: union
     - name: TxHash
       type: bytes
       optional: true
@@ -40,9 +38,7 @@ Transaction:
       marshal-as: reference
     - name: Body
       type: TransactionBody
-      unmarshal-with: UnmarshalTransaction
-      marshal-as: value
-      zero-value: nil
+      marshal-as: union
     - name: hash
       type: bytes
       marshal-as: none
@@ -65,9 +61,7 @@ TransactionStatus:
       type: string
     - name: Result
       type: TransactionResult
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalTransactionResult
+      marshal-as: union
     - name: Initiator
       description: is the signer that initiated the transaction
       type: url
@@ -75,6 +69,5 @@ TransactionStatus:
     - name: Signers
       description: lists accounts that have signed the transaction
       type: Signer
-      marshal-as: value
-      unmarshal-with: UnmarshalSigner
+      marshal-as: union
       repeatable: true

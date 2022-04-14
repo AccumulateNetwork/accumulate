@@ -108,18 +108,6 @@ func (s *TransactionStatus) FindSigners(authority *url.URL) []Signer {
 	return s.Signers[i:j]
 }
 
-func NewTransaction(typ TransactionType) (TransactionBody, error) {
-	return NewTransactionBody(typ)
-}
-
-func UnmarshalTransaction(data []byte) (TransactionBody, error) {
-	return UnmarshalTransactionBody(data)
-}
-
-func UnmarshalTransactionJSON(data []byte) (TransactionBody, error) {
-	return UnmarshalTransactionBodyJSON(data)
-}
-
 // IsUser returns true if the transaction type is user.
 func (t TransactionType) IsUser() bool {
 	return TransactionTypeUnknown < t && t.GetEnumValue() <= TransactionMaxUser.GetEnumValue()
