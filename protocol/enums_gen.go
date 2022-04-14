@@ -239,6 +239,15 @@ const SignatureTypeInternal SignatureType = 6
 // SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
 const SignatureTypeForwarded SignatureType = 7
 
+// SignatureTypeBTC represents an BTC signature.
+const SignatureTypeBTC SignatureType = 8
+
+// SignatureTypeBTCLegacy represents an BTC signature with uncompressed public key.
+const SignatureTypeBTCLegacy SignatureType = 9
+
+// SignatureTypeETH represents an ETH signature.
+const SignatureTypeETH SignatureType = 10
+
 // TransactionMaxUser is the highest number reserved for user transactions.
 const TransactionMaxUser TransactionMax = 48
 
@@ -400,16 +409,16 @@ func (v AccountAuthOperationType) String() string {
 
 // AccountAuthOperationTypeByName returns the named Account Auth Operation Type.
 func AccountAuthOperationTypeByName(name string) (AccountAuthOperationType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return AccountAuthOperationTypeUnknown, true
 	case "enable":
 		return AccountAuthOperationTypeEnable, true
 	case "disable":
 		return AccountAuthOperationTypeDisable, true
-	case "addAuthority":
+	case "addauthority":
 		return AccountAuthOperationTypeAddAuthority, true
-	case "removeAuthority":
+	case "removeauthority":
 		return AccountAuthOperationTypeRemoveAuthority, true
 	default:
 		return 0, false
@@ -490,36 +499,36 @@ func (v AccountType) String() string {
 
 // AccountTypeByName returns the named Account Type.
 func AccountTypeByName(name string) (AccountType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return AccountTypeUnknown, true
 	case "anchor":
 		return AccountTypeAnchor, true
 	case "identity":
 		return AccountTypeIdentity, true
-	case "tokenIssuer":
+	case "tokenissuer":
 		return AccountTypeTokenIssuer, true
 	case "token":
 		return AccountTypeTokenIssuer, true
-	case "tokenAccount":
+	case "tokenaccount":
 		return AccountTypeTokenAccount, true
-	case "liteTokenAccount":
+	case "litetokenaccount":
 		return AccountTypeLiteTokenAccount, true
-	case "keyPage":
+	case "keypage":
 		return AccountTypeKeyPage, true
-	case "keyBook":
+	case "keybook":
 		return AccountTypeKeyBook, true
-	case "dataAccount":
+	case "dataaccount":
 		return AccountTypeDataAccount, true
-	case "liteDataAccount":
+	case "litedataaccount":
 		return AccountTypeLiteDataAccount, true
-	case "unknownSigner":
+	case "unknownsigner":
 		return AccountTypeUnknownSigner, true
-	case "internalLedger":
+	case "internalledger":
 		return AccountTypeInternalLedger, true
-	case "liteIdentity":
+	case "liteidentity":
 		return AccountTypeLiteIdentity, true
-	case "internalSyntheticLedger":
+	case "internalsyntheticledger":
 		return AccountTypeInternalSyntheticLedger, true
 	default:
 		return 0, false
@@ -576,10 +585,10 @@ func (v AllowedTransactionBit) String() string {
 
 // AllowedTransactionBitByName returns the named Allowed Transaction Bit.
 func AllowedTransactionBitByName(name string) (AllowedTransactionBit, bool) {
-	switch name {
-	case "updateKeyPage":
+	switch strings.ToLower(name) {
+	case "updatekeypage":
 		return AllowedTransactionBitUpdateKeyPage, true
-	case "updateAccountAuth":
+	case "updateaccountauth":
 		return AllowedTransactionBitUpdateAccountAuth, true
 	default:
 		return 0, false
@@ -642,7 +651,7 @@ func (v ChainType) String() string {
 
 // ChainTypeByName returns the named Chain Type.
 func ChainTypeByName(name string) (ChainType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return ChainTypeUnknown, true
 	case "transaction":
@@ -698,7 +707,7 @@ func (v *ErrorCode) SetEnumValue(id uint64) bool {
 func (v ErrorCode) String() string {
 	switch v {
 	case ErrorCodeOK:
-		return "oK"
+		return "ok"
 	case ErrorCodeEncodingError:
 		return "encodingError"
 	case ErrorCodeBadNonce:
@@ -772,72 +781,72 @@ func (v ErrorCode) String() string {
 
 // ErrorCodeByName returns the named Error Code.
 func ErrorCodeByName(name string) (ErrorCode, bool) {
-	switch name {
-	case "oK":
+	switch strings.ToLower(name) {
+	case "ok":
 		return ErrorCodeOK, true
-	case "encodingError":
+	case "encodingerror":
 		return ErrorCodeEncodingError, true
-	case "badNonce":
+	case "badnonce":
 		return ErrorCodeBadNonce, true
-	case "didPanic":
+	case "didpanic":
 		return ErrorCodeDidPanic, true
-	case "unknownError":
+	case "unknownerror":
 		return ErrorCodeUnknownError, true
-	case "notFound":
+	case "notfound":
 		return ErrorCodeNotFound, true
-	case "txnRange":
+	case "txnrange":
 		return ErrorCodeTxnRange, true
-	case "txnHistory":
+	case "txnhistory":
 		return ErrorCodeTxnHistory, true
-	case "invalidURL":
+	case "invalidurl":
 		return ErrorCodeInvalidURL, true
-	case "directoryURL":
+	case "directoryurl":
 		return ErrorCodeDirectoryURL, true
-	case "chainIdError":
+	case "chainiderror":
 		return ErrorCodeChainIdError, true
-	case "routingChainId":
+	case "routingchainid":
 		return ErrorCodeRoutingChainId, true
-	case "checkTxError":
+	case "checktxerror":
 		return ErrorCodeCheckTxError, true
-	case "deliverTxError":
+	case "delivertxerror":
 		return ErrorCodeDeliverTxError, true
-	case "txnStateError":
+	case "txnstateerror":
 		return ErrorCodeTxnStateError, true
-	case "recordTxnError":
+	case "recordtxnerror":
 		return ErrorCodeRecordTxnError, true
-	case "syntheticTxnError":
+	case "synthetictxnerror":
 		return ErrorCodeSyntheticTxnError, true
-	case "marshallingError":
+	case "marshallingerror":
 		return ErrorCodeMarshallingError, true
-	case "unMarshallingError":
+	case "unmarshallingerror":
 		return ErrorCodeUnMarshallingError, true
-	case "invalidQueryType":
+	case "invalidquerytype":
 		return ErrorCodeInvalidQueryType, true
-	case "invalidTxnType":
+	case "invalidtxntype":
 		return ErrorCodeInvalidTxnType, true
-	case "validateTxnError":
+	case "validatetxnerror":
 		return ErrorCodeValidateTxnError, true
-	case "invalidTxnError":
+	case "invalidtxnerror":
 		return ErrorCodeInvalidTxnError, true
-	case "addTxnError":
+	case "addtxnerror":
 		return ErrorCodeAddTxnError, true
-	case "dataUrlError":
+	case "dataurlerror":
 		return ErrorCodeDataUrlError, true
-	case "dataEntryHashError":
+	case "dataentryhasherror":
 		return ErrorCodeDataEntryHashError, true
-	case "txnQueryError":
+	case "txnqueryerror":
 		return ErrorCodeTxnQueryError, true
-	case "invalidRequest":
+	case "invalidrequest":
 		return ErrorCodeInvalidRequest, true
-	case "invalidSignature":
+	case "invalidsignature":
 		return ErrorCodeInvalidSignature, true
-	case "insufficientCredits":
+	case "insufficientcredits":
 		return ErrorCodeInsufficientCredits, true
-	case "badVersion":
+	case "badversion":
 		return ErrorCodeBadVersion, true
 	case "internal":
 		return ErrorCodeInternal, true
-	case "alreadyDelivered":
+	case "alreadydelivered":
 		return ErrorCodeAlreadyDelivered, true
 	case "unauthorized":
 		return ErrorCodeUnauthorized, true
@@ -904,7 +913,7 @@ func (v KeyPageOperationType) String() string {
 
 // KeyPageOperationTypeByName returns the named Key Page Operation Type.
 func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return KeyPageOperationTypeUnknown, true
 	case "update":
@@ -913,9 +922,9 @@ func KeyPageOperationTypeByName(name string) (KeyPageOperationType, bool) {
 		return KeyPageOperationTypeRemove, true
 	case "add":
 		return KeyPageOperationTypeAdd, true
-	case "setThreshold":
+	case "setthreshold":
 		return KeyPageOperationTypeSetThreshold, true
-	case "updateAllowed":
+	case "updateallowed":
 		return KeyPageOperationTypeUpdateAllowed, true
 	default:
 		return 0, false
@@ -974,7 +983,7 @@ func (v ObjectType) String() string {
 
 // ObjectTypeByName returns the named Object Type.
 func ObjectTypeByName(name string) (ObjectType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return ObjectTypeUnknown, true
 	case "account":
@@ -1014,7 +1023,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH:
 		*v = u
 		return true
 	default:
@@ -1030,9 +1039,9 @@ func (v SignatureType) String() string {
 	case SignatureTypeLegacyED25519:
 		return "legacyED25519"
 	case SignatureTypeED25519:
-		return "eD25519"
+		return "ed25519"
 	case SignatureTypeRCD1:
-		return "rCD1"
+		return "rcd1"
 	case SignatureTypeReceipt:
 		return "receipt"
 	case SignatureTypeSynthetic:
@@ -1041,6 +1050,12 @@ func (v SignatureType) String() string {
 		return "internal"
 	case SignatureTypeForwarded:
 		return "forwarded"
+	case SignatureTypeBTC:
+		return "btc"
+	case SignatureTypeBTCLegacy:
+		return "btclegacy"
+	case SignatureTypeETH:
+		return "eth"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
 	}
@@ -1048,14 +1063,14 @@ func (v SignatureType) String() string {
 
 // SignatureTypeByName returns the named Signature Type.
 func SignatureTypeByName(name string) (SignatureType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return SignatureTypeUnknown, true
-	case "legacyED25519":
+	case "legacyed25519":
 		return SignatureTypeLegacyED25519, true
-	case "eD25519":
+	case "ed25519":
 		return SignatureTypeED25519, true
-	case "rCD1":
+	case "rcd1":
 		return SignatureTypeRCD1, true
 	case "receipt":
 		return SignatureTypeReceipt, true
@@ -1065,6 +1080,12 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeInternal, true
 	case "forwarded":
 		return SignatureTypeForwarded, true
+	case "btc":
+		return SignatureTypeBTC, true
+	case "btclegacy":
+		return SignatureTypeBTCLegacy, true
+	case "eth":
+		return SignatureTypeETH, true
 	default:
 		return 0, false
 	}
@@ -1122,7 +1143,7 @@ func (v TransactionMax) String() string {
 
 // TransactionMaxByName returns the named Transaction Max.
 func TransactionMaxByName(name string) (TransactionMax, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "user":
 		return TransactionMaxUser, true
 	case "synthetic":
@@ -1250,78 +1271,78 @@ func (v TransactionType) String() string {
 
 // TransactionTypeByName returns the named Transaction Type.
 func TransactionTypeByName(name string) (TransactionType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "unknown":
 		return TransactionTypeUnknown, true
-	case "createIdentity":
+	case "createidentity":
 		return TransactionTypeCreateIdentity, true
-	case "createTokenAccount":
+	case "createtokenaccount":
 		return TransactionTypeCreateTokenAccount, true
-	case "sendTokens":
+	case "sendtokens":
 		return TransactionTypeSendTokens, true
-	case "createDataAccount":
+	case "createdataaccount":
 		return TransactionTypeCreateDataAccount, true
-	case "writeData":
+	case "writedata":
 		return TransactionTypeWriteData, true
-	case "writeDataTo":
+	case "writedatato":
 		return TransactionTypeWriteDataTo, true
-	case "acmeFaucet":
+	case "acmefaucet":
 		return TransactionTypeAcmeFaucet, true
-	case "createToken":
+	case "createtoken":
 		return TransactionTypeCreateToken, true
-	case "issueTokens":
+	case "issuetokens":
 		return TransactionTypeIssueTokens, true
-	case "burnTokens":
+	case "burntokens":
 		return TransactionTypeBurnTokens, true
-	case "createKeyPage":
+	case "createkeypage":
 		return TransactionTypeCreateKeyPage, true
-	case "createKeyBook":
+	case "createkeybook":
 		return TransactionTypeCreateKeyBook, true
-	case "addCredits":
+	case "addcredits":
 		return TransactionTypeAddCredits, true
-	case "updateKeyPage":
+	case "updatekeypage":
 		return TransactionTypeUpdateKeyPage, true
-	case "addValidator":
+	case "addvalidator":
 		return TransactionTypeAddValidator, true
-	case "removeValidator":
+	case "removevalidator":
 		return TransactionTypeRemoveValidator, true
-	case "updateValidatorKey":
+	case "updatevalidatorkey":
 		return TransactionTypeUpdateValidatorKey, true
-	case "updateAccountAuth":
+	case "updateaccountauth":
 		return TransactionTypeUpdateAccountAuth, true
-	case "updateKey":
+	case "updatekey":
 		return TransactionTypeUpdateKey, true
 	case "remote":
 		return TransactionTypeRemote, true
 	case "signPending":
 		return TransactionTypeRemote, true
-	case "syntheticCreateChain":
+	case "syntheticcreatechain":
 		return TransactionTypeSyntheticCreateChain, true
-	case "syntheticWriteData":
+	case "syntheticwritedata":
 		return TransactionTypeSyntheticWriteData, true
-	case "syntheticDepositTokens":
+	case "syntheticdeposittokens":
 		return TransactionTypeSyntheticDepositTokens, true
-	case "syntheticAnchor":
+	case "syntheticanchor":
 		return TransactionTypeSyntheticAnchor, true
-	case "syntheticDepositCredits":
+	case "syntheticdepositcredits":
 		return TransactionTypeSyntheticDepositCredits, true
-	case "syntheticBurnTokens":
+	case "syntheticburntokens":
 		return TransactionTypeSyntheticBurnTokens, true
-	case "syntheticForwardTransaction":
+	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
-	case "syntheticMirror":
+	case "syntheticmirror":
 		return TransactionTypeSyntheticMirror, true
-	case "segWitDataEntry":
+	case "segwitdataentry":
 		return TransactionTypeSegWitDataEntry, true
-	case "syntheticReceipt":
+	case "syntheticreceipt":
 		return TransactionTypeSyntheticReceipt, true
-	case "internalGenesis":
+	case "internalgenesis":
 		return TransactionTypeInternalGenesis, true
-	case "internalSendTransactions":
+	case "internalsendtransactions":
 		return TransactionTypeInternalSendTransactions, true
-	case "internalTransactionsSigned":
+	case "internaltransactionssigned":
 		return TransactionTypeInternalTransactionsSigned, true
-	case "internalTransactionsSent":
+	case "internaltransactionssent":
 		return TransactionTypeInternalTransactionsSent, true
 	default:
 		return 0, false
@@ -1382,7 +1403,7 @@ func (v VoteType) String() string {
 
 // VoteTypeByName returns the named Vote Type.
 func VoteTypeByName(name string) (VoteType, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "accept":
 		return VoteTypeAccept, true
 	case "reject":
