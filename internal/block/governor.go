@@ -228,7 +228,7 @@ func (g *governor) checkDispatchError(err error) {
 	}
 
 	// It's a real error
-	g.logger.Error("Failed to dispatch transactions", "error", err)
+	// g.logger.Error("Failed to dispatch transactions", "error", err)
 }
 
 func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.InternalLedger) {

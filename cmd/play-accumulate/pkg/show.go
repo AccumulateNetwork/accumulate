@@ -90,7 +90,7 @@ func (s *Session) Show(v interface{}) {
 		)
 	case *protocol.ADI:
 		dir, _ := s.TryGetDirectory(v.Url)
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Identity (ADI)\n"+
 				"    Url:       %v\n",
 			v.Url,

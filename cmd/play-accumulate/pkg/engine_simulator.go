@@ -17,30 +17,37 @@ type SimEngine struct {
 
 type sessionTB struct {
 	*Session
+	lastLog string
 }
 
-func (s sessionTB) Name() string {
+func (s *sessionTB) Name() string {
 	return s.Filename
 }
 
-func (s sessionTB) Log(v ...interface{}) {
-	s.Output(Output{"error", []byte(fmt.Sprintln(v...))})
+func (s *sessionTB) Log(v ...interface{}) {
+	str := fmt.Sprintln(v...)
+	s.lastLog = str
+	s.Output(Output{"stderr", []byte(str)})
 }
 
-func (s sessionTB) Fail() {
+func (s *sessionTB) Fail() {
 	// What should we do here?
 }
 
-func (s sessionTB) FailNow() {
-	s.Abort("Failed")
+func (s *sessionTB) FailNow() {
+	if s.lastLog == "" {
+		s.Abort("Failed")
+	} else {
+		s.Abort(s.lastLog)
+	}
 }
 
-func (s sessionTB) Helper() {
+func (s *sessionTB) Helper() {
 	// Anything to do here?
 }
 
 func (s *Session) UseSimulator(bvnCount int) {
-	sim := simulator.New(sessionTB{s}, bvnCount)
+	sim := simulator.New(&sessionTB{Session: s}, bvnCount)
 	sim.InitChain()
 	s.Engine = &SimEngine{sim}
 }
