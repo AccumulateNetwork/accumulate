@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -31,6 +32,8 @@ func init() {
 	Command.Flags().StringVarP(&Flag.Network, "network", "n", "", "Run the test against a network")
 }
 
+var reYamlDoc = regexp.MustCompile("(?m)^---$")
+
 func run(_ *cobra.Command, filenames []string) {
 	parser := New(WithExtensions(FencedCode))
 
@@ -40,6 +43,12 @@ func run(_ *cobra.Command, filenames []string) {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading %q: %v\n", filename, err)
 			os.Exit(1)
+		}
+
+		// Extract frontmatter
+		ranges := reYamlDoc.FindAllIndex(contents, 2)
+		if len(ranges) == 2 {
+			contents = contents[ranges[1][1]:]
 		}
 
 		documents[i] = parser.Parse(contents)
