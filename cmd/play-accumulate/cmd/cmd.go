@@ -58,8 +58,17 @@ func run(_ *cobra.Command, filenames []string) {
 	for i, document := range documents {
 		S := &pkg.Session{
 			Filename: filepath.Base(filenames[i]),
-			Stdout:   os.Stdout,
-			Stderr:   os.Stderr,
+			Output: func(o ...pkg.Output) {
+				if len(o) == 0 {
+					return
+				}
+				switch o[0].Mime {
+				case "stderr":
+					_, _ = os.Stderr.Write(o[0].Value)
+				default:
+					_, _ = os.Stdout.Write(o[0].Value)
+				}
+			},
 		}
 		if C == nil {
 			S.UseSimulator(3)

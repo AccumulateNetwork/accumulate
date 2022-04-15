@@ -24,7 +24,7 @@ func (s sessionTB) Name() string {
 }
 
 func (s sessionTB) Log(v ...interface{}) {
-	fmt.Fprintln(s.Stdout, v...)
+	s.Output(Output{"error", []byte(fmt.Sprintln(v...))})
 }
 
 func (s sessionTB) Fail() {
