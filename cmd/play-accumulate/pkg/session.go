@@ -4,7 +4,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
-	"io"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -22,10 +21,14 @@ type Keyish = interface{}
 // Intish indicates that the parameter must be convertable to an integer.
 type Intish = interface{}
 
+type Output struct {
+	Mime  string
+	Value []byte
+}
+
 type Session struct {
 	Filename string
-	Stdout   io.Writer
-	Stderr   io.Writer
+	Output   func(...Output)
 	Engine   Engine
 
 	timestamp uint64

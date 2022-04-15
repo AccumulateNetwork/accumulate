@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"
@@ -10,14 +11,25 @@ import (
 )
 
 func (s *Session) Dump(v interface{}) {
-	spew.Fdump(s.Stdout, v)
+	s.Output(Output{"text/plain", []byte(spew.Sdump(v))})
 }
 
 func (s *Session) Print(v interface{}) {
 	if s, ok := v.(string); ok && !strings.HasSuffix(s, "\n") {
 		v = s + "\n"
 	}
-	fmt.Fprint(s.Stdout, v)
+	s.Output(Output{"text/plain", []byte(fmt.Sprint(v))})
+}
+
+func (s *Session) printAndJSON(str string, v interface{}) {
+	if !strings.HasSuffix(str, "\n") {
+		str = str + "\n"
+	}
+	out := []Output{{"text/plain", []byte(str)}}
+	if json, err := json.Marshal(v); err == nil {
+		out = append(out, Output{"application/json", json})
+	}
+	s.Output(out...)
 }
 
 func (s *Session) formatBalanceForIssuer(url Urlish, balance *big.Int) string {
@@ -46,16 +58,17 @@ func (s *Session) Show(v interface{}) {
 		v = txn.Body
 	}
 
+	var str string
 	switch v := v.(type) {
 	case string:
-		s.Print(v)
+		str = v
 	case *URL:
-		s.Print(v.String())
+		str = v.String()
 
 	// Accounts
 	case *protocol.LiteIdentity:
 		dir, _ := s.TryGetDirectory(v.Url)
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Lite Identity\n"+
 				"    Url:       %v\n",
 			v.Url,
@@ -63,9 +76,8 @@ func (s *Session) Show(v interface{}) {
 		for i, url := range dir {
 			str += fmt.Sprintf("    Entry %d:   %s\n", i, url)
 		}
-		s.Print(str)
 	case *protocol.LiteTokenAccount:
-		s.Print(fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Lite Token Account\n"+
 				"    Identity:   %v\n"+
 				"    Issuer:     %v\n"+
@@ -75,10 +87,10 @@ func (s *Session) Show(v interface{}) {
 			v.TokenUrl.ShortString(),
 			s.formatBalanceForIssuer(v.TokenUrl, &v.Balance),
 			protocol.FormatAmount(v.CreditBalance, protocol.CreditPrecisionPower),
-		))
+		)
 	case *protocol.ADI:
 		dir, _ := s.TryGetDirectory(v.Url)
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Identity (ADI)\n"+
 				"    Url:       %v\n",
 			v.Url,
@@ -86,9 +98,8 @@ func (s *Session) Show(v interface{}) {
 		for i, url := range dir {
 			str += fmt.Sprintf("    Entry %d:   %s\n", i, url)
 		}
-		s.Print(str)
 	case *protocol.TokenAccount:
-		s.Print(fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Lite Token Account\n"+
 				"    Url:        %v\n"+
 				"    Issuer:     %v\n"+
@@ -98,9 +109,9 @@ func (s *Session) Show(v interface{}) {
 			v.TokenUrl.ShortString(),
 			s.formatBalanceForIssuer(v.TokenUrl, &v.Balance),
 			v.Scratch,
-		))
+		)
 	case *protocol.KeyBook:
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Key Book\n"+
 				"    Url:      %v\n",
 			v.Url,
@@ -108,9 +119,8 @@ func (s *Session) Show(v interface{}) {
 		for i := uint64(0); i < v.PageCount; i++ {
 			str += fmt.Sprintf("    Page %d:   %s\n", i, protocol.FormatKeyPageUrl(v.Url, i))
 		}
-		s.Print(str)
 	case *protocol.KeyPage:
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Key Page\n"+
 				"    Url:          %v\n"+
 				"    Credits:      %v\n"+
@@ -131,9 +141,8 @@ func (s *Session) Show(v interface{}) {
 				str += fmt.Sprintf("    Key %d:        %X (%v)\n", i, key.PublicKeyHash, key.Owner)
 			}
 		}
-		s.Print(str)
 	case *protocol.TokenIssuer:
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Token Issuer\n"+
 				"    Url:         %v\n"+
 				"    Symbol:      %v\n"+
@@ -150,16 +159,15 @@ func (s *Session) Show(v interface{}) {
 				protocol.FormatBigAmount(v.SupplyLimit, int(v.Precision)),
 			)
 		}
-		s.Print(str)
 	case protocol.Account:
-		s.Print(fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Account %v (%v)\n",
 			v.GetUrl(), v.Type(),
-		))
+		)
 
 	// Transactions
 	case *protocol.SendTokens:
-		str := fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Send Tokens Transaction\n"+
 				"    Hash:   %X\n"+
 				"    From:   %v\n",
@@ -169,9 +177,8 @@ func (s *Session) Show(v interface{}) {
 		for _, to := range v.To {
 			str += fmt.Sprintf("    Send:   %v to %v\n", s.formatBalanceForAccount(to.Url, &to.Amount), to.Url)
 		}
-		s.Print(str)
 	case *protocol.AddCredits:
-		s.Print(fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Add Credits Transaction\n"+
 				"    Hash:    %X\n"+
 				"    From:    %v\n"+
@@ -181,9 +188,9 @@ func (s *Session) Show(v interface{}) {
 			txn.Header.Principal,
 			v.Recipient,
 			protocol.FormatBigAmount(&v.Amount, protocol.AcmePrecisionPower),
-		))
+		)
 	case *protocol.AcmeFaucet:
-		s.Print(fmt.Sprintf(
+		str = fmt.Sprintf(
 			"ACME Faucet Transaction\n"+
 				"    Hash:     %X\n"+
 				"    To:       %v\n"+
@@ -191,14 +198,15 @@ func (s *Session) Show(v interface{}) {
 			txn.GetHash(),
 			v.Url,
 			protocol.AcmeFaucetAmount,
-		))
+		)
 	case protocol.TransactionBody:
-		s.Print(fmt.Sprintf(
+		str = fmt.Sprintf(
 			"Transaction %X (%v) for %v\n",
 			txn.GetHash(), v.Type(), txn.Header.Principal,
-		))
+		)
 
 	default:
-		s.Print(spew.Sdump(v))
+		str = spew.Sdump(v)
 	}
+	s.printAndJSON(str, v)
 }
