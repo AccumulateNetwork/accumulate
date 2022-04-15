@@ -1,0 +1,117 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+  debug:
+    # enable: true
+    source: ../../cmd/play-accumulate-kernel
+---
+
+# Identity (ADI)
+
+## Setup
+
+```go
+liteKey := GenerateKey()
+liteAddr := LiteAddress(liteKey, ACME)
+Faucet(liteAddr).
+	Wait()
+Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits(liteAddr, 100).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().
+	Wait()
+```
+## Create an ADI
+
+```go{ id: 1 }
+aliceKey := GenerateKey("alice")
+Show(Transaction(liteAddr).
+	WithSigner(liteAddr).
+	CreateIdentity("alice").
+		WithKey(aliceKey).
+		WithKeyBook("alice/book").
+	Initiate(liteKey).
+	Submit().
+	Wait())
+Show(Get("alice"))
+```
+
+```{ result_of: 1, id: 1, mime: "text/plain" }
+Transaction C7C84AC16F5408967B762A220069D8B207AD38A0AA5A8C2E8F1AF7EDD5A36FB6 (createIdentity) for acc://c6f113b4ccd3f071b4c91519f907a01561380c8db0e8b2b4/ACME
+
+```
+
+```{ result_of: 1, id: 1, mime: "application/json" }
+{
+  "type": "createIdentity",
+  "url": "acc://alice",
+  "keyHash": "32c2b4dc220c1e3a08291a3f30f90fdd2abe2804105cfb2995ea271a0c539a2c",
+  "keyBookUrl": "acc://alice/book"
+}
+```
+
+```{ result_of: 1, id: 2, mime: "text/plain" }
+Identity (ADI)
+    Url:       acc://alice
+    Entry 0:   acc://alice/book
+
+```
+
+```{ result_of: 1, id: 2, mime: "application/json" }
+{
+  "type": "identity",
+  "keyBook": "acc://alice/book",
+  "url": "acc://alice",
+  "authorities": [
+    {
+      "url": "acc://alice/book"
+    }
+  ]
+}
+```
+
+## Add credits to the key page
+
+```go{ id: 2 }
+Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits("alice/book/1", 100).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().
+	Wait()
+Show(Get("alice/book/1"))
+```
+
+```{ result_of: 2, id: 1, mime: "text/plain" }
+Key Page
+    Url:          alice
+    Credits:      500
+    Version:      1
+    Thresholds:   accept=1, reject=0, response=0, block=0
+    Key 0:        32C2B4DC220C1E3A08291A3F30F90FDD2ABE2804105CFB2995EA271A0C539A2C
+
+```
+
+```{ result_of: 2, id: 1, mime: "application/json" }
+{
+  "type": "keyPage",
+  "keyBook": "acc://alice/book",
+  "url": "acc://alice/book/1",
+  "creditBalance": 50000,
+  "acceptThreshold": 1,
+  "threshold": 1,
+  "version": 1,
+  "keys": [
+    {
+      "publicKeyHash": "32c2b4dc220c1e3a08291a3f30f90fdd2abe2804105cfb2995ea271a0c539a2c",
+      "publicKey": "32c2b4dc220c1e3a08291a3f30f90fdd2abe2804105cfb2995ea271a0c539a2c"
+    }
+  ]
+}
+```
