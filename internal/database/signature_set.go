@@ -69,11 +69,7 @@ func (s *sigSetData) Reset(version uint64) {
 	s.Entries = system
 }
 
-func (s *sigSetData) Add(entryHash [32]byte, newSignature protocol.Signature) bool {
-	var newEntry sigSetKeyData
-	newEntry.KeyHash = signatureKeyHash(newSignature)
-	newEntry.EntryHash = entryHash
-
+func (s *sigSetData) Add(newEntry sigSetKeyData, newSignature protocol.Signature) bool {
 	// The signature is a system signature if it's one of the system types or if
 	// the signer is a node.
 	switch {
@@ -127,8 +123,14 @@ func (s *SignatureSet) Add(newSignature protocol.Signature) (int, error) {
 		return 0, fmt.Errorf("marshal signature: %w", err)
 	}
 
-	entryHash := sha256.Sum256(data)
-	if !s.hashes.Add(entryHash, newSignature) {
+	var newEntry sigSetKeyData
+	newEntry.EntryHash = sha256.Sum256(data)
+	newEntry.KeyHash, err = signatureKeyHash(newSignature)
+	if err != nil {
+		return 0, err
+	}
+
+	if !s.hashes.Add(newEntry, newSignature) {
 		return len(s.hashes.Entries), nil
 	}
 
@@ -143,8 +145,15 @@ func (s *SignatureSet) Add(newSignature protocol.Signature) (int, error) {
 
 // signatureKeyHash returns a hash that is used to prevent two signatures from
 // the same key.
-func signatureKeyHash(sig protocol.Signature) [32]byte {
+func signatureKeyHash(sig protocol.Signature) ([32]byte, error) {
 	switch sig := sig.(type) {
+	case protocol.KeySignature:
+		// Normal signatures must come from a unique key
+		return sha256.Sum256(sig.GetPublicKey()), nil
+
+	case *protocol.ForwardedSignature:
+		return signatureKeyHash(sig.Signature)
+
 	case *protocol.SyntheticSignature:
 		// Multiple synthetic signatures doesn't make sense, but if they're
 		// unique... ok
@@ -152,24 +161,19 @@ func signatureKeyHash(sig protocol.Signature) [32]byte {
 		hasher.AddUrl(sig.SourceNetwork)
 		hasher.AddUrl(sig.DestinationNetwork)
 		hasher.AddUint(sig.SequenceNumber)
-		return *(*[32]byte)(hasher.MerkleHash())
+		return *(*[32]byte)(hasher.MerkleHash()), nil
 
 	case *protocol.ReceiptSignature:
 		// Multiple receipts doesn't make sense, but if they anchor to a unique
 		// root... ok
-		return *(*[32]byte)(sig.Result)
+		return *(*[32]byte)(sig.Result), nil
 
 	case *protocol.InternalSignature:
 		// Internal signatures only make any kind of sense if they're coming
 		// from the local network, so they should never be different
-		return sha256.Sum256([]byte("Accumulate Internal Signature"))
+		return sha256.Sum256([]byte("Accumulate Internal Signature")), nil
 
 	default:
-		// Normal signatures must come from a unique key
-		hash := sig.GetPublicKeyHash()
-		if hash == nil {
-			panic("attempted to add a signature that doesn't have a key!")
-		}
-		return *(*[32]byte)(hash)
+		return [32]byte{}, fmt.Errorf("unrecognized signature type %T", sig)
 	}
 }
