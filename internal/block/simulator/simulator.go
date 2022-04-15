@@ -18,6 +18,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/sync/errgroup"
 )
 
 type Simulator struct {
@@ -164,27 +165,29 @@ func (s *Simulator) InitChain() {
 func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) {
 	s.Helper()
 
-	wg := new(sync.WaitGroup)
-	wg.Add(len(s.Subnets))
-
+	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
-		go func(x *ExecEntry) {
-			defer wg.Done()
-
-			submitted := x.TakeSubmitted()
-			status := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
+		x := s.Subnet(subnet.ID)
+		submitted := x.TakeSubmitted()
+		errg.Go(func() error {
+			status, err := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
+			if err != nil {
+				return err
+			}
 			if statusChan == nil {
-				return
+				return nil
 			}
 
 			for _, status := range status {
 				statusChan <- status
 			}
-		}(s.Subnet(subnet.ID))
+			return nil
+		})
 	}
 
 	// Wait for all subnets to complete
-	wg.Wait()
+	err := errg.Wait()
+	require.NoError(tb{s}, err)
 
 	// Wait for the governor
 	for _, subnet := range s.Subnets {

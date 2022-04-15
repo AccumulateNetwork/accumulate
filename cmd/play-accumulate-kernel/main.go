@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -47,8 +49,23 @@ func run(_ *cobra.Command, args []string) {
 	// Setup the Accumulate session
 	session := &pkg.Session{
 		Filename: "notebook.go",
-		Stdout:   kernel.Stdout(),
-		Stderr:   kernel.Stderr(),
+		Output: func(o ...pkg.Output) {
+			out := kernel.Output()
+			for _, o := range o {
+				switch o.Mime {
+				case "text/json", "application/json":
+					var buf bytes.Buffer
+					if json.Indent(&buf, o.Value, "", "  ") == nil {
+						out = out.Add(o.Mime, buf.Bytes())
+					} else {
+						out = out.Add(o.Mime, o.Value)
+					}
+				default:
+					out = out.Add(o.Mime, o.Value)
+				}
+			}
+			kernel.SendSafe(out)
+		},
 	}
 	session.UseSimulator(3)
 	playcmd.InterpUseSession(session, kernel)
