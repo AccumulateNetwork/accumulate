@@ -42,7 +42,7 @@ Show(Get("alice"))
 ```
 
 ```{ result_of: 1, id: 1, mime: "text/plain" }
-Transaction 6CFEC7170CD4953EE3565434C12B5D071FC3DB087EC5AD4213E33D766D9F85DA (createIdentity) for acc://e4642a13ac0889a0132af7a0d4f85ded90d947934d3d5673/ACME
+Transaction C7C84AC16F5408967B762A220069D8B207AD38A0AA5A8C2E8F1AF7EDD5A36FB6 (createIdentity) for acc://c6f113b4ccd3f071b4c91519f907a01561380c8db0e8b2b4/ACME
 
 ```
 
@@ -56,7 +56,9 @@ Transaction 6CFEC7170CD4953EE3565434C12B5D071FC3DB087EC5AD4213E33D766D9F85DA (cr
 ```
 
 ```{ result_of: 1, id: 2, mime: "text/plain" }
-
+Identity (ADI)
+    Url:       acc://alice
+    Entry 0:   acc://alice/book
 
 ```
 
