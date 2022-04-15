@@ -49,7 +49,7 @@ func InitChain(t TB, db *database.Database, exec *Executor) {
 	require.NoError(tb{t}, block.Batch.Commit())
 }
 
-func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) []*protocol.TransactionStatus {
+func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
 	t.Helper()
 
 	if block == nil {
@@ -74,7 +74,10 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 	var results []*protocol.TransactionStatus
 	for _, envelope := range envelopes {
 		for _, delivery := range NormalizeEnvelope(t, envelope) {
-			st := DeliverTx(t, exec, block, delivery)
+			st, err := DeliverTx(t, exec, block, delivery)
+			if err != nil {
+				return nil, err
+			}
 			st.For = *(*[32]byte)(delivery.Transaction.GetHash())
 			results = append(results, st)
 		}
@@ -84,7 +87,7 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 
 	// Is the block empty?
 	if block.State.Empty() {
-		return nil
+		return nil, nil
 	}
 
 	// Commit the batch
@@ -95,7 +98,7 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 	defer batch.Discard()
 	require.NoError(tb{t}, exec.DidCommit(block, batch))
 
-	return results
+	return results, nil
 }
 
 func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delivery) (protocol.TransactionResult, error) {
@@ -122,30 +125,32 @@ func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 	return deliveries
 }
 
-func DeliverTx(t TB, exec *Executor, block *Block, delivery *chain.Delivery) *protocol.TransactionStatus {
+func DeliverTx(t TB, exec *Executor, block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	t.Helper()
 
 	err := delivery.LoadTransaction(block.Batch)
 	if err != nil {
 		var perr *protocol.Error
 		if !errors.As(err, &perr) {
-			require.NoError(tb{t}, err)
+			return nil, err
 		}
 
 		if perr.Code != protocol.ErrorCodeAlreadyDelivered {
-			require.NoError(tb{t}, err)
+			return nil, err
 		}
 
 		return &protocol.TransactionStatus{
 			Delivered: true,
 			Code:      perr.Code.GetEnumValue(),
 			Message:   perr.Error(),
-		}
+		}, nil
 	}
 
 	status, err := exec.ExecuteEnvelope(block, delivery)
-	require.NoError(tb{t}, err)
-	return status
+	if err != nil {
+		return nil, err
+	}
+	return status, nil
 }
 
 func RequireSuccess(t TB, results ...*protocol.TransactionStatus) {
