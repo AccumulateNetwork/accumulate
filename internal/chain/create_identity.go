@@ -55,6 +55,9 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		if len(body.KeyHash) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
+		if bookUrl == nil {
+			return nil, fmt.Errorf("key book url is required to create identity")
+		}
 
 		book = new(protocol.KeyBook)
 		book.Url = bookUrl
@@ -104,9 +107,6 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) erro
 }
 
 func selectBookUrl(body *protocol.CreateIdentity) *url.URL {
-	if body.KeyBookUrl == nil {
-		return body.Url.JoinPath(protocol.DefaultKeyBook)
-	}
 	return body.KeyBookUrl
 }
 

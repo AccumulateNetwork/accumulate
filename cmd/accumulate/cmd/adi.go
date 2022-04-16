@@ -172,6 +172,11 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
 		}
+	} else {
+		bookUrl, err = url2.Parse(adiUrlStr + "/book")
+		if err != nil {
+			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
+		}
 	}
 
 	idc := protocol.CreateIdentity{}
