@@ -115,7 +115,7 @@ func TestSubscribeAfterClose(t *testing.T) {
 	client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
 	require.NoError(t, err)
 	_, err = client.Subscribe(context.Background(), t.Name(), "tm.event = 'Tx'")
-	require.EqualError(t, err, "node was stopped")
+	require.EqualError(t, err, "failed to subscribe: service is shutting down")
 	time.Sleep(time.Millisecond) // Time for it to panic
 
 	// Ideally, this would also test rpc/core.Environment.Subscribe, but that is
