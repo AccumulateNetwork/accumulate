@@ -17,7 +17,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	rpc "github.com/tendermint/tendermint/rpc/client"
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
+	ctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
