@@ -8,12 +8,12 @@ import (
 	"net/http"
 	"net/url"
 
+	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/proxy"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
@@ -39,7 +39,7 @@ func New(config *config.Config, app abci.Application, logger log.Logger) (*Node,
 
 	// create node
 	var err error
-	node.Service, err = nm.New(&config.Config, logger, proxy.NewLocalClientCreator(app), nil)
+	node.Service, err = nm.New(&config.Config, logger, abciclient.NewLocalCreator(app), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}

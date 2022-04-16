@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/tendermint/tendermint/rpc/client"
-	core "github.com/tendermint/tendermint/rpc/core/types"
+	core "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
