@@ -252,3 +252,57 @@ ResponseAccount:
       marshal-as: reference
       pointer: true
       optional: true
+
+RequestMinorBlocks:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: Limit
+      type: uint
+    - name: TxFetchMode
+      type: TxFetchMode
+      marshal-as: enum
+    - name: FilterSynthAnchorsOnlyBlocks
+      type: bool
+
+ResponseMinorBlocks:
+  fields:
+    - name: Start
+      type: uint
+      keep-empty: true
+    - name: End
+      type: uint
+      keep-empty: true
+    - name: Total
+      type: uint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: ResponseMinorEntry
+      pointer: true
+      marshal-as: reference
+
+ResponseMinorEntry:
+  fields:
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: TxCount
+      description: shows how many transactions this block contains
+      type: uint
+    - name: TxIds
+      repeatable: true
+      type: bytes
+    - name: Transactions
+      description: the transactions within this block
+      type: ResponseByTxId
+      repeatable: true
+      pointer: true
+      marshal-as: reference

@@ -100,6 +100,25 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type MinorBlocksQuery struct {
+	UrlQuery
+	QueryPagination
+	TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
+	FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
+}
+
+type MinorQueryResponse struct {
+
+	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
+	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
+	// BlockTime is the start time of the block..
+	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	// TxCount shows how many transactions this block contains.
+	TxCount      uint64                      `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
+	TxIds        [][]byte                    `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
+	Transactions []*TransactionQueryResponse `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+}
+
 type MultiResponse struct {
 	Type       string        `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Items      []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
@@ -660,6 +679,41 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 		Value interface{} `json:"value,omitempty"`
 	}{}
 	u.Value = encoding.AnyToJSON(v.Value)
+	return json.Marshal(&u)
+}
+
+func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url                          *url.URL          `json:"url,omitempty"`
+		Start                        uint64            `json:"start,omitempty"`
+		Count                        uint64            `json:"count,omitempty"`
+		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
+		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.TxFetchMode = v.TxFetchMode
+	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	return json.Marshal(&u)
+}
+
+func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		BlockIndex   uint64                                       `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                                   `json:"blockTime,omitempty"`
+		TxCount      uint64                                       `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
+	}{}
+	u.BlockIndex = v.BlockIndex
+	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -1236,6 +1290,64 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	return nil
+}
+
+func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url                          *url.URL          `json:"url,omitempty"`
+		Start                        uint64            `json:"start,omitempty"`
+		Count                        uint64            `json:"count,omitempty"`
+		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
+		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.TxFetchMode = v.TxFetchMode
+	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	v.TxFetchMode = u.TxFetchMode
+	v.FilterSynthAnchorsOnlyBlocks = u.FilterSynthAnchorsOnlyBlocks
+	return nil
+}
+
+func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		BlockIndex   uint64                                       `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                                   `json:"blockTime,omitempty"`
+		TxCount      uint64                                       `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
+	}{}
+	u.BlockIndex = v.BlockIndex
+	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.BlockIndex = u.BlockIndex
+	v.BlockTime = u.BlockTime
+	v.TxCount = u.TxCount
+	v.TxIds = make([][]byte, len(u.TxIds))
+	for i, x := range u.TxIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding TxIds: %w", err)
+		} else {
+			v.TxIds[i] = x
+		}
+	}
+	v.Transactions = u.Transactions
 	return nil
 }
 
