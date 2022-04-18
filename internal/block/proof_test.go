@@ -12,6 +12,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestExecutor_Query_ProveAccount(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
@@ -29,7 +31,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 		Faucet()
 	sim.MustSubmitAndExecuteBlock(env)
-	sim.WaitForTransaction(delivered, env.Transaction[0].GetHash())
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	// Get a proof of the account state
 	req := new(query.RequestByUrl)

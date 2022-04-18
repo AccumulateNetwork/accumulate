@@ -27,7 +27,7 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
-	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
+	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
