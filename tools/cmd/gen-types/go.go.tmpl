@@ -15,15 +15,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	{{- if not (isPkg "protocol")}}
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	{{- end}}
-	{{- if not (isPkg "types/state")}}
-	"gitlab.com/accumulatenetwork/accum1ulate/types/state"
-	{{- end}}
-	{{- if not (isPkg "types/api/transactions")}}
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	{{- if not (isPkg "types/api/query")}}
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	{{- end}}
 	{{- if not (isPkg "types/api/query")}}
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
