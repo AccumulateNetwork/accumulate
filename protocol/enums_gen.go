@@ -188,6 +188,12 @@ const ErrorCodeAlreadyDelivered ErrorCode = 32
 // ErrorCodeUnauthorized indicates the signer is not authorized to sign a transaction.
 const ErrorCodeUnauthorized ErrorCode = 33
 
+// ErrorCodeQueryChainUpdatesError is returned when chain-updates query fails.
+const ErrorCodeQueryChainUpdatesError ErrorCode = 34
+
+// ErrorCodeQueryEntriesError is returned when entries query fails.
+const ErrorCodeQueryEntriesError ErrorCode = 35
+
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -695,7 +701,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized, ErrorCodeQueryChainUpdatesError, ErrorCodeQueryEntriesError:
 		*v = u
 		return true
 	default:
@@ -774,6 +780,10 @@ func (v ErrorCode) String() string {
 		return "alreadyDelivered"
 	case ErrorCodeUnauthorized:
 		return "unauthorized"
+	case ErrorCodeQueryChainUpdatesError:
+		return "queryChainUpdatesError"
+	case ErrorCodeQueryEntriesError:
+		return "queryEntriesError"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -850,6 +860,10 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeAlreadyDelivered, true
 	case "unauthorized":
 		return ErrorCodeUnauthorized, true
+	case "querychainupdateserror":
+		return ErrorCodeQueryChainUpdatesError, true
+	case "queryentrieserror":
+		return ErrorCodeQueryEntriesError, true
 	default:
 		return 0, false
 	}

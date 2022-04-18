@@ -136,7 +136,7 @@ var accountGenerateCmd = &cobra.Command{
 	Use:   "generate [key name (optional)]",
 	Short: "Generate a random lite token account or a lite account derived previously imported/created key",
 	Args:  cobra.MinimumNArgs(0),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := GenerateAccount()
 		printOutput(cmd, out, err)
 	},

@@ -358,6 +358,20 @@ func (c *Client) QueryKeyPageIndex(ctx context.Context, req *api.KeyPageIndexQue
 	return &resp, nil
 }
 
+// QueryMinorBlocks queries an account's minor blocks.
+//
+// WARNING: EXPERIMENTAL!
+func (c *Client) QueryMinorBlocks(ctx context.Context, req *api.MinorBlocksQuery) (*api.MultiResponse, error) {
+	var resp api.MultiResponse
+
+	err := c.RequestAPIv2(ctx, "query-minor-blocks", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // QueryTx queries a transaction by ID.
 func (c *Client) QueryTx(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
 	var resp api.TransactionQueryResponse
