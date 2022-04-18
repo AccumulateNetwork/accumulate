@@ -77,6 +77,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(pageCmd)
 	cmd.AddCommand(tokenCmd)
 	cmd.AddCommand(txCmd)
+	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(validatorCmd)
 	cmd.AddCommand(versionCmd)
 

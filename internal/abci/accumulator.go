@@ -454,7 +454,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		return abci.ResponseCommit{}
 	}
 
-	// Notify the executor that we comitted
+	// Notify the executor that we committed
 	err = app.Executor.DidCommit(app.block, batch)
 	if err != nil {
 		app.fatal(err, true)
