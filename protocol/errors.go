@@ -1,10 +1,10 @@
 package protocol
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -42,4 +42,28 @@ func (err *Error) Error() string {
 
 func (err *Error) Unwrap() error {
 	return err.Message
+}
+
+// ConvertErrorStatus converts a status code to an old protocol error code.
+//
+// Protocol error codes are deprecated and should be converted to status codes.
+func ConvertErrorStatus(s errors.Status) ErrorCode {
+	switch s {
+	case errors.StatusOK, errors.StatusDelivered, errors.StatusPending, errors.StatusRemote:
+		return 0
+
+	case errors.StatusBadRequest:
+		return ErrorCodeInvalidRequest
+	case errors.StatusUnauthenticated:
+		return ErrorCodeInvalidSignature
+	case errors.StatusInsufficientCredits:
+		return ErrorCodeInsufficientCredits
+	case errors.StatusUnauthorized:
+		return ErrorCodeUnauthorized
+	case errors.StatusNotFound:
+		return ErrorCodeNotFound
+
+	default:
+		return ErrorCodeUnknownError
+	}
 }
