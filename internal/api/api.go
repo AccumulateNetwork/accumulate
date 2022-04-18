@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -11,29 +13,29 @@ import (
 //go:generate go run ../../tools/cmd/gen-types --package api --language go-union --out unions_gen.go responses.yml
 
 type NetworkModule interface {
-	Metrics() (*NetworkMetrics, error)
+	Metrics(context.Context) (*NetworkMetrics, error)
 }
 
 type NodeModule interface {
-	Status() (*NodeStatus, error)
-	Version() (*NodeVersion, error)
-	Describe() (*NodeDescription, error)
-	Metrics() (*NodeMetrics, error)
+	Status(context.Context) (*NodeStatus, error)
+	Version(context.Context) (*NodeVersion, error)
+	Describe(context.Context) (*NodeDescription, error)
+	Metrics(context.Context) (*NodeMetrics, error)
 }
 
 type QueryModule interface {
-	QueryState(account *url.URL, fragment []string, opts QueryStateOptions) (Record, error)
-	QuerySet(account *url.URL, fragment []string, opts QuerySetOptions) (Record, error)
-	Search(scope *url.URL, query string, opts SearchOptions) (Record, error)
+	QueryState(ctx context.Context, account *url.URL, fragment []string, opts QueryStateOptions) (Record, error)
+	QuerySet(ctx context.Context, account *url.URL, fragment []string, opts QuerySetOptions) (Record, error)
+	Search(ctx context.Context, scope *url.URL, query string, opts SearchOptions) (Record, error)
 }
 
 type SubmitModule interface {
-	Submit(envelope *protocol.Envelope, opts SubmitOptions) (*Submission, error)
+	Submit(ctx context.Context, envelope *protocol.Envelope, opts SubmitOptions) (*Submission, error)
 }
 
 type FaucetModule interface {
 	SubmitModule
-	Faucet(account *url.URL, opts SubmitOptions) (*Submission, error)
+	Faucet(ctx context.Context, account *url.URL, opts SubmitOptions) (*Submission, error)
 }
 
 type SubmitMode uint64

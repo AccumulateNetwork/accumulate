@@ -96,10 +96,10 @@ type SearchOptions struct {
 }
 
 type Submission struct {
-	fieldsSet       []bool
-	TransactionHash [32]byte                   `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
-	SignatureHashes [][32]byte                 `json:"signatureHashes,omitempty" form:"signatureHashes" query:"signatureHashes" validate:"required"`
-	Status          protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	fieldsSet         []bool
+	TransactionHashes [][32]byte                    `json:"transactionHashes,omitempty" form:"transactionHashes" query:"transactionHashes" validate:"required"`
+	SignatureHashes   [][32]byte                    `json:"signatureHashes,omitempty" form:"signatureHashes" query:"signatureHashes" validate:"required"`
+	Status            []*protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
 type SubmitOptions struct {
@@ -242,12 +242,20 @@ func (v *SearchOptions) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Submission) Copy() *Submission {
 	u := new(Submission)
 
-	u.TransactionHash = v.TransactionHash
+	u.TransactionHashes = make([][32]byte, len(v.TransactionHashes))
+	for i, v := range v.TransactionHashes {
+		u.TransactionHashes[i] = v
+	}
 	u.SignatureHashes = make([][32]byte, len(v.SignatureHashes))
 	for i, v := range v.SignatureHashes {
 		u.SignatureHashes[i] = v
 	}
-	u.Status = *(&v.Status).Copy()
+	u.Status = make([]*protocol.TransactionStatus, len(v.Status))
+	for i, v := range v.Status {
+		if v != nil {
+			u.Status[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
@@ -413,8 +421,13 @@ func (v *SearchOptions) Equal(u *SearchOptions) bool {
 }
 
 func (v *Submission) Equal(u *Submission) bool {
-	if !(v.TransactionHash == u.TransactionHash) {
+	if len(v.TransactionHashes) != len(u.TransactionHashes) {
 		return false
+	}
+	for i := range v.TransactionHashes {
+		if !(v.TransactionHashes[i] == u.TransactionHashes[i]) {
+			return false
+		}
 	}
 	if len(v.SignatureHashes) != len(u.SignatureHashes) {
 		return false
@@ -424,8 +437,13 @@ func (v *Submission) Equal(u *Submission) bool {
 			return false
 		}
 	}
-	if !((&v.Status).Equal(&u.Status)) {
+	if len(v.Status) != len(u.Status) {
 		return false
+	}
+	for i := range v.Status {
+		if !((v.Status[i]).Equal(u.Status[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -906,7 +924,7 @@ func (v *SearchOptions) IsValid() error {
 }
 
 var fieldNames_Submission = []string{
-	1: "TransactionHash",
+	1: "TransactionHashes",
 	2: "SignatureHashes",
 	3: "Status",
 }
@@ -915,16 +933,20 @@ func (v *Submission) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.TransactionHash == ([32]byte{})) {
-		writer.WriteHash(1, &v.TransactionHash)
+	if !(len(v.TransactionHashes) == 0) {
+		for _, v := range v.TransactionHashes {
+			writer.WriteHash(1, &v)
+		}
 	}
 	if !(len(v.SignatureHashes) == 0) {
 		for _, v := range v.SignatureHashes {
 			writer.WriteHash(2, &v)
 		}
 	}
-	if !((v.Status).Equal(new(protocol.TransactionStatus))) {
-		writer.WriteValue(3, &v.Status)
+	if !(len(v.Status) == 0) {
+		for _, v := range v.Status {
+			writer.WriteValue(3, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_Submission)
@@ -935,9 +957,9 @@ func (v *Submission) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field TransactionHash is missing")
-	} else if v.TransactionHash == ([32]byte{}) {
-		errs = append(errs, "field TransactionHash is not set")
+		errs = append(errs, "field TransactionHashes is missing")
+	} else if len(v.TransactionHashes) == 0 {
+		errs = append(errs, "field TransactionHashes is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field SignatureHashes is missing")
@@ -946,7 +968,7 @@ func (v *Submission) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Status is missing")
-	} else if (v.Status).Equal(new(protocol.TransactionStatus)) {
+	} else if len(v.Status) == 0 {
 		errs = append(errs, "field Status is not set")
 	}
 
@@ -1229,8 +1251,12 @@ func (v *Submission) UnmarshalBinary(data []byte) error {
 func (v *Submission) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadHash(1); ok {
-		v.TransactionHash = *x
+	for {
+		if x, ok := reader.ReadHash(1); ok {
+			v.TransactionHashes = append(v.TransactionHashes, *x)
+		} else {
+			break
+		}
 	}
 	for {
 		if x, ok := reader.ReadHash(2); ok {
@@ -1239,8 +1265,12 @@ func (v *Submission) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Status = *x
+	for {
+		if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Status = append(v.Status, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_Submission)
@@ -1313,11 +1343,14 @@ func (v *QueryStateOptions) MarshalJSON() ([]byte, error) {
 
 func (v *Submission) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TransactionHash string                     `json:"transactionHash,omitempty"`
-		SignatureHashes encoding.JsonList[string]  `json:"signatureHashes,omitempty"`
-		Status          protocol.TransactionStatus `json:"status,omitempty"`
+		TransactionHashes encoding.JsonList[string]                      `json:"transactionHashes,omitempty"`
+		SignatureHashes   encoding.JsonList[string]                      `json:"signatureHashes,omitempty"`
+		Status            encoding.JsonList[*protocol.TransactionStatus] `json:"status,omitempty"`
 	}{}
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.TransactionHashes = make(encoding.JsonList[string], len(v.TransactionHashes))
+	for i, x := range v.TransactionHashes {
+		u.TransactionHashes[i] = encoding.ChainToJSON(x)
+	}
 	u.SignatureHashes = make(encoding.JsonList[string], len(v.SignatureHashes))
 	for i, x := range v.SignatureHashes {
 		u.SignatureHashes[i] = encoding.ChainToJSON(x)
@@ -1414,11 +1447,14 @@ func (v *QueryStateOptions) UnmarshalJSON(data []byte) error {
 
 func (v *Submission) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TransactionHash string                     `json:"transactionHash,omitempty"`
-		SignatureHashes encoding.JsonList[string]  `json:"signatureHashes,omitempty"`
-		Status          protocol.TransactionStatus `json:"status,omitempty"`
+		TransactionHashes encoding.JsonList[string]                      `json:"transactionHashes,omitempty"`
+		SignatureHashes   encoding.JsonList[string]                      `json:"signatureHashes,omitempty"`
+		Status            encoding.JsonList[*protocol.TransactionStatus] `json:"status,omitempty"`
 	}{}
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.TransactionHashes = make(encoding.JsonList[string], len(v.TransactionHashes))
+	for i, x := range v.TransactionHashes {
+		u.TransactionHashes[i] = encoding.ChainToJSON(x)
+	}
 	u.SignatureHashes = make(encoding.JsonList[string], len(v.SignatureHashes))
 	for i, x := range v.SignatureHashes {
 		u.SignatureHashes[i] = encoding.ChainToJSON(x)
@@ -1427,10 +1463,13 @@ func (v *Submission) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
-		return fmt.Errorf("error decoding TransactionHash: %w", err)
-	} else {
-		v.TransactionHash = x
+	v.TransactionHashes = make([][32]byte, len(u.TransactionHashes))
+	for i, x := range u.TransactionHashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding TransactionHashes: %w", err)
+		} else {
+			v.TransactionHashes[i] = x
+		}
 	}
 	v.SignatureHashes = make([][32]byte, len(u.SignatureHashes))
 	for i, x := range u.SignatureHashes {
