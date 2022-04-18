@@ -1,6 +1,7 @@
 # Binaries (mac, linux)
 accumulated
 accumulate
+play-accumulate
 !*/
 tools/cmd/gen-types/gen-types
 tools/cmd/gen-enum/gen-enum

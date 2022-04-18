@@ -39,7 +39,7 @@ func (v {{.Name}}) String() string {
 	{{- $typ := .Name}}
 	{{- range .Values}}
 	case {{$typ}}{{.Name}}:
-		return "{{lower .Name}}"
+		return "{{lowerCamel .Name}}"
 	{{- end}}
 	default:
 		return fmt.Sprintf("{{.Name}}:%d", v)
@@ -48,7 +48,7 @@ func (v {{.Name}}) String() string {
 
 // {{.Name}}ByName returns the named {{natural .Name}}.
 func {{.Name}}ByName(name string) ({{.Name}}, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	{{- $typ := .Name}}
 	{{- range .Values}}
 	{{- $typ := (print $typ .Name)}}

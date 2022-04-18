@@ -15,11 +15,11 @@ func (SyntheticCreateChain) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticCreateChain
 }
 
-func (SyntheticCreateChain) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticCreateChain) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticCreateChain{}).Validate(st, tx)
 }
 
-func (SyntheticCreateChain) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticCreateChain) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticCreateChain)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateChain), tx.Transaction.Body)

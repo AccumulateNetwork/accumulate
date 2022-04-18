@@ -79,11 +79,3 @@ func (b *transactionBucket) Signatures(signer *url.URL) storage.Key {
 func (b *transactionBucket) Synthetic() storage.Key {
 	return b.Object().Append("Synthetic")
 }
-
-// blockIndexBucket is a database bucket for a block index.
-type blockIndexBucket struct{ objectBucket }
-
-// blockUpdatesIndex returns a transactionBucket for the transaction with the given ID.
-func blockUpdatesIndex(blockIndex uint64) blockIndexBucket {
-	return blockIndexBucket{object("Block", blockIndex)}
-}

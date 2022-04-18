@@ -19,7 +19,7 @@ type ValidatorUpdate struct {
 type ProcessTransactionState struct {
 	ValidatorsUpdates      []ValidatorUpdate
 	ProducedTxns           []*protocol.Transaction
-	AdditionalTransactions []*protocol.Envelope
+	AdditionalTransactions []*Delivery
 	ChainUpdates           ChainUpdates
 }
 
@@ -31,7 +31,7 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	s.ProducedTxns = append(s.ProducedTxns, txn)
 }
 
-func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *protocol.Envelope) {
+func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
 	s.AdditionalTransactions = append(s.AdditionalTransactions, txn)
 }
 

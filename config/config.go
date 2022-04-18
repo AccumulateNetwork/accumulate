@@ -16,6 +16,12 @@ import (
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
+const (
+	configDir     = "config"
+	tmConfigFile  = "tendermint.toml"
+	accConfigFile = "accumulate.toml"
+)
+
 type NetworkType string
 
 const (
@@ -214,7 +220,7 @@ func (n *Network) GetSubnetByID(subnetID string) Subnet {
 }
 
 func Load(dir string) (*Config, error) {
-	return loadFile(dir, filepath.Join(dir, "config", "config.toml"), filepath.Join(dir, "config", "accumulate.toml"))
+	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
 
 func loadFile(dir, tmFile, accFile string) (*Config, error) {
@@ -232,10 +238,12 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 }
 
 func Store(config *Config) error {
-	// Exits on fail, hard-coded to write to '${config.RootDir}/config/config.toml'
-	tm.WriteConfigFile(config.RootDir, &config.Config)
+	err := config.Config.WriteToTemplate(filepath.Join(config.RootDir, configDir, tmConfigFile))
+	if err != nil {
+		return err
+	}
 
-	f, err := os.Create(filepath.Join(config.RootDir, "config", "accumulate.toml"))
+	f, err := os.Create(filepath.Join(config.RootDir, configDir, accConfigFile))
 	if err != nil {
 		return err
 	}

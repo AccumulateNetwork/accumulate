@@ -1,16 +1,17 @@
 package cmd
 
 import (
-	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"reflect"
+	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -62,7 +63,8 @@ func printError(cmd *cobra.Command, err error) {
 	DidError = err
 }
 
-func printGeneralTransactionParameters(_ io.Writer, res *api2.TransactionQueryResponse) string {
+//nolint:gosimple
+func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
@@ -92,15 +94,6 @@ func PrintJson(v interface{}) (string, error) {
 	return string(data), nil
 }
 
-func FPrintJson(w io.Writer, v interface{}) error {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	fmt.Fprint(w, string(data))
-	return nil
-}
-
 func PrintChainQueryResponseV2(res *QueryResponse) (string, error) {
 	if WantJsonOutput || res.Type == "dataEntry" {
 		return PrintJson(res)
@@ -118,66 +111,61 @@ func PrintChainQueryResponseV2(res *QueryResponse) (string, error) {
 }
 
 func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string, error) {
-	buf := new(bytes.Buffer)
-	err := FPrintTransactionQueryResponseV2(buf, res)
-	return buf.String(), err
-}
-
-func FPrintTransactionQueryResponseV2(w io.Writer, res *api2.TransactionQueryResponse) error {
 	if WantJsonOutput {
-		return FPrintJson(w, res)
+		return PrintJson(res)
 	}
 
-	err := outputForHumansTx(w, res)
+	out, err := outputForHumansTx(res)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	for i, txid := range res.SyntheticTxids {
-		fmt.Fprintf(w, "  - Synthetic Transaction %d : %x\n", i, txid)
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
 	}
 
 	for _, receipt := range res.Receipts {
 		// // TODO Figure out how to include the directory receipt and block
 		// out += fmt.Sprintf("Receipt from %v#chain/%s in block %d\n", receipt.Account, receipt.Chain, receipt.DirectoryBlock)
-		fmt.Fprintf(w, "Receipt from %v#chain/%s\n", receipt.Account, receipt.Chain)
+		out += fmt.Sprintf("Receipt from %v#chain/%s\n", receipt.Account, receipt.Chain)
 		if receipt.Error != "" {
-			fmt.Fprintf(w, "  Error!! %s\n", receipt.Error)
+			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
 		if !receipt.Receipt.Convert().Validate() {
 			//nolint:gosimple
-			fmt.Fprintf(w, "  Invalid!!\n")
+			out += fmt.Sprintf("  Invalid!!\n")
 		}
 	}
 
-	return nil
+	return out, nil
 }
 
-func PrintMinorBlockQueryResponseV2(w io.Writer, res *api2.MinorQueryResponse) error {
+func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error) {
 	if WantJsonOutput {
-		return FPrintJson(w, res)
+		return PrintJson(res)
 	}
 
-	fmt.Fprintf(w, "--- block #%d, blocktime %v:\n", res.BlockIndex, res.BlockTime)
+	str := fmt.Sprintf("--- block #%d, blocktime %v:\n", res.BlockIndex, res.BlockTime)
 	if res.TxCount > 0 {
-		fmt.Fprintf(w, "    total tx count\t: %d\n", res.TxCount)
+		str += fmt.Sprintf("    total tx count\t: %d\n", res.TxCount)
 	}
 
 	if len(res.Transactions) > 0 {
 		for _, tx := range res.Transactions {
 			if tx.Data != nil {
-				err := FPrintTransactionQueryResponseV2(w, tx)
+				s, err := PrintTransactionQueryResponseV2(tx)
 				if err != nil {
-					return err
+					return "", err
 				}
+				str += s
 			}
 		}
 	} else {
 		for i, txid := range res.TxIds {
-			fmt.Fprintf(w, "    txid #%d\t\t: %s\n", i+1, hex.EncodeToString(txid))
+			str += fmt.Sprintf("    txid #%d\t\t: %s\n", i+1, hex.EncodeToString(txid))
 		}
 	}
-	return nil
+	return str, nil
 }
 
 func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
@@ -225,7 +213,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t%s", i, item)
 		}
 	case "txHistory":
-		out += fmt.Sprintf("\n\tTransaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
 			// Convert the item to a transaction query response
 			txr := new(api2.TransactionQueryResponse)
@@ -240,38 +228,28 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			}
 			out += s
 		}
-	}
-
-	return out, nil
-}
-
-func FPrintMultiResponse(w io.Writer, res *api2.MultiResponse) error {
-	if WantJsonOutput || res.Type == "dataSet" {
-		return FPrintJson(w, res)
-	}
-
-	switch res.Type {
 	case "minorBlock":
-		fmt.Fprintf(w, "\n\tMinor block result Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		str := fmt.Sprintf("\n\tMinor block result Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
-			fmt.Fprintln(w, "==========================================================================")
+			str += fmt.Sprintln("==========================================================================")
 
 			// Convert the item to a transaction query response
 			mtr := new(api2.MinorQueryResponse)
 			err := Remarshal(res.Items[i], mtr)
 			if err != nil {
-				return err
+				return "", err
 			}
 
-			err = PrintMinorBlockQueryResponseV2(w, mtr)
+			s, err := PrintMinorBlockQueryResponseV2(mtr)
 			if err != nil {
-				return err
+				return "", err
 			}
-			fmt.Fprintln(w)
+			str += s
+			str += fmt.Sprintln()
 		}
 	}
 
-	return nil
+	return out, nil
 }
 
 //nolint:gosimple
@@ -294,8 +272,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 
-		out += fmt.Sprintf("\tCredits\t\t:\t%d\n", protocol.CreditPrecision*ata.CreditBalance)
-		out += fmt.Sprintf("\tLast Used On\t\t:\t%d\n", ata.LastUsedOn)
+		out += fmt.Sprintf("\tCredits\t\t:\t%v\n", protocol.FormatAmount(ata.CreditBalance, protocol.CreditPrecisionPower))
+		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(ata.LastUsedOn*uint64(time.Microsecond))))
 		return out, nil
 	case protocol.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
@@ -313,7 +291,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook().String())
+		for _, a := range ata.Authorities {
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", a.Url)
+		}
 
 		return out, nil
 	case protocol.AccountTypeIdentity.String():
@@ -325,7 +305,9 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 		var out string
 		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.Url)
-		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook().String())
+		for _, a := range adi.Authorities {
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", a.Url)
+		}
 
 		return out, nil
 	case protocol.AccountTypeKeyBook.String():
@@ -346,15 +328,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			return "", err
 		}
 
-		out := fmt.Sprintf("\n\tCredit Balance\t:\t%.2f\n", float64(ss.CreditBalance)/protocol.CreditPrecision)
-		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%v\n", protocol.FormatAmount(ss.CreditBalance, protocol.CreditPrecisionPower))
+		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name(s)\n")
 		for i, k := range ss.Keys {
 			keyName := ""
-			name, err := FindLabelFromPubKey(k.PublicKeyHash)
+			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			}
-			out += fmt.Sprintf("\t%d\t%d\t\t%x\t%s\n", i, k.LastUsedOn, k.PublicKeyHash, keyName)
+			out += fmt.Sprintf("\t%d\t%v\t\t%x\t%s\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), k.PublicKeyHash, keyName)
 		}
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
@@ -374,210 +356,118 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
 		out += "\n"
 		return out, nil
+	case protocol.AccountTypeLiteIdentity.String():
+		li := protocol.LiteIdentity{}
+		err := Remarshal(res.Data, &li)
+		if err != nil {
+			return "", err
+		}
+		params := api2.DirectoryQuery{}
+		params.Url = li.Url
+		params.Start = uint64(0)
+		params.Count = uint64(10)
+		params.Expand = true
+
+		var adiRes api2.MultiResponse
+		if err := Client.RequestAPIv2(context.Background(), "query-directory", &params, &adiRes); err != nil {
+			ret, err := PrintJsonRpcError(err)
+			if err != nil {
+				return "", err
+			}
+			return "", fmt.Errorf("%v", ret)
+		}
+		return PrintMultiResponse(&adiRes)
 	default:
 		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
 }
 
-func outputForHumansTx(w io.Writer, res *api2.TransactionQueryResponse) error {
+func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 	typStr := res.Data.(map[string]interface{})["type"].(string)
 	typ, ok := protocol.TransactionTypeByName(typStr)
 	if !ok {
-		return fmt.Errorf("Unknown transaction type %s", typStr)
+		return "", fmt.Errorf("Unknown transaction type %s", typStr)
 	}
 
 	if typ == protocol.TransactionTypeSendTokens {
-		txn := new(api2.TokenSend)
+		txn := new(api.TokenSend)
 		err := Remarshal(res.Data, txn)
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		tx := txn
+		var out string
 		for i := range tx.To {
 			amt, err := formatAmount("acc://ACME", &tx.To[i].Amount)
 			if err != nil {
 				amt = "unknown"
 			}
-			fmt.Fprintf(w, "Send %s from %s to %s\n", amt, res.Origin, tx.To[i].Url)
-			fmt.Fprintf(w, "  - Synthetic Transaction : %x\n", tx.To[i].Txid)
+			out += fmt.Sprintf("Send %s from %s to %s\n", amt, res.Origin, tx.To[i].Url)
+			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.To[i].Txid)
 		}
 
-		printGeneralTransactionParameters(w, res)
-		return nil
+		out += printGeneralTransactionParameters(res)
+		return out, nil
 	}
 
 	txn, err := protocol.NewTransactionBody(typ)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	err = Remarshal(res.Data, txn)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	fmt.Fprintf(w, "    type: %s\n", typStr)
 
 	switch txn := txn.(type) {
 	case *protocol.SyntheticDepositTokens:
 		deposit := txn
-		fmt.Fprintln(w)
+		out := "\n"
 		amt, err := formatAmount(deposit.Token.String(), &deposit.Amount)
 		if err != nil {
 			amt = "unknown"
 		}
-		fmt.Fprintf(w, "Receive %s to %s (cause: %X)\n", amt, res.Origin, deposit.Cause)
+		out += fmt.Sprintf("Receive %s to %s (cause: %X)\n", amt, res.Origin, deposit.Cause)
 
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.SyntheticDepositCredits:
-		deposit := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Source \t:%s\n", deposit.Source)
-		fmt.Fprintf(w, "Credits \t:%d\n", deposit.Amount)
-
-		printGeneralTransactionParameters(w, res)
-		return nil
+		out += printGeneralTransactionParameters(res)
+		return out, nil
 	case *protocol.SyntheticCreateChain:
 		scc := txn
+		var out string
 		for _, cp := range scc.Chains {
 			c, err := protocol.UnmarshalAccount(cp.Data)
 			if err != nil {
-				return err
+				return "", err
 			}
 			// unmarshal
 			verb := "Created"
 			if cp.IsUpdate {
 				verb = "Updated"
 			}
-			fmt.Fprintf(w, "%s %v (%v)\n", verb, c.GetUrl(), c.Type())
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.GetUrl(), c.Type())
 		}
-		return nil
+		return out, nil
 	case *protocol.CreateIdentity:
 		id := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "ADI URL \t\t:\t%s\n", id.Url)
-		fmt.Fprintf(w, "Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
+		out := "\n"
+		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
+		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyName, err := FindLabelFromPubKey(id.KeyHash)
+		keyName, err := FindLabelFromPublicKeyHash(id.KeyHash)
 		if err != nil {
-			fmt.Fprintf(w, "Public Key \t:\t%x\n", id.KeyHash)
+			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {
-			fmt.Fprintf(w, "Public Key (name) \t:\t%x (%s)\n", id.KeyHash, keyName)
+			out += fmt.Sprintf("Public Key (name(s)) \t:\t%x (%s)\n", id.KeyHash, keyName)
 		}
 
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.CreateDataAccount:
-		dataAcc := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "ADI URL \t\t:\t%s\n", dataAcc.Url)
-		fmt.Fprintf(w, "Key Book URL\t\t:\t%s\n", dataAcc.KeyBookUrl)
-		fmt.Fprintf(w, "Manager Book URL\t\t:\t%s\n", dataAcc.ManagerKeyBookUrl)
-		fmt.Fprintf(w, "Is scratch account\t\t:\t%t\n", dataAcc.Scratch)
-
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.CreateKeyBook:
-		keyBook := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "ADI URL \t\t:\t%s\n", keyBook.Url)
-		fmt.Fprintf(w, "Key Book URL\t\t:\t%s\n", keyBook.PublicKeyHash)
-		fmt.Fprintf(w, "Manager Book URL\t\t:\t%s\n", keyBook.Manager)
-
-		keyName, err := FindLabelFromPubKey(keyBook.PublicKeyHash)
-		if err != nil {
-			fmt.Fprintf(w, "Public Key \t:\t%x\n", keyBook.PublicKeyHash)
-		} else {
-			fmt.Fprintf(w, "Public Key (name) \t:\t%x (%s)\n", keyBook.PublicKeyHash, keyName)
-		}
-
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.CreateKeyPage:
-		page := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Manager URL\t\t:\t%s\n", page.Manager)
-
-		for _, key := range page.Keys {
-			keyName, err := FindLabelFromPubKey(key.KeyHash)
-			if err != nil {
-				fmt.Fprintf(w, "Public Key \t:\t%x\n", key.KeyHash)
-			} else {
-				fmt.Fprintf(w, "Public Key (name) \t:\t%x (%s)\n", key.KeyHash, keyName)
-			}
-			fmt.Fprintf(w, "Key owner \t:\t%s\n", key.Owner)
-		}
-
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.SyntheticAnchor:
-		synthAnchor := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Block \t\t\t:\t%d\n", synthAnchor.Block)
-		fmt.Fprintf(w, "ACME burnt \t\t:\t%d\n", synthAnchor.AcmeBurnt.Int64())
-		fmt.Fprintf(w, "ACME oracle price \t:\t%d\n", synthAnchor.AcmeOraclePrice)
-
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.UpdateKeyPage:
-		page := txn
-		fmt.Fprintln(w)
-		for _, op := range page.Operation {
-			fmt.Fprintf(w, "Type \t:\t%v\n", op.Type())
-			// TODO switch operation types
-		}
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.SyntheticReceipt:
-		synthRcpt := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Source \t\t:%s\n", synthRcpt.Source)
-		fmt.Fprintf(w, "SynthTxHash \t:\t%s\n", hex.EncodeToString(synthRcpt.SynthTxHash[:]))
-		fmt.Fprintf(w, "Status \t\t:\t%s\n", getTxStatus(synthRcpt.Status))
-
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.SyntheticBurnTokens:
-		burn := txn
-		fmt.Fprintln(w)
-		amt, err := formatAmount(burn.Amount.String(), &burn.Amount)
-		if err != nil {
-			amt = "unknown"
-		}
-
-		fmt.Fprintf(w, "Source \t\t\t:\t%s\n", burn.Source)
-		fmt.Fprintf(w, "Amount \t\t\t:\t%s\n", amt)
-
-		printGeneralTransactionParameters(w, res)
-		return nil
-	case *protocol.SegWitDataEntry:
-		seg := txn
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Source \t\t\t:\t%s\n", seg.Source)
-		fmt.Fprintf(w, "EntryUrl \t\t\t:\t%s\n", seg.EntryUrl)
-		fmt.Fprintf(w, "EntryHash \t\t\t:\t%s\n", hex.EncodeToString(seg.EntryHash[:]))
-
-		printGeneralTransactionParameters(w, res)
-		return nil
+		out += printGeneralTransactionParameters(res)
+		return out, nil
 
 	default:
-		fmt.Fprintln(w, printReflection("", "", reflect.ValueOf(txn)))
+		return printReflection("", "", reflect.ValueOf(txn)), nil
 	}
-	return nil
-}
-
-func getTxStatus(status *protocol.TransactionStatus) string {
-	strStatus := ""
-	if status.Code > 0 {
-		strStatus = "error: " + status.Message
-	} else if status.Delivered {
-		strStatus = "delivered"
-	} else if status.Pending {
-		strStatus = "pending"
-	}
-	return strStatus
 }
 
 func printReflection(field, indent string, value reflect.Value) string {
@@ -589,9 +479,10 @@ func printReflection(field, indent string, value reflect.Value) string {
 
 	if typ.AssignableTo(reflect.TypeOf(new(url2.URL))) {
 		v := value.Interface().(*url2.URL)
-		if v != nil {
-			return out + " " + v.String() + "\n"
+		if v == nil {
+			return out + " (nil)\n"
 		}
+		return out + " " + v.String() + "\n"
 	}
 
 	if typ.AssignableTo(reflect.TypeOf(url2.URL{})) {

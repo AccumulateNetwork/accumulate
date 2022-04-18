@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/tendermint/tendermint/rpc/client"
-	core "github.com/tendermint/tendermint/rpc/core/types"
+	core "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,6 +27,6 @@ func (NullRouter) Query(ctx context.Context, subnet string, query []byte, opts c
 	return nil, storage.ErrNotFound
 }
 
-func (NullRouter) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (NullRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	return new(routing.ResponseSubmit), nil
 }

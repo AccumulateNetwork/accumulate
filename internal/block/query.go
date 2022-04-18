@@ -523,7 +523,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	}
 
 	if txState.Transaction == nil {
-		tx = batch.Transaction(txState.TxHash)
+		tx = batch.Transaction(txState.Hash[:])
 		txState, err = tx.GetState()
 		if errors.Is(err, storage.ErrNotFound) {
 			return nil, fmt.Errorf("transaction %w for envelope %X", storage.ErrNotFound, txid)
@@ -543,7 +543,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
-	qr.Envelope.Transaction = txState.Transaction
+	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
 	qr.Status = status
 	copy(qr.TxId[:], txid)
 	qr.Height = -1
@@ -573,7 +573,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 			if err != nil {
 				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
 			}
-			qset.Signatures = append(qset.Signatures, state.Signatures...)
+			qset.Signatures = append(qset.Signatures, state.Signature)
 		}
 
 		qr.Signers = append(qr.Signers, qset)
@@ -964,7 +964,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
-						txt := qr.Envelope.Type()
+						txt := qr.Envelope.Transaction[0].Body.Type()
 						if txt.IsInternal() {
 							internalTxCount++
 						} else if req.TxFetchMode == query.TxFetchModeExpand {

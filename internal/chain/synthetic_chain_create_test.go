@@ -40,16 +40,16 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 		Initiate(protocol.SignatureTypeED25519, fooKey).
 		Build()
 
-	st := NewStateManagerForTest(t, db, env)
+	st, d := NewStateManagerForTest(t, db, env)
 	defer st.Discard()
 
 	scc := SyntheticCreateChain{}
-	result, err := scc.Validate(st, env)
+	result, err := scc.Validate(st, d)
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
 
 	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	_, receiptBody := CreateSynthReceipt(env.Transaction, status)
-	principalUrl := env.Transaction.Header.Principal
+	_, receiptBody := CreateSynthReceipt(d.Transaction, status)
+	principalUrl := d.Transaction.Header.Principal
 	env = acctesting.NewTransaction().
 		WithPrincipal(principalUrl).
 		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
@@ -57,7 +57,10 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 		WithBody(receiptBody).
 		Initiate(protocol.SignatureTypeED25519, fooKey).
 		Build()
-	_, err = SyntheticReceipt{}.Validate(st, env)
+
+	st, d = NewStateManagerForTest(t, db, env)
+	defer st.Discard()
+	_, err = SyntheticReceipt{}.Validate(st, d)
 	require.NoError(t, err)
 
 }
@@ -92,9 +95,10 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 		Initiate(protocol.SignatureTypeED25519, fooKey).
 		Build()
 
-	st := NewStateManagerForTest(t, db, env)
+	st, d := NewStateManagerForTest(t, db, env)
 	defer st.Discard()
 
-	_, err = SyntheticCreateChain{}.Validate(st, env)
+	require.NoError(t, err)
+	_, err = SyntheticCreateChain{}.Validate(st, d)
 	require.NoError(t, err) // We created ADI acc://foo not acc://foo/bar
 }

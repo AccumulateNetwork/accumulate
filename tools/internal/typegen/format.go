@@ -48,7 +48,7 @@ func GoFmt(filePath string, buf *bytes.Buffer) error {
 		return err
 	}
 
-	err = exec.Command("go", "run", "golang.org/x/tools/cmd/goimports", "-w", filePath).Run()
+	err = exec.Command("go", "run", "github.com/rinchsan/gosimports/cmd/gosimports", "-w", filePath).Run()
 	if err != nil {
 		return err
 	}

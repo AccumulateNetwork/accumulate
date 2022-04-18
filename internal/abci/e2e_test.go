@@ -47,9 +47,10 @@ func TestCreateLiteAccount(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
-	var count = 11
-	credits := 100.0
-	originAddr, balances := n.testLiteTx(count, credits)
+	const N, M = 11, 1
+	const count = N * M
+	credits := 10000.0
+	originAddr, balances := n.testLiteTx(N, M, credits)
 	amountSent := float64(count * 1000)
 	initialAmount := protocol.AcmeFaucetAmount * protocol.AcmePrecision
 	currentBalance := n.GetLiteTokenAccount(originAddr).Balance.Int64()
@@ -74,7 +75,7 @@ func TestEvilNode(t *testing.T) {
 
 	var count = 11
 	credits := 100.0
-	originAddr, balances := n.testLiteTx(count, credits)
+	originAddr, balances := n.testLiteTx(count, 1, credits)
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
@@ -96,11 +97,11 @@ func TestEvilNode(t *testing.T) {
 
 }
 
-func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]int64) {
+func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int64) {
 	sender := generateKey()
 	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
 
-	recipients := make([]string, count)
+	recipients := make([]string, N)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
 		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key).String()
@@ -123,19 +124,21 @@ func (n *FakeNode) testLiteTx(count int, credits float64) (string, map[string]in
 	n.require.NoError(batch.Commit())
 
 	balance := map[string]int64{}
-	n.MustExecuteAndWait(func(send func(*Tx)) {
-		for i := 0; i < count; i++ {
-			recipient := recipients[rand.Intn(len(recipients))]
-			balance[recipient] += 1000
+	for i := 0; i < M; i++ {
+		n.MustExecuteAndWait(func(send func(*Tx)) {
+			for i := 0; i < N; i++ {
+				recipient := recipients[rand.Intn(len(recipients))]
+				balance[recipient] += 1000
 
-			exch := new(protocol.SendTokens)
-			exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
-			send(newTxn(senderUrl.String()).
-				WithBody(exch).
-				Initiate(protocol.SignatureTypeLegacyED25519, sender).
-				Build())
-		}
-	})
+				exch := new(protocol.SendTokens)
+				exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
+				send(newTxn(senderUrl.String()).
+					WithBody(exch).
+					Initiate(protocol.SignatureTypeLegacyED25519, sender).
+					Build())
+			}
+		})
+	}
 
 	return senderUrl.String(), balance
 }
@@ -982,7 +985,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	liteKey, fooKey := generateKey(), generateKey()
 
-	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), "ACME")
+	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
@@ -1073,7 +1076,7 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
 	require.NoError(t, batch.Commit())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1146,9 +1149,9 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	issuer := n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
-	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], "acme")
+	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	underLimit := int64(1000 * fooPrecision)
@@ -1276,7 +1279,7 @@ func TestInvalidDeposit(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	liteKey := generateKey()
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1336,24 +1339,21 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestUpdateValidators(t *testing.T) {
-	t.Skip("AC-1200")
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
-	nodeKey1, nodeKey2 := generateKey(), generateKey()
-	nh1 := sha256.Sum256(nodeKey1.PubKey().Bytes())
-	nh2 := sha256.Sum256(nodeKey2.PubKey().Bytes())
-	// Verify there is one validator (node key)
+	nodeKeyAdd1, nodeKeyAdd2, nodeKeyUpd := generateKey(), generateKey(), generateKey()
 
+	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
 
 	// Add a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
-		body.Key = nh1[:]
+		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 1).
@@ -1362,17 +1362,15 @@ func TestUpdateValidators(t *testing.T) {
 			Build())
 	})
 
-	nh := sha256.Sum256(n.key.PubKey().Bytes())
 	// Verify the validator was added
-	//	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey1.PubKey()})
-	require.ElementsMatch(t, n.client.Validators(), [][]byte{nh[:], nh1[:]})
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyAdd1.PubKey()})
 
 	// Update a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
 
-		body.KeyHash = nh1[:]
-		body.NewKeyHash = nh2[:]
+		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
+		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 2).
@@ -1382,12 +1380,12 @@ func TestUpdateValidators(t *testing.T) {
 	})
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKey2.PubKey()})
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey()})
 
-	// Remove a validator
+	// Add a third validator, so the page threshold will become 2
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.RemoveValidator)
-		body.Key = nodeKey2.PubKey().Bytes()
+		body := new(protocol.AddValidator)
+		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 3).
@@ -1396,8 +1394,37 @@ func TestUpdateValidators(t *testing.T) {
 			Build())
 	})
 
+	// Verify the validator was added
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+
+	// Remove a validator
+	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
+		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+
+		send(newTxn(netUrl.String()).
+			WithSigner(validators, 4).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
+	})
+
+	// Should not be removed yet, the tx is pending
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+
+	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithSigner(validators, 4).
+			WithTxnHash(ids[0][:]).
+			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
+			Build())
+	})
+	n.MustWaitForTxns(convertIds32(envHashes...)...)
+
 	// Verify the validator was removed
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
+	pubKeys := n.client.Validators()
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey()})
+
 }
 
 func TestMultisig(t *testing.T) {
@@ -1443,9 +1470,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
 			Build())
 	})
@@ -1461,9 +1485,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
 	})
@@ -1482,9 +1503,6 @@ func TestMultisig(t *testing.T) {
 			WithTimestampVar(&globalNonce).
 			WithSigner(url.MustParse("foo/book0/1"), 1).
 			WithTxnHash(ids[0][:]).
-			// TODO Eliminate transaction body
-			WithPrincipal(url.MustParse("foo")).
-			WithBody(&protocol.RemoteTransactionBody{}).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
 	})

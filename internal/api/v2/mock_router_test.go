@@ -10,7 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	client "github.com/tendermint/tendermint/rpc/client"
-	coretypes "github.com/tendermint/tendermint/rpc/core/types"
+	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	routing "gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	url "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -89,7 +89,7 @@ func (mr *MockRouterMockRecorder) RouteAccount(arg0 interface{}) *gomock.Call {
 }
 
 // Submit mocks base method.
-func (m *MockRouter) Submit(ctx context.Context, subnet string, tx []byte, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (m *MockRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Submit", ctx, subnet, tx, pretend, async)
 	ret0, _ := ret[0].(*routing.ResponseSubmit)

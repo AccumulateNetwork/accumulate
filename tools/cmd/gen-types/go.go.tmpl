@@ -5,8 +5,11 @@ package {{.Package}}
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -14,6 +17,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	{{- if not (isPkg "protocol")}}
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	{{- end}}
+	{{- if not (isPkg "types/api/query")}}
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	{{- end}}
 	{{- if not (isPkg "types/api/query")}}
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -202,9 +208,9 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 
 {{define "valueToJson"}}
 {{- if .Field.IsMarshalled}}
-{{valueToJson .Field (print .Dst "." .Field.Name) (print .Src "." (get .Field)) .ForUnmarshal (get .Field)}}
+{{valueToJson .Field (print .Dst "." .Field.Name) (print .Src "." (get .Field))}}
 {{- if .Field.AlternativeName}}
-{{valueToJson .Field (print .Dst "." .Field.AlternativeName) (print .Src "." (get .Field)) .ForUnmarshal (get .Field)}}
+{{valueToJson .Field (print .Dst "." .Field.AlternativeName) (print .Src "." (get .Field))}}
 {{- end}}
 {{- end}}
 {{- end}}
@@ -233,10 +239,10 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 	{{- if .IsEmbedded}}
 	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
-	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u" "ForUnmarshal" false}}
+	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
 	{{- end}}
 	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u" "ForUnmarshal" false}}
+	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
 	{{- end}}
 	{{- end}}
 	return json.Marshal(&u)
@@ -251,10 +257,10 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	{{- if .IsEmbedded}}
 	{{- $name := get .}}
 	{{- range .TypeRef.Fields}}
-	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u" "ForUnmarshal" true}}
+	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u"}}
 	{{- end}}
 	{{- else}}
-	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u" "ForUnmarshal" true}}
+	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u"}}
 	{{- end}}
 	{{- end}}
 	if err := json.Unmarshal(data, &u); err != nil {

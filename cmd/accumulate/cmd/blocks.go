@@ -133,6 +133,11 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 		return err
 	}
 
-	err = FPrintMultiResponse(cmd.OutOrStderr(), res)
-	return err
+	out, err := PrintMultiResponse(res)
+	if err != nil {
+		return err
+	}
+
+	printOutput(cmd, out, nil)
+	return nil
 }
