@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -27,7 +28,7 @@ var tokenCmdGet = &cobra.Command{
 }
 
 var tokenCmdCreate = &cobra.Command{
-	Use:   "create [origin adi or lite url] [adi signer key name (if applicable)] [token url] [symbol] [precision (0 - 18)] [properties URL (optional)]",
+	Use:   "create [origin adi or lite url] [adi signer key name (if applicable)] [token url] [symbol] [precision (0 - 18)] [supply limit] [properties URL (optional)]",
 	Short: "Create new token",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -100,16 +101,20 @@ func CreateToken(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) < 3 {
+	if len(args) < 4 {
 		return "", fmt.Errorf("insufficient number of arguments")
 	}
 
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
+	supplyLimit, err := strconv.Atoi(args[3])
+	if err != nil {
+		return "", err
+	}
 	var properties *url2.URL
-	if len(args) > 3 {
-		properties, err = url2.Parse(args[3])
+	if len(args) > 4 {
+		properties, err = url2.Parse(args[4])
 		if err != nil {
 			return "", fmt.Errorf("invalid properties url, %v", err)
 		}
@@ -138,7 +143,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
-
+	params.SupplyLimit = big.NewInt(int64(supplyLimit))
 	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err

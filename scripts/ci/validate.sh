@@ -354,7 +354,7 @@ TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
 (accumulate -j tx get --prove $TXID | jq -e .receipts[0] -C --indent 0) && success || die "Failed to get receipt for ${TXID}"
 
 section "Create a token issuer"
-wait-for cli-tx token create keytest keytest-1-0 keytest/token-issuer TOK 10
+wait-for cli-tx token create keytest keytest-1-0 keytest/token-issuer TOK 10 1000000000000000
 accumulate get keytest/token-issuer 1> /dev/null || die "Cannot find keytest/token-issuer"
 success
 
@@ -424,7 +424,7 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Issue a new token"
-JSON=$(accumulate -j token create keytest keytest-1-0 keytest/foocoin bar 8)
+JSON=$(accumulate -j token create keytest keytest-1-0 keytest/foocoin bar 8 1000000000000000)
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
