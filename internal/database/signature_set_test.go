@@ -12,6 +12,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestSignatureSet_Add(t *testing.T) {
 	db := OpenInMemory(nil)
 	batch := db.Begin(true)

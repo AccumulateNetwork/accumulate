@@ -2,9 +2,9 @@ package etcd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -55,7 +55,7 @@ func (db *DB) get(key storage.Key) ([]byte, error) {
 	}
 
 	if resp.Count == 0 {
-		return nil, storage.ErrNotFound
+		return nil, errors.NotFound("key %v not found", key)
 	}
 
 	if resp.Count != 1 {
@@ -76,7 +76,7 @@ func (db *DB) commit(batch map[storage.Key][]byte) error {
 		return err
 	}
 	if !resp.Succeeded {
-		return errors.New("transaction failed")
+		return errors.New(errors.StatusInternalError, "transaction failed")
 	}
 	return nil
 }

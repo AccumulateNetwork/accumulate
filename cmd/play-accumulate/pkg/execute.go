@@ -1,6 +1,8 @@
 package pkg
 
 import (
+	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -17,8 +19,8 @@ type bldTxn struct {
 	b           *signing.Builder
 }
 
-func (s *Session) WaitForSubmitted() []*completedTxn {
-	completed := make([]*completedTxn, len(s.submitted))
+func (s *Session) WaitForSubmitted() []completedFlow {
+	completed := make([]completedFlow, len(s.submitted))
 	for i, sub := range s.submitted {
 		completed[i] = sub.Wait()
 	}
@@ -162,24 +164,85 @@ func (s *submittedTxn) info() (*URL, [32]byte) {
 }
 
 func (s *submittedTxn) Ok() {
-	if s.Status.Code != 0 {
-		s.s.Abortf("Transaction %X failed with code %d: %s\n", s.Hash, s.Status.Code, s.Status.Message)
+	if s.Status.Code == 0 {
+		return
 	}
+
+	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", s.Hash, s.Status.Code, s.Status.Message)
+	for err := s.Status.Error; err != nil; err = err.Cause {
+		if cs := err.CallSite; cs != nil {
+			str += fmt.Sprintf("%s\n\t%s:%d\n", cs.FuncName, cs.File, cs.Line)
+		}
+	}
+	s.s.Abort(errors.New(str))
 }
 
-func (s *submittedTxn) Wait() *completedTxn {
+func (s *submittedTxn) NotOk(message string) *submittedTxn {
+	if s.Status.Code != 0 {
+		return s
+	}
+
+	s.s.Abortf("Transaction %X succeeded, %s", s.Status.For, message)
+	panic("unreachable")
+}
+
+func (s *submittedTxn) Wait() completedFlow {
+	s.Ok()
+
 	status, txn, err := s.s.Engine.WaitFor(s.Hash)
 	if err != nil {
 		s.s.Abortf("Failed to get transaction %X: %v\n", s.Hash, err)
 	}
-	c := new(completedTxn)
-	c.submittedTxn = *s
-	c.Status = status
-	c.Transaction = txn
+	if len(status) != len(txn) {
+		panic("wrong number of statuses")
+	}
+	c := make(completedFlow, len(status))
+	for i := range c {
+		c[i] = &completedTxn{
+			s:           s.s,
+			Transaction: txn[i],
+			Status:      status[i],
+		}
+	}
+	return c
+}
+
+type completedFlow []*completedTxn
+
+func (c completedFlow) Ok() completedFlow {
+	for _, c := range c {
+		c.Ok()
+	}
+
 	return c
 }
 
 type completedTxn struct {
-	submittedTxn
+	s *Session
 	*protocol.Transaction
+	Status *protocol.TransactionStatus
+}
+
+func (c *completedTxn) Ok() *completedTxn {
+	if c.Status.Code == 0 {
+		return c
+	}
+
+	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", c.Status.For, c.Status.Code, c.Status.Message)
+	for err := c.Status.Error; err != nil; err = err.Cause {
+		if cs := err.CallSite; cs != nil {
+			str += fmt.Sprintf("%s\n\t%s:%d\n", cs.FuncName, cs.File, cs.Line)
+		}
+	}
+	c.s.Abort(errors.New(str))
+	panic("unreachable")
+}
+
+func (c *completedTxn) NotOk(message string) *completedTxn {
+	if c.Status.Code != 0 {
+		return c
+	}
+
+	c.s.Abortf("Transaction %X succeeded, %s", c.Status.For, message)
+	panic("unreachable")
 }

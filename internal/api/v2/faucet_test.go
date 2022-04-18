@@ -9,6 +9,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestFaucet(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)

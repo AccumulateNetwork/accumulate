@@ -1,10 +1,10 @@
 package badger
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/dgraph-io/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
@@ -106,7 +106,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	v, err = item.ValueCopy(nil)
 	// If we didn't find the value, return ErrNotFound
 	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, storage.ErrNotFound
+		return nil, errors.NotFound("key %v not found", key)
 	}
 
 	return v, nil

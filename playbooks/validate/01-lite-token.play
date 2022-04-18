@@ -28,7 +28,7 @@ acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
 ### Get tokens
 
 ```go{ id: 2 }
-Show(Faucet(aliceAddr).Wait())
+Show(Faucet(aliceAddr).Wait().Ok())
 Show(Get(aliceAddr))
 ```
 
@@ -73,8 +73,7 @@ Show(Transaction(aliceAddr).
     AddCredits(aliceAddr, 10).
         Oracle(5).
     Initiate(alice).
-    Submit().
-    Wait())
+	Submit().Wait().Ok()
 Show(Get(aliceAddr))
 ```
 
@@ -129,8 +128,7 @@ Show(Transaction(aliceAddr).
         To(bobAddr, 68).
         AndTo(charlieAddr, 42).
     Initiate(alice).
-    Submit().
-    Wait())
+	Submit().Wait().Ok())
 Show(Get(aliceAddr))
 Show(Get(bobAddr))
 Show(Get(charlieAddr))

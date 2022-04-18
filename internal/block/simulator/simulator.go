@@ -294,12 +294,12 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 
 	for _, envelope := range envelopes {
 		for _, delivery := range NormalizeEnvelope(s, envelope) {
-			s.WaitForTransaction(status, delivery.Transaction.GetHash())
+			s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())
 		}
 	}
 }
 
-func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) (*protocol.TransactionStatus, *protocol.Transaction) {
+func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
 	s.Helper()
 
 	var x *ExecEntry
@@ -318,21 +318,24 @@ func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionSta
 	}
 
 	batch := x.Database.Begin(false)
-	synth, err := batch.Transaction(txnHash).GetSyntheticTxns()
+	synth, err1 := batch.Transaction(txnHash).GetSyntheticTxns()
+	state, err2 := batch.Transaction(txnHash).GetState()
+	status, err3 := batch.Transaction(txnHash).GetStatus()
 	batch.Discard()
-	require.NoError(s, err)
+	require.NoError(s, err1)
+	require.NoError(s, err2)
+	require.NoError(s, err3)
 
+	status.For = *(*[32]byte)(txnHash)
+	statuses := []*protocol.TransactionStatus{status}
+	transactions := []*protocol.Transaction{state.Transaction}
 	for _, id := range synth.Hashes {
-		s.WaitForTransaction(statusCheck, id[:])
+		st, txn := s.WaitForTransactionFlow(statusCheck, id[:])
+		statuses = append(statuses, st...)
+		transactions = append(transactions, txn...)
 	}
 
-	batch = x.Database.Begin(false)
-	defer batch.Discard()
-	state, err := batch.Transaction(txnHash).GetState()
-	require.NoError(s, err)
-	status, err := batch.Transaction(txnHash).GetStatus()
-	require.NoError(s, err)
-	return status, state.Transaction
+	return statuses, transactions
 }
 
 type ExecEntry struct {

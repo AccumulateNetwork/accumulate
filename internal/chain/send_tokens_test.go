@@ -14,6 +14,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestLiteTokenTransactions(t *testing.T) {
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 	db := database.OpenInMemory(nil)
