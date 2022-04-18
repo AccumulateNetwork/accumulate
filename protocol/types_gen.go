@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -663,6 +664,7 @@ type TransactionStatus struct {
 	Pending   bool              `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	// Initiator is the signer that initiated the transaction.
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
@@ -2145,6 +2147,9 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
+	if v.Error != nil {
+		u.Error = (v.Error).Copy()
+	}
 	if v.Result != nil {
 		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
 	}
@@ -3937,6 +3942,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	if !(v.Message == u.Message) {
+		return false
+	}
+	switch {
+	case v.Error == u.Error:
+		// equal
+	case v.Error == nil || u.Error == nil:
+		return false
+	case !((v.Error).Equal(u.Error)):
 		return false
 	}
 	if !(v.Result == u.Result) {
@@ -8599,9 +8612,10 @@ var fieldNames_TransactionStatus = []string{
 	3: "Pending",
 	4: "Code",
 	5: "Message",
-	6: "Result",
-	7: "Initiator",
-	8: "Signers",
+	6: "Error",
+	7: "Result",
+	8: "Initiator",
+	9: "Signers",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -8623,15 +8637,18 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(len(v.Message) == 0) {
 		writer.WriteString(5, v.Message)
 	}
+	if !(v.Error == nil) {
+		writer.WriteValue(6, v.Error)
+	}
 	if !(v.Result == nil) {
-		writer.WriteValue(6, v.Result)
+		writer.WriteValue(7, v.Result)
 	}
 	if !(v.Initiator == nil) {
-		writer.WriteUrl(7, v.Initiator)
+		writer.WriteUrl(8, v.Initiator)
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteValue(8, v)
+			writer.WriteValue(9, v)
 		}
 	}
 
@@ -8668,16 +8685,21 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field Message is not set")
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Error is missing")
+	} else if v.Error == nil {
+		errs = append(errs, "field Error is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Result is missing")
 	} else if v.Result == nil {
 		errs = append(errs, "field Result is not set")
 	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
 		errs = append(errs, "field Initiator is missing")
 	} else if v.Initiator == nil {
 		errs = append(errs, "field Initiator is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
@@ -11566,18 +11588,21 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(5); ok {
 		v.Message = x
 	}
-	reader.ReadValue(6, func(b []byte) error {
+	if x := new(errors2.Error); reader.ReadValue(6, x.UnmarshalBinary) {
+		v.Error = x
+	}
+	reader.ReadValue(7, func(b []byte) error {
 		x, err := UnmarshalTransactionResult(b)
 		if err == nil {
 			v.Result = x
 		}
 		return err
 	})
-	if x, ok := reader.ReadUrl(7); ok {
+	if x, ok := reader.ReadUrl(8); ok {
 		v.Initiator = x
 	}
 	for {
-		ok := reader.ReadValue(8, func(b []byte) error {
+		ok := reader.ReadValue(9, func(b []byte) error {
 			x, err := UnmarshalSigner(b)
 			if err == nil {
 				v.Signers = append(v.Signers, x)
@@ -13058,6 +13083,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		Pending   bool                                          `json:"pending,omitempty"`
 		Code      uint64                                        `json:"code,omitempty"`
 		Message   string                                        `json:"message,omitempty"`
+		Error     *errors2.Error                                `json:"error,omitempty"`
 		Result    encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
 		Initiator *url.URL                                      `json:"initiator,omitempty"`
 		Signers   encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
@@ -13067,6 +13093,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
+	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
@@ -15392,6 +15419,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		Pending   bool                                          `json:"pending,omitempty"`
 		Code      uint64                                        `json:"code,omitempty"`
 		Message   string                                        `json:"message,omitempty"`
+		Error     *errors2.Error                                `json:"error,omitempty"`
 		Result    encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
 		Initiator *url.URL                                      `json:"initiator,omitempty"`
 		Signers   encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
@@ -15401,6 +15429,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
+	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
@@ -15412,6 +15441,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.Pending = u.Pending
 	v.Code = u.Code
 	v.Message = u.Message
+	v.Error = u.Error
 	v.Result = u.Result.Value
 
 	v.Initiator = u.Initiator

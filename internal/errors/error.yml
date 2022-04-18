@@ -1,0 +1,24 @@
+Error:
+  fields:
+    - name: Message
+      type: string
+    - name: Code
+      type: Status
+      marshal-as: enum
+    - name: Cause
+      type: Error
+      marshal-as: reference
+      pointer: true
+    - name: CallSite
+      type: CallSite
+      marshal-as: reference
+      pointer: true
+
+CallSite:
+  fields:
+    - name: FuncName
+      type: string
+    - name: File
+      type: string
+    - name: Line
+      type: int

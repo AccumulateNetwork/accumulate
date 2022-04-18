@@ -16,6 +16,7 @@ import (
 	"github.com/traefik/yaegi/interp"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
 var Flag = struct {
@@ -33,9 +34,10 @@ func init() {
 }
 
 var reYamlDoc = regexp.MustCompile("(?m)^---$")
+var reCodeFence = regexp.MustCompile("^([^\\s\\{]*)(\\{[^\\n]*\\})?")
 
 func run(_ *cobra.Command, filenames []string) {
-	parser := New(WithExtensions(FencedCode))
+	testing.EnableDebugFeatures()
 
 	documents := make([]*Node, len(filenames))
 	for i, filename := range filenames {
@@ -51,6 +53,8 @@ func run(_ *cobra.Command, filenames []string) {
 			contents = contents[ranges[1][1]:]
 		}
 
+		// Create a new parser for each document, because that's what works
+		parser := New(WithExtensions(FencedCode))
 		documents[i] = parser.Parse(contents)
 	}
 
@@ -99,9 +103,11 @@ func run(_ *cobra.Command, filenames []string) {
 					color.Blue("\n%s %s\n\n", strings.Repeat("#", level), heading)
 					level = 0
 				}
+				return GoToNext
 
 			case CodeBlock:
-				if string(node.Info) != "go" {
+				m := reCodeFence.FindSubmatch(node.Info)
+				if len(m) < 2 || string(m[1]) != "go" {
 					return GoToNext
 				}
 				// Continue

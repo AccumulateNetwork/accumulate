@@ -5,10 +5,10 @@ import (
 
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type NullRouter struct{}
@@ -24,7 +24,7 @@ func (NullRouter) Route(...*protocol.Envelope) (string, error) {
 }
 
 func (NullRouter) Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
-	return nil, storage.ErrNotFound
+	return nil, errors.StatusNotFound
 }
 
 func (NullRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {

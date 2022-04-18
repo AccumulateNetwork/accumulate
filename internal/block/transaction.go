@@ -1,11 +1,11 @@
 package block
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -72,6 +72,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	result, err := executor.Execute(st, &chain.Delivery{Transaction: transaction})
 	if err != nil {
+		err = errors.Wrap(0, err)
 		return recordFailedTransaction(batch, transaction, err)
 	}
 
@@ -255,11 +256,21 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
-		failure := protocol.NewError(protocol.ErrorCodeUnknownError, failure)
 		status.Remote = false
 		status.Delivered = true
-		status.Code = failure.Code.GetEnumValue()
 		status.Message = failure.Error()
+
+		var err1 *protocol.Error
+		var err2 *errors.Error
+		switch {
+		case errors.As(failure, &err1):
+			status.Code = err1.Code.GetEnumValue()
+		case errors.As(failure, &err2):
+			status.Error = err2
+			status.Code = protocol.ConvertErrorStatus(err2.Code).GetEnumValue()
+		default:
+			status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
+		}
 	})
 	if err != nil {
 		return nil, nil, err

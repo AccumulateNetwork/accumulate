@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -126,7 +126,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 		}
 		if chainName == "" {
-			return nil, nil, fmt.Errorf("anchor %X %w", entryHash, storage.ErrNotFound)
+			return nil, nil, errors.NotFound("anchor %X not found", entryHash[:4])
 		}
 		res := new(query.ResponseChainEntry)
 		res.Type = protocol.ChainTypeAnchor
@@ -445,7 +445,7 @@ func getChainEntry(chain *database.Chain, s string) (int64, []byte, error) {
 	}
 
 	if valid {
-		return 0, nil, fmt.Errorf("entry %q %w", s, storage.ErrNotFound)
+		return 0, nil, errors.NotFound("entry %q not found", s)
 	}
 	return 0, nil, fmt.Errorf("invalid entry: %q is not a number or a hash", s)
 }
@@ -478,7 +478,7 @@ func getTransaction(chain *database.Chain, s string) (int64, []byte, error) {
 	}
 
 	if valid {
-		return 0, nil, fmt.Errorf("transaction %q %w", s, storage.ErrNotFound)
+		return 0, nil, errors.NotFound("transaction %q not found", s)
 	}
 	return 0, nil, fmt.Errorf("invalid transaction: %q is not a number or a hash", s)
 }
@@ -517,7 +517,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	tx := batch.Transaction(txid)
 	txState, err := tx.GetState()
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
+		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	} else if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
@@ -526,7 +526,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		tx = batch.Transaction(txState.Hash[:])
 		txState, err = tx.GetState()
 		if errors.Is(err, storage.ErrNotFound) {
-			return nil, fmt.Errorf("transaction %w for envelope %X", storage.ErrNotFound, txid)
+			return nil, errors.NotFound("transaction not found for signature %X", txid[:4])
 		} else if err != nil {
 			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 		}
@@ -538,7 +538,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	} else if !status.Delivered && status.Remote {
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
-		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
+		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
 	qr := query.ResponseByTxId{}

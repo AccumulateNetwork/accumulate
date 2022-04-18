@@ -1,11 +1,11 @@
 package block
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -67,7 +67,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 			err = validateNormalSignature(batch, delivery.Transaction, signature, isInitiator)
 		}
 		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeInvalidSignature, "signature %d: %w", i, err)
+			return nil, errors.Format(errors.StatusUnauthenticated, "signature %d: %w", i, err)
 		}
 	}
 

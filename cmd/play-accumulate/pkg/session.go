@@ -40,7 +40,7 @@ type Engine interface {
 	GetDirectory(*URL) ([]*url.URL, error)
 	GetTransaction([32]byte) (*protocol.Transaction, error)
 	Submit(*protocol.Envelope) (*protocol.TransactionStatus, error)
-	WaitFor([32]byte) (*protocol.TransactionStatus, *protocol.Transaction, error)
+	WaitFor([32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error)
 }
 
 type Abort struct {

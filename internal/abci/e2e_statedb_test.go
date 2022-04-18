@@ -13,6 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestStateDBConsistency(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
