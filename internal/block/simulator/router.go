@@ -2,13 +2,13 @@ package simulator
 
 import (
 	"context"
-	"errors"
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -81,8 +81,11 @@ func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.En
 
 		result, err := CheckTx(r.TB, x.Database, x.Executor, envelope)
 		if err != nil {
-			if err, ok := err.(*protocol.Error); ok {
-				status.Code = err.Code.GetEnumValue()
+			if err1, ok := err.(*protocol.Error); ok {
+				status.Code = err1.Code.GetEnumValue()
+			} else if err2, ok := err.(*errors.Error); ok {
+				status.Code = err2.Code.GetEnumValue()
+				status.Error = err2
 			} else {
 				status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
 			}
