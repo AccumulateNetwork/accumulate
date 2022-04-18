@@ -14,10 +14,13 @@ import (
 	"github.com/traefik/yaegi/interp"
 	playcmd "gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks/pkg/kernel"
 )
 
 func main() {
+	testing.EnableDebugFeatures()
+
 	_ = cmd.Execute()
 }
 
