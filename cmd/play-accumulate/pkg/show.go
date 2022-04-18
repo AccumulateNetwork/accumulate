@@ -49,10 +49,6 @@ func (s *Session) formatBalanceForAccount(url Urlish, balance *big.Int) string {
 }
 
 func (s *Session) Show(v interface{}) {
-	if ctxn, ok := v.(*completedTxn); ok {
-		v = ctxn.Transaction
-	}
-
 	txn, ok := v.(*protocol.Transaction)
 	if ok {
 		v = txn.Body
@@ -64,6 +60,16 @@ func (s *Session) Show(v interface{}) {
 		str = v
 	case *URL:
 		str = v.String()
+
+	case completedFlow:
+		for _, txn := range v {
+			s.Show(txn)
+		}
+		return
+
+	case *completedTxn:
+		s.Show(v.Transaction)
+		return
 
 	// Accounts
 	case *protocol.LiteIdentity:

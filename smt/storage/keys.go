@@ -13,7 +13,6 @@ const (
 	KeyLength = 32 // Total bytes used for keys
 )
 
-const debugKeys = true
 const debugPrintKeys = false
 
 var debugKeyMap = map[Key]string{}

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -129,7 +130,7 @@ func (m *DB) get(key storage.Key) (value []byte, err error) {
 
 	v, ok := m.entries[key]
 	if !ok {
-		return nil, storage.ErrNotFound
+		return nil, errors.NotFound("key %v not found", key)
 	}
 	return append([]byte{}, v...), nil
 }

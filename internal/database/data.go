@@ -3,8 +3,8 @@ package database
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Data manages a data chain.
@@ -61,7 +61,7 @@ func (d *Data) Get(hash []byte) (*protocol.DataEntry, error) {
 func (d *Data) GetLatest() ([]byte, *protocol.DataEntry, error) {
 	height := d.chain.Height()
 	if height == 0 {
-		return nil, nil, storage.ErrNotFound
+		return nil, nil, errors.NotFound("chain is empty")
 	}
 	hash, err := d.chain.Entry(height - 1)
 	if err != nil {

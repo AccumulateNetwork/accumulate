@@ -59,6 +59,10 @@ TransactionStatus:
       type: uvarint
     - name: Message
       type: string
+    - name: Error
+      type: errors2.Error
+      marshal-as: reference
+      pointer: true
     - name: Result
       type: TransactionResult
       marshal-as: union

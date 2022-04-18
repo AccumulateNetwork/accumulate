@@ -16,6 +16,8 @@ import (
 	"golang.org/x/exp/rand"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 var rng = rand.New(rand.NewSource(0))
 
 func generateKey() tmed25519.PrivKey {

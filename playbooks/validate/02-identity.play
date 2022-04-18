@@ -17,14 +17,14 @@ engine:
 liteKey := GenerateKey()
 liteAddr := LiteAddress(liteKey, ACME)
 Faucet(liteAddr).
-	Wait()
+	Wait().Ok()
 Transaction(liteAddr).
 	WithSigner(liteAddr).
-	AddCredits(liteAddr, 100).
+	AddCredits(liteAddr, 200).
 		Oracle(5).
 	Initiate(liteKey).
-	Submit().
-	Wait()
+	Submit().Wait().Ok()
+Show("Ok")
 ```
 ## Create an ADI
 
@@ -36,8 +36,7 @@ Show(Transaction(liteAddr).
 		WithKey(aliceKey).
 		WithKeyBook("alice/book").
 	Initiate(liteKey).
-	Submit().
-	Wait())
+	Submit().Wait().Ok())
 Show(Get("alice"))
 ```
 
@@ -75,6 +74,21 @@ Identity (ADI)
 }
 ```
 
+## Recreating the ADI fails
+
+```go
+flow := Transaction(liteAddr).
+	WithSigner(liteAddr).
+	CreateIdentity("alice").
+		WithKey(aliceKey).
+		WithKeyBook("alice/book").
+	Initiate(liteKey).
+	Submit().Wait()
+flow[0].Ok() // CreateIdentity succeeded
+flow[1].NotOk("expected 'already exists'") // SyntheticCreateChain failed
+Show("Test passed - recreation failed")
+```
+
 ## Add credits to the key page
 
 ```go{ id: 2 }
@@ -83,8 +97,7 @@ Transaction(liteAddr).
 	AddCredits("alice/book/1", 100).
 		Oracle(5).
 	Initiate(liteKey).
-	Submit().
-	Wait()
+	Submit().Wait().Ok()
 Show(Get("alice/book/1"))
 ```
 

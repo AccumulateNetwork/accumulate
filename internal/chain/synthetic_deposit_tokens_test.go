@@ -6,9 +6,12 @@ import (
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func init() { acctesting.EnableDebugFeatures() }
 
 func TestSynthTokenDeposit_Lite(t *testing.T) {
 	t.Skip("TODO Broken")

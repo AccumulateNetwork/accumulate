@@ -1,0 +1,45 @@
+Status:
+  Unknown:
+    value: 0
+    description: means the status is unknown
+
+  # Transaction statuses and query responses
+  OK:
+    value: 200
+    description: means the request completed successfully
+  Delivered:
+    value: 201
+    description: means the transaction has been delivered
+  Pending:
+    value: 202
+    description: means the transaction is pending
+  Remote:
+    value: 203
+    description: means the transaction is a local reference to a remote
+
+  # Routing
+  WrongPartition:
+    value: 301
+    description: means the requested resource is assigned to a different network partition
+
+  # Client errors
+  BadRequest:
+    value: 400
+    description: means the request was invalid
+  Unauthenticated:
+    value: 401
+    description: means the signature could not be validated
+  InsufficientCredits:
+    value: 402
+    description: means the signer does not have sufficient credits to execute the transaction
+  Unauthorized:
+    value: 403
+    description: means the signer is not authorized to sign the transaction
+  NotFound:
+    value: 404
+    description: means a record could not be found
+
+  # Server errors
+  InternalError:
+    value: 500
+    description: means an internal error occured

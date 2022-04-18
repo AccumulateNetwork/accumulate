@@ -84,7 +84,7 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 	return status, nil
 }
 
-func (e NetEngine) WaitFor(hash [32]byte) (*protocol.TransactionStatus, *protocol.Transaction, error) {
+func (e NetEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
 	req := new(api.TxnQuery)
 	req.Txid = hash[:]
 	req.Wait = 10 * time.Second
@@ -93,12 +93,17 @@ func (e NetEngine) WaitFor(hash [32]byte) (*protocol.TransactionStatus, *protoco
 		return nil, nil, err
 	}
 
+	resp.Status.For = hash
+	statuses := []*protocol.TransactionStatus{resp.Status}
+	transactions := []*protocol.Transaction{resp.Transaction}
 	for _, hash := range resp.SyntheticTxids {
-		_, _, err := e.WaitFor(hash)
+		st, txn, err := e.WaitFor(hash)
 		if err != nil {
 			return nil, nil, err
 		}
+		statuses = append(statuses, st...)
+		transactions = append(transactions, txn...)
 	}
 
-	return resp.Status, resp.Transaction, nil
+	return statuses, transactions, nil
 }
