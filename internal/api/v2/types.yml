@@ -105,6 +105,30 @@ SignerMetadata:
     - name: AcceptThreshold
       type: uint
 
+MinorQueryResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: TxCount
+      description: shows how many transactions this block contains
+      type: uint
+    - name: TxIds
+      repeatable: true
+      type: bytes
+    - name: Transactions
+      type: TransactionQueryResponse
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
+
 MerkleState:
   non-binary: true
   incomparable: true
@@ -244,6 +268,20 @@ DirectoryQuery:
     - UrlQuery
     - QueryPagination
     - QueryOptions
+
+MinorBlocksQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
+  fields:
+    - name: TxFetchMode
+      type: query.TxFetchMode
+      optional: true
+    - name: FilterSynthAnchorsOnlyBlocks
+      type: bool
+      optional: true
 
 QueryOptions:
   non-binary: true

@@ -18,6 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
+const QueryMinorBlocksMaxCount = 1000 // Hardcoded ceiling for now
+
 type queryDirect struct {
 	Options
 	Subnet string
@@ -467,4 +469,56 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	res.Data = qr
 	res.Type = "key-page-index"
 	return res, nil
+}
+
+func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
+	if pagination.Count == 0 {
+		// TODO Return an empty array plus the total count?
+		return nil, validatorError(errors.New("count must be greater than 0"))
+	}
+
+	if pagination.Start > math.MaxInt64 {
+		return nil, errors.New("start is too large")
+	}
+
+	if pagination.Count > QueryMinorBlocksMaxCount {
+		return nil, fmt.Errorf("count is too large, the ceiling is fixed to %d", QueryMinorBlocksMaxCount)
+	}
+
+	req := &query.RequestMinorBlocks{
+		Account:                      u,
+		Start:                        pagination.Start,
+		Limit:                        pagination.Count,
+		TxFetchMode:                  txFetchMode,
+		FilterSynthAnchorsOnlyBlocks: includeSynthAnchors,
+	}
+	k, v, err := q.query(req, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if k != "minor-block" {
+		return nil, fmt.Errorf("unknown response type: want minor-block, got %q", k)
+	}
+
+	res := new(query.ResponseMinorBlocks)
+	err = res.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+
+	mres := new(MultiResponse)
+	mres.Type = "minorBlock"
+	mres.Items = make([]interface{}, 0)
+	mres.Start = pagination.Start
+	mres.Count = pagination.Count
+	mres.Total = res.Total
+	for _, entry := range res.Entries {
+		queryRes, err := packMinorQueryResponse(entry)
+		if err != nil {
+			return nil, err
+		}
+		mres.Items = append(mres.Items, queryRes)
+	}
+
+	return mres, nil
 }

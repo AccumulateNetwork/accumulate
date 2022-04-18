@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -65,6 +66,15 @@ type RequestKeyPageIndex struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Key       []byte   `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+}
+
+type RequestMinorBlocks struct {
+	fieldsSet                    []bool
+	Account                      *url.URL    `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start                        uint64      `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit                        uint64      `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	TxFetchMode                  TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
+	FilterSynthAnchorsOnlyBlocks bool        `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks" validate:"required"`
 }
 
 type RequestTxHistory struct {
@@ -128,6 +138,27 @@ type ResponseKeyPageIndex struct {
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 	Signer    *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
+}
+
+type ResponseMinorBlocks struct {
+	fieldsSet []bool
+	Start     uint64                `json:"start" form:"start" query:"start" validate:"required"`
+	End       uint64                `json:"end" form:"end" query:"end" validate:"required"`
+	Total     uint64                `json:"total" form:"total" query:"total" validate:"required"`
+	Entries   []*ResponseMinorEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+}
+
+type ResponseMinorEntry struct {
+	fieldsSet []bool
+	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
+	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
+	// BlockTime is the start time of the block..
+	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	// TxCount shows how many transactions this block contains.
+	TxCount uint64   `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
+	TxIds   [][]byte `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
+	// Transactions the transactions within this block.
+	Transactions []*ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
 
 type ResponsePending struct {
@@ -245,6 +276,22 @@ func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 }
 
 func (v *RequestKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
+	u := new(RequestMinorBlocks)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Start = v.Start
+	u.Limit = v.Limit
+	u.TxFetchMode = v.TxFetchMode
+	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+
+	return u
+}
+
+func (v *RequestMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RequestTxHistory) Copy() *RequestTxHistory {
 	u := new(RequestTxHistory)
@@ -387,6 +434,49 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 }
 
 func (v *ResponseKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseMinorBlocks) Copy() *ResponseMinorBlocks {
+	u := new(ResponseMinorBlocks)
+
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = make([]*ResponseMinorEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ResponseMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseMinorEntry) Copy() *ResponseMinorEntry {
+	u := new(ResponseMinorEntry)
+
+	u.BlockIndex = v.BlockIndex
+	if v.BlockTime != nil {
+		u.BlockTime = new(time.Time)
+		*u.BlockTime = *v.BlockTime
+	}
+	u.TxCount = v.TxCount
+	u.TxIds = make([][]byte, len(v.TxIds))
+	for i, v := range v.TxIds {
+		u.TxIds[i] = encoding.BytesCopy(v)
+	}
+	u.Transactions = make([]*ResponseByTxId, len(v.Transactions))
+	for i, v := range v.Transactions {
+		if v != nil {
+			u.Transactions[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ResponseMinorEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ResponsePending) Copy() *ResponsePending {
 	u := new(ResponsePending)
@@ -560,6 +650,31 @@ func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Key, u.Key)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.Limit == u.Limit) {
+		return false
+	}
+	if !(v.TxFetchMode == u.TxFetchMode) {
+		return false
+	}
+	if !(v.FilterSynthAnchorsOnlyBlocks == u.FilterSynthAnchorsOnlyBlocks) {
 		return false
 	}
 
@@ -764,6 +879,63 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	}
 	if !(v.Index == u.Index) {
 		return false
+	}
+
+	return true
+}
+
+func (v *ResponseMinorBlocks) Equal(u *ResponseMinorBlocks) bool {
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.End == u.End) {
+		return false
+	}
+	if !(v.Total == u.Total) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *ResponseMinorEntry) Equal(u *ResponseMinorEntry) bool {
+	if !(v.BlockIndex == u.BlockIndex) {
+		return false
+	}
+	switch {
+	case v.BlockTime == u.BlockTime:
+		// equal
+	case v.BlockTime == nil || u.BlockTime == nil:
+		return false
+	case !(*v.BlockTime == *u.BlockTime):
+		return false
+	}
+	if !(v.TxCount == u.TxCount) {
+		return false
+	}
+	if len(v.TxIds) != len(u.TxIds) {
+		return false
+	}
+	for i := range v.TxIds {
+		if !(bytes.Equal(v.TxIds[i], u.TxIds[i])) {
+			return false
+		}
+	}
+	if len(v.Transactions) != len(u.Transactions) {
+		return false
+	}
+	for i := range v.Transactions {
+		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1197,6 +1369,77 @@ func (v *RequestKeyPageIndex) IsValid() error {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
 		errs = append(errs, "field Key is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RequestMinorBlocks = []string{
+	1: "Account",
+	2: "Start",
+	3: "Limit",
+	4: "TxFetchMode",
+	5: "FilterSynthAnchorsOnlyBlocks",
+}
+
+func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(2, v.Start)
+	}
+	if !(v.Limit == 0) {
+		writer.WriteUint(3, v.Limit)
+	}
+	if !(v.TxFetchMode == 0) {
+		writer.WriteEnum(4, v.TxFetchMode)
+	}
+	if !(!v.FilterSynthAnchorsOnlyBlocks) {
+		writer.WriteBool(5, v.FilterSynthAnchorsOnlyBlocks)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestMinorBlocks) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Limit is missing")
+	} else if v.Limit == 0 {
+		errs = append(errs, "field Limit is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxFetchMode is missing")
+	} else if v.TxFetchMode == 0 {
+		errs = append(errs, "field TxFetchMode is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field FilterSynthAnchorsOnlyBlocks is missing")
+	} else if !v.FilterSynthAnchorsOnlyBlocks {
+		errs = append(errs, "field FilterSynthAnchorsOnlyBlocks is not set")
 	}
 
 	switch len(errs) {
@@ -1676,6 +1919,133 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 	}
 }
 
+var fieldNames_ResponseMinorBlocks = []string{
+	1: "Start",
+	2: "End",
+	3: "Total",
+	4: "Entries",
+}
+
+func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, v.Start)
+	writer.WriteUint(2, v.End)
+	writer.WriteUint(3, v.Total)
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(4, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ResponseMinorBlocks)
+	return buffer.Bytes(), err
+}
+
+func (v *ResponseMinorBlocks) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Start is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field End is missing")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Total is missing")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ResponseMinorEntry = []string{
+	1: "BlockIndex",
+	2: "BlockTime",
+	3: "TxCount",
+	4: "TxIds",
+	5: "Transactions",
+}
+
+func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.BlockIndex == 0) {
+		writer.WriteUint(1, v.BlockIndex)
+	}
+	if !(v.BlockTime == nil) {
+		writer.WriteTime(2, *v.BlockTime)
+	}
+	if !(v.TxCount == 0) {
+		writer.WriteUint(3, v.TxCount)
+	}
+	if !(len(v.TxIds) == 0) {
+		for _, v := range v.TxIds {
+			writer.WriteBytes(4, v)
+		}
+	}
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			writer.WriteValue(5, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ResponseMinorEntry)
+	return buffer.Bytes(), err
+}
+
+func (v *ResponseMinorEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BlockIndex is missing")
+	} else if v.BlockIndex == 0 {
+		errs = append(errs, "field BlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field BlockTime is missing")
+	} else if v.BlockTime == nil {
+		errs = append(errs, "field BlockTime is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field TxCount is missing")
+	} else if v.TxCount == 0 {
+		errs = append(errs, "field TxCount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field TxIds is missing")
+	} else if len(v.TxIds) == 0 {
+		errs = append(errs, "field TxIds is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Transactions is missing")
+	} else if len(v.Transactions) == 0 {
+		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ResponsePending = []string{
 	1: "Transactions",
 }
@@ -2044,6 +2414,34 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Limit = x
+	}
+	if x := new(TxFetchMode); reader.ReadEnum(4, x) {
+		v.TxFetchMode = *x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.FilterSynthAnchorsOnlyBlocks = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
+	v.fieldsSet = seen
+	return err
+}
+
 func (v *RequestTxHistory) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2269,6 +2667,71 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseKeyPageIndex)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *ResponseMinorBlocks) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ResponseMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.End = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Total = x
+	}
+	for {
+		if x := new(ResponseMinorEntry); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ResponseMinorBlocks)
+	v.fieldsSet = seen
+	return err
+}
+
+func (v *ResponseMinorEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ResponseMinorEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.BlockIndex = x
+	}
+	if x, ok := reader.ReadTime(2); ok {
+		v.BlockTime = &x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.TxCount = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(4); ok {
+			v.TxIds = append(v.TxIds, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(ResponseByTxId); reader.ReadValue(5, x.UnmarshalBinary) {
+			v.Transactions = append(v.Transactions, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ResponseMinorEntry)
 	v.fieldsSet = seen
 	return err
 }
@@ -2549,6 +3012,39 @@ func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.KeyPage = v.Signer
 	u.Index = v.Index
+	return json.Marshal(&u)
+}
+
+func (v *ResponseMinorBlocks) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Start   uint64                                 `json:"start"`
+		End     uint64                                 `json:"end"`
+		Total   uint64                                 `json:"total"`
+		Entries encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
+	}{}
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
+func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		BlockIndex   uint64                             `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                         `json:"blockTime,omitempty"`
+		TxCount      uint64                             `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]         `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*ResponseByTxId] `json:"transactions,omitempty"`
+	}{}
+	u.BlockIndex = v.BlockIndex
+	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -2928,6 +3424,61 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 		v.Signer = u.KeyPage
 	}
 	v.Index = u.Index
+	return nil
+}
+
+func (v *ResponseMinorBlocks) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Start   uint64                                 `json:"start"`
+		End     uint64                                 `json:"end"`
+		Total   uint64                                 `json:"total"`
+		Entries encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
+	}{}
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Start = u.Start
+	v.End = u.End
+	v.Total = u.Total
+	v.Entries = u.Entries
+	return nil
+}
+
+func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		BlockIndex   uint64                             `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                         `json:"blockTime,omitempty"`
+		TxCount      uint64                             `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]         `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*ResponseByTxId] `json:"transactions,omitempty"`
+	}{}
+	u.BlockIndex = v.BlockIndex
+	u.BlockTime = v.BlockTime
+	u.TxCount = v.TxCount
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
+	for i, x := range v.TxIds {
+		u.TxIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Transactions = v.Transactions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.BlockIndex = u.BlockIndex
+	v.BlockTime = u.BlockTime
+	v.TxCount = u.TxCount
+	v.TxIds = make([][]byte, len(u.TxIds))
+	for i, x := range u.TxIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding TxIds: %w", err)
+		} else {
+			v.TxIds[i] = x
+		}
+	}
+	v.Transactions = u.Transactions
 	return nil
 }
 

@@ -39,6 +39,12 @@ ErrorCode:
   Unauthorized:
     value: 33
     description: indicates the signer is not authorized to sign a transaction
+  QueryChainUpdatesError:
+    value: 34
+    description: is returned when chain-updates query fails
+  QueryEntriesError:
+    value: 35
+    description: is returned when entries query fails
 
   TxnRange:
     value: 6

@@ -56,6 +56,7 @@ validate docker:
   - apk add --no-cache docker-compose
   - docker-compose up -d
   - docker-compose run -e MNEMONIC="${MNEMONIC}" -e DN_NODES_DIR="${DN_NODES_DIR}" --rm --entrypoint bash tools /scripts/ci/validate.sh
+  - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-minor-blocks.sh
   - docker-compose down
 
 lint:

@@ -52,6 +52,9 @@ func jrpcFormatResponse(res interface{}, err error) interface{} {
 {{range .Methods}}
 {{if eq .Kind "query"}}
 {{if .Description}}// {{.Name}} {{.Description}}.{{end}}
+{{- if .Experimental}}
+//
+// WARNING: EXPERIMENTAL! {{end}}
 func (m *JrpcMethods) {{.Name}}(_ context.Context, params json.RawMessage) interface{} {
 	req := new({{.Input}})
 	err := m.parse(params, req)
@@ -63,6 +66,9 @@ func (m *JrpcMethods) {{.Name}}(_ context.Context, params json.RawMessage) inter
 }
 {{else if eq .Kind "execute"}}
 {{if .Description}}// {{.Name}} {{.Description}}.{{end}}
+{{- if .Experimental}}
+//
+// WARNING! EXPERIMENTAL! {{end}}
 func (m *JrpcMethods) {{.Name}}(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.{{.Input}}){{range .Validate}}, "{{.}}"{{end}})
 }
