@@ -113,6 +113,23 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 	return res, nil
 }
 
+func packMinorQueryResponse(entry *query.ResponseMinorEntry) (*MinorQueryResponse, error) {
+	var err error
+	resp := new(MinorQueryResponse)
+	resp.BlockIndex = entry.BlockIndex
+	resp.BlockTime = entry.BlockTime
+	resp.TxCount = entry.TxCount
+	resp.TxIds = entry.TxIds
+	for _, tx := range entry.Transactions {
+		if tx.Envelope != nil {
+			var txQryResp *TransactionQueryResponse
+			txQryResp, err = packTxResponse(tx, nil, tx.Envelope, tx.Status)
+			resp.Transactions = append(resp.Transactions, txQryResp)
+		}
+	}
+	return resp, err
+}
+
 func packChainValue(qr *query.ResponseChainEntry) *ChainQueryResponse {
 	resp := new(ChainQueryResponse)
 	resp.Type = "chainEntry"

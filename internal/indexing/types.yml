@@ -37,6 +37,34 @@ BlockStateSynthTxnEntry:
   - name: ChainEntry
     type: uvarint
 
+ChainUpdate:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Name
+      type: string
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Index
+      type: uint
+    - name: SourceIndex
+      type: uint
+    - name: SourceBlock
+      type: uint
+    - name: Entry
+      type: bytes
+
+
+BlockChainUpdatesIndex:
+  fields:
+    - name: Entries
+      repeatable: true
+      type: ChainUpdate
+      pointer: true
+      marshal-as: reference
+
 PendingTransactionsIndex:
   fields:
   - name: Transactions
