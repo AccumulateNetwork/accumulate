@@ -13,6 +13,7 @@ const (
 	QueryTypeData         // Query a specific data entry using the url and optional entry hash
 	QueryTypeDataSet      // Query a set of data given pagination parameters for a given URL
 	QueryTypeKeyPageIndex // Query key page index
+	QueryTypeMinorBlocks  // Query minor blocks
 )
 
 // Enum value maps for QueryType.
@@ -27,6 +28,7 @@ var (
 		QueryTypeData:         "QueryTypeData",
 		QueryTypeDataSet:      "QueryTypeDataSet",
 		QueryTypeKeyPageIndex: "QueryTypeKeyPageIndex",
+		QueryTypeMinorBlocks:  "QueryTypeMinorBlocks",
 	}
 	QueryTypeValue = map[string]QueryType{
 		"QueryTypeUnknown":      QueryTypeUnknown,
@@ -38,6 +40,7 @@ var (
 		"QueryTypeData":         QueryTypeData,
 		"QueryTypeDataSet":      QueryTypeDataSet,
 		"QueryTypeKeyPageIndex": QueryTypeKeyPageIndex,
+		"QueryTypeMinorBlocks":  QueryTypeMinorBlocks,
 	}
 )
 

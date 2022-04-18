@@ -43,19 +43,8 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 }
 
 type ChainUpdates struct {
-	chains  map[string]*ChainUpdate
-	Entries []ChainUpdate
-}
-
-// ChainUpdate records an update to a chain of an account.
-type ChainUpdate struct {
-	Account     *url.URL
-	Name        string
-	Type        protocol.ChainType
-	Index       uint64
-	SourceIndex uint64
-	SourceBlock uint64
-	Entry       []byte
+	chains  map[string]*indexing.ChainUpdate
+	Entries []indexing.ChainUpdate
 }
 
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
@@ -65,9 +54,9 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 }
 
 // DidUpdateChain records a chain update.
-func (c *ChainUpdates) DidUpdateChain(update ChainUpdate) {
+func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
 	if c.chains == nil {
-		c.chains = map[string]*ChainUpdate{}
+		c.chains = map[string]*indexing.ChainUpdate{}
 	}
 
 	str := strings.ToLower(fmt.Sprintf("%s#chain/%s", update.Account, update.Name))
@@ -94,7 +83,7 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 		}
 	}
 
-	var update ChainUpdate
+	var update indexing.ChainUpdate
 	update.Name = name
 	update.Type = typ
 	update.Account = u

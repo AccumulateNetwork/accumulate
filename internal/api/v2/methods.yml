@@ -91,6 +91,15 @@ QueryKeyPageIndex:
   output: ChainQueryResponse
   call-params: [Url, Key]
 
+QueryMinorBlocks:
+  description: queries an account's minor blocks
+  kind: query
+  experimental: true
+  rpc: query-minor-blocks
+  input: MinorBlocksQuery
+  output: MultiResponse
+  call-params: [Url, QueryPagination, TxFetchMode, FilterSynthAnchorsOnlyBlocks]
+
 Execute:
   description: submits a transaction
   rpc: execute
