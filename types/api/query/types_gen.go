@@ -3015,18 +3015,32 @@ func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ResponseMinorBlocks) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Start   uint64                                 `json:"start"`
+		End     uint64                                 `json:"end"`
+		Total   uint64                                 `json:"total"`
+		Entries encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
+	}{}
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
 func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		BlockIndex   uint64            `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time        `json:"blockTime,omitempty"`
-		TxCount      uint64            `json:"txCount,omitempty"`
-		TxIds        []*string         `json:"txIds,omitempty"`
-		Transactions []*ResponseByTxId `json:"transactions,omitempty"`
+		BlockIndex   uint64                             `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                         `json:"blockTime,omitempty"`
+		TxCount      uint64                             `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]         `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*ResponseByTxId] `json:"transactions,omitempty"`
 	}{}
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	u.TxCount = v.TxCount
-	u.TxIds = make([]*string, len(v.TxIds))
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
 	for i, x := range v.TxIds {
 		u.TxIds[i] = encoding.BytesToJSON(x)
 	}
@@ -3413,18 +3427,39 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ResponseMinorBlocks) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Start   uint64                                 `json:"start"`
+		End     uint64                                 `json:"end"`
+		Total   uint64                                 `json:"total"`
+		Entries encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
+	}{}
+	u.Start = v.Start
+	u.End = v.End
+	u.Total = v.Total
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Start = u.Start
+	v.End = u.End
+	v.Total = u.Total
+	v.Entries = u.Entries
+	return nil
+}
+
 func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		BlockIndex   uint64            `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time        `json:"blockTime,omitempty"`
-		TxCount      uint64            `json:"txCount,omitempty"`
-		TxIds        []*string         `json:"txIds,omitempty"`
-		Transactions []*ResponseByTxId `json:"transactions,omitempty"`
+		BlockIndex   uint64                             `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                         `json:"blockTime,omitempty"`
+		TxCount      uint64                             `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]         `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*ResponseByTxId] `json:"transactions,omitempty"`
 	}{}
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	u.TxCount = v.TxCount
-	u.TxIds = make([]*string, len(v.TxIds))
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
 	for i, x := range v.TxIds {
 		u.TxIds[i] = encoding.BytesToJSON(x)
 	}

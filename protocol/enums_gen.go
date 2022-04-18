@@ -860,9 +860,9 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeAlreadyDelivered, true
 	case "unauthorized":
 		return ErrorCodeUnauthorized, true
-	case "queryChainUpdatesError":
+	case "querychainupdateserror":
 		return ErrorCodeQueryChainUpdatesError, true
-	case "queryEntriesError":
+	case "queryentrieserror":
 		return ErrorCodeQueryEntriesError, true
 	default:
 		return 0, false

@@ -700,16 +700,16 @@ func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 
 func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
-		TxCount      uint64                      `json:"txCount,omitempty"`
-		TxIds        []*string                   `json:"txIds,omitempty"`
-		Transactions []*TransactionQueryResponse `json:"transactions,omitempty"`
+		BlockIndex   uint64                                       `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                                   `json:"blockTime,omitempty"`
+		TxCount      uint64                                       `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
 	}{}
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	u.TxCount = v.TxCount
-	u.TxIds = make([]*string, len(v.TxIds))
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
 	for i, x := range v.TxIds {
 		u.TxIds[i] = encoding.BytesToJSON(x)
 	}
@@ -1319,16 +1319,16 @@ func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 
 func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		BlockIndex   uint64                      `json:"blockIndex,omitempty"`
-		BlockTime    *time.Time                  `json:"blockTime,omitempty"`
-		TxCount      uint64                      `json:"txCount,omitempty"`
-		TxIds        []*string                   `json:"txIds,omitempty"`
-		Transactions []*TransactionQueryResponse `json:"transactions,omitempty"`
+		BlockIndex   uint64                                       `json:"blockIndex,omitempty"`
+		BlockTime    *time.Time                                   `json:"blockTime,omitempty"`
+		TxCount      uint64                                       `json:"txCount,omitempty"`
+		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
+		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
 	}{}
 	u.BlockIndex = v.BlockIndex
 	u.BlockTime = v.BlockTime
 	u.TxCount = v.TxCount
-	u.TxIds = make([]*string, len(v.TxIds))
+	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
 	for i, x := range v.TxIds {
 		u.TxIds[i] = encoding.BytesToJSON(x)
 	}

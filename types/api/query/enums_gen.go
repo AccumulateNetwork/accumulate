@@ -53,12 +53,12 @@ func (v TxFetchMode) String() string {
 
 // TxFetchModeByName returns the named Tx Fetch Mode.
 func TxFetchModeByName(name string) (TxFetchMode, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "expand":
 		return TxFetchModeExpand, true
 	case "ids":
 		return TxFetchModeIds, true
-	case "countOnly":
+	case "countonly":
 		return TxFetchModeCountOnly, true
 	case "omit":
 		return TxFetchModeOmit, true

@@ -782,6 +782,14 @@ func (v *TransactionChainIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *BlockChainUpdatesIndex) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Entries encoding.JsonList[*ChainUpdate] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
 func (v *BlockStateIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ProducedSynthTxns encoding.JsonList[*BlockStateSynthTxnEntry] `json:"producedSynthTxns,omitempty"`
@@ -837,6 +845,18 @@ func (v *TransactionChainIndex) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Entries = v.Entries
 	return json.Marshal(&u)
+}
+
+func (v *BlockChainUpdatesIndex) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Entries encoding.JsonList[*ChainUpdate] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Entries = u.Entries
+	return nil
 }
 
 func (v *BlockStateIndex) UnmarshalJSON(data []byte) error {
