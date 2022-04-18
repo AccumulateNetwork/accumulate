@@ -22,9 +22,6 @@ type TransactionMax uint64
 // VoteType specifies how the user wants to vote on a proposal (e.g. transaction, initiative, etc)
 type VoteType uint64
 
-// TxFetchMode specifies how much detail of the transactions should be included in the result set
-type TxFetchMode uint64
-
 type Signature interface {
 	encoding.BinaryValue
 	Type() SignatureType

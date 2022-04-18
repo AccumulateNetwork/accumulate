@@ -476,7 +476,7 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	}
 
 	// Create a BlockChainUpdates Index
-	err = indexing.BlockChainUpdates(block.Batch, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
+	err = indexing.BlockChainUpdates(block.Batch, &m.Network, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
 	if err != nil {
 		return err
 	}

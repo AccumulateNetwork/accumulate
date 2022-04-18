@@ -62,8 +62,7 @@ func printError(cmd *cobra.Command, err error) {
 	DidError = err
 }
 
-//nolint:gosimple
-func printGeneralTransactionParameters(w io.Writer, res *api2.TransactionQueryResponse) string {
+func printGeneralTransactionParameters(_ io.Writer, res *api2.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)

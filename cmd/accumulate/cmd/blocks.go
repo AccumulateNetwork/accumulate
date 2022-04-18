@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -10,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 const minorBlockApiTimeout = 2 * time.Minute
@@ -20,7 +19,7 @@ var blocksCmd = &cobra.Command{
 	Short: "Create and get blocks",
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
-		var txFetchMode protocol.TxFetchMode
+		var txFetchMode query.TxFetchMode
 		var filterAnBlks bool
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
@@ -43,7 +42,7 @@ var blocksCmd = &cobra.Command{
 					}
 				} else {
 					fmt.Println("Usage:")
-					PrintGetMinorBLocks()
+					PrintGetMinorBlocks()
 				}
 			default:
 				fmt.Println("Usage:")
@@ -56,16 +55,16 @@ var blocksCmd = &cobra.Command{
 	},
 }
 
-func parseFetchMode(args []string) (protocol.TxFetchMode, error) {
+func parseFetchMode(args []string) (query.TxFetchMode, error) {
 	if len(args) > 4 {
-		txFetchMode, ok := protocol.TxFetchModeByName(args[4])
+		txFetchMode, ok := query.TxFetchModeByName(args[4])
 		if ok {
 			return txFetchMode, nil
 		} else {
-			return protocol.TxFetchModeOmit, fmt.Errorf("%s is not a valid fetch mode. Use expand|ids|countOnly|omit", args[4])
+			return query.TxFetchModeOmit, fmt.Errorf("%s is not a valid fetch mode. Use expand|ids|countOnly|omit", args[4])
 		}
 	}
-	return protocol.TxFetchModeExpand, nil
+	return query.TxFetchModeExpand, nil
 }
 
 func parseFilterSynthAnchorOnlyBlocks(args []string) (bool, error) {
@@ -90,16 +89,15 @@ func init() {
 	blocksCmd.Flags().DurationVar(&BlocksWaitSynth, "wait-synth", 0, "Wait for synthetic transactions to complete")
 }
 
-func PrintGetMinorBLocks() {
+func PrintGetMinorBlocks() {
 	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [filter synth-anchors only blocks true|false (optional)] Get minor blocks")
 }
 
 func PrintBlocks() {
-	PrintGetMinorBLocks()
+	PrintGetMinorBlocks()
 }
 
-func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode protocol.TxFetchMode, filterAnBlks bool) error {
-	var res api2.MultiResponse
+func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode query.TxFetchMode, filterAnBlks bool) error {
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return err
@@ -121,11 +119,6 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 	params.TxFetchMode = txFetchMode
 	params.FilterSynthAnchorsOnlyBlocks = filterAnBlks
 
-	data, err := json.Marshal(params)
-	if err != nil {
-		return err
-	}
-
 	// Temporary increase timeout, we may get a large result set which takes a while to construct
 	globalTimeout := Client.Timeout
 	Client.Timeout = minorBlockApiTimeout
@@ -133,12 +126,13 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 		Client.Timeout = globalTimeout
 	}()
 
-	if err := Client.RequestAPIv2(context.Background(), "query-minor-blocks", json.RawMessage(data), &res); err != nil {
+	res, err := Client.QueryMinorBlocks(context.Background(), params)
+	if err != nil {
 		rpcError, err := PrintJsonRpcError(err)
 		cmd.Println(rpcError)
 		return err
 	}
 
-	err = FPrintMultiResponse(cmd.OutOrStderr(), &res)
+	err = FPrintMultiResponse(cmd.OutOrStderr(), res)
 	return err
 }

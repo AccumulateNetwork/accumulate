@@ -270,7 +270,7 @@ RequestMinorBlocks:
     - name: Limit
       type: uint
     - name: TxFetchMode
-      type: protocol.TxFetchMode
+      type: TxFetchMode
       marshal-as: enum
     - name: FilterSynthAnchorsOnlyBlocks
       type: bool

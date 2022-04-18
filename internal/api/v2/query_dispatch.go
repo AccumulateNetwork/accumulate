@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 type queryDispatch struct {
@@ -152,7 +152,7 @@ func (q *queryDispatch) QueryDataSet(url *url.URL, pagination QueryPagination, q
 	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
 
-func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPagination, txFetchMode protocol.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
+func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
 	r, err := q.Router.RouteAccount(url)
 	if err != nil {
 		return nil, err

@@ -943,8 +943,8 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		minorEntry.BlockIndex = idxEntry.BlockIndex
 		minorEntry.BlockTime = idxEntry.BlockTime
 
-		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < protocol.TxFetchModeOmit || req.FilterSynthAnchorsOnlyBlocks) {
-			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, idxEntry.BlockIndex).Get()
+		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < query.TxFetchModeOmit || req.FilterSynthAnchorsOnlyBlocks) {
+			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, idxEntry.BlockIndex).Get()
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
@@ -958,16 +958,16 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				}
 				minorEntry.TxCount++
 
-				if req.TxFetchMode <= protocol.TxFetchModeIds {
+				if req.TxFetchMode <= query.TxFetchModeIds {
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
-				if req.TxFetchMode == protocol.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
+				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
 						txt := qr.Envelope.Type()
 						if txt.IsInternal() {
 							internalTxCount++
-						} else if req.TxFetchMode == protocol.TxFetchModeExpand {
+						} else if req.TxFetchMode == query.TxFetchModeExpand {
 							minorEntry.Transactions = append(minorEntry.Transactions, qr)
 						}
 						if txt == protocol.TransactionTypeSyntheticAnchor && req.FilterSynthAnchorsOnlyBlocks {

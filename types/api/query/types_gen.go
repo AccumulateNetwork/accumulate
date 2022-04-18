@@ -70,11 +70,11 @@ type RequestKeyPageIndex struct {
 
 type RequestMinorBlocks struct {
 	fieldsSet                    []bool
-	Account                      *url.URL             `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Start                        uint64               `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Limit                        uint64               `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
-	TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
-	FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks" validate:"required"`
+	Account                      *url.URL    `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start                        uint64      `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit                        uint64      `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	TxFetchMode                  TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
+	FilterSynthAnchorsOnlyBlocks bool        `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks" validate:"required"`
 }
 
 type RequestTxHistory struct {
@@ -2422,7 +2422,7 @@ func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Limit = x
 	}
-	if x := new(protocol.TxFetchMode); reader.ReadEnum(4, x) {
+	if x := new(TxFetchMode); reader.ReadEnum(4, x) {
 		v.TxFetchMode = *x
 	}
 	if x, ok := reader.ReadBool(5); ok {

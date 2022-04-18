@@ -103,8 +103,8 @@ type MetricsResponse struct {
 type MinorBlocksQuery struct {
 	UrlQuery
 	QueryPagination
-	TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
-	FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
+	TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
+	FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
 }
 
 type MinorQueryResponse struct {
@@ -684,11 +684,11 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url                          *url.URL             `json:"url,omitempty"`
-		Start                        uint64               `json:"start,omitempty"`
-		Count                        uint64               `json:"count,omitempty"`
-		TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty"`
-		FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+		Url                          *url.URL          `json:"url,omitempty"`
+		Start                        uint64            `json:"start,omitempty"`
+		Count                        uint64            `json:"count,omitempty"`
+		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
+		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
@@ -1289,11 +1289,11 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url                          *url.URL             `json:"url,omitempty"`
-		Start                        uint64               `json:"start,omitempty"`
-		Count                        uint64               `json:"count,omitempty"`
-		TxFetchMode                  protocol.TxFetchMode `json:"txFetchMode,omitempty"`
-		FilterSynthAnchorsOnlyBlocks bool                 `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+		Url                          *url.URL          `json:"url,omitempty"`
+		Start                        uint64            `json:"start,omitempty"`
+		Count                        uint64            `json:"count,omitempty"`
+		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
+		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start

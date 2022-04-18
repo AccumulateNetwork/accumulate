@@ -3,6 +3,7 @@ package indexing
 import (
 	"errors"
 
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -13,8 +14,8 @@ type BlockChainUpdatesIndexer struct {
 }
 
 // BlockChainUpdates returns a block updates indexer.
-func BlockChainUpdates(batch *database.Batch, blockIndex uint64) *BlockChainUpdatesIndexer {
-	return &BlockChainUpdatesIndexer{batch.BlockChainUpdatesIndex(blockIndex).Index()}
+func BlockChainUpdates(batch *database.Batch, network *config.Network, blockIndex uint64) *BlockChainUpdatesIndexer {
+	return &BlockChainUpdatesIndexer{batch.Account(network.NodeUrl()).Index("Block", "Minor", blockIndex)}
 }
 
 // Get loads and unmarshals the index. Get returns an empty index if it has not

@@ -281,7 +281,7 @@ MinorBlocksQuery:
     - QueryPagination
   fields:
     - name: TxFetchMode
-      type: protocol.TxFetchMode
+      type: query.TxFetchMode
       optional: true
     - name: FilterSynthAnchorsOnlyBlocks
       type: bool
