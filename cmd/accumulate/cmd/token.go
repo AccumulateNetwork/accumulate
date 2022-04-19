@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 
@@ -143,7 +144,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
-	params.SupplyLimit = big.NewInt(int64(supplyLimit))
+	params.SupplyLimit = big.NewInt(int64(math.Pow10(prcsn)) * int64(supplyLimit))
 	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err
