@@ -20,7 +20,7 @@ func (b *MemoryDB) Close() error {
 }
 
 //InitDB initializes the MemoryDB and must be called prior to use of the object
-func (b *MemoryDB) InitDB(string) (err error) {
+func (b *MemoryDB) InitDB(string, string) (err error) {
 	b.buckets = make(map[[32]byte]*Bucket)
 	return err
 }
