@@ -315,6 +315,32 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKeyHash)
 }
 
+func TestCreateADIWithoutKeybook(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	n := nodes[subnets[1]][0]
+
+	liteAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+	batch := n.db.Begin(true)
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	require.NoError(t, batch.Commit())
+
+	_, _, err := n.Execute(func(send func(*Tx)) {
+		adi := new(protocol.CreateIdentity)
+		adi.Url = n.ParseUrl("RoadRunner")
+		adi.KeyHash = keyHash[:]
+
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
+		send(newTxn(sponsorUrl).
+			WithBody(adi).
+			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
+			Build())
+	})
+	require.Error(t, err)
+}
+
 func TestCreateLiteDataAccount(t *testing.T) {
 
 	//this test exercises WriteDataTo and SyntheticWriteData validators

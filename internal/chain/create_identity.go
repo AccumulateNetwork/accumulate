@@ -29,9 +29,11 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	}
 
 	bookUrl := selectBookUrl(body)
-	err = validateKeyBookUrl(bookUrl, body.Url)
-	if err != nil {
-		return nil, err
+	if bookUrl != nil {
+		err = validateKeyBookUrl(bookUrl, body.Url)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	identity := new(protocol.ADI)
