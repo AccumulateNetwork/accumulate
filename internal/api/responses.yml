@@ -1,0 +1,60 @@
+NodeStatus:
+  fields:
+    - name: Ok
+      type: bool
+
+NodeVersion:
+  fields:
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool
+    - name: IsTestNet
+      type: bool
+
+NodeDescription:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Partition
+      type: config.Network
+      marshal-as: reference
+
+NodeMetrics:
+  fields:
+    - name: TPS
+      type: float
+
+NetworkMetrics:
+  fields:
+    - name: TPS
+      type: float
+
+Submission:
+  fields:
+    - name: TransactionHash
+      type: hash
+    - name: SignatureHashes
+      type: hash
+      repeatable: true
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+
+AccountRecord:
+  union: { type: record }
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: union
+    - name: Chains
+      type: ChainState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Receipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true

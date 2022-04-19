@@ -22,6 +22,7 @@ const (
 	BigInt   = typegen.TypeCodeBigInt
 	Any      = typegen.TypeCodeAny
 	RawJson  = typegen.TypeCodeRawJson
+	Float    = typegen.TypeCodeFloat
 
 	// Basic     = typegen.MarshalAsBasic
 	// None      = typegen.MarshalAsNone
@@ -139,7 +140,7 @@ func goUnionMethod(field *Field, name string) string {
 
 func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type.Code {
-	case Bool, String, Duration, Time, Bytes, Uint, Int:
+	case Bool, String, Duration, Time, Bytes, Uint, Int, Float:
 		return typegen.TitleCase(field.Type.String()), false
 	case Url, Hash:
 		return typegen.TitleCase(field.Type.String()), true
@@ -197,6 +198,8 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 		typ = "time.Time"
 	case Any:
 		typ = "interface{}"
+	case Float:
+		typ = "float64"
 	}
 
 	if field.Pointer && !forNew {
@@ -265,7 +268,7 @@ func GoIsZero(field *Field, varName string) (string, error) {
 		return fmt.Sprintf("%s == nil", varName), nil
 	case Bool:
 		return fmt.Sprintf("!%s", varName), nil
-	case Uint, Int, Duration:
+	case Uint, Int, Duration, Float:
 		return fmt.Sprintf("%s == 0", varName), nil
 	case BigInt:
 		return fmt.Sprintf("(%s).Cmp(new(big.Int)) == 0", varName), nil
@@ -297,7 +300,7 @@ func GoJsonZeroValue(field *Field) (string, error) {
 		return "false", nil
 	case String, Hash:
 		return `""`, nil
-	case Uint, Int:
+	case Uint, Int, Float:
 		return "0", nil
 	}
 
@@ -320,7 +323,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 	var expr string
 	var wantPtr bool
 	switch field.Type.Code {
-	case Bool, String, Hash, Uint, Int, Duration, Time:
+	case Bool, String, Hash, Uint, Int, Float, Duration, Time:
 		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 	case Bytes, RawJson:
 		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false
@@ -395,7 +398,7 @@ func GoCopy(field *Field, dstName, srcName string) (string, error) {
 
 func goCopy(field *Field, dstName, srcName string) (string, error) {
 	switch field.Type.Code {
-	case Bool, String, Duration, Time, Uint, Int, Hash:
+	case Bool, String, Duration, Time, Uint, Float, Int, Hash:
 		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
 
 	case Bytes, RawJson:
