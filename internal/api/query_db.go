@@ -82,7 +82,7 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 			receipt.Error = errors.Wrap(errors.StatusUnknown, err)
 		} else {
 			receipt.LocalBlock = block
-			receipt.Receipt = *protocol.ReceiptFromManaged(mr)
+			receipt.Proof = *protocol.ReceiptFromManaged(mr)
 		}
 	}
 

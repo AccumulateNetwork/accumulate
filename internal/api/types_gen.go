@@ -85,7 +85,7 @@ type Receipt struct {
 	fieldsSet      []bool
 	LocalBlock     uint64           `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
-	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Proof          protocol.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	Error          *errors2.Error   `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
@@ -219,7 +219,7 @@ func (v *Receipt) Copy() *Receipt {
 
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
-	u.Receipt = *(&v.Receipt).Copy()
+	u.Proof = *(&v.Proof).Copy()
 	if v.Error != nil {
 		u.Error = (v.Error).Copy()
 	}
@@ -397,7 +397,7 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	if !(v.DirectoryBlock == u.DirectoryBlock) {
 		return false
 	}
-	if !((&v.Receipt).Equal(&u.Receipt)) {
+	if !((&v.Proof).Equal(&u.Proof)) {
 		return false
 	}
 	switch {
@@ -829,7 +829,7 @@ func (v *QueryStateOptions) IsValid() error {
 var fieldNames_Receipt = []string{
 	1: "LocalBlock",
 	2: "DirectoryBlock",
-	3: "Receipt",
+	3: "Proof",
 	4: "Error",
 }
 
@@ -843,8 +843,8 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(v.DirectoryBlock == 0) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
-	if !((v.Receipt).Equal(new(protocol.Receipt))) {
-		writer.WriteValue(3, &v.Receipt)
+	if !((v.Proof).Equal(new(protocol.Receipt))) {
+		writer.WriteValue(3, &v.Proof)
 	}
 	if !(v.Error == nil) {
 		writer.WriteValue(4, v.Error)
@@ -868,9 +868,9 @@ func (v *Receipt) IsValid() error {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Receipt is missing")
-	} else if (v.Receipt).Equal(new(protocol.Receipt)) {
-		errs = append(errs, "field Receipt is not set")
+		errs = append(errs, "field Proof is missing")
+	} else if (v.Proof).Equal(new(protocol.Receipt)) {
+		errs = append(errs, "field Proof is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Error is missing")
@@ -1217,7 +1217,7 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.DirectoryBlock = x
 	}
 	if x := new(protocol.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Receipt = *x
+		v.Proof = *x
 	}
 	if x := new(errors2.Error); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Error = x
