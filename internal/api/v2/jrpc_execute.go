@@ -10,7 +10,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) interface{} {
@@ -76,14 +75,15 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 }
 
 func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.FaucetUrl
+	txn.Body = req
 	env := new(protocol.Envelope)
-	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Header.Principal = protocol.FaucetUrl
-	env.Transaction.Body = req
+	env.Transaction = []*protocol.Transaction{txn}
 	sig, err := new(signing.Builder).
 		UseFaucet().
 		UseSimpleHash().
-		Initiate(env.Transaction)
+		Initiate(txn)
 	if err != nil {
 		return nil, nil, accumulateError(err)
 	}
@@ -92,7 +92,7 @@ func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
 	keySig := sig.(protocol.KeySignature)
 
 	txrq := new(TxRequest)
-	txrq.Origin = env.Transaction.Header.Principal
+	txrq.Origin = txn.Header.Principal
 	txrq.Signer.SignatureType = sig.Type()
 	txrq.Signer.Timestamp = sig.GetTimestamp()
 	txrq.Signer.PublicKey = keySig.GetPublicKey()
@@ -101,7 +101,7 @@ func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
 	txrq.Signer.UseSimpleHash = true
 	txrq.Signature = sig.GetSignature()
 
-	body, err := env.Transaction.Body.MarshalBinary()
+	body, err := txn.Body.MarshalBinary()
 	if err != nil {
 		return nil, nil, accumulateError(err)
 	}
@@ -124,6 +124,15 @@ func (r txRequestSigner) SetPublicKey(sig protocol.Signature) error {
 	case *protocol.RCD1Signature:
 		sig.PublicKey = r.Signer.PublicKey
 
+	case *protocol.BTCSignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.BTCLegacySignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.ETHSignature:
+		sig.PublicKey = r.Signer.PublicKey
+
 	default:
 		return fmt.Errorf("cannot set the public key on a %T", sig)
 	}
@@ -142,6 +151,15 @@ func (r txRequestSigner) Sign(sig protocol.Signature, message []byte) error {
 	case *protocol.RCD1Signature:
 		sig.Signature = r.Signature
 
+	case *protocol.BTCSignature:
+		sig.Signature = r.Signature
+
+	case *protocol.BTCLegacySignature:
+		sig.Signature = r.Signature
+
+	case *protocol.ETHSignature:
+		sig.Signature = r.Signature
+
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)
 	}
@@ -150,29 +168,25 @@ func (r txRequestSigner) Sign(sig protocol.Signature, message []byte) error {
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	envs, err := processExecuteRequest(req, payload)
+	env, err := processExecuteRequest(req, payload)
 	if err != nil {
 		return err
 	}
 
 	// Route the request
-	subnet, err := m.Router.Route(envs...)
+	subnet, err := m.Router.Route(env)
 	if err != nil {
 		return validatorError(err)
 	}
 
-	// Marshal the envelope(s)
-	var txData []byte
-	for _, env := range envs {
-		b, err := env.MarshalBinary()
-		if err != nil {
-			return accumulateError(err)
-		}
-		txData = append(txData, b...)
+	// Marshal the envelope
+	txData, err := env.MarshalBinary()
+	if err != nil {
+		return accumulateError(err)
 	}
 
 	// Submit the envelope(s)
-	resp, err := m.Router.Submit(ctx, subnet, txData, req.CheckOnly, false)
+	resp, err := m.Router.Submit(ctx, subnet, env, req.CheckOnly, false)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -181,11 +195,11 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	simpleHash := sha256.Sum256(txData)
 	res := new(TxResponse)
 	res.Code = uint64(resp.Code)
-	res.TransactionHash = envs[0].GetTxHash()
-	res.SignatureHashes = make([][]byte, len(envs[0].Signatures))
+	res.TransactionHash = env.Transaction[0].GetHash()
+	res.SignatureHashes = make([][]byte, len(env.Signatures))
 	res.SimpleHash = simpleHash[:]
 
-	for i, sig := range envs[0].Signatures {
+	for i, sig := range env.Signatures {
 		res.SignatureHashes[i] = sig.Hash()
 	}
 
@@ -221,25 +235,30 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 }
 
-func processExecuteRequest(req *TxRequest, payload []byte) ([]*protocol.Envelope, error) {
+func processExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, error) {
 	if req.IsEnvelope {
-		// Unmarshal all the envelopes
-		return transactions.UnmarshalAll(payload)
+		env := new(protocol.Envelope)
+		err := env.UnmarshalBinary(payload)
+		return env, err
 	}
 
-	body, err := protocol.UnmarshalTransaction(payload)
+	body, err := protocol.UnmarshalTransactionBody(payload)
 	if err != nil {
 		return nil, accumulateError(err)
 	}
 
 	// Build the envelope
+	txn := new(protocol.Transaction)
+	txn.Body = body
+	txn.Header.Principal = req.Origin
+	txn.Header.Memo = req.Memo
+	txn.Header.Metadata = req.Metadata
 	env := new(protocol.Envelope)
 	env.TxHash = req.TxHash
-	env.Transaction = new(protocol.Transaction)
-	env.Transaction.Body = body
-	env.Transaction.Header.Principal = req.Origin
-	env.Transaction.Header.Memo = req.Memo
-	env.Transaction.Header.Metadata = req.Metadata
+	env.Transaction = append(env.Transaction, txn)
+	if remote, ok := body.(*protocol.RemoteTransaction); ok && len(remote.Hash) == 0 {
+		remote.Hash = *(*[32]byte)(env.TxHash)
+	}
 
 	// Sign and initiate the transaction
 	sigBuilder := new(signing.Builder).
@@ -261,23 +280,19 @@ func processExecuteRequest(req *TxRequest, payload []byte) ([]*protocol.Envelope
 	}
 
 	var sig protocol.Signature
-	if env.Type() == protocol.TransactionTypeRemote {
-		sig, err = sigBuilder.Sign(env.GetTxHash())
+	if txn.Body.Type() == protocol.TransactionTypeRemote {
+		sig, err = sigBuilder.Sign(txn.GetHash())
 	} else {
-		sig, err = sigBuilder.Initiate(env.Transaction)
+		sig, err = sigBuilder.Initiate(txn)
 	}
 	if err != nil {
 		return nil, validatorError(err)
 	}
 	env.Signatures = append(env.Signatures, sig)
 
-	if !env.VerifyTxHash() {
-		return nil, validatorError(errors.New("invalid transaction hash"))
-	}
-
-	if !sig.Verify(env.GetTxHash()) {
+	if !sig.Verify(txn.GetHash()) {
 		return nil, validatorError(errors.New("invalid signature"))
 	}
 
-	return []*protocol.Envelope{env}, nil
+	return env, nil
 }

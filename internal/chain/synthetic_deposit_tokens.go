@@ -1,9 +1,9 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -14,11 +14,11 @@ func (SyntheticDepositTokens) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
 }
 
-func (SyntheticDepositTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticDepositTokens{}).Validate(st, tx)
 }
 
-func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// *big.Int, tokenChain, *url.URL
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
 	if !ok {
@@ -38,7 +38,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *protocol.Envelope) 
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
-		return nil, fmt.Errorf("could not find token account")
+		return nil, errors.NotFound("could not find token account")
 	} else if !body.Token.Equal(tok) {
 		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	} else {

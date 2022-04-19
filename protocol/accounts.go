@@ -7,7 +7,6 @@ import (
 
 type Account interface {
 	encoding.BinaryValue
-	CopyAsInterface() interface{}
 	Type() AccountType
 	GetUrl() *url.URL
 }

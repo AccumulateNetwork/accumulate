@@ -13,6 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 func TestStateDBConsistency(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
@@ -37,7 +39,7 @@ func TestStateDBConsistency(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	credits := 40.0
-	n.testLiteTx(10, credits)
+	n.testLiteTx(10, 1, credits)
 
 	for _, nodes := range nodes {
 		for _, node := range nodes {
@@ -73,5 +75,5 @@ func TestStateDBConsistency(t *testing.T) {
 	nodes = RunTestNet(t, subnets, daemons, getDb, false, nil)
 	n = nodes[subnets[1]][0]
 
-	n.testLiteTx(10, credits)
+	n.testLiteTx(10, 1, credits)
 }

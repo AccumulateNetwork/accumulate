@@ -21,3 +21,34 @@ txSyntheticTxns:
     - name: Txids
       type: chain
       repeatable: true
+
+SigOrTxn:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union
+    - name: Hash
+      type: hash
+
+merkleState:
+  fields:
+    - name: Count
+      type: uint
+    - name: Pending
+      type: hash
+      repeatable: true
+
+exampleFullAccountState:
+  fields:
+    - name: State
+      type: protocol.Account
+      marshal-as: union
+    - name: Chains
+      type: merkleState
+      marshal-as: reference
+      pointer: true
+      repeatable: true

@@ -21,6 +21,14 @@ go test:
   - go build -v ./...
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname
 
+playbooks:
+  stage: test
+  extends: [ .rules all, .go ]
+  needs: []
+  script:
+  - go build ./cmd/play-accumulate
+  - find playbooks -name '*.play' -exec ./play-accumulate {} \;
+
 validate simple:
   stage: test
   extends: [ .rules all, .go ]
@@ -40,14 +48,15 @@ validate docker:
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
-    NODE_ROOT: /nodes/dn/Node0
+    DN_NODES_DIR: /nodes/dn
   script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3
+  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e NODE_ROOT="${NODE_ROOT}" --rm --entrypoint bash tools /scripts/ci/validate.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e DN_NODES_DIR="${DN_NODES_DIR}" --rm --entrypoint bash tools /scripts/ci/validate.sh
+  - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-minor-blocks.sh
   - docker-compose down
 
 lint:

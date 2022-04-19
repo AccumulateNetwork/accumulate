@@ -10,11 +10,11 @@ type IssueTokens struct{}
 
 func (IssueTokens) Type() protocol.TransactionType { return protocol.TransactionTypeIssueTokens }
 
-func (IssueTokens) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (IssueTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (IssueTokens{}).Validate(st, tx)
 }
 
-func (IssueTokens) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.IssueTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.IssueTokens), tx.Transaction.Body)

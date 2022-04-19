@@ -19,6 +19,9 @@ LegacyED25519Signature:
       type: VoteType
       marshal-as: enum
       optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
 
 RCD1Signature:
   union: { type: signature }
@@ -38,6 +41,9 @@ RCD1Signature:
     - name: Vote
       type: VoteType
       marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
       optional: true
 
 ED25519Signature:
@@ -59,16 +65,91 @@ ED25519Signature:
       type: VoteType
       marshal-as: enum
       optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
+
+BTCSignature:
+  union: { type: signature }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
+
+BTCLegacySignature:
+  union: { type: signature }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
+
+ETHSignature:
+  union: { type: signature }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Signer
+      type: url
+      pointer: true
+    - name: SignerVersion
+      type: uint
+    - name: Timestamp
+      type: uint
+      optional: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: TransactionHash
+      type: hash
+      optional: true
 
 ReceiptSignature:
   union: { type: signature }
-  embeddings:
-  - Receipt
   fields:
     - name: SourceNetwork
       description: is the network that produced the transaction
       type: url
       pointer: true
+    - type: Receipt
+      marshal-as: reference
+    - name: TransactionHash
+      type: hash
+      optional: true
 
 SyntheticSignature:
   union: { type: signature }
@@ -85,6 +166,9 @@ SyntheticSignature:
     - name: SequenceNumber
       description: is the sequence number of the transaction
       type: uint
+    - name: TransactionHash
+      type: hash
+      optional: true
 
 InternalSignature:
   union: { type: signature }
@@ -94,6 +178,9 @@ InternalSignature:
       description: is the network that produced the transaction
       type: url
       pointer: true
+    - name: TransactionHash
+      type: hash
+      optional: true
 
 ForwardedSignature:
   union: { type: signature }
@@ -101,11 +188,7 @@ ForwardedSignature:
   fields:
     - name: Signature
       type: KeySignature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalKeySignature
+      marshal-as: union
     - name: Signer
       type: Signer
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: UnmarshalSigner
+      marshal-as: union

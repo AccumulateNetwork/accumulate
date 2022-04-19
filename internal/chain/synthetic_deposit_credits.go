@@ -12,11 +12,11 @@ func (SyntheticDepositCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositCredits
 }
 
-func (SyntheticDepositCredits) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticDepositCredits{}).Validate(st, tx)
 }
 
-func (SyntheticDepositCredits) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositCredits)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), tx.Transaction.Body)

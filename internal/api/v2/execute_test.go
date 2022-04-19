@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	core "github.com/tendermint/tendermint/rpc/core/types"
+	core "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
@@ -17,6 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func init() { acctesting.EnableDebugFeatures() }
 
 func TestExecuteCheckOnly(t *testing.T) {
 	env := acctesting.NewTransaction().

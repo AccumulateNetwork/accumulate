@@ -10,6 +10,6 @@ func (Package) ConstructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte,
 	return constructFaucetTxn(req)
 }
 
-func (Package) ProcessExecuteRequest(req *TxRequest, payload []byte) ([]*protocol.Envelope, error) {
+func (Package) ProcessExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, error) {
 	return processExecuteRequest(req, payload)
 }

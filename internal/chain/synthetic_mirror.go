@@ -12,11 +12,11 @@ func (SyntheticMirror) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticMirror
 }
 
-func (SyntheticMirror) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticMirror) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (SyntheticMirror{}).Validate(st, tx)
 }
 
-func (SyntheticMirror) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (SyntheticMirror) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticMirror)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticMirror), tx.Transaction.Body)

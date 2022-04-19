@@ -2,11 +2,11 @@ package chain
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -104,7 +104,7 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 	}
 	if env.Transaction == nil {
 		// This is a signature, not an envelope
-		return nil, fmt.Errorf("transaction %X %w", txid, storage.ErrNotFound)
+		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 	return env.Transaction, nil
 }

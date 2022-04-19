@@ -49,9 +49,7 @@ TransactionQueryResponse:
     - name: Signatures
       repeatable: true
       type: protocol.Signature
-      marshal-as: value
-      zero-value: nil
-      unmarshal-with: protocol.UnmarshalSignature
+      marshal-as: union
     - name: Status
       type: protocol.TransactionStatus
       pointer: true
@@ -91,9 +89,7 @@ SignaturePage:
       marshal-as: reference
     - name: Signatures
       type: protocol.Signature
-      marshal-as: value
-      unmarshal-with: protocol.UnmarshalSignature
-      zero-value: nil
+      marshal-as: union
       repeatable: true
 
 SignerMetadata:
@@ -108,6 +104,30 @@ SignerMetadata:
       pointer: true
     - name: AcceptThreshold
       type: uint
+
+MinorQueryResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: TxCount
+      description: shows how many transactions this block contains
+      type: uint
+    - name: TxIds
+      repeatable: true
+      type: bytes
+    - name: Transactions
+      type: TransactionQueryResponse
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
 
 MerkleState:
   non-binary: true
@@ -248,6 +268,20 @@ DirectoryQuery:
     - UrlQuery
     - QueryPagination
     - QueryOptions
+
+MinorBlocksQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
+  fields:
+    - name: TxFetchMode
+      type: query.TxFetchMode
+      optional: true
+    - name: FilterSynthAnchorsOnlyBlocks
+      type: bool
+      optional: true
 
 QueryOptions:
   non-binary: true

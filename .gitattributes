@@ -1,0 +1,2 @@
+# Render playbooks as markdown
+*.play gitlab-language=markdown

@@ -108,7 +108,7 @@ var txnTests = []*TCG{
 		txnTest("adi", &UpdateKeyPage{Operation: []protocol.KeyPageOperation{&AddKeyOperation{Entry: KeySpecParams{KeyHash: key[32:]}}}}),
 	}},
 	{Name: "SignPending", Cases: []*TC{
-		txnTest("adi", &RemoteTransactionBody{}),
+		txnTest("adi", &RemoteTransaction{}),
 	}},
 	{Name: "SyntheticCreateChain", Cases: []*TC{
 		txnTest("adi", &SyntheticCreateChain{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
@@ -181,7 +181,7 @@ func txnTest(origin string, body TransactionBody) *TC {
 	signer.Timestamp = uint64(rand.Uint32())
 	env := new(Envelope)
 	txn := new(Transaction)
-	env.Transaction = txn
+	env.Transaction = []*Transaction{txn}
 	txn.Header.Principal = originUrl
 	txn.Body = body
 

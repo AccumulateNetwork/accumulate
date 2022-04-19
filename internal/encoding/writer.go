@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"time"
 
@@ -150,10 +151,18 @@ func (w *Writer) WriteInt(n uint, v int64) {
 	w.writeInt(n, v)
 }
 
-// WriteInt writes the value as a varint-encoded unsigned integer.
+// WriteUint writes the value as a varint-encoded unsigned integer.
 func (w *Writer) WriteUint(n uint, v uint64) {
 	w.writeField(n)
 	w.writeUint(n, v)
+}
+
+// WriteFloat writes the value as a IEEE 754 encoded floating point number.
+func (w *Writer) WriteFloat(n uint, v float64) {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], math.Float64bits(v))
+	w.writeField(n)
+	w.writeRaw(n, b[:])
 }
 
 // WriteBool writes the value as a varint-encoded unsigned integer.

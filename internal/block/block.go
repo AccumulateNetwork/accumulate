@@ -16,44 +16,13 @@ type Block struct {
 	Batch  *database.Batch
 }
 
-type Delivery struct {
-	parent      *Delivery
-	Signatures  []protocol.Signature
-	Transaction *protocol.Transaction
-	Remote      []protocol.KeySignature
-	State       chain.ProcessTransactionState
-}
-
-// IsForwarded returns true if the transaction was delivered within a
-// SyntheticForwardedTransaction.
-func (d *Delivery) IsForwarded() bool {
-	if d.parent == nil {
-		return false
-	}
-	return d.parent.Transaction.Body.Type() == protocol.TransactionTypeSyntheticForwardTransaction
-}
-
-func (d *Delivery) prepare(block *Block, envelope *protocol.Envelope) (*Delivery, error) {
-	// Load the transaction using the block batch
-	transaction, err := loadTransaction(block.Batch, envelope)
+func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+	err := delivery.LoadTransaction(block.Batch)
 	if err != nil {
 		return nil, err
 	}
 
-	e := new(Delivery)
-	e.parent = d
-	e.Signatures = envelope.Signatures
-	e.Transaction = transaction
-	return e, nil
-}
-
-func PrepareDelivery(block *Block, envelope *protocol.Envelope) (*Delivery, error) {
-	return (*Delivery)(nil).prepare(block, envelope)
-}
-
-func (x *Executor) ExecuteEnvelope(block *Block, delivery *Delivery) (*protocol.TransactionStatus, error) {
 	// Process signatures
-	var err error
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
@@ -160,12 +129,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *Delivery) (*protocol.
 	}
 
 	// Process additional transactions
-	for _, envelope := range delivery.State.AdditionalTransactions {
-		delivery, err := delivery.prepare(block, envelope)
-		if err != nil {
-			return nil, err
-		}
-
+	for _, delivery := range delivery.State.AdditionalTransactions {
 		// Discard the status of additional transactions
 		_, err = x.ExecuteEnvelope(block, delivery)
 		if err != nil {

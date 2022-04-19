@@ -115,7 +115,10 @@ func (s *Builder) prepare(init bool) (protocol.Signature, error) {
 
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519,
-		protocol.SignatureTypeRCD1:
+		protocol.SignatureTypeRCD1,
+		protocol.SignatureTypeBTC,
+		protocol.SignatureTypeETH,
+		protocol.SignatureTypeBTCLegacy:
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeInternal:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
@@ -147,9 +150,51 @@ func (s *Builder) prepare(init bool) (protocol.Signature, error) {
 		sig.Timestamp = s.Timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
+	case protocol.SignatureTypeBTC:
+		sig := new(protocol.BTCSignature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = s.Timestamp
+		return sig, s.Signer.SetPublicKey(sig)
+
+	case protocol.SignatureTypeBTCLegacy:
+		sig := new(protocol.BTCLegacySignature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = s.Timestamp
+		return sig, s.Signer.SetPublicKey(sig)
+
+	case protocol.SignatureTypeETH:
+		sig := new(protocol.ETHSignature)
+		sig.Signer = s.Url
+		sig.SignerVersion = s.Version
+		sig.Timestamp = s.Timestamp
+		return sig, s.Signer.SetPublicKey(sig)
+
 	default:
 		panic("unreachable")
 	}
+}
+
+func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.ED25519Signature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.RCD1Signature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.BTCSignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.BTCLegacySignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.ETHSignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	default:
+		panic("unreachable")
+	}
+
+	return s.Signer.Sign(sig, hash)
 }
 
 func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
@@ -158,7 +203,7 @@ func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
 		return nil, err
 	}
 
-	return sig, s.Signer.Sign(sig, message)
+	return sig, s.sign(sig, message)
 }
 
 func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
@@ -178,7 +223,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 		txn.Header.Initiator = *(*[32]byte)(init)
 	}
 
-	return sig, s.Signer.Sign(sig, txn.GetHash())
+	return sig, s.sign(sig, txn.GetHash())
 }
 
 func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router) (protocol.Signature, error) {
@@ -215,5 +260,6 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 		txn.Header.Initiator = *(*[32]byte)(initHash)
 	}
 
+	initSig.TransactionHash = *(*[32]byte)(txn.GetHash())
 	return initSig, nil
 }

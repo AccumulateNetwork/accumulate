@@ -3,7 +3,6 @@ package simulator
 import (
 	"fmt"
 	"sync"
-	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -12,16 +11,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"golang.org/x/sync/errgroup"
 )
 
 type Simulator struct {
-	testing.TB
+	tb
 	Logger    log.Logger
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
@@ -29,28 +30,28 @@ type Simulator struct {
 	routingOverrides map[[32]byte]string
 }
 
-func newLogger(t testing.TB) log.Logger {
+func (s *Simulator) newLogger() log.Logger {
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
+		return logging.NewTestLogger(s, "plain", acctesting.DefaultLogLevels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
-	require.NoError(t, err)
+	require.NoError(s, err)
 	level, writer, err := logging.ParseLogLevel(acctesting.DefaultLogLevels, w)
-	require.NoError(t, err)
+	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
-	require.NoError(t, err)
+	require.NoError(s, err)
 	return logger
 }
 
-func New(t testing.TB, bvnCount int) *Simulator {
+func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
 
 	// Initialize the simulartor and network
 	sim := new(Simulator)
 	sim.routingOverrides = map[[32]byte]string{}
 	sim.TB = t
-	sim.Logger = newLogger(t).With("module", "simulator")
+	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
 	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
@@ -63,7 +64,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 		subnet := &sim.Subnets[i]
 		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
 
-		logger := newLogger(t).With("subnet", subnet.ID)
+		logger := sim.newLogger().With("subnet", subnet.ID)
 		key := acctesting.GenerateKey(t.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
@@ -80,7 +81,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 			Network: network,
 			Router:  sim.Router(),
 		}, db)
-		require.NoError(t, err)
+		require.NoError(sim, err)
 
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database: db,
@@ -90,7 +91,7 @@ func New(t testing.TB, bvnCount int) *Simulator {
 
 	for _, subnet := range sim.Subnets {
 		x := sim.Subnet(subnet.ID)
-		require.NoError(t, x.Executor.Start())
+		require.NoError(sim, x.Executor.Start())
 	}
 
 	return sim
@@ -164,28 +165,29 @@ func (s *Simulator) InitChain() {
 func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) {
 	s.Helper()
 
-	wg := new(sync.WaitGroup)
-	wg.Add(len(s.Subnets))
-
+	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
-		go func(x *ExecEntry) {
-			defer wg.Done()
-
-			submitted := x.TakeSubmitted()
-			status := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
+		x := s.Subnet(subnet.ID)
+		submitted := x.TakeSubmitted()
+		errg.Go(func() error {
+			status, err := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
+			if err != nil {
+				return err
+			}
 			if statusChan == nil {
-				return
+				return nil
 			}
 
-			for i, status := range status {
-				status.For = *(*[32]byte)(submitted[i].GetTxHash())
+			for _, status := range status {
 				statusChan <- status
 			}
-		}(s.Subnet(subnet.ID))
+			return nil
+		})
 	}
 
 	// Wait for all subnets to complete
-	wg.Wait()
+	err := errg.Wait()
+	require.NoError(tb{s}, err)
 
 	// Wait for the governor
 	for _, subnet := range s.Subnets {
@@ -214,11 +216,18 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		require.NoError(s, err)
 		x := s.Subnet(subnet)
 
-		// Check - check a copy so we don't cause strange errors by changing
-		// something
-		_, err = CheckTx(s, x.Database, x.Executor, envelope.Copy())
+		// Normalize - use a copy to avoid weird issues caused by modifying values
+		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
 		if err != nil {
 			return nil, err
+		}
+
+		// Check
+		for _, delivery := range deliveries {
+			_, err = CheckTx(s, x.Database, x.Executor, delivery)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Enqueue
@@ -234,9 +243,11 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	s.Helper()
 
 	ch := make(chan *protocol.TransactionStatus)
-	ids := make(map[[32]byte]bool, len(envelopes))
+	ids := map[[32]byte]bool{}
 	for _, env := range envelopes {
-		ids[*(*[32]byte)(env.GetTxHash())] = true
+		for _, d := range NormalizeEnvelope(s, env) {
+			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
+		}
 	}
 
 	_, err := s.Submit(envelopes...)
@@ -282,16 +293,18 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	s.Helper()
 
 	for _, envelope := range envelopes {
-		s.WaitForTransaction(status, envelope.GetTxHash())
+		for _, delivery := range NormalizeEnvelope(s, envelope) {
+			s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())
+		}
 	}
 }
 
-func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) bool, txnHash []byte) {
+func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
 	s.Helper()
 
 	var x *ExecEntry
 	for i := 0; i < 50; i++ {
-		x = s.findTxn(status, txnHash)
+		x = s.findTxn(statusCheck, txnHash)
 		if x != nil {
 			break
 		}
@@ -299,18 +312,30 @@ func (s *Simulator) WaitForTransaction(status func(*protocol.TransactionStatus) 
 		s.ExecuteBlock(nil)
 	}
 	if x == nil {
-		s.Fatalf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
+		s.Errorf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
+		s.FailNow()
 		panic("unreachable")
 	}
 
 	batch := x.Database.Begin(false)
-	synth, err := batch.Transaction(txnHash).GetSyntheticTxns()
+	synth, err1 := batch.Transaction(txnHash).GetSyntheticTxns()
+	state, err2 := batch.Transaction(txnHash).GetState()
+	status, err3 := batch.Transaction(txnHash).GetStatus()
 	batch.Discard()
-	require.NoError(s, err)
+	require.NoError(s, err1)
+	require.NoError(s, err2)
+	require.NoError(s, err3)
 
+	status.For = *(*[32]byte)(txnHash)
+	statuses := []*protocol.TransactionStatus{status}
+	transactions := []*protocol.Transaction{state.Transaction}
 	for _, id := range synth.Hashes {
-		s.WaitForTransaction(status, id[:])
+		st, txn := s.WaitForTransactionFlow(statusCheck, id[:])
+		statuses = append(statuses, st...)
+		transactions = append(transactions, txn...)
 	}
+
+	return statuses, transactions
 }
 
 type ExecEntry struct {

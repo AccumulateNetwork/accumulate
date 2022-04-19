@@ -11,6 +11,7 @@ func TestBatchCommit(t *testing.T) {
 	db := OpenInMemory(nil)
 	ledgerUrl := protocol.DnUrl().JoinPath(protocol.Ledger)
 
+	// Setup
 	batch := db.Begin(true)
 	defer batch.Discard()
 	ledger := new(protocol.InternalLedger)
@@ -20,9 +21,11 @@ func TestBatchCommit(t *testing.T) {
 	require.NoError(t, batch.Account(ledgerUrl).PutState(ledger))
 	require.NoError(t, batch.Commit())
 
+	// Create a long-running batch
 	batch = db.Begin(true)
 	defer batch.Discard()
 
+	// Load, update, and store the ledger, then commit
 	sub := batch.Begin(true)
 	defer sub.Discard()
 	ledger = nil
@@ -32,6 +35,7 @@ func TestBatchCommit(t *testing.T) {
 	require.NoError(t, sub.Account(ledgerUrl).PutState(ledger))
 	require.NoError(t, sub.Commit())
 
+	// Reload the ledger in a new batch and verify that the update is seen
 	sub = batch.Begin(false)
 	defer sub.Discard()
 	ledger = nil

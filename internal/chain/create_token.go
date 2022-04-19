@@ -10,11 +10,11 @@ type CreateToken struct{}
 
 func (CreateToken) Type() protocol.TransactionType { return protocol.TransactionTypeCreateToken }
 
-func (CreateToken) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateToken) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateToken{}).Validate(st, tx)
 }
 
-func (CreateToken) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateToken)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), tx.Transaction.Body)

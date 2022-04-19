@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
@@ -262,16 +263,31 @@ func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
 func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte, err error) {
 	n.t.Helper()
 
-	var blob []byte
+	bulk := new(protocol.Envelope)
 	inBlock(func(tx *protocol.Envelope) {
-		for _, sig := range tx.Signatures {
-			sigHashes = append(sigHashes, *(*[32]byte)(sig.Hash()))
-		}
-		txnHashes = append(txnHashes, *(*[32]byte)(tx.GetTxHash()))
-		b, err := tx.MarshalBinary()
+		deliveries, err := chain.NormalizeEnvelope(tx)
 		require.NoError(n.t, err)
-		blob = append(blob, b...)
+		for _, d := range deliveries {
+			bulk.Signatures = append(bulk.Signatures, d.Signatures...)
+			bulk.Transaction = append(bulk.Transaction, d.Transaction)
+		}
 	})
+
+	for _, sig := range bulk.Signatures {
+		sigHashes = append(sigHashes, *(*[32]byte)(sig.Hash()))
+	}
+	for _, txn := range bulk.Transaction {
+		remote, ok := txn.Body.(*protocol.RemoteTransaction)
+		switch {
+		case !ok:
+			txnHashes = append(txnHashes, *(*[32]byte)(txn.GetHash()))
+		case remote.Hash != [32]byte{}:
+			txnHashes = append(txnHashes, remote.Hash)
+		}
+	}
+
+	blob, err := bulk.MarshalBinary()
+	require.NoError(n.t, err)
 
 	// Submit all the transactions as a batch
 	st := n.client.SubmitTx(context.Background(), blob, true)
@@ -405,7 +421,7 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	var typ protocol.TransactionType
 	require.NoError(n.t, typ.UnmarshalJSON([]byte(strconv.Quote(resp.Type))))
 
-	resp.Data, err = protocol.NewTransaction(typ)
+	resp.Data, err = protocol.NewTransactionBody(typ)
 	require.NoError(n.t, err)
 	require.NoError(n.t, json.Unmarshal(data, resp.Data))
 

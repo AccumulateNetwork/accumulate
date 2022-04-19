@@ -2,11 +2,12 @@ package block
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -26,7 +27,7 @@ func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) 
 	return status.Initiator != nil, nil
 }
 
-func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
+func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
 	// Is this the initial signature?
 	initiated, err := hasBeenInitiated(batch, delivery.Transaction)
 	if err != nil {
@@ -42,7 +43,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, s
 
 	// Basic validation
 	if !signature.Verify(delivery.Transaction.GetHash()) {
-		return nil, errors.New("invalid")
+		return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
@@ -76,7 +77,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, s
 	// as local
 	remote := delivery.Transaction.Body.Type().IsUser() && !delivery.Transaction.Header.Principal.LocalTo(signature.GetSigner())
 	if !initiated && (!remote || forwarded) {
-		stateEnv := new(protocol.Envelope)
+		stateEnv := new(database.SigOrTxn)
 		stateEnv.Transaction = delivery.Transaction
 		db := batch.Transaction(delivery.Transaction.GetHash())
 		err = db.PutState(stateEnv)
@@ -93,9 +94,9 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *Delivery, s
 	sigHash := sha256.Sum256(sigData)
 
 	// Store the signature as an envelope
-	env := new(protocol.Envelope)
-	env.TxHash = delivery.Transaction.GetHash()
-	env.Signatures = []protocol.Signature{signature}
+	env := new(database.SigOrTxn)
+	env.Hash = *(*[32]byte)(delivery.Transaction.GetHash())
+	env.Signature = signature
 	err = batch.Transaction(sigHash[:]).PutState(env)
 	if err != nil {
 		return nil, fmt.Errorf("store envelope: %w", err)
@@ -251,7 +252,7 @@ func validateLocalLiteSignature(transaction *protocol.Transaction, signer *proto
 // validateRemoteLiteSignature verifies that the lite token account is
 // authorized to sign for the principal.
 func validateRemoteLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
-	return protocol.NewError(protocol.ErrorCodeUnauthorized, errors.New("remote signatures are not supported for lite accounts"))
+	return errors.Format(errors.StatusUnauthorized, "remote signatures are not supported for lite accounts")
 }
 
 // validateLocalPageSignature verifies that the key page is authorized to sign for
@@ -318,6 +319,13 @@ func validateRemotePageSignature(_ *database.Batch, transaction *protocol.Transa
 //
 // Otherwise, the fee is the base signature fee + signature data surcharge.
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
+	// Don't charge fees for internal administrative functions
+	signer := signature.GetSigner()
+	_, isBvn := protocol.ParseBvnUrl(signer)
+	if isBvn || protocol.IsDnUrl(signer) {
+		return 0, nil
+	}
+
 	// Compute the signature fee
 	fee, err := protocol.ComputeSignatureFee(signature)
 	if err != nil {
@@ -357,7 +365,7 @@ func validateNormalSignature(batch *database.Batch, transaction *protocol.Transa
 		return fmt.Errorf("calculating fee: %w", err)
 	}
 	if !signer.CanDebitCredits(fee.AsUInt64()) {
-		return protocol.Errorf(protocol.ErrorCodeInsufficientCredits, "insufficient credits: have %s, want %s",
+		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
 			protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}
@@ -366,7 +374,7 @@ func validateNormalSignature(batch *database.Batch, transaction *protocol.Transa
 }
 
 // processForwardedSignature validates a forwarded private key signature.
-func processForwardedSignature(batch *database.Batch, delivery *Delivery, signature *protocol.ForwardedSignature, _ bool) error {
+func processForwardedSignature(batch *database.Batch, delivery *chain.Delivery, signature *protocol.ForwardedSignature, _ bool) error {
 	// TODO If the forwarded signature paid the full fee unnecessarily, refund
 	// it
 
@@ -410,7 +418,7 @@ func processNormalSignature(batch *database.Batch, transaction *protocol.Transac
 		return fmt.Errorf("calculating fee: %w", err)
 	}
 	if !signer.DebitCredits(fee.AsUInt64()) {
-		return protocol.Errorf(protocol.ErrorCodeInsufficientCredits, "insufficient credits: have %s, want %s",
+		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
 			protocol.FormatAmount(signer.GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}
@@ -511,12 +519,15 @@ func getAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
 			}
 
-			for _, sig := range state.Signatures {
-				if protocol.SignatureDidInitiate(sig, txnInitHash) {
-					signatures[0] = sig
-				} else {
-					signatures = append(signatures, sig)
-				}
+			if state.Signature == nil {
+				// This should not happen
+				continue
+			}
+
+			if protocol.SignatureDidInitiate(state.Signature, txnInitHash) {
+				signatures[0] = state.Signature
+			} else {
+				signatures = append(signatures, state.Signature)
 			}
 		}
 	}

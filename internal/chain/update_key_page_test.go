@@ -16,6 +16,8 @@ import (
 	"golang.org/x/exp/rand"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
 var rng = rand.New(rand.NewSource(0))
 
 func generateKey() tmed25519.PrivKey {
@@ -54,10 +56,10 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				Initiate(protocol.SignatureTypeED25519, testKey).
 				Build()
 
-			st := NewStateManagerForTest(t, db, env)
+			st, d := NewStateManagerForTest(t, db, env)
 			defer st.Discard()
 
-			_, err := UpdateKeyPage{}.Validate(st, env)
+			_, err := UpdateKeyPage{}.Validate(st, d)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {

@@ -13,11 +13,11 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Execute(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (UpdateKeyPage{}).Validate(st, tx)
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol.TransactionResult, error) {
+func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
@@ -64,8 +64,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *protocol.Envelope) (protocol
 			return nil, err
 		}
 	}
-
-	page.Version += 1
 
 	didUpdateKeyPage(page)
 	st.Update(page)
@@ -170,6 +168,8 @@ func getKeyPageIndex(page *url.URL) (uint64, bool) {
 }
 
 func didUpdateKeyPage(page *protocol.KeyPage) {
+	page.Version += 1
+
 	// We're changing the height of the key page, so reset all the nonces
 	for _, key := range page.Keys {
 		key.LastUsedOn = 0

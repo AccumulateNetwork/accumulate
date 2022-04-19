@@ -164,7 +164,7 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
 	case TransactionTypeRemote:
-		return new(RemoteTransactionBody), nil
+		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
 		return new(RemoveValidator), nil
 	case TransactionTypeSegWitDataEntry:
@@ -492,8 +492,14 @@ func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
 // NewSignature creates a new Signature for the specified SignatureType.
 func NewSignature(typ SignatureType) (Signature, error) {
 	switch typ {
+	case SignatureTypeBTCLegacy:
+		return new(BTCLegacySignature), nil
+	case SignatureTypeBTC:
+		return new(BTCSignature), nil
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
+	case SignatureTypeETH:
+		return new(ETHSignature), nil
 	case SignatureTypeForwarded:
 		return new(ForwardedSignature), nil
 	case SignatureTypeInternal:
