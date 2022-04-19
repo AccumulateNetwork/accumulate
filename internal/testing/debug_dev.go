@@ -8,7 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func EnableDebugFeatures() {
-	errors.EnableLocationTracking()
-	storage.EnableKeyNameTracking()
+func EnableDebugFeatures(v bool) {
+	errors.EnableLocationTracking(v)
+	storage.EnableKeyNameTracking(v)
 }

@@ -30,6 +30,7 @@ require (
 	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
+	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
 	go.etcd.io/etcd/client/v3 v3.5.2
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
@@ -41,10 +42,7 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
-require (
-	github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
-	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e // indirect
-)
+require github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
 
 require (
 	4d63.com/gochecknoglobals v0.1.0 // indirect
@@ -210,7 +208,6 @@ require (
 	github.com/timakin/bodyclose v0.0.0-20210704033933-f49887972144 // indirect
 	github.com/tomarrell/wrapcheck/v2 v2.5.0 // indirect
 	github.com/tommy-muehle/go-mnd/v2 v2.5.0 // indirect
-	github.com/traefik/yaegi v0.11.3
 	github.com/ultraware/funlen v0.0.3 // indirect
 	github.com/ultraware/whitespace v0.0.5 // indirect
 	github.com/uudashr/gocognit v1.0.5 // indirect

@@ -74,13 +74,13 @@ func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
 // DidAddChainEntry records a chain update in the block state.
 func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
 	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
-		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
-			Transaction: entry,
-			ChainEntry:  index,
-		})
-		if err != nil {
-			return err
-		}
+		// err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
+		// 	Transaction: entry,
+		// 	ChainEntry:  index,
+		// })
+		// if err != nil {
+		// 	return err
+		// }
 	}
 
 	var update indexing.ChainUpdate

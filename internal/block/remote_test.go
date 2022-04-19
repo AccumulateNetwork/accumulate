@@ -15,7 +15,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func doSha256(data []byte) []byte {
 	hash := sha256.Sum256(data)

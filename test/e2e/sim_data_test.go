@@ -13,7 +13,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func delivered(status *TransactionStatus) bool {
 	return status.Delivered

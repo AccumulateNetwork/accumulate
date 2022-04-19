@@ -12,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func TestTransactionIsReady(tt *testing.T) {
 	logger := NewTestLogger(tt)

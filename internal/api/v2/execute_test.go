@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func TestExecuteCheckOnly(t *testing.T) {
 	env := acctesting.NewTransaction().

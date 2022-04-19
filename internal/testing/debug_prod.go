@@ -10,7 +10,7 @@ import (
 	"github.com/fatih/color"
 )
 
-func EnableDebugFeatures() {
+func EnableDebugFeatures(bool) {
 	fmt.Fprintln(os.Stderr, color.RedString("Debugging features are not supported in production"))
 	// os.Exit(1)
 }

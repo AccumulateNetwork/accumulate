@@ -5,6 +5,6 @@ package errors
 
 var trackLocation = false
 
-func EnableLocationTracking() {
-	trackLocation = true
+func EnableLocationTracking(v bool) {
+	trackLocation = v
 }

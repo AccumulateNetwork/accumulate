@@ -11,15 +11,14 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/traefik/yaegi/interp"
-	playcmd "gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks/pkg/kernel"
+	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
 )
 
 func main() {
-	testing.EnableDebugFeatures()
+	testing.EnableDebugFeatures(true)
 
 	_ = cmd.Execute()
 }
@@ -71,7 +70,7 @@ func run(_ *cobra.Command, args []string) {
 		},
 	}
 	session.UseSimulator(3)
-	playcmd.InterpUseSession(session, kernel)
+	pkg.InterpUseSession(session, kernel)
 
 	// Handle incoming events
 	rd := NewEventReader(conn)

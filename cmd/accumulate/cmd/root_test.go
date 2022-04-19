@@ -19,7 +19,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 type testCase func(t *testing.T, tc *testCmd)
 type testMatrixTests []testCase

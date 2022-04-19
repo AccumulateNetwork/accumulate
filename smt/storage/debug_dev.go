@@ -5,6 +5,6 @@ package storage
 
 var debugKeys = false
 
-func EnableKeyNameTracking() {
-	debugKeys = true
+func EnableKeyNameTracking(v bool) {
+	debugKeys = v
 }

@@ -1,0 +1,38 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+---
+
+# Load Test
+
+```go
+const N = 100
+var txn *Submission
+```
+
+```go{ id: 1 }
+alice := GenerateKey("alice")
+aliceAddr := LiteAddress(alice, ACME)
+for i := 0; i < N; i++ {
+	txn = Faucet(aliceAddr)
+}
+txn.Wait().Ok()
+Show(Get(aliceAddr))
+```
+
+```{ result_of: 1, id: 1, mime: "application/vnd.code.notebook.stderr" }
+1:37: panic
+
+```
+
+```{ result_of: 1, id: 2, mime: "application/vnd.code.notebook.error" }
+{
+	"name": "Panic",
+	"message": "{Transaction FEB7DD5BC2F6BF65DEF19D0280126C3528EDC2CBBD71D4D33638E1FC070552FD failed with code 4: invalid recipient: \"acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME\" is not a lite address\ngitlab.com/accumulatenetwork/accumulate/internal/block.(*Executor).ProcessTransaction\n\t/home/firelizzard/src/accumulate/internal/block/transaction.go:75\n}",
+	"stack": "goroutine 54 [running]:\nruntime/debug.Stack()\n\t/home/firelizzard/sdk/go1.18/src/runtime/debug/stack.go:24 +0x65\ngithub.com/traefik/yaegi/interp.(*Interpreter).Execute.func1()\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/program.go:131 +0x94\npanic({0x162f760, 0xc000d78550})\n\t/home/firelizzard/sdk/go1.18/src/runtime/panic.go:838 +0x207\ngithub.com/traefik/yaegi/interp.runCfg.func1()\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/run.go:193 +0x145\npanic({0x162f760, 0xc000d78550})\n\t/home/firelizzard/sdk/go1.18/src/runtime/panic.go:838 +0x207\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*Session).Abort(...)\n\t/home/firelizzard/src/accumulate/cmd/play-accumulate/pkg/session.go:51\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*completedTxn).Ok(0xc0009d05d0)\n\t/home/firelizzard/src/accumulate/cmd/play-accumulate/pkg/execute.go:237 +0x24d\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.completedFlow.Ok(...)\n\t/home/firelizzard/src/accumulate/cmd/play-accumulate/pkg/execute.go:214\nreflect.Value.call({0x15d2c40?, 0xc0009ce6a8?, 0x46a799?}, {0x17d48f1, 0x4}, {0x26f1910, 0x0, 0x4e1a45?})\n\t/home/firelizzard/sdk/go1.18/src/reflect/value.go:556 +0x845\nreflect.Value.Call({0x15d2c40?, 0xc0009ce6a8?, 0x454ef2?}, {0x26f1910, 0x0, 0x0})\n\t/home/firelizzard/sdk/go1.18/src/reflect/value.go:339 +0xbf\ngithub.com/traefik/yaegi/interp.callBin.func1({0x15d2c40?, 0xc0009ce6a8?, 0xc00026fca0?}, {0x26f1910?, 0xc0009d0600?, 0x2?})\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/run.go:1484 +0x28\ngithub.com/traefik/yaegi/interp.callBin.func10(0xc0003e6000)\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/run.go:1658 +0x158\ngithub.com/traefik/yaegi/interp.runCfg(0xc0001f4240, 0xc0003e6000, 0x1530000?, 0xc00026fe88?)\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/run.go:201 +0x29d\ngithub.com/traefik/yaegi/interp.(*Interpreter).run(0xc0004b2000, 0xc000141d40, 0x0?)\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/run.go:120 +0x374\ngithub.com/traefik/yaegi/interp.(*Interpreter).Execute(0xc0004b2000, 0xc00052e6f0)\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/program.go:147 +0x11a\ngithub.com/traefik/yaegi/interp.(*Interpreter).eval(0xc0004b2000, {0xc00024c180?, 0x0?}, {0x0?, 0xc00050d590?}, 0x0?)\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/interp.go:615 +0x5c\ngithub.com/traefik/yaegi/interp.(*Interpreter).Eval(...)\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/interp.go:492\ngithub.com/traefik/yaegi/interp.(*Interpreter).EvalWithContext.func1()\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/interp.go:632 +0x85\ncreated by github.com/traefik/yaegi/interp.(*Interpreter).EvalWithContext\n\t/home/firelizzard/go/pkg/mod/github.com/traefik/yaegi@v0.11.3/interp/interp.go:630 +0x1ae\n"
+}
+```
+

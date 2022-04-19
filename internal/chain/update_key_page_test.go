@@ -16,7 +16,7 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 var rng = rand.New(rand.NewSource(0))
 

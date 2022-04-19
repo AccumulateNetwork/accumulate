@@ -13,10 +13,10 @@ import (
 
 	"github.com/fatih/color"
 	. "github.com/russross/blackfriday/v2"
-	"github.com/traefik/yaegi/interp"
-	"github.com/traefik/yaegi/stdlib"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
+	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/stdlib"
 )
 
 var reYamlDoc = regexp.MustCompile("(?m)^---$")
@@ -60,7 +60,7 @@ func ExecuteFile(filename string, client *client.Client) error {
 		S.UseNetwork(client)
 	}
 	I := interp.New(interp.Options{})
-	interpUseSession(S, I)
+	InterpUseSession(S, I)
 
 	var level int
 	var heading string
@@ -112,7 +112,7 @@ func ExecuteFile(filename string, client *client.Client) error {
 	return err
 }
 
-func interpUseSession(s *Session, I interface {
+func InterpUseSession(s *Session, I interface {
 	Use(values interp.Exports) error
 	Eval(src string) (res reflect.Value, err error)
 }) {
@@ -122,7 +122,8 @@ func interpUseSession(s *Session, I interface {
 	}
 
 	pkg := map[string]reflect.Value{
-		"ACME": reflect.ValueOf(protocol.AcmeUrl()),
+		"ACME":       reflect.ValueOf(protocol.AcmeUrl()),
+		"Submission": reflect.ValueOf((*submittedTxn)(nil)),
 	}
 
 	sv := reflect.ValueOf(s)

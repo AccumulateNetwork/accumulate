@@ -21,7 +21,7 @@ import (
 	query2 "gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func TestEndToEnd(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")

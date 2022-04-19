@@ -11,7 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func TestSynthTokenDeposit_Lite(t *testing.T) {
 	t.Skip("TODO Broken")

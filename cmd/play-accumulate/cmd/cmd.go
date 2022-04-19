@@ -25,7 +25,7 @@ func init() {
 }
 
 func run(_ *cobra.Command, filenames []string) {
-	testing.EnableDebugFeatures()
+	testing.EnableDebugFeatures(true)
 
 	var c *client.Client
 	var err error

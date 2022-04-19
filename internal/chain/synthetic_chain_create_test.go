@@ -11,7 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { acctesting.EnableDebugFeatures(true) }
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	db := database.OpenInMemory(nil)
