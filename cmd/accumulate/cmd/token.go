@@ -102,18 +102,32 @@ func CreateToken(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) < 4 {
+	if len(args) < 3 {
 		return "", fmt.Errorf("insufficient number of arguments")
 	}
 
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
-	supplyLimit, err := strconv.Atoi(args[3])
-	if err != nil {
-		return "", err
-	}
+	var supplyLimit int
 	var properties *url2.URL
+	if len(args) > 3 {
+		supplyLimit, err = strconv.Atoi(args[3])
+		if err != nil {
+			properties, err = url2.Parse(args[4])
+			if err != nil {
+				return "", fmt.Errorf("invalid properties url, %v", err)
+			}
+			res, err := GetUrl(properties.String())
+			if err != nil {
+				return "", fmt.Errorf("cannot query properties url, %v", err)
+			}
+			//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
+			if res.Type != protocol.AccountTypeDataAccount.String() {
+				return "", fmt.Errorf("properties url is not a valid properties data account")
+			}
+		}
+	}
 	if len(args) > 4 {
 		properties, err = url2.Parse(args[4])
 		if err != nil {

@@ -393,7 +393,7 @@ accumulate -j tx get $TXID | jq -re .status.result.entryHash 1> /dev/null || die
 success
 
 section "Issue a new token"
-JSON=$(accumulate -j token create keytest keytest-1-0 keytest/foocoin bar 8 1000000)
+JSON=$(accumulate -j token create keytest keytest-1-0 keytest/foocoin bar 8 )
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
@@ -474,13 +474,6 @@ TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
 wait-for-tx $TXID
 MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
-
-section "Token refund on txn failure"
-BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
-TXID=$(cli-tx tx create keytest/tokens keytest-2-0 acc://invalid-account 1)
-wait-for-tx $TXID
-BALANCE1=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
-[ $BALANCE -eq $BALANCE1 ] && success || die "Expected $BALANCE, got $BALANCE1"
 
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
 if [ -f "$NODE_PRIV_VAL" ]; then
