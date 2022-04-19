@@ -34,14 +34,17 @@ NetworkMetrics:
 
 Submission:
   fields:
-    - name: TransactionHash
+    - name: TransactionHashes
       type: hash
+      repeatable: true
     - name: SignatureHashes
       type: hash
       repeatable: true
     - name: Status
       type: protocol.TransactionStatus
       marshal-as: reference
+      pointer: true
+      repeatable: true
 
 AccountRecord:
   union: { type: record }
