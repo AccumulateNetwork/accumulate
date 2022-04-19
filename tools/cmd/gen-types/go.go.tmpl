@@ -14,6 +14,9 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	{{- if not (isPkg "internal/errors")}}
+	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	{{- end}}
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	{{- if not (isPkg "errors")}}
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
