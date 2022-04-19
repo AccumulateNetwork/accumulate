@@ -59,18 +59,24 @@ function wait-for-tx {
     done
 }
 
-# cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
-function cli-tx {
+function cli-run {
     if ! JSON=`accumulate -j "$@" 2>&1`; then
         echo "$JSON" | jq -C --indent 0 >&2
-        die "Request failed"
+        >&2 echo -e '\033[1;31m'"$@"'\033[0m'
+        return 1
     fi
+    echo "$JSON"
+}
+
+# cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
+function cli-tx {
+    JSON=`cli-run "$@"` || return 1
     echo "$JSON" | jq -re .transactionHash
 }
 
 # cli-tx-sig <args...> - Execute a CLI command and extract the first signature hash from the result
 function cli-tx-sig {
-    JSON=`accumulate -j "$@"` || return 1
+    JSON=`cli-run "$@"` || return 1
     echo "$JSON" | jq -re .signatureHashes[0]
 }
 

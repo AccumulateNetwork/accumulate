@@ -43,12 +43,12 @@ Show(Get(liteDataAddr1))
 ### Setup
 
 ```go
-aliceKey := GenerateKey("alice")
+bobKey := GenerateKey("bob")
 Transaction(liteTokenAddr).
 	WithSigner(liteTokenAddr).
-	CreateIdentity("alice").
-		WithKey(aliceKey).
-		WithKeyBook("alice/book").
+	CreateIdentity("bob").
+		WithKey(bobKey).
+		WithKeyBook("bob/book").
 	Initiate(liteKey).
 	Submit().Wait().Ok()
 Show("Ok")

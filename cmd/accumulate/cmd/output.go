@@ -42,17 +42,31 @@ func PrintJsonRpcError(err error) (string, error) {
 }
 
 func printOutput(cmd *cobra.Command, out string, err error) {
-	if err != nil {
-		if WantJsonOutput {
-			b, _ := json.Marshal(map[string]string{"error": err.Error()})
-			cmd.PrintErrf("%s\n", b)
-		} else {
-			cmd.PrintErrf("Error: %v\n", err)
-		}
-		DidError = err
-	} else {
+	if err == nil {
 		cmd.Println(out)
+		return
 	}
+
+	DidError = err
+	if !WantJsonOutput {
+		cmd.PrintErrf("Error: %v\n", err)
+		return
+	}
+
+	// Check if the error is an action response error
+	var v interface{}
+	ar, ok := err.(*ActionResponseError)
+	if ok {
+		v = ar
+	} else {
+		v = err.Error()
+	}
+
+	// JSON marshal the error
+	b, _ := json.Marshal(map[string]interface{}{"error": v})
+
+	// If the caller wants JSON, they probably want it on stdout
+	cmd.Printf("%s\n", b)
 }
 
 func printError(cmd *cobra.Command, err error) {
@@ -605,6 +619,18 @@ func (a *ActionDataResponse) Print() (string, error) {
 	return out, nil
 }
 
+type ActionResponseError struct {
+	ActionResponse
+}
+
+func (a *ActionResponseError) Error() string {
+	b, err := json.Marshal(a)
+	if err != nil {
+		return err.Error()
+	}
+	return string(b)
+}
+
 func (a *ActionResponse) Print() (string, error) {
 	ok := a.Code == "0" || a.Code == ""
 
@@ -613,11 +639,7 @@ func (a *ActionResponse) Print() (string, error) {
 		if ok {
 			a.Code = "ok"
 		}
-		b, err := json.Marshal(a)
-		if err != nil {
-			return "", err
-		}
-		out = string(b)
+		return "", &ActionResponseError{*a}
 	} else {
 		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
 		for i, hash := range a.SignatureHashes {
