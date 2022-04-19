@@ -49,7 +49,7 @@ The Accumulate API is composed of the following layers:
 
 * `Submit(envelope, options)` submits a transaction for execution. Submit can
   also be used to validate a transaction without submitting it.
-* `Faucet(account, options)` funds a lite account.
+* `Faucet(account, options)` funds a lite account (for testnet only).
 
 ### Network
 
