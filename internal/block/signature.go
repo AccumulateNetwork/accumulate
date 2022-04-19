@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -9,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
@@ -265,7 +267,7 @@ func validateSigner(batch *database.Batch, transaction *protocol.Transaction, lo
 		return &protocol.UnknownSigner{Url: signerUrl}, nil
 	}
 
-	err = verifySignerCanSign(transaction, signer)
+	err = verifySignerCanSign(batch, transaction, signer)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -304,30 +306,35 @@ func loadSignerLocally(batch *database.Batch, signerUrl *url.URL) (protocol.Sign
 func validateSignature(transaction *protocol.Transaction, signer protocol.Signer, signature protocol.Signature) (protocol.KeyEntry, error) {
 	// Check the height
 	if signature.GetSignerVersion() != signer.GetVersion() {
-		return nil, protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
+		return nil, errors.Format(errors.StatusBadSignerVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
 	}
 
 	// Find the key entry
 	_, entry, ok := signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
-		return nil, fmt.Errorf("key does not belong to signer")
+		return nil, errors.New(errors.StatusUnauthorized, "key does not belong to signer")
 	}
 
 	// Check the timestamp, except for faucet transactions
 	if transaction.Body.Type() != protocol.TransactionTypeAcmeFaucet &&
 		signature.GetTimestamp() != 0 &&
 		entry.GetLastUsedOn() >= signature.GetTimestamp() {
-		return nil, protocol.Errorf(protocol.ErrorCodeBadNonce, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
+		return nil, errors.Format(errors.StatusBadTimestamp, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
 	}
 
 	return entry, nil
 }
 
 // verifySignerCanSign verifies that the signer is allowed to sign the transaction
-func verifySignerCanSign(transaction *protocol.Transaction, signer protocol.Signer) error {
+func verifySignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
 	switch signer := signer.(type) {
 	case *protocol.LiteTokenAccount:
-		// A lite token account is only allowed to sign for itself
+		// A lite token account is allowed to write to a lite data account
+		if isWriteToLiteDataAccount(batch, transaction) {
+			return nil
+		}
+
+		// Otherwise a lite token account is only allowed to sign for itself
 		if !signer.Url.Equal(transaction.Header.Principal) {
 			return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
 		}
@@ -347,9 +354,39 @@ func verifySignerCanSign(transaction *protocol.Transaction, signer protocol.Sign
 	return nil
 }
 
+func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Transaction) bool {
+	body, ok := transaction.Body.(*protocol.WriteData)
+	if !ok {
+		return false // Not WriteData
+	}
+
+	chainId, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
+	if err != nil {
+		return false // Not a lite data address
+	}
+
+	var account *protocol.LiteDataAccount
+	err = batch.Account(transaction.Header.Principal).GetStateAs(&account)
+	switch {
+	case err == nil:
+		return true // Found the account
+	case !errors.Is(err, storage.ErrNotFound):
+		return false // Unknown error, could be a different account type
+	}
+
+	// Are we creating a lite data account?
+	computedChainId := protocol.ComputeLiteDataAccountId(&body.Entry)
+	return bytes.HasPrefix(computedChainId, chainId)
+}
+
 // verifyPageIsAuthorized verifies that the key page is authorized to sign for
 // the principal.
 func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
+	// Anyone is allowed to write to a lite data account
+	if isWriteToLiteDataAccount(batch, transaction) {
+		return nil
+	}
+
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	if err != nil {
@@ -403,7 +440,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.Sign
 	// Compute the signature fee
 	fee, err := protocol.ComputeSignatureFee(signature)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 	if !isInitiator {
 		return fee, nil
@@ -412,7 +449,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.Sign
 	// Add the transaction fee for the initial signature
 	txnFee, err := protocol.ComputeTransactionFee(transaction)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Subtract the base signature fee, but not the oversize surcharge if there is one
@@ -441,13 +478,13 @@ func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, si
 	// Load the signer and validate the signature against it
 	_, err = validateSignature(delivery.Transaction, signers[0], signature)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Ensure the signer has sufficient credits for the fee
 	fee, err := computeSignerFee(delivery.Transaction, signature, isInitiator)
 	if err != nil {
-		return fmt.Errorf("calculating fee: %w", err)
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	if !signers[0].CanDebitCredits(fee.AsUInt64()) {
 		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",

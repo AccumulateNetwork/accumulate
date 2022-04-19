@@ -3,6 +3,7 @@ package pkg
 import (
 	"crypto/ed25519"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -20,10 +21,28 @@ func (s *Session) GenerateKey(values ...interface{}) ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed(hash[:])
 }
 
-func (s *Session) LiteAddress(key interface{}, token Urlish) *URL {
-	addr, err := protocol.LiteTokenAddress(s.pubkey(key), s.url(token).String(), protocol.SignatureTypeED25519)
+func (s *Session) LiteAddress(keyOrEntry interface{}, args ...interface{}) *URL {
+	var addr *url.URL
+	var err error
+	switch len(args) {
+	case 0:
+		switch v := keyOrEntry.(type) {
+		case ed25519.PrivateKey, ed25519.PublicKey, []byte:
+			return protocol.LiteAuthorityForKey(s.pubkey(v), protocol.SignatureTypeED25519)
+		case protocol.DataEntry:
+			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(&v))
+		case *protocol.DataEntry:
+			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(v))
+		case [][]byte:
+			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(&protocol.DataEntry{Data: v}))
+		}
+	case 1:
+		addr, err = protocol.LiteTokenAddress(s.pubkey(keyOrEntry), s.url(args[0]).String(), protocol.SignatureTypeED25519)
+	}
+
 	if err != nil {
-		s.Abortf("Invalid token URL: %v", err)
+		s.Abort(err)
 	}
 	return addr
+
 }

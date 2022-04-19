@@ -22,13 +22,17 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
+	return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, body.Cause)
+}
+
+func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte) (protocol.TransactionResult, error) {
 	var account protocol.Account
 	result := new(protocol.WriteDataResult)
 	if st.Origin != nil {
 
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteDataAccount:
-			liteDataAccountId, err := protocol.ParseLiteDataAddress(tx.Transaction.Header.Principal)
+			liteDataAccountId, err := protocol.ParseLiteDataAddress(st.OriginUrl)
 			if err != nil {
 				return nil, err
 			}
@@ -36,7 +40,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 			liteDataAccountId = append(liteDataAccountId, origin.Tail...)
 
 			//compute the hash for this entry
-			entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, &body.Entry)
+			entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, entry)
 			if err != nil {
 				return nil, err
 			}
@@ -44,23 +48,23 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 			account = origin
 			result.EntryHash = *(*[32]byte)(entryHash)
 			result.AccountID = liteDataAccountId
-			result.AccountUrl = tx.Transaction.Header.Principal
+			result.AccountUrl = st.OriginUrl
 		default:
 			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
 				protocol.AccountTypeLiteDataAccount, origin.Type())
 		}
-	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Header.Principal); err != nil {
-		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Header.Principal.String(), err)
+	} else if _, err := protocol.ParseLiteDataAddress(st.OriginUrl); err != nil {
+		return nil, fmt.Errorf("invalid lite data URL %s: %v", st.OriginUrl.String(), err)
 	} else {
 		// Address is lite, but the lite data account doesn't exist, so create one
-		liteDataAccountId := protocol.ComputeLiteDataAccountId(&body.Entry)
+		liteDataAccountId := protocol.ComputeLiteDataAccountId(entry)
 		u, err := protocol.LiteDataAddress(liteDataAccountId)
 		if err != nil {
 			return nil, err
 		}
 
 		//the computed data account chain id must match the origin url.
-		if !tx.Transaction.Header.Principal.Equal(u) {
+		if !st.OriginUrl.Equal(u) {
 			return nil, fmt.Errorf("first entry doesnt match chain id")
 		}
 
@@ -74,7 +78,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		//12 additional bytes.
 		lite.Tail = liteDataAccountId[20:32]
 
-		entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, &body.Entry)
+		entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, entry)
 		if err != nil {
 			return nil, err
 		}
@@ -91,7 +95,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	sw.EntryUrl = result.AccountUrl
 
 	//we provide the transaction id of the original transaction
-	sw.Cause = body.Cause
+	sw.Cause = cause
 
 	//and the entry hash
 	sw.EntryHash = result.EntryHash
@@ -107,9 +111,9 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	// produced the data entry
 
 	//now replace the original data entry payload with the new segwit payload
-	tx.Transaction.Body = &sw
+	txn.Body = &sw
 
-	st.UpdateData(account, sw.EntryHash[:], &body.Entry)
+	st.UpdateData(account, sw.EntryHash[:], entry)
 
 	return result, nil
 }

@@ -47,6 +47,7 @@
       "args": [
         "${workspaceFolder}/playbooks/validate/01-lite-token.play",
         "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
       ]
     },
     {
@@ -90,6 +91,31 @@
         "-n",
         "0",
         "--truncate"
+      ]
+    },
+    {
+      "name": "Run DevNet Test",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/test/devnet",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-X=--reset",
+      ]
+    },
+    {
+      "name": "Run DevNet Playbook",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/test/devnet",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-X", "-v=1,-b=1,--reset", "play",
+        // "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        // "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
       ]
     },
     {
