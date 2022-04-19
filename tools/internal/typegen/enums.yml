@@ -50,3 +50,5 @@ TypeCode:
   RawJson:
     # Should we replace this with Any?
     value: 12
+  Float:
+    value: 13

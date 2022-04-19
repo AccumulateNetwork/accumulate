@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"time"
 
@@ -198,12 +199,25 @@ func (r *Reader) ReadInt(n uint) (int64, bool) {
 	return r.readInt(n)
 }
 
-// ReadInt reads the value as a varint-encoded unsigned integer.
+// ReadUint reads the value as a varint-encoded unsigned integer.
 func (r *Reader) ReadUint(n uint) (uint64, bool) {
 	if !r.readField(n) {
 		return 0, false
 	}
 	return r.readUint(n)
+}
+
+// ReadFloat reads the value as a varint-encoded unsigned integer.
+func (r *Reader) ReadFloat(n uint) (float64, bool) {
+	if !r.readField(n) {
+		return 0, false
+	}
+	b, ok := r.readRaw(n, 8)
+	if !ok {
+		return 0, false
+	}
+	v := math.Float64frombits(binary.BigEndian.Uint64(b))
+	return v, true
 }
 
 // ReadBool reads the value as a varint-encoded unsigned integer. An error is
