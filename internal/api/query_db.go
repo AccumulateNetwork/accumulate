@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -18,22 +19,22 @@ type DatabaseQueryModule struct {
 
 var _ QueryModule = (*DatabaseQueryModule)(nil)
 
-func (q *DatabaseQueryModule) QueryState(account *url.URL, fragment []string, opts QueryStateOptions) (Record, error) {
-	batch := q.DB.Begin(false)
+func (m *DatabaseQueryModule) QueryState(_ context.Context, account *url.URL, fragment []string, opts QueryStateOptions) (Record, error) {
+	batch := m.DB.Begin(false)
 	defer batch.Discard()
 
 	if len(fragment) > 0 {
 		return nil, errors.Format(errors.StatusBadRequest, "unsupported fragment query %q", strings.Join(fragment, "/"))
 	}
 
-	return q.queryAccount(batch, account, opts)
+	return m.queryAccount(batch, account, opts)
 }
 
-func (q *DatabaseQueryModule) QuerySet(account *url.URL, fragment []string, opts QuerySetOptions) (Record, error) {
+func (m *DatabaseQueryModule) QuerySet(_ context.Context, account *url.URL, fragment []string, opts QuerySetOptions) (Record, error) {
 	return nil, errors.Format(errors.StatusBadRequest, "unsupported fragment query %q", strings.Join(fragment, "/"))
 }
 
-func (q *DatabaseQueryModule) Search(scope *url.URL, query string, opts SearchOptions) (Record, error) {
+func (m *DatabaseQueryModule) Search(_ context.Context, scope *url.URL, query string, opts SearchOptions) (Record, error) {
 	if opts.Kind == "" {
 		return nil, errors.Format(errors.StatusBadRequest, "missing option `kind`")
 	}
@@ -41,7 +42,7 @@ func (q *DatabaseQueryModule) Search(scope *url.URL, query string, opts SearchOp
 	return nil, errors.Format(errors.StatusBadRequest, "unsupported search kind %q", opts.Kind)
 }
 
-func (q *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *url.URL, opts QueryStateOptions) (Record, error) {
+func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *url.URL, opts QueryStateOptions) (Record, error) {
 	account := batch.Account(accountUrl)
 	rec := new(AccountRecord)
 	var err error
@@ -76,12 +77,12 @@ func (q *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 	if opts.Prove {
 		receipt := new(Receipt)
 		rec.Receipt = receipt
-		block, mr, err := indexing.ReceiptForAccountState(q.Network, batch, account)
+		block, mr, err := indexing.ReceiptForAccountState(m.Network, batch, account)
 		if err != nil {
 			receipt.Error = errors.Wrap(errors.StatusUnknown, err)
 		} else {
 			receipt.LocalBlock = block
-			receipt.Receipt = *protocol.ReceiptFromManaged(mr)
+			receipt.Proof = *protocol.ReceiptFromManaged(mr)
 		}
 	}
 

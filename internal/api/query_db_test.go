@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,7 @@ func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	// Get a proof of the account state
 	x := sim.SubnetFor(aliceUrl)
 	dbql := &api.DatabaseQueryModule{Network: &x.Executor.Network, DB: x.Database}
-	rec, err := dbql.QueryState(aliceUrl, nil, api.QueryStateOptions{Prove: true})
+	rec, err := dbql.QueryState(context.Background(), aliceUrl, nil, api.QueryStateOptions{Prove: true})
 	require.NoError(t, err)
 	require.IsType(t, (*api.AccountRecord)(nil), rec)
 	arec := rec.(*api.AccountRecord)
@@ -49,5 +50,5 @@ func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	require.Equal(t, uint64(protocol.AcmePrecision*protocol.AcmeFaucetAmount), lite.Balance.Uint64())
 
 	// Validate the proof
-	require.True(t, arec.Receipt.Receipt.Convert().Validate())
+	require.True(t, arec.Receipt.Proof.Convert().Validate())
 }
