@@ -65,6 +65,9 @@ const TypeCodeAny TypeCode = 11
 // TypeCodeRawJson .
 const TypeCodeRawJson TypeCode = 12
 
+// TypeCodeFloat .
+const TypeCodeFloat TypeCode = 13
+
 // GetEnumValue returns the value of the Marshal As
 func (v MarshalAs) GetEnumValue() uint64 { return uint64(v) }
 
@@ -148,7 +151,7 @@ func (v TypeCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *TypeCode) SetEnumValue(id uint64) bool {
 	u := TypeCode(id)
 	switch u {
-	case TypeCodeUnknown, TypeCodeInt, TypeCodeUint, TypeCodeBool, TypeCodeString, TypeCodeHash, TypeCodeBytes, TypeCodeUrl, TypeCodeTime, TypeCodeDuration, TypeCodeBigInt, TypeCodeAny, TypeCodeRawJson:
+	case TypeCodeUnknown, TypeCodeInt, TypeCodeUint, TypeCodeBool, TypeCodeString, TypeCodeHash, TypeCodeBytes, TypeCodeUrl, TypeCodeTime, TypeCodeDuration, TypeCodeBigInt, TypeCodeAny, TypeCodeRawJson, TypeCodeFloat:
 		*v = u
 		return true
 	default:
@@ -185,6 +188,8 @@ func (v TypeCode) String() string {
 		return "any"
 	case TypeCodeRawJson:
 		return "rawJson"
+	case TypeCodeFloat:
+		return "float"
 	default:
 		return fmt.Sprintf("TypeCode:%d", v)
 	}
@@ -227,6 +232,8 @@ func TypeCodeByName(name string) (TypeCode, bool) {
 		return TypeCodeAny, true
 	case "rawjson":
 		return TypeCodeRawJson, true
+	case "float":
+		return TypeCodeFloat, true
 	default:
 		return 0, false
 	}
