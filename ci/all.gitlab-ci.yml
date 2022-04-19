@@ -37,7 +37,15 @@ validate simple:
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
   script:
   - apt-get -y update && apt-get -y install jq xxd
-  - go run ./tools/test/devnet/ -v 1 -b 1 --reset
+  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset
+
+validate playbooks:
+  stage: test
+  extends: [ .rules all, .go ]
+  needs: []
+  script:
+  - apt-get -y update && apt-get -y install jq xxd
+  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset play playbooks/validate/*
 
 validate docker:
   stage: test

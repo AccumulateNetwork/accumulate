@@ -2,7 +2,8 @@ package protocol
 
 import (
 	"encoding"
-	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
 // Fee is the unit cost of a transaction.
@@ -114,7 +115,7 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeSignature, nil
 	default:
 		// All user transactions must have a defined fee amount, even if it's zero
-		return 0, fmt.Errorf("unknown transaction type: %v", typ)
+		return 0, errors.Format(errors.StatusInternalError, "unknown transaction type: %v", typ)
 	}
 }
 
@@ -122,7 +123,7 @@ func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
 	// Check the transaction size (including signatures)
 	data, err := obj.MarshalBinary()
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, errors.Wrap(errors.StatusInternalError, err)
 	}
 
 	// count the number of 256-byte chunks
@@ -139,10 +140,10 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(sig)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 	if size > SignatureSizeMax {
-		return 0, fmt.Errorf("signature size exceeds %v byte entry limit", SignatureSizeMax)
+		return 0, errors.Format(errors.StatusBadRequest, "signature size exceeds %v byte entry limit", SignatureSizeMax)
 	}
 
 	// If the signature is larger than 256 B, charge extra
@@ -165,16 +166,16 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	fee, err := BaseTransactionFee(tx.Type())
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Check the transaction size
 	count, size, err := dataCount(tx)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 	if size > TransactionSizeMax {
-		return 0, fmt.Errorf("transaction size exceeds %v byte entry limit", TransactionSizeMax)
+		return 0, errors.Format(errors.StatusBadRequest, "transaction size exceeds %v byte entry limit", TransactionSizeMax)
 	}
 
 	// Charge an extra data fee per 256 B past the initial 256 B

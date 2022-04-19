@@ -129,9 +129,9 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	case err == nil:
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
-		return nil, fmt.Errorf("load principal: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
 	case !transactionAllowsMissingPrincipal(delivery.Transaction):
-		return nil, fmt.Errorf("load principal: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
 	}
 
 	// Set up the state manager

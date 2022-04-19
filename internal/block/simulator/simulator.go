@@ -132,11 +132,6 @@ func (s *Simulator) SubnetFor(url *url.URL) *ExecEntry {
 	return s.Subnet(subnet)
 }
 
-func (s *Simulator) QueryUrl(url *url.URL, req queryRequest, prove bool) interface{} {
-	x := s.SubnetFor(url)
-	return Query(s, x.Database, x.Executor, req, prove)
-}
-
 func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{} {
 	s.Helper()
 

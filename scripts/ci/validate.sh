@@ -61,7 +61,10 @@ function wait-for-tx {
 
 # cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
 function cli-tx {
-    JSON=`accumulate -j "$@"` || return 1
+    if ! JSON=`accumulate -j "$@" 2>&1`; then
+        echo "$JSON" | jq -C --indent 0 >&2
+        die "Request failed"
+    fi
     echo "$JSON" | jq -re .transactionHash
 }
 
@@ -84,7 +87,7 @@ function api-tx {
 
 # die <message> - Print an error message and exit
 function die {
-    echo -e '\033[1;31m'"$@"'\033[0m'
+    >&2 echo -e '\033[1;31m'"$@"'\033[0m'
     exit 1
 }
 
@@ -154,7 +157,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
 fi
 
 section "Generate a Lite Token Account"
-accumulate account list 2&>1 | grep -q ACME || accumulate account generate
+accumulate account list 2>&1 | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
 TXS=()
 for i in {1..1}

@@ -41,7 +41,7 @@ func convert(err error) *Error {
 
 	u, ok := err.(interface{ Unwrap() error })
 	if ok {
-		e.Cause = convert(u.Unwrap())
+		e.setCause(convert(u.Unwrap()))
 	}
 
 	return e
@@ -93,15 +93,13 @@ func Format(code Status, format string, args ...interface{}) *Error {
 	err := fmt.Errorf(format, args...)
 
 	e := make(code)
-	u, ok := err.(interface {
-		Unwrap() error
-	})
+	u, ok := err.(interface{ Unwrap() error })
 	if ok {
 		e.Message = err.Error()
-		e.setCause(convert(u.Unwrap()))
-	} else {
-		e.setCause(convert(err))
+		err = u.Unwrap()
 	}
+
+	e.setCause(convert(err))
 	return e
 }
 
