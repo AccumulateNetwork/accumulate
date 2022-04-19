@@ -21,6 +21,13 @@ func NewRecord(typ RecordType) (Record, error) {
 	}
 }
 
+//EqualRecord is used to compare the values of the union
+func EqualRecord(a, b Record) bool {
+	dat1, _ := a.MarshalBinary()
+	dat2, _ := b.MarshalBinary()
+	return bytes.Compare(dat1, dat2) == 0
+}
+
 // UnmarshalRecordType unmarshals the RecordType from the start of a Record.
 func UnmarshalRecordType(r io.Reader) (RecordType, error) {
 	var typ RecordType

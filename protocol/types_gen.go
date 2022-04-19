@@ -2930,7 +2930,7 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		return false
 	}
 	for i := range v.Signatures {
-		if !(v.Signatures[i] == u.Signatures[i]) {
+		if !(EqualSignature(v.Signatures[i], u.Signatures[i])) {
 			return false
 		}
 	}
@@ -3511,7 +3511,7 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 }
 
 func (v *SendTransaction) Equal(u *SendTransaction) bool {
-	if !(v.Payload == u.Payload) {
+	if !(EqualTransactionBody(v.Payload, u.Payload)) {
 		return false
 	}
 	switch {
@@ -3875,7 +3875,7 @@ func (v *Transaction) Equal(u *Transaction) bool {
 	if !((&v.Header).Equal(&u.Header)) {
 		return false
 	}
-	if !(v.Body == u.Body) {
+	if !(EqualTransactionBody(v.Body, u.Body)) {
 		return false
 	}
 
@@ -3921,7 +3921,7 @@ func (v *TransactionSignature) Equal(u *TransactionSignature) bool {
 	if !(v.Transaction == u.Transaction) {
 		return false
 	}
-	if !(v.Signature == u.Signature) {
+	if !(EqualSignature(v.Signature, u.Signature)) {
 		return false
 	}
 
@@ -4009,7 +4009,7 @@ func (v *UpdateAccountAuth) Equal(u *UpdateAccountAuth) bool {
 		return false
 	}
 	for i := range v.Operations {
-		if !(v.Operations[i] == u.Operations[i]) {
+		if !(EqualAccountAuthOperation(v.Operations[i], u.Operations[i])) {
 			return false
 		}
 	}
@@ -4062,7 +4062,7 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		return false
 	}
 	for i := range v.Operation {
-		if !(v.Operation[i] == u.Operation[i]) {
+		if !(EqualKeyPageOperation(v.Operation[i], u.Operation[i])) {
 			return false
 		}
 	}

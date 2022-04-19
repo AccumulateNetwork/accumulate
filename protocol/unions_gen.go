@@ -47,6 +47,13 @@ func NewAccount(typ AccountType) (Account, error) {
 	}
 }
 
+//EqualAccount is used to compare the values of the union
+func EqualAccount(a, b Account) bool {
+	dat1, _ := a.MarshalBinary()
+	dat2, _ := b.MarshalBinary()
+	return bytes.Compare(dat1, dat2) == 0
+}
+
 // UnmarshalAccountType unmarshals the AccountType from the start of a Account.
 func UnmarshalAccountType(r io.Reader) (AccountType, error) {
 	var typ AccountType
@@ -206,6 +213,13 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	}
 }
 
+//EqualTransactionBody is used to compare the values of the union
+func EqualTransactionBody(a, b TransactionBody) bool {
+	dat1, _ := a.MarshalBinary()
+	dat2, _ := b.MarshalBinary()
+	return bytes.Compare(dat1, dat2) == 0
+}
+
 // UnmarshalTransactionType unmarshals the TransactionType from the start of a TransactionBody.
 func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
 	var typ TransactionType
@@ -303,6 +317,13 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 	default:
 		return nil, fmt.Errorf("unknown account auth operation %v", typ)
 	}
+}
+
+//EqualAccountAuthOperation is used to compare the values of the union
+func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
+	dat1, _ := a.MarshalBinary()
+	dat2, _ := b.MarshalBinary()
+	return bytes.Compare(dat1, dat2) == 0
 }
 
 // UnmarshalAccountAuthOperationType unmarshals the AccountAuthOperationType from the start of a AccountAuthOperation.
@@ -404,6 +425,13 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 	default:
 		return nil, fmt.Errorf("unknown key page operation %v", typ)
 	}
+}
+
+//EqualKeyPageOperation is used to compare the values of the union
+func EqualKeyPageOperation(a, b KeyPageOperation) bool {
+	dat1, _ := a.MarshalBinary()
+	dat2, _ := b.MarshalBinary()
+	return bytes.Compare(dat1, dat2) == 0
 }
 
 // UnmarshalKeyPageOperationType unmarshals the KeyPageOperationType from the start of a KeyPageOperation.
@@ -515,6 +543,13 @@ func NewSignature(typ SignatureType) (Signature, error) {
 	default:
 		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
+}
+
+//EqualSignature is used to compare the values of the union
+func EqualSignature(a, b Signature) bool {
+	dat1, _ := a.MarshalBinary()
+	dat2, _ := b.MarshalBinary()
+	return bytes.Compare(dat1, dat2) == 0
 }
 
 // UnmarshalSignatureType unmarshals the SignatureType from the start of a Signature.
