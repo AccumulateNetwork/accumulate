@@ -45,6 +45,8 @@
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/play-accumulate",
       "args": [
+        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        "${workspaceFolder}/playbooks/validate/02-identity.play",
         "${workspaceFolder}/playbooks/validate/03-lite-data.play",
       ]
     },
