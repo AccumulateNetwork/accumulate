@@ -602,9 +602,22 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 }
 
 func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
-	chain, err := batch.Account(account).ReadChain(chainName)
+	acc := batch.Account(account)
+	chain, err := acc.ReadChain(chainName)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
+	}
+	state, err := acc.GetState()
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: err}
+	}
+
+	var isScratch bool
+	switch v := state.(type) {
+	case *protocol.DataAccount:
+		isScratch = v.Scratch
+	default:
+		isScratch = false
 	}
 
 	thr := query.ResponseTxHistory{}
@@ -618,9 +631,35 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid, false)
+		qr, err := m.queryByTxId(batch, txid, false) // TODO move back after debug
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+		}
+
+		if isScratch {
+			chainIndex, err := indexing.TransactionChain(batch, txid).Get()
+			if err != nil {
+				return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+			}
+			for _, entry := range chainIndex.Entries {
+				if entry.Chain == protocol.MainChain {
+
+					// Load the chain
+					minorIndexChain, err := acc.ReadChain(protocol.MinorRootIndexChain)
+					if err != nil {
+						return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+					}
+
+					// Load the entry
+					entry := new(protocol.IndexEntry)
+					err = chain.EntryAs(minorIndexChain.Height(), entry)
+					if err != nil {
+						return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+					}
+
+					break
+				}
+			}
 		}
 		thr.Transactions = append(thr.Transactions, *qr)
 	}
