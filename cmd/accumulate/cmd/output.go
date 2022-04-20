@@ -500,19 +500,7 @@ func printReflection(field, indent string, value reflect.Value) string {
 	case reflect.Slice, reflect.Array:
 		if value.Len() == 32 && value.Index(0).Type().Bits() == 8 {
 			out += " "
-			var hashString string
-			hash, ok := value.Interface().([32]uint8)
-			if ok {
-				hashString = hex.EncodeToString(hash[:])
-			} else {
-				hash, ok := value.Interface().([]uint8)
-				if ok {
-					hashString = hex.EncodeToString(hash)
-				} else {
-					hashString = "(unknown hash format)"
-				}
-			}
-			out += fmt.Sprintf("%s%s\n", indent+"   ", hashString)
+			out += fmt.Sprintf("%s%s\n", indent+"   ", getHashString(value))
 		} else {
 			out += "\n"
 			for i, n := 0, value.Len(); i < n; i++ {
@@ -554,6 +542,22 @@ func printReflection(field, indent string, value reflect.Value) string {
 	default:
 		return out + " " + fmt.Sprint(value) + "\n"
 	}
+}
+
+func getHashString(value reflect.Value) string {
+	var hashString string
+	hash, ok := value.Interface().([32]uint8)
+	if ok {
+		hashString = hex.EncodeToString(hash[:])
+	} else {
+		hash, ok := value.Interface().([]uint8)
+		if ok {
+			hashString = hex.EncodeToString(hash)
+		} else {
+			hashString = "(unknown hash format)"
+		}
+	}
+	return hashString
 }
 
 func outputTransactionResultForHumans(t protocol.TransactionResult) string {
