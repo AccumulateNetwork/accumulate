@@ -9,13 +9,13 @@ VERSION = gitlab.com/accumulatenetwork/accumulate.Version=$(GIT_DESCRIBE)
 COMMIT = gitlab.com/accumulatenetwork/accumulate.Commit=$(GIT_COMMIT)
 
 LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
-BUILDFLAGS = -tags production
+FLAGS = $(BUILDFLAGS) -tags production -ldflags $(LDFLAGS)
 
 build:
-	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulated
+	go build $(FLAGS) ./cmd/accumulated
 
 install:
-	go install $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulated
+	go install $(FLAGS) ./cmd/accumulated
 
 accumulate:
-	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulate
+	go build $(FLAGS) ./cmd/accumulate
