@@ -3,6 +3,7 @@ package encoding
 import (
 	"encoding"
 	"fmt"
+	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
@@ -19,6 +20,7 @@ type BinaryValue interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
 	CopyAsInterface() interface{}
+	UnmarshalBinaryFrom(io.Reader) error
 }
 
 // Byter is implemented by any value that has a Bytes method.

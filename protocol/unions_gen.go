@@ -101,7 +101,7 @@ func UnmarshalAccountFrom(rd io.ReadSeeker) (Account, error) {
 	}
 
 	// Unmarshal the result
-	err = v.UnmarshalBinary(nil)
+	err = v.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func UnmarshalTransactionBodyFrom(rd io.ReadSeeker) (TransactionBody, error) {
 	}
 
 	// Unmarshal the result
-	err = v.UnmarshalBinary(nil)
+	err = v.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func UnmarshalAccountAuthOperationFrom(rd io.ReadSeeker) (AccountAuthOperation, 
 	}
 
 	// Unmarshal the result
-	err = v.UnmarshalBinary(nil)
+	err = v.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +460,7 @@ func UnmarshalKeyPageOperationFrom(rd io.ReadSeeker) (KeyPageOperation, error) {
 	}
 
 	// Unmarshal the result
-	err = v.UnmarshalBinary(nil)
+	err = v.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}
@@ -571,7 +571,7 @@ func UnmarshalSignatureFrom(rd io.ReadSeeker) (Signature, error) {
 	}
 
 	// Unmarshal the result
-	err = v.UnmarshalBinary(nil)
+	err = v.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}

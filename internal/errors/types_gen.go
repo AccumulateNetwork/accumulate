@@ -116,17 +116,19 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 	if !(len(v.FuncName) == 0) {
 		writer.WriteString(1, v.FuncName)
 	}
-
 	if !(len(v.File) == 0) {
 		writer.WriteString(2, v.File)
 	}
-
 	if !(v.Line == 0) {
 		writer.WriteInt(3, v.Line)
 	}
-
-	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CallSite)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -179,21 +181,22 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 	if !(len(v.Message) == 0) {
 		writer.WriteString(1, v.Message)
 	}
-
 	if !(v.Code == 0) {
 		writer.WriteEnum(2, v.Code)
 	}
-
 	if !(v.Cause == nil) {
 		writer.WriteValue(3, v.Cause)
 	}
-
 	if !(v.CallSite == nil) {
 		writer.WriteValue(4, v.CallSite)
 	}
-
-	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Error)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -232,9 +235,11 @@ func (v *Error) IsValid() error {
 }
 
 func (v *CallSite) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.FuncName = x
@@ -245,19 +250,26 @@ func (v *CallSite) UnmarshalBinary(data []byte) error {
 	if x, ok := reader.ReadInt(3); ok {
 		v.Line = x
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_CallSite)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_CallSite)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *Error) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Message = x
@@ -271,11 +283,16 @@ func (v *Error) UnmarshalBinary(data []byte) error {
 	if x := new(CallSite); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.CallSite = x
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_Error)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_Error)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }

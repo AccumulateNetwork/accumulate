@@ -75,7 +75,7 @@ func UnmarshalRecordFrom(rd io.ReadSeeker) (Record, error) {
 	}
 
 	// Unmarshal the result
-	err = v.UnmarshalBinary(nil)
+	err = v.UnmarshalBinaryFrom(rd)
 	if err != nil {
 		return nil, err
 	}

@@ -304,9 +304,13 @@ func (v *BlockChainUpdatesIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
-
-	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_BlockChainUpdatesIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -345,9 +349,13 @@ func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
-
-	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_BlockStateIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -386,13 +394,16 @@ func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 	if !(len(v.Transaction) == 0) {
 		writer.WriteBytes(1, v.Transaction)
 	}
-
 	if !(v.ChainEntry == 0) {
 		writer.WriteUint(2, v.ChainEntry)
 	}
-
-	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_BlockStateSynthTxnEntry)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -446,33 +457,31 @@ func (v *ChainUpdate) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteUrl(1, v.Account)
 	}
-
 	if !(len(v.Name) == 0) {
 		writer.WriteString(2, v.Name)
 	}
-
 	if !(v.Type == 0) {
 		writer.WriteEnum(3, v.Type)
 	}
-
 	if !(v.Index == 0) {
 		writer.WriteUint(4, v.Index)
 	}
-
 	if !(v.SourceIndex == 0) {
 		writer.WriteUint(5, v.SourceIndex)
 	}
-
 	if !(v.SourceBlock == 0) {
 		writer.WriteUint(6, v.SourceBlock)
 	}
-
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(7, v.Entry)
 	}
-
-	writer.WriteBytes(8, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ChainUpdate)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -541,9 +550,13 @@ func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(1, &v)
 		}
 	}
-
-	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_PendingTransactionsIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -586,21 +599,22 @@ func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteUrl(1, v.Account)
 	}
-
 	if !(len(v.Chain) == 0) {
 		writer.WriteString(2, v.Chain)
 	}
-
 	if !(v.ChainIndex == 0) {
 		writer.WriteUint(3, v.ChainIndex)
 	}
-
 	if !(v.AnchorIndex == 0) {
 		writer.WriteUint(4, v.AnchorIndex)
 	}
-
-	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -654,9 +668,13 @@ func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
-
-	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TransactionChainIndex)
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -680,9 +698,11 @@ func (v *TransactionChainIndex) IsValid() error {
 }
 
 func (v *BlockChainUpdatesIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *BlockChainUpdatesIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	for {
 		if x := new(ChainUpdate); reader.ReadValue(1, x.UnmarshalBinary) {
@@ -691,19 +711,26 @@ func (v *BlockChainUpdatesIndex) UnmarshalBinary(data []byte) error {
 			break
 		}
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_BlockChainUpdatesIndex)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_BlockChainUpdatesIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *BlockStateIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *BlockStateIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	for {
 		if x := new(BlockStateSynthTxnEntry); reader.ReadValue(1, x.UnmarshalBinary) {
@@ -712,19 +739,26 @@ func (v *BlockStateIndex) UnmarshalBinary(data []byte) error {
 			break
 		}
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_BlockStateIndex)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_BlockStateIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadBytes(1); ok {
 		v.Transaction = x
@@ -732,19 +766,26 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.ChainEntry = x
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_BlockStateSynthTxnEntry)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_BlockStateSynthTxnEntry)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *ChainUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *ChainUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Account = x
@@ -767,19 +808,26 @@ func (v *ChainUpdate) UnmarshalBinary(data []byte) error {
 	if x, ok := reader.ReadBytes(7); ok {
 		v.Entry = x
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_ChainUpdate)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_ChainUpdate)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *PendingTransactionsIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *PendingTransactionsIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	for {
 		if x, ok := reader.ReadHash(1); ok {
@@ -788,19 +836,26 @@ func (v *PendingTransactionsIndex) UnmarshalBinary(data []byte) error {
 			break
 		}
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_PendingTransactionsIndex)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_PendingTransactionsIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Account = x
@@ -814,19 +869,26 @@ func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.AnchorIndex = x
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *TransactionChainIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-	rreader := bytes.NewReader(data)
-	reader := encoding.NewReader(rreader)
+func (v *TransactionChainIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
 
 	for {
 		if x := new(TransactionChainEntry); reader.ReadValue(1, x.UnmarshalBinary) {
@@ -835,13 +897,18 @@ func (v *TransactionChainIndex) UnmarshalBinary(data []byte) error {
 			break
 		}
 	}
-	var buf = make([]byte, rreader.Len())
-	_, err := io.ReadFull(rreader, buf)
-	v.extraData = buf
-	seen, err := reader.Reset(fieldNames_TransactionChainIndex)
-	v.fieldsSet = seen
 
+	seen, err := reader.Reset(fieldNames_TransactionChainIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 
 func (v *BlockChainUpdatesIndex) MarshalJSON() ([]byte, error) {

@@ -100,7 +100,9 @@ func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 var fieldNames_{{.Name}} = []string{
 	{{$index := 0}}
 	{{- range .Fields}}
+	{{- if gt .Number $index }}
 	{{$index = .Number}}
+	{{- end}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	{{.Number}}: "{{.Name}}",
@@ -116,9 +118,7 @@ var fieldNames_{{.Name}} = []string{
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
-    {{$index:=0}}
-	{{  range .Fields}}
-	{{$index = .Number}}
+   	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	writer.WriteValue({{.Number}}, &v.{{get .}})
@@ -131,9 +131,13 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	{{- end}}
 	{{- end}}
 	{{- end}}
-	{{$index = (inc $index)}}
-	writer.WriteBytes({{$index}},v.extraData)
-     	_, _, err := writer.Reset(fieldNames_{{.Name}})
+	_, _, err := writer.Reset(fieldNames_{{.Name}})
+	if err != nil {
+		return nil, err
+	}
+
+	buffer.Write(v.extraData)
+
 	return buffer.Bytes(), err
 }
 
@@ -171,10 +175,12 @@ func (v *{{.Name}}) IsValid() error {
 
 {{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
 
-    rreader := bytes.NewReader(data)
-	reader:=encoding.NewReader(rreader)
-	{{  range .Fields}}
+func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+  	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	reader.ReadValue({{.Number}}, v.{{get .}}.UnmarshalBinary)
@@ -187,13 +193,18 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 	{{- end}}
 	{{- end}}
 	{{- end}}
-    var buf = make([]byte,rreader.Len())
-	_,err:=io.ReadFull(rreader,buf)
-	v.extraData=buf	
-	seen, err := reader.Reset(fieldNames_{{.Name}})
+
+   seen, err := reader.Reset(fieldNames_{{.Name}})
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
-	
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return err
+	}
 	return err
+
 }
 {{end}}{{end}}
 

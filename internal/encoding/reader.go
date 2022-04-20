@@ -342,3 +342,8 @@ func (r *Reader) ReadEnum(n uint, v EnumValueSetter) bool {
 	r.didRead(n, fmt.Errorf("%d is not a valid value", u), "failed to unmarshal value")
 	return false
 }
+
+//ReadAll reads the entire value from the current position
+func (r *Reader) ReadAll() ([]byte, error) {
+	return io.ReadAll(r.r)
+}
