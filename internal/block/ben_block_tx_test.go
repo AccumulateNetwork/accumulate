@@ -1,6 +1,7 @@
 package block_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 func BenchmarkBlockTxs(b *testing.B) {
 
 	//number of transactions can be set
-	//	nTxs := []int{100,500}
+	nTxs := []int{1, 10, 100, 500, 1000}
 
 	sim := simulator.New(b, 1)
 	sim.InitChain()
@@ -33,39 +34,38 @@ func BenchmarkBlockTxs(b *testing.B) {
 	require.NoError(b, x.Executor.BeginBlock(block))
 
 	//benchmark on different transaction numbers for a single block
-	//	for _, size := range nTxs {
-	//		b.Run(fmt.Sprintf("Number of transactions_%d", size), func(b *testing.B) {
-	//			for i := 0; i < size; i++ {
-	for i := 0; i < 500; i++ {
+	for _, size := range nTxs {
+		b.Run(fmt.Sprintf("Number of transactions_%d", size), func(b *testing.B) {
+			for i := 0; i < size; i++ {
 
-		env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
-			WithPrincipal(protocol.FaucetUrl).
-			WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
-			Faucet())
-		require.NoError(b, err)
-		require.NoError(b, env[0].LoadTransaction(block.Batch))
-		_, err = x.Executor.ExecuteEnvelope(block, env[0])
-		require.NoError(b, err)
+				env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
+					WithPrincipal(protocol.FaucetUrl).
+					WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
+					Faucet())
+				require.NoError(b, err)
+				require.NoError(b, env[0].LoadTransaction(block.Batch))
+				_, err = x.Executor.ExecuteEnvelope(block, env[0])
+				require.NoError(b, err)
+			}
+
+			b.ResetTimer()
+
+			env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
+				WithPrincipal(protocol.FaucetUrl).
+				WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
+				Faucet())
+			require.NoError(b, err)
+			require.NoError(b, env[0].LoadTransaction(block.Batch))
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				block2 := *block // Copy the block
+				block2.Batch = block.Batch.Begin(true)
+				_, err = x.Executor.ExecuteEnvelope(&block2, env[0])
+				block2.Batch.Discard()
+				require.NoError(b, err)
+			}
+		})
 	}
-
-	b.ResetTimer()
-
-	env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
-		WithPrincipal(protocol.FaucetUrl).
-		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
-		Faucet())
-	require.NoError(b, err)
-	require.NoError(b, env[0].LoadTransaction(block.Batch))
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		block2 := *block // Copy the block
-		block2.Batch = block.Batch.Begin(true)
-		_, err = x.Executor.ExecuteEnvelope(&block2, env[0])
-		block2.Batch.Discard()
-		require.NoError(b, err)
-	}
-	//		})
-	//	}
 
 }
