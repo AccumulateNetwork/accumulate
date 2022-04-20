@@ -109,10 +109,14 @@ func CreateToken(origin string, args []string) (string, error) {
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
-	var supplyLimit int
+	prcsn, err := strconv.Atoi(precision)
+	if err != nil {
+		return "", err
+	}
+	var supplyLimit *big.Int
 	var properties *url2.URL
 	if len(args) > 3 {
-		supplyLimit, err = strconv.Atoi(args[3])
+		limit, err := strconv.Atoi(args[3])
 		if err != nil {
 			properties, err = url2.Parse(args[4])
 			if err != nil {
@@ -127,6 +131,7 @@ func CreateToken(origin string, args []string) (string, error) {
 				return "", fmt.Errorf("properties url is not a valid properties data account")
 			}
 		}
+		supplyLimit = big.NewInt(int64(math.Pow10(prcsn)) * int64(limit))
 	}
 	if len(args) > 4 {
 		properties, err = url2.Parse(args[4])
@@ -143,11 +148,6 @@ func CreateToken(origin string, args []string) (string, error) {
 		}
 	}
 
-	prcsn, err := strconv.Atoi(precision)
-	if err != nil {
-		return "", err
-	}
-
 	u, err := url2.Parse(url)
 	if err != nil {
 		return "", err
@@ -158,7 +158,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
-	params.SupplyLimit = big.NewInt(int64(math.Pow10(prcsn)) * int64(supplyLimit))
+	params.SupplyLimit = supplyLimit
 	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err
