@@ -57,9 +57,6 @@ func (c *stateCache) Commit() ([]protocol.Account, error) {
 
 // LoadUrl loads a chain by URL and unmarshals it.
 func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
-	if account == nil {
-		return nil, storage.ErrNotFound
-	}
 	state, ok := c.chains[account.AccountID32()]
 	if ok {
 		return state, nil

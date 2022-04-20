@@ -49,36 +49,38 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 
 	accounts := []protocol.Account{identity}
 	var book *protocol.KeyBook
-	err = st.LoadUrlAs(bookUrl, &book)
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, storage.ErrNotFound):
-		if len(body.KeyHash) == 0 {
-			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
-		}
-		if bookUrl == nil {
-			return nil, fmt.Errorf("key book url is required to create identity")
-		}
+	if bookUrl != nil {
+		err = st.LoadUrlAs(bookUrl, &book)
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, storage.ErrNotFound):
+			if len(body.KeyHash) == 0 {
+				return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
+			}
+			if bookUrl == nil {
+				return nil, fmt.Errorf("key book url is required to create identity")
+			}
 
-		book = new(protocol.KeyBook)
-		book.Url = bookUrl
-		book.PageCount = 1
-		book.AddAuthority(bookUrl)
-		accounts = append(accounts, book)
-		if len(body.KeyHash) != 32 {
-			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
+			book = new(protocol.KeyBook)
+			book.Url = bookUrl
+			book.PageCount = 1
+			book.AddAuthority(bookUrl)
+			accounts = append(accounts, book)
+			if len(body.KeyHash) != 32 {
+				return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
+			}
+			page := new(protocol.KeyPage)
+			page.Version = 1
+			page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
+			page.AcceptThreshold = 1 // Require one signature from the Key Page
+			keySpec := new(protocol.KeySpec)
+			keySpec.PublicKeyHash = body.KeyHash
+			page.Keys = append(page.Keys, keySpec)
+			accounts = append(accounts, page)
+		default:
+			return nil, err
 		}
-		page := new(protocol.KeyPage)
-		page.Version = 1
-		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-		page.AcceptThreshold = 1 // Require one signature from the Key Page
-		keySpec := new(protocol.KeySpec)
-		keySpec.PublicKeyHash = body.KeyHash
-		page.Keys = append(page.Keys, keySpec)
-		accounts = append(accounts, page)
-	default:
-		return nil, err
 	}
 
 	st.Create(accounts...)
