@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"math"
+	"math/big"
 	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -27,7 +29,7 @@ var tokenCmdGet = &cobra.Command{
 }
 
 var tokenCmdCreate = &cobra.Command{
-	Use:   "create [origin adi or lite url] [adi signer key name (if applicable)] [token url] [symbol] [precision (0 - 18)] [properties URL (optional)]",
+	Use:   "create [origin adi or lite url] [adi signer key name (if applicable)] [token url] [symbol] [precision (0 - 18)] [supply limit] [properties URL (optional)]",
 	Short: "Create new token",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -107,9 +109,32 @@ func CreateToken(origin string, args []string) (string, error) {
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
+	prcsn, err := strconv.Atoi(precision)
+	if err != nil {
+		return "", err
+	}
+	var supplyLimit *big.Int
 	var properties *url2.URL
 	if len(args) > 3 {
-		properties, err = url2.Parse(args[3])
+		limit, err := strconv.Atoi(args[3])
+		if err != nil {
+			properties, err = url2.Parse(args[4])
+			if err != nil {
+				return "", fmt.Errorf("invalid properties url, %v", err)
+			}
+			res, err := GetUrl(properties.String())
+			if err != nil {
+				return "", fmt.Errorf("cannot query properties url, %v", err)
+			}
+			//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
+			if res.Type != protocol.AccountTypeDataAccount.String() {
+				return "", fmt.Errorf("properties url is not a valid properties data account")
+			}
+		}
+		supplyLimit = big.NewInt(int64(math.Pow10(prcsn)) * int64(limit))
+	}
+	if len(args) > 4 {
+		properties, err = url2.Parse(args[4])
 		if err != nil {
 			return "", fmt.Errorf("invalid properties url, %v", err)
 		}
@@ -123,11 +148,6 @@ func CreateToken(origin string, args []string) (string, error) {
 		}
 	}
 
-	prcsn, err := strconv.Atoi(precision)
-	if err != nil {
-		return "", err
-	}
-
 	u, err := url2.Parse(url)
 	if err != nil {
 		return "", err
@@ -138,7 +158,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
-
+	params.SupplyLimit = supplyLimit
 	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, signer)
 	if err != nil {
 		return "", err
