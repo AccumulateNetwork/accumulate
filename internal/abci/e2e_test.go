@@ -16,6 +16,7 @@ import (
 	types2 "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -654,6 +655,43 @@ func TestAdiAccountTx(t *testing.T) {
 
 	require.Equal(t, int64(protocol.AcmePrecision-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
+}
+
+func TestSendTokensToBadRecipient(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	n := nodes[subnets[1]][0]
+
+	alice := generateKey()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	batch := n.db.Begin(true)
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, batch.Commit())
+
+	// The send should succeed
+	txnHashes := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		exch := new(protocol.SendTokens)
+		exch.AddRecipient(acctesting.MustParseUrl("foo"), big.NewInt(int64(1000)))
+
+		send(newTxn(aliceUrl.String()).
+			WithSigner(aliceUrl, 1).
+			WithBody(exch).
+			Initiate(protocol.SignatureTypeLegacyED25519, alice).
+			Build())
+	})
+
+	// The synthetic transaction should fail
+	res, err := n.api.QueryTx(txnHashes[0][:], time.Second, true, api.QueryOptions{})
+	require.NoError(t, err)
+	res, err = n.api.QueryTx(res.SyntheticTxids[0][:], time.Second, true, api.QueryOptions{})
+	require.NoError(t, err)
+	require.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), res.Status.Code)
+
+	// Give the synthetic receipt a second to resolve - workaround AC-1238
+	time.Sleep(time.Second)
+
+	// The balance should be unchanged
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
