@@ -316,8 +316,10 @@ func TestCreateADI(t *testing.T) {
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
+	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
 	liteAccount := generateKey()
