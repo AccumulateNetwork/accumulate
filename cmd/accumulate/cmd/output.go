@@ -247,6 +247,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			str += s
 			str += fmt.Sprintln()
 		}
+		out += str
 	}
 
 	return out, nil
