@@ -50,6 +50,7 @@ type {{.Name}} struct {
 	{{-     end}}
 	{{-   end}}
 	{{- end}}
+    extraData []byte
 }
 {{end}}
 
@@ -97,7 +98,9 @@ func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 
 {{range .Types}}{{if .IsBinary}}
 var fieldNames_{{.Name}} = []string{
+	{{$index := 0}}
 	{{- range .Fields}}
+	{{$index = .Number}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	{{.Number}}: "{{.Name}}",
@@ -106,13 +109,16 @@ var fieldNames_{{.Name}} = []string{
 	{{- end}}
 	{{- end}}
 	{{- end}}
+	{{$index = (inc $index)}}
+	{{$index}}: "extraData",
 }
 
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
-
+    {{$index:=0}}
 	{{  range .Fields}}
+	{{$index = .Number}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	writer.WriteValue({{.Number}}, &v.{{get .}})
@@ -125,8 +131,9 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	{{- end}}
 	{{- end}}
 	{{- end}}
-
-	_, _, err := writer.Reset(fieldNames_{{.Name}})
+	{{$index = (inc $index)}}
+	writer.WriteBytes({{$index}},v.extraData)
+     	_, _, err := writer.Reset(fieldNames_{{.Name}})
 	return buffer.Bytes(), err
 }
 
@@ -164,12 +171,9 @@ func (v *{{.Name}}) IsValid() error {
 
 {{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
+    rreader := bytes.NewReader(data)
+	reader:=encoding.NewReader(rreader)
 	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
@@ -183,9 +187,12 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	{{- end}}
 	{{- end}}
 	{{- end}}
-
+    var buf = make([]byte,rreader.Len())
+	_,err:=io.ReadFull(rreader,buf)
+	v.extraData=buf	
 	seen, err := reader.Reset(fieldNames_{{.Name}})
 	v.fieldsSet = seen
+	
 	return err
 }
 {{end}}{{end}}

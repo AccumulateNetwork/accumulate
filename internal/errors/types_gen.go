@@ -16,6 +16,7 @@ type CallSite struct {
 	FuncName  string `json:"funcName,omitempty" form:"funcName" query:"funcName" validate:"required"`
 	File      string `json:"file,omitempty" form:"file" query:"file" validate:"required"`
 	Line      int64  `json:"line,omitempty" form:"line" query:"line" validate:"required"`
+	extraData []byte
 }
 
 type Error struct {
@@ -24,6 +25,7 @@ type Error struct {
 	Code      Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Cause     *Error    `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	CallSite  *CallSite `json:"callSite,omitempty" form:"callSite" query:"callSite" validate:"required"`
+	extraData []byte
 }
 
 func (v *CallSite) Copy() *CallSite {
@@ -97,9 +99,14 @@ func (v *Error) Equal(u *Error) bool {
 }
 
 var fieldNames_CallSite = []string{
+
 	1: "FuncName",
+
 	2: "File",
+
 	3: "Line",
+
+	4: "extraData",
 }
 
 func (v *CallSite) MarshalBinary() ([]byte, error) {
@@ -109,13 +116,16 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 	if !(len(v.FuncName) == 0) {
 		writer.WriteString(1, v.FuncName)
 	}
+
 	if !(len(v.File) == 0) {
 		writer.WriteString(2, v.File)
 	}
+
 	if !(v.Line == 0) {
 		writer.WriteInt(3, v.Line)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CallSite)
 	return buffer.Bytes(), err
 }
@@ -150,10 +160,16 @@ func (v *CallSite) IsValid() error {
 }
 
 var fieldNames_Error = []string{
+
 	1: "Message",
+
 	2: "Code",
+
 	3: "Cause",
+
 	4: "CallSite",
+
+	5: "extraData",
 }
 
 func (v *Error) MarshalBinary() ([]byte, error) {
@@ -163,16 +179,20 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 	if !(len(v.Message) == 0) {
 		writer.WriteString(1, v.Message)
 	}
+
 	if !(v.Code == 0) {
 		writer.WriteEnum(2, v.Code)
 	}
+
 	if !(v.Cause == nil) {
 		writer.WriteValue(3, v.Cause)
 	}
+
 	if !(v.CallSite == nil) {
 		writer.WriteValue(4, v.CallSite)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Error)
 	return buffer.Bytes(), err
 }
@@ -212,11 +232,9 @@ func (v *Error) IsValid() error {
 }
 
 func (v *CallSite) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.FuncName = x
@@ -227,18 +245,19 @@ func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadInt(3); ok {
 		v.Line = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CallSite)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *Error) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Message = x
@@ -252,8 +271,11 @@ func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(CallSite); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.CallSite = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_Error)
 	v.fieldsSet = seen
+
 	return err
 }

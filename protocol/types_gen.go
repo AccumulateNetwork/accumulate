@@ -21,27 +21,32 @@ type ADI struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
+	extraData []byte
 }
 
 type AccountAuth struct {
 	fieldsSet   []bool
 	Authorities []AuthorityEntry `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	extraData   []byte
 }
 
 type AcmeFaucet struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type AcmeOracle struct {
 	fieldsSet []bool
 	Price     uint64 `json:"price,omitempty" form:"price" query:"price" validate:"required"`
+	extraData []byte
 }
 
 type AddAccountAuthorityOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to add.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type AddCredits struct {
@@ -49,6 +54,7 @@ type AddCredits struct {
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle"`
+	extraData []byte
 }
 
 type AddCreditsResult struct {
@@ -56,24 +62,28 @@ type AddCreditsResult struct {
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	Credits   uint64  `json:"credits,omitempty" form:"credits" query:"credits" validate:"required"`
 	Oracle    uint64  `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
+	extraData []byte
 }
 
 type AddKeyOperation struct {
 	fieldsSet []bool
 	Entry     KeySpecParams `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type AddValidator struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
-	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	extraData []byte
 }
 
 type Anchor struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
+	extraData []byte
 }
 
 type AnchorMetadata struct {
@@ -84,19 +94,22 @@ type AnchorMetadata struct {
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
 	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
 	Entry       []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData   []byte
 }
 
 type AnchoredRecord struct {
 	fieldsSet []bool
 	Record    []byte   `json:"record,omitempty" form:"record" query:"record" validate:"required"`
 	Anchor    [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	extraData []byte
 }
 
 type AuthorityEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	// Disabled disables auth checks for this authority, allowing anyone to sign for it.
-	Disabled bool `json:"disabled,omitempty" form:"disabled" query:"disabled" validate:"required"`
+	Disabled  bool `json:"disabled,omitempty" form:"disabled" query:"disabled" validate:"required"`
+	extraData []byte
 }
 
 type BTCLegacySignature struct {
@@ -108,6 +121,7 @@ type BTCLegacySignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type BTCSignature struct {
@@ -119,23 +133,27 @@ type BTCSignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type BurnTokens struct {
 	fieldsSet []bool
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type ChainMetadata struct {
 	fieldsSet []bool
 	Name      string    `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	Type      ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	extraData []byte
 }
 
 type ChainParams struct {
 	fieldsSet []bool
 	Data      []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	IsUpdate  bool   `json:"isUpdate,omitempty" form:"isUpdate" query:"isUpdate" validate:"required"`
+	extraData []byte
 }
 
 type CreateDataAccount struct {
@@ -144,6 +162,7 @@ type CreateDataAccount struct {
 	KeyBookUrl        *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	ManagerKeyBookUrl *url.URL `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl"`
 	Scratch           bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	extraData         []byte
 }
 
 type CreateIdentity struct {
@@ -152,6 +171,7 @@ type CreateIdentity struct {
 	KeyHash    []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData  []byte
 }
 
 type CreateKeyBook struct {
@@ -159,12 +179,14 @@ type CreateKeyBook struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	Manager       *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData     []byte
 }
 
 type CreateKeyPage struct {
 	fieldsSet []bool
 	Keys      []*KeySpecParams `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	Manager   *url.URL         `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData []byte
 }
 
 type CreateToken struct {
@@ -176,6 +198,7 @@ type CreateToken struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
 	Manager     *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData   []byte
 }
 
 type CreateTokenAccount struct {
@@ -185,29 +208,34 @@ type CreateTokenAccount struct {
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Scratch    bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData  []byte
 }
 
 type DataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	Scratch bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	Scratch   bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	extraData []byte
 }
 
 type DataEntry struct {
 	fieldsSet []bool
 	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
 }
 
 type DirectoryIndexMetadata struct {
 	fieldsSet []bool
 	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	extraData []byte
 }
 
 type DisableAccountAuthOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to enable authorization for.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type ED25519Signature struct {
@@ -219,6 +247,7 @@ type ED25519Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type ETHSignature struct {
@@ -230,16 +259,19 @@ type ETHSignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type EmptyResult struct {
 	fieldsSet []bool
+	extraData []byte
 }
 
 type EnableAccountAuthOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to enable authorization for.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type Envelope struct {
@@ -247,6 +279,7 @@ type Envelope struct {
 	Signatures  []Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	TxHash      []byte         `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Transaction []*Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
+	extraData   []byte
 }
 
 // ForwardedSignature is used when forwarding signatures from one subnet to another.
@@ -254,11 +287,13 @@ type ForwardedSignature struct {
 	fieldsSet []bool
 	Signature KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Signer    Signer       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	extraData []byte
 }
 
 type HashSet struct {
 	fieldsSet []bool
 	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
+	extraData []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -272,10 +307,12 @@ type IndexEntry struct {
 	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
 	// BlockTime is the start time of the block. Only include when indexing the root anchor chain.
 	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	extraData []byte
 }
 
 type InternalGenesis struct {
 	fieldsSet []bool
+	extraData []byte
 }
 
 type InternalLedger struct {
@@ -288,11 +325,13 @@ type InternalLedger struct {
 	PendingOracle uint64          `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
 	ActiveOracle  uint64          `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
 	AcmeBurnt     big.Int         `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	extraData     []byte
 }
 
 type InternalSendTransactions struct {
 	fieldsSet    []bool
 	Transactions []SendTransaction `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 // InternalSignature is used when executing transactions internally.
@@ -301,29 +340,34 @@ type InternalSignature struct {
 	// Network is the network that produced the transaction.
 	Network         *url.URL `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type InternalSyntheticLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	Pending []*SyntheticLedgerEntry `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Pending   []*SyntheticLedgerEntry `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	extraData []byte
 }
 
 type InternalTransactionsSent struct {
 	fieldsSet    []bool
 	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type InternalTransactionsSigned struct {
 	fieldsSet    []bool
 	Transactions []TransactionSignature `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type IssueTokens struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type KeyBook struct {
@@ -331,6 +375,7 @@ type KeyBook struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
 	PageCount uint64 `json:"pageCount,omitempty" form:"pageCount" query:"pageCount" validate:"required"`
+	extraData []byte
 }
 
 type KeyPage struct {
@@ -348,6 +393,7 @@ type KeyPage struct {
 	Version              uint64               `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty" form:"transactionBlacklist" query:"transactionBlacklist"`
+	extraData            []byte
 }
 
 type KeySpec struct {
@@ -355,12 +401,14 @@ type KeySpec struct {
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	Owner         *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	extraData     []byte
 }
 
 type KeySpecParams struct {
 	fieldsSet []bool
 	KeyHash   []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	extraData []byte
 }
 
 type LegacyED25519Signature struct {
@@ -372,17 +420,20 @@ type LegacyED25519Signature struct {
 	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type LiteDataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Tail      []byte   `json:"tail,omitempty" form:"tail" query:"tail" validate:"required"`
+	extraData []byte
 }
 
 type LiteIdentity struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type LiteTokenAccount struct {
@@ -392,16 +443,19 @@ type LiteTokenAccount struct {
 	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	extraData     []byte
 }
 
 type MetricsRequest struct {
 	fieldsSet []bool
 	Metric    string        `json:"metric,omitempty" form:"metric" query:"metric" validate:"required"`
 	Duration  time.Duration `json:"duration,omitempty" form:"duration" query:"duration" validate:"required"`
+	extraData []byte
 }
 
 type MetricsResponse struct {
-	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
 }
 
 type Object struct {
@@ -409,7 +463,8 @@ type Object struct {
 	// Type is the object's type.
 	Type ObjectType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	// Chains lists the object's chains.
-	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Chains    []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	extraData []byte
 }
 
 type RCD1Signature struct {
@@ -421,6 +476,7 @@ type RCD1Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type Receipt struct {
@@ -428,12 +484,14 @@ type Receipt struct {
 	Start     []byte         `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Result    []byte         `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	Entries   []ReceiptEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type ReceiptEntry struct {
 	fieldsSet []bool
 	Right     bool   `json:"right,omitempty" form:"right" query:"right" validate:"required"`
 	Hash      []byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
 }
 
 type ReceiptSignature struct {
@@ -442,29 +500,34 @@ type ReceiptSignature struct {
 	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
 	Receipt
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type RemoteTransaction struct {
 	fieldsSet []bool
 	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash"`
+	extraData []byte
 }
 
 type RemoveAccountAuthorityOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to add.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type RemoveKeyOperation struct {
 	fieldsSet []bool
 	Entry     KeySpecParams `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type RemoveValidator struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
-	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	extraData []byte
 }
 
 type SegWitDataEntry struct {
@@ -472,6 +535,7 @@ type SegWitDataEntry struct {
 	SyntheticOrigin
 	EntryUrl  *url.URL `json:"entryUrl,omitempty" form:"entryUrl" query:"entryUrl" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	extraData []byte
 }
 
 type SendTokens struct {
@@ -479,17 +543,20 @@ type SendTokens struct {
 	Hash      [32]byte          `json:"hash,omitempty" form:"hash" query:"hash"`
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
 }
 
 type SendTransaction struct {
 	fieldsSet []bool
 	Payload   TransactionBody `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 	Recipient *url.URL        `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	extraData []byte
 }
 
 type SetThresholdKeyPageOperation struct {
 	fieldsSet []bool
 	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticAnchor struct {
@@ -508,38 +575,44 @@ type SyntheticAnchor struct {
 	Block           uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	AcmeOraclePrice uint64 `json:"acmeOraclePrice,omitempty" form:"acmeOraclePrice" query:"acmeOraclePrice" validate:"required"`
 	// Receipts are receipts for anchors from other subnets that were included in the block.
-	Receipts []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Receipts  []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticBurnTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticCreateChain struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Chains []ChainParams `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Chains    []ChainParams `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticDepositCredits struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticDepositTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Token  *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
-	Amount big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticForwardTransaction struct {
 	fieldsSet   []bool
 	Signatures  []ForwardedSignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Transaction *Transaction         `json:"transaction,omitempty" form:"transaction" query:"transaction"`
+	extraData   []byte
 }
 
 type SyntheticLedger struct {
@@ -547,6 +620,7 @@ type SyntheticLedger struct {
 	Nonce     uint64     `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
 	Unsigned  [][32]byte `json:"unsigned,omitempty" form:"unsigned" query:"unsigned" validate:"required"`
 	Unsent    [][32]byte `json:"unsent,omitempty" form:"unsent" query:"unsent" validate:"required"`
+	extraData []byte
 }
 
 // SyntheticLedgerEntry contains the information needed to produce a receipt for a synthetic transaction that was produced in some block.
@@ -564,18 +638,21 @@ type SyntheticLedgerEntry struct {
 	RootIndexIndex uint64 `json:"rootIndexIndex,omitempty" form:"rootIndexIndex" query:"rootIndexIndex" validate:"required"`
 	// NeedsReceipt indicates whether the synthetic transaction is waiting for a receipt.
 	NeedsReceipt bool `json:"needsReceipt,omitempty" form:"needsReceipt" query:"needsReceipt" validate:"required"`
+	extraData    []byte
 }
 
 type SyntheticMirror struct {
 	fieldsSet []bool
 	Objects   []AnchoredRecord `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticOrigin struct {
 	fieldsSet []bool
 	// Source is the principal of the transaction that produced this transaction.
-	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	Cause  [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	Source    *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Cause     [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticReceipt struct {
@@ -583,6 +660,7 @@ type SyntheticReceipt struct {
 	SyntheticOrigin
 	SynthTxHash [32]byte           `json:"synthTxHash,omitempty" form:"synthTxHash" query:"synthTxHash" validate:"required"`
 	Status      *TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	extraData   []byte
 }
 
 // SyntheticSignature is used to initiate transactions between BVNs.
@@ -595,21 +673,24 @@ type SyntheticSignature struct {
 	// SequenceNumber is the sequence number of the transaction.
 	SequenceNumber  uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type SyntheticWriteData struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type TokenAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	TokenUrl *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
-	Balance  big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	Scratch  bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	extraData []byte
 }
 
 type TokenIssuer struct {
@@ -621,12 +702,14 @@ type TokenIssuer struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
 	Issued      big.Int  `json:"issued,omitempty" form:"issued" query:"issued" validate:"required"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
+	extraData   []byte
 }
 
 type TokenRecipient struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type Transaction struct {
@@ -634,6 +717,7 @@ type Transaction struct {
 	Header    TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
 	Body      TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash      []byte
+	extraData []byte
 }
 
 type TransactionHeader struct {
@@ -642,17 +726,20 @@ type TransactionHeader struct {
 	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
 	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	extraData []byte
 }
 
 type TransactionResultSet struct {
 	fieldsSet []bool
 	Results   []*TransactionStatus `json:"results,omitempty" form:"results" query:"results" validate:"required"`
+	extraData []byte
 }
 
 type TransactionSignature struct {
 	fieldsSet   []bool
 	Transaction [32]byte  `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signature   Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	extraData   []byte
 }
 
 type TransactionStatus struct {
@@ -669,56 +756,66 @@ type TransactionStatus struct {
 	// Initiator is the signer that initiated the transaction.
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// Signers lists accounts that have signed the transaction.
-	Signers []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	Signers   []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData []byte
 }
 
 type UnknownAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type UnknownSigner struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Version   uint64   `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	extraData []byte
 }
 
 type UpdateAccountAuth struct {
 	fieldsSet  []bool
 	Operations []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	extraData  []byte
 }
 
 type UpdateAllowedKeyPageOperation struct {
 	fieldsSet []bool
 	Allow     []TransactionType `json:"allow,omitempty" form:"allow" query:"allow"`
 	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny"`
+	extraData []byte
 }
 
 type UpdateKey struct {
 	fieldsSet  []bool
 	NewKeyHash []byte `json:"newKeyHash,omitempty" form:"newKeyHash" query:"newKeyHash" validate:"required"`
+	extraData  []byte
 }
 
 type UpdateKeyOperation struct {
 	fieldsSet []bool
 	OldEntry  KeySpecParams `json:"oldEntry,omitempty" form:"oldEntry" query:"oldEntry" validate:"required"`
 	NewEntry  KeySpecParams `json:"newEntry,omitempty" form:"newEntry" query:"newEntry" validate:"required"`
+	extraData []byte
 }
 
 type UpdateKeyPage struct {
 	fieldsSet []bool
 	Operation []KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
+	extraData []byte
 }
 
 type UpdateValidatorKey struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	NewPubKey []byte `json:"newPubKey,omitempty" form:"newPubKey" query:"newPubKey" validate:"required"`
+	extraData []byte
 }
 
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type WriteDataResult struct {
@@ -726,12 +823,14 @@ type WriteDataResult struct {
 	EntryHash  [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	AccountUrl *url.URL `json:"accountUrl,omitempty" form:"accountUrl" query:"accountUrl" validate:"required"`
 	AccountID  []byte   `json:"accountID,omitempty" form:"accountID" query:"accountID" validate:"required"`
+	extraData  []byte
 }
 
 type WriteDataTo struct {
 	fieldsSet []bool
 	Recipient *url.URL  `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 func (*ADI) Type() AccountType { return AccountTypeIdentity }
@@ -4125,9 +4224,14 @@ func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
 }
 
 var fieldNames_ADI = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
+	4: "extraData",
 }
 
 func (v *ADI) MarshalBinary() ([]byte, error) {
@@ -4135,11 +4239,14 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ADI)
 	return buffer.Bytes(), err
 }
@@ -4170,7 +4277,10 @@ func (v *ADI) IsValid() error {
 }
 
 var fieldNames_AccountAuth = []string{
+
 	1: "Authorities",
+
+	2: "extraData",
 }
 
 func (v *AccountAuth) MarshalBinary() ([]byte, error) {
@@ -4183,6 +4293,7 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AccountAuth)
 	return buffer.Bytes(), err
 }
@@ -4207,8 +4318,12 @@ func (v *AccountAuth) IsValid() error {
 }
 
 var fieldNames_AcmeFaucet = []string{
+
 	1: "Type",
+
 	2: "Url",
+
+	3: "extraData",
 }
 
 func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
@@ -4216,10 +4331,12 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AcmeFaucet)
 	return buffer.Bytes(), err
 }
@@ -4247,7 +4364,10 @@ func (v *AcmeFaucet) IsValid() error {
 }
 
 var fieldNames_AcmeOracle = []string{
+
 	1: "Price",
+
+	2: "extraData",
 }
 
 func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
@@ -4258,6 +4378,7 @@ func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
 		writer.WriteUint(1, v.Price)
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AcmeOracle)
 	return buffer.Bytes(), err
 }
@@ -4282,8 +4403,12 @@ func (v *AcmeOracle) IsValid() error {
 }
 
 var fieldNames_AddAccountAuthorityOperation = []string{
+
 	1: "Type",
+
 	2: "Authority",
+
+	3: "extraData",
 }
 
 func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
@@ -4291,10 +4416,12 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AddAccountAuthorityOperation)
 	return buffer.Bytes(), err
 }
@@ -4322,10 +4449,16 @@ func (v *AddAccountAuthorityOperation) IsValid() error {
 }
 
 var fieldNames_AddCredits = []string{
+
 	1: "Type",
+
 	2: "Recipient",
+
 	3: "Amount",
+
 	4: "Oracle",
+
+	5: "extraData",
 }
 
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
@@ -4333,16 +4466,20 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
 	}
+
 	if !(v.Oracle == 0) {
 		writer.WriteUint(4, v.Oracle)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AddCredits)
 	return buffer.Bytes(), err
 }
@@ -4375,10 +4512,16 @@ func (v *AddCredits) IsValid() error {
 }
 
 var fieldNames_AddCreditsResult = []string{
+
 	1: "Type",
+
 	2: "Amount",
+
 	3: "Credits",
+
 	4: "Oracle",
+
+	5: "extraData",
 }
 
 func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
@@ -4386,16 +4529,20 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
+
 	if !(v.Credits == 0) {
 		writer.WriteUint(3, v.Credits)
 	}
+
 	if !(v.Oracle == 0) {
 		writer.WriteUint(4, v.Oracle)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AddCreditsResult)
 	return buffer.Bytes(), err
 }
@@ -4433,8 +4580,12 @@ func (v *AddCreditsResult) IsValid() error {
 }
 
 var fieldNames_AddKeyOperation = []string{
+
 	1: "Type",
+
 	2: "Entry",
+
+	3: "extraData",
 }
 
 func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
@@ -4442,10 +4593,12 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !((v.Entry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.Entry)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AddKeyOperation)
 	return buffer.Bytes(), err
 }
@@ -4473,9 +4626,14 @@ func (v *AddKeyOperation) IsValid() error {
 }
 
 var fieldNames_AddValidator = []string{
+
 	1: "Type",
+
 	2: "PubKey",
+
 	3: "Owner",
+
+	4: "extraData",
 }
 
 func (v *AddValidator) MarshalBinary() ([]byte, error) {
@@ -4483,13 +4641,16 @@ func (v *AddValidator) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PubKey) == 0) {
 		writer.WriteBytes(2, v.PubKey)
 	}
+
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AddValidator)
 	return buffer.Bytes(), err
 }
@@ -4517,9 +4678,14 @@ func (v *AddValidator) IsValid() error {
 }
 
 var fieldNames_Anchor = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
+	4: "extraData",
 }
 
 func (v *Anchor) MarshalBinary() ([]byte, error) {
@@ -4527,11 +4693,14 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Anchor)
 	return buffer.Bytes(), err
 }
@@ -4562,12 +4731,20 @@ func (v *Anchor) IsValid() error {
 }
 
 var fieldNames_AnchorMetadata = []string{
+
 	1: "ChainMetadata",
+
 	2: "Account",
+
 	3: "Index",
+
 	4: "SourceIndex",
+
 	5: "SourceBlock",
+
 	6: "Entry",
+
+	7: "extraData",
 }
 
 func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
@@ -4575,22 +4752,28 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteValue(1, &v.ChainMetadata)
+
 	if !(v.Account == nil) {
 		writer.WriteUrl(2, v.Account)
 	}
+
 	if !(v.Index == 0) {
 		writer.WriteUint(3, v.Index)
 	}
+
 	if !(v.SourceIndex == 0) {
 		writer.WriteUint(4, v.SourceIndex)
 	}
+
 	if !(v.SourceBlock == 0) {
 		writer.WriteUint(5, v.SourceBlock)
 	}
+
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(6, v.Entry)
 	}
 
+	writer.WriteBytes(7, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AnchorMetadata)
 	return buffer.Bytes(), err
 }
@@ -4638,8 +4821,12 @@ func (v *AnchorMetadata) IsValid() error {
 }
 
 var fieldNames_AnchoredRecord = []string{
+
 	1: "Record",
+
 	2: "Anchor",
+
+	3: "extraData",
 }
 
 func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
@@ -4649,10 +4836,12 @@ func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
 	if !(len(v.Record) == 0) {
 		writer.WriteBytes(1, v.Record)
 	}
+
 	if !(v.Anchor == ([32]byte{})) {
 		writer.WriteHash(2, &v.Anchor)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AnchoredRecord)
 	return buffer.Bytes(), err
 }
@@ -4682,8 +4871,12 @@ func (v *AnchoredRecord) IsValid() error {
 }
 
 var fieldNames_AuthorityEntry = []string{
+
 	1: "Url",
+
 	2: "Disabled",
+
+	3: "extraData",
 }
 
 func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
@@ -4693,10 +4886,12 @@ func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
+
 	if !(!v.Disabled) {
 		writer.WriteBool(2, v.Disabled)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_AuthorityEntry)
 	return buffer.Bytes(), err
 }
@@ -4726,14 +4921,24 @@ func (v *AuthorityEntry) IsValid() error {
 }
 
 var fieldNames_BTCLegacySignature = []string{
+
 	1: "Type",
+
 	2: "PublicKey",
+
 	3: "Signature",
+
 	4: "Signer",
+
 	5: "SignerVersion",
+
 	6: "Timestamp",
+
 	7: "Vote",
+
 	8: "TransactionHash",
+
+	9: "extraData",
 }
 
 func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
@@ -4741,28 +4946,36 @@ func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
+
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
+
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(5, v.SignerVersion)
 	}
+
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
 	}
+
 	if !(v.Vote == 0) {
 		writer.WriteEnum(7, v.Vote)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_BTCLegacySignature)
 	return buffer.Bytes(), err
 }
@@ -4805,14 +5018,24 @@ func (v *BTCLegacySignature) IsValid() error {
 }
 
 var fieldNames_BTCSignature = []string{
+
 	1: "Type",
+
 	2: "PublicKey",
+
 	3: "Signature",
+
 	4: "Signer",
+
 	5: "SignerVersion",
+
 	6: "Timestamp",
+
 	7: "Vote",
+
 	8: "TransactionHash",
+
+	9: "extraData",
 }
 
 func (v *BTCSignature) MarshalBinary() ([]byte, error) {
@@ -4820,28 +5043,36 @@ func (v *BTCSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
+
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
+
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(5, v.SignerVersion)
 	}
+
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
 	}
+
 	if !(v.Vote == 0) {
 		writer.WriteEnum(7, v.Vote)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_BTCSignature)
 	return buffer.Bytes(), err
 }
@@ -4884,8 +5115,12 @@ func (v *BTCSignature) IsValid() error {
 }
 
 var fieldNames_BurnTokens = []string{
+
 	1: "Type",
+
 	2: "Amount",
+
+	3: "extraData",
 }
 
 func (v *BurnTokens) MarshalBinary() ([]byte, error) {
@@ -4893,10 +5128,12 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_BurnTokens)
 	return buffer.Bytes(), err
 }
@@ -4924,8 +5161,12 @@ func (v *BurnTokens) IsValid() error {
 }
 
 var fieldNames_ChainMetadata = []string{
+
 	1: "Name",
+
 	2: "Type",
+
+	3: "extraData",
 }
 
 func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
@@ -4935,10 +5176,12 @@ func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
 	if !(len(v.Name) == 0) {
 		writer.WriteString(1, v.Name)
 	}
+
 	if !(v.Type == 0) {
 		writer.WriteEnum(2, v.Type)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ChainMetadata)
 	return buffer.Bytes(), err
 }
@@ -4968,8 +5211,12 @@ func (v *ChainMetadata) IsValid() error {
 }
 
 var fieldNames_ChainParams = []string{
+
 	1: "Data",
+
 	2: "IsUpdate",
+
+	3: "extraData",
 }
 
 func (v *ChainParams) MarshalBinary() ([]byte, error) {
@@ -4979,10 +5226,12 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	if !(len(v.Data) == 0) {
 		writer.WriteBytes(1, v.Data)
 	}
+
 	if !(!v.IsUpdate) {
 		writer.WriteBool(2, v.IsUpdate)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ChainParams)
 	return buffer.Bytes(), err
 }
@@ -5012,11 +5261,18 @@ func (v *ChainParams) IsValid() error {
 }
 
 var fieldNames_CreateDataAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "KeyBookUrl",
+
 	4: "ManagerKeyBookUrl",
+
 	5: "Scratch",
+
+	6: "extraData",
 }
 
 func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
@@ -5024,19 +5280,24 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(3, v.KeyBookUrl)
 	}
+
 	if !(v.ManagerKeyBookUrl == nil) {
 		writer.WriteUrl(4, v.ManagerKeyBookUrl)
 	}
+
 	if !(!v.Scratch) {
 		writer.WriteBool(5, v.Scratch)
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CreateDataAccount)
 	return buffer.Bytes(), err
 }
@@ -5064,11 +5325,18 @@ func (v *CreateDataAccount) IsValid() error {
 }
 
 var fieldNames_CreateIdentity = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "KeyHash",
+
 	4: "KeyBookUrl",
+
 	5: "Manager",
+
+	6: "extraData",
 }
 
 func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
@@ -5076,19 +5344,24 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(len(v.KeyHash) == 0) {
 		writer.WriteBytes(3, v.KeyHash)
 	}
+
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(4, v.KeyBookUrl)
 	}
+
 	if !(v.Manager == nil) {
 		writer.WriteUrl(5, v.Manager)
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CreateIdentity)
 	return buffer.Bytes(), err
 }
@@ -5116,10 +5389,16 @@ func (v *CreateIdentity) IsValid() error {
 }
 
 var fieldNames_CreateKeyBook = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "PublicKeyHash",
+
 	4: "Manager",
+
+	5: "extraData",
 }
 
 func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
@@ -5127,16 +5406,20 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(len(v.PublicKeyHash) == 0) {
 		writer.WriteBytes(3, v.PublicKeyHash)
 	}
+
 	if !(v.Manager == nil) {
 		writer.WriteUrl(4, v.Manager)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CreateKeyBook)
 	return buffer.Bytes(), err
 }
@@ -5169,9 +5452,14 @@ func (v *CreateKeyBook) IsValid() error {
 }
 
 var fieldNames_CreateKeyPage = []string{
+
 	1: "Type",
+
 	2: "Keys",
+
 	3: "Manager",
+
+	4: "extraData",
 }
 
 func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
@@ -5179,15 +5467,18 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
 			writer.WriteValue(2, v)
 		}
 	}
+
 	if !(v.Manager == nil) {
 		writer.WriteUrl(3, v.Manager)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CreateKeyPage)
 	return buffer.Bytes(), err
 }
@@ -5215,14 +5506,24 @@ func (v *CreateKeyPage) IsValid() error {
 }
 
 var fieldNames_CreateToken = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "KeyBookUrl",
+
 	4: "Symbol",
+
 	5: "Precision",
+
 	6: "Properties",
+
 	7: "SupplyLimit",
+
 	8: "Manager",
+
+	9: "extraData",
 }
 
 func (v *CreateToken) MarshalBinary() ([]byte, error) {
@@ -5230,28 +5531,36 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(3, v.KeyBookUrl)
 	}
+
 	if !(len(v.Symbol) == 0) {
 		writer.WriteString(4, v.Symbol)
 	}
+
 	if !(v.Precision == 0) {
 		writer.WriteUint(5, v.Precision)
 	}
+
 	if !(v.Properties == nil) {
 		writer.WriteUrl(6, v.Properties)
 	}
+
 	if !(v.SupplyLimit == nil) {
 		writer.WriteBigInt(7, v.SupplyLimit)
 	}
+
 	if !(v.Manager == nil) {
 		writer.WriteUrl(8, v.Manager)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CreateToken)
 	return buffer.Bytes(), err
 }
@@ -5289,12 +5598,20 @@ func (v *CreateToken) IsValid() error {
 }
 
 var fieldNames_CreateTokenAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "TokenUrl",
+
 	4: "KeyBookUrl",
+
 	5: "Scratch",
+
 	6: "Manager",
+
+	7: "extraData",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5302,22 +5619,28 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(3, v.TokenUrl)
 	}
+
 	if !(v.KeyBookUrl == nil) {
 		writer.WriteUrl(4, v.KeyBookUrl)
 	}
+
 	if !(!v.Scratch) {
 		writer.WriteBool(5, v.Scratch)
 	}
+
 	if !(v.Manager == nil) {
 		writer.WriteUrl(6, v.Manager)
 	}
 
+	writer.WriteBytes(7, v.extraData)
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
 	return buffer.Bytes(), err
 }
@@ -5350,10 +5673,16 @@ func (v *CreateTokenAccount) IsValid() error {
 }
 
 var fieldNames_DataAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
 	4: "Scratch",
+
+	5: "extraData",
 }
 
 func (v *DataAccount) MarshalBinary() ([]byte, error) {
@@ -5361,14 +5690,18 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
+
 	if !(!v.Scratch) {
 		writer.WriteBool(4, v.Scratch)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DataAccount)
 	return buffer.Bytes(), err
 }
@@ -5399,7 +5732,10 @@ func (v *DataAccount) IsValid() error {
 }
 
 var fieldNames_DataEntry = []string{
+
 	1: "Data",
+
+	2: "extraData",
 }
 
 func (v *DataEntry) MarshalBinary() ([]byte, error) {
@@ -5412,6 +5748,7 @@ func (v *DataEntry) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DataEntry)
 	return buffer.Bytes(), err
 }
@@ -5436,7 +5773,10 @@ func (v *DataEntry) IsValid() error {
 }
 
 var fieldNames_DirectoryIndexMetadata = []string{
+
 	1: "Count",
+
+	2: "extraData",
 }
 
 func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
@@ -5447,6 +5787,7 @@ func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
 		writer.WriteUint(1, v.Count)
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DirectoryIndexMetadata)
 	return buffer.Bytes(), err
 }
@@ -5471,8 +5812,12 @@ func (v *DirectoryIndexMetadata) IsValid() error {
 }
 
 var fieldNames_DisableAccountAuthOperation = []string{
+
 	1: "Type",
+
 	2: "Authority",
+
+	3: "extraData",
 }
 
 func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
@@ -5480,10 +5825,12 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DisableAccountAuthOperation)
 	return buffer.Bytes(), err
 }
@@ -5511,14 +5858,24 @@ func (v *DisableAccountAuthOperation) IsValid() error {
 }
 
 var fieldNames_ED25519Signature = []string{
+
 	1: "Type",
+
 	2: "PublicKey",
+
 	3: "Signature",
+
 	4: "Signer",
+
 	5: "SignerVersion",
+
 	6: "Timestamp",
+
 	7: "Vote",
+
 	8: "TransactionHash",
+
+	9: "extraData",
 }
 
 func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
@@ -5526,28 +5883,36 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
+
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
+
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(5, v.SignerVersion)
 	}
+
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
 	}
+
 	if !(v.Vote == 0) {
 		writer.WriteEnum(7, v.Vote)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ED25519Signature)
 	return buffer.Bytes(), err
 }
@@ -5590,14 +5955,24 @@ func (v *ED25519Signature) IsValid() error {
 }
 
 var fieldNames_ETHSignature = []string{
+
 	1: "Type",
+
 	2: "PublicKey",
+
 	3: "Signature",
+
 	4: "Signer",
+
 	5: "SignerVersion",
+
 	6: "Timestamp",
+
 	7: "Vote",
+
 	8: "TransactionHash",
+
+	9: "extraData",
 }
 
 func (v *ETHSignature) MarshalBinary() ([]byte, error) {
@@ -5605,28 +5980,36 @@ func (v *ETHSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
+
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
+
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(5, v.SignerVersion)
 	}
+
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
 	}
+
 	if !(v.Vote == 0) {
 		writer.WriteEnum(7, v.Vote)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ETHSignature)
 	return buffer.Bytes(), err
 }
@@ -5669,7 +6052,10 @@ func (v *ETHSignature) IsValid() error {
 }
 
 var fieldNames_EmptyResult = []string{
+
 	1: "Type",
+
+	2: "extraData",
 }
 
 func (v *EmptyResult) MarshalBinary() ([]byte, error) {
@@ -5678,6 +6064,7 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_EmptyResult)
 	return buffer.Bytes(), err
 }
@@ -5700,8 +6087,12 @@ func (v *EmptyResult) IsValid() error {
 }
 
 var fieldNames_EnableAccountAuthOperation = []string{
+
 	1: "Type",
+
 	2: "Authority",
+
+	3: "extraData",
 }
 
 func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
@@ -5709,10 +6100,12 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_EnableAccountAuthOperation)
 	return buffer.Bytes(), err
 }
@@ -5740,9 +6133,14 @@ func (v *EnableAccountAuthOperation) IsValid() error {
 }
 
 var fieldNames_Envelope = []string{
+
 	1: "Signatures",
+
 	2: "TxHash",
+
 	3: "Transaction",
+
+	4: "extraData",
 }
 
 func (v *Envelope) MarshalBinary() ([]byte, error) {
@@ -5754,15 +6152,18 @@ func (v *Envelope) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
+
 	if !(len(v.TxHash) == 0) {
 		writer.WriteBytes(2, v.TxHash)
 	}
+
 	if !(len(v.Transaction) == 0) {
 		for _, v := range v.Transaction {
 			writer.WriteValue(3, v)
 		}
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Envelope)
 	return buffer.Bytes(), err
 }
@@ -5787,9 +6188,14 @@ func (v *Envelope) IsValid() error {
 }
 
 var fieldNames_ForwardedSignature = []string{
+
 	1: "Type",
+
 	2: "Signature",
+
 	3: "Signer",
+
+	4: "extraData",
 }
 
 func (v *ForwardedSignature) MarshalBinary() ([]byte, error) {
@@ -5797,13 +6203,16 @@ func (v *ForwardedSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteValue(3, v.Signer)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ForwardedSignature)
 	return buffer.Bytes(), err
 }
@@ -5836,7 +6245,10 @@ func (v *ForwardedSignature) IsValid() error {
 }
 
 var fieldNames_HashSet = []string{
+
 	1: "Hashes",
+
+	2: "extraData",
 }
 
 func (v *HashSet) MarshalBinary() ([]byte, error) {
@@ -5849,6 +6261,7 @@ func (v *HashSet) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_HashSet)
 	return buffer.Bytes(), err
 }
@@ -5873,10 +6286,16 @@ func (v *HashSet) IsValid() error {
 }
 
 var fieldNames_IndexEntry = []string{
+
 	1: "Source",
+
 	2: "Anchor",
+
 	3: "BlockIndex",
+
 	4: "BlockTime",
+
+	5: "extraData",
 }
 
 func (v *IndexEntry) MarshalBinary() ([]byte, error) {
@@ -5886,16 +6305,20 @@ func (v *IndexEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Source == 0) {
 		writer.WriteUint(1, v.Source)
 	}
+
 	if !(v.Anchor == 0) {
 		writer.WriteUint(2, v.Anchor)
 	}
+
 	if !(v.BlockIndex == 0) {
 		writer.WriteUint(3, v.BlockIndex)
 	}
+
 	if !(v.BlockTime == nil) {
 		writer.WriteTime(4, *v.BlockTime)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_IndexEntry)
 	return buffer.Bytes(), err
 }
@@ -5935,7 +6358,10 @@ func (v *IndexEntry) IsValid() error {
 }
 
 var fieldNames_InternalGenesis = []string{
+
 	1: "Type",
+
+	2: "extraData",
 }
 
 func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
@@ -5944,6 +6370,7 @@ func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalGenesis)
 	return buffer.Bytes(), err
 }
@@ -5966,15 +6393,26 @@ func (v *InternalGenesis) IsValid() error {
 }
 
 var fieldNames_InternalLedger = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
 	4: "Index",
+
 	5: "Timestamp",
+
 	6: "Synthetic",
+
 	7: "PendingOracle",
+
 	8: "ActiveOracle",
+
 	9: "AcmeBurnt",
+
+	10: "extraData",
 }
 
 func (v *InternalLedger) MarshalBinary() ([]byte, error) {
@@ -5982,29 +6420,38 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
+
 	if !(v.Index == 0) {
 		writer.WriteInt(4, v.Index)
 	}
+
 	if !(v.Timestamp == (time.Time{})) {
 		writer.WriteTime(5, v.Timestamp)
 	}
+
 	if !((v.Synthetic).Equal(new(SyntheticLedger))) {
 		writer.WriteValue(6, &v.Synthetic)
 	}
+
 	if !(v.PendingOracle == 0) {
 		writer.WriteUint(7, v.PendingOracle)
 	}
+
 	if !(v.ActiveOracle == 0) {
 		writer.WriteUint(8, v.ActiveOracle)
 	}
+
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(9, &v.AcmeBurnt)
 	}
 
+	writer.WriteBytes(10, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalLedger)
 	return buffer.Bytes(), err
 }
@@ -6065,8 +6512,12 @@ func (v *InternalLedger) IsValid() error {
 }
 
 var fieldNames_InternalSendTransactions = []string{
+
 	1: "Type",
+
 	2: "Transactions",
+
+	3: "extraData",
 }
 
 func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
@@ -6074,12 +6525,14 @@ func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalSendTransactions)
 	return buffer.Bytes(), err
 }
@@ -6107,9 +6560,14 @@ func (v *InternalSendTransactions) IsValid() error {
 }
 
 var fieldNames_InternalSignature = []string{
+
 	1: "Type",
+
 	2: "Network",
+
 	3: "TransactionHash",
+
+	4: "extraData",
 }
 
 func (v *InternalSignature) MarshalBinary() ([]byte, error) {
@@ -6117,13 +6575,16 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Network == nil) {
 		writer.WriteUrl(2, v.Network)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalSignature)
 	return buffer.Bytes(), err
 }
@@ -6151,10 +6612,16 @@ func (v *InternalSignature) IsValid() error {
 }
 
 var fieldNames_InternalSyntheticLedger = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
 	4: "Pending",
+
+	5: "extraData",
 }
 
 func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -6162,16 +6629,20 @@ func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
+
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
 			writer.WriteValue(4, v)
 		}
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalSyntheticLedger)
 	return buffer.Bytes(), err
 }
@@ -6207,8 +6678,12 @@ func (v *InternalSyntheticLedger) IsValid() error {
 }
 
 var fieldNames_InternalTransactionsSent = []string{
+
 	1: "Type",
+
 	2: "Transactions",
+
+	3: "extraData",
 }
 
 func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
@@ -6216,12 +6691,14 @@ func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteHash(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalTransactionsSent)
 	return buffer.Bytes(), err
 }
@@ -6249,8 +6726,12 @@ func (v *InternalTransactionsSent) IsValid() error {
 }
 
 var fieldNames_InternalTransactionsSigned = []string{
+
 	1: "Type",
+
 	2: "Transactions",
+
+	3: "extraData",
 }
 
 func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
@@ -6258,12 +6739,14 @@ func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_InternalTransactionsSigned)
 	return buffer.Bytes(), err
 }
@@ -6291,9 +6774,14 @@ func (v *InternalTransactionsSigned) IsValid() error {
 }
 
 var fieldNames_IssueTokens = []string{
+
 	1: "Type",
+
 	2: "Recipient",
+
 	3: "Amount",
+
+	4: "extraData",
 }
 
 func (v *IssueTokens) MarshalBinary() ([]byte, error) {
@@ -6301,13 +6789,16 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_IssueTokens)
 	return buffer.Bytes(), err
 }
@@ -6340,10 +6831,16 @@ func (v *IssueTokens) IsValid() error {
 }
 
 var fieldNames_KeyBook = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
 	4: "PageCount",
+
+	5: "extraData",
 }
 
 func (v *KeyBook) MarshalBinary() ([]byte, error) {
@@ -6351,14 +6848,18 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
+
 	if !(v.PageCount == 0) {
 		writer.WriteUint(4, v.PageCount)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_KeyBook)
 	return buffer.Bytes(), err
 }
@@ -6394,16 +6895,28 @@ func (v *KeyBook) IsValid() error {
 }
 
 var fieldNames_KeyPage = []string{
-	1:  "Type",
-	2:  "Url",
-	3:  "CreditBalance",
-	4:  "AcceptThreshold",
-	5:  "RejectThreshold",
-	6:  "ResponseThreshold",
-	7:  "BlockThreshold",
-	8:  "Version",
-	9:  "Keys",
+
+	1: "Type",
+
+	2: "Url",
+
+	3: "CreditBalance",
+
+	4: "AcceptThreshold",
+
+	5: "RejectThreshold",
+
+	6: "ResponseThreshold",
+
+	7: "BlockThreshold",
+
+	8: "Version",
+
+	9: "Keys",
+
 	10: "TransactionBlacklist",
+
+	11: "extraData",
 }
 
 func (v *KeyPage) MarshalBinary() ([]byte, error) {
@@ -6411,36 +6924,46 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(3, v.CreditBalance)
 	}
+
 	if !(v.AcceptThreshold == 0) {
 		writer.WriteUint(4, v.AcceptThreshold)
 	}
+
 	if !(v.RejectThreshold == 0) {
 		writer.WriteUint(5, v.RejectThreshold)
 	}
+
 	if !(v.ResponseThreshold == 0) {
 		writer.WriteUint(6, v.ResponseThreshold)
 	}
+
 	if !(v.BlockThreshold == 0) {
 		writer.WriteUint(7, v.BlockThreshold)
 	}
+
 	if !(v.Version == 0) {
 		writer.WriteUint(8, v.Version)
 	}
+
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
 			writer.WriteValue(9, v)
 		}
 	}
+
 	if !(v.TransactionBlacklist == nil) {
 		writer.WriteEnum(10, *v.TransactionBlacklist)
 	}
 
+	writer.WriteBytes(11, v.extraData)
 	_, _, err := writer.Reset(fieldNames_KeyPage)
 	return buffer.Bytes(), err
 }
@@ -6503,9 +7026,14 @@ func (v *KeyPage) IsValid() error {
 }
 
 var fieldNames_KeySpec = []string{
+
 	1: "PublicKeyHash",
+
 	2: "LastUsedOn",
+
 	3: "Owner",
+
+	4: "extraData",
 }
 
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
@@ -6515,13 +7043,16 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	if !(len(v.PublicKeyHash) == 0) {
 		writer.WriteBytes(1, v.PublicKeyHash)
 	}
+
 	if !(v.LastUsedOn == 0) {
 		writer.WriteUint(2, v.LastUsedOn)
 	}
+
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_KeySpec)
 	return buffer.Bytes(), err
 }
@@ -6556,8 +7087,12 @@ func (v *KeySpec) IsValid() error {
 }
 
 var fieldNames_KeySpecParams = []string{
+
 	1: "KeyHash",
+
 	2: "Owner",
+
+	3: "extraData",
 }
 
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
@@ -6567,10 +7102,12 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	if !(len(v.KeyHash) == 0) {
 		writer.WriteBytes(1, v.KeyHash)
 	}
+
 	if !(v.Owner == nil) {
 		writer.WriteUrl(2, v.Owner)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_KeySpecParams)
 	return buffer.Bytes(), err
 }
@@ -6595,14 +7132,24 @@ func (v *KeySpecParams) IsValid() error {
 }
 
 var fieldNames_LegacyED25519Signature = []string{
+
 	1: "Type",
+
 	2: "Timestamp",
+
 	3: "PublicKey",
+
 	4: "Signature",
+
 	5: "Signer",
+
 	6: "SignerVersion",
+
 	7: "Vote",
+
 	8: "TransactionHash",
+
+	9: "extraData",
 }
 
 func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
@@ -6610,28 +7157,36 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(2, v.Timestamp)
 	}
+
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(3, v.PublicKey)
 	}
+
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(4, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(5, v.Signer)
 	}
+
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(6, v.SignerVersion)
 	}
+
 	if !(v.Vote == 0) {
 		writer.WriteEnum(7, v.Vote)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_LegacyED25519Signature)
 	return buffer.Bytes(), err
 }
@@ -6679,9 +7234,14 @@ func (v *LegacyED25519Signature) IsValid() error {
 }
 
 var fieldNames_LiteDataAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "Tail",
+
+	4: "extraData",
 }
 
 func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
@@ -6689,13 +7249,16 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(len(v.Tail) == 0) {
 		writer.WriteBytes(3, v.Tail)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_LiteDataAccount)
 	return buffer.Bytes(), err
 }
@@ -6728,8 +7291,12 @@ func (v *LiteDataAccount) IsValid() error {
 }
 
 var fieldNames_LiteIdentity = []string{
+
 	1: "Type",
+
 	2: "Url",
+
+	3: "extraData",
 }
 
 func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
@@ -6737,10 +7304,12 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
 	return buffer.Bytes(), err
 }
@@ -6768,12 +7337,20 @@ func (v *LiteIdentity) IsValid() error {
 }
 
 var fieldNames_LiteTokenAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "TokenUrl",
+
 	4: "Balance",
+
 	5: "LastUsedOn",
+
 	6: "CreditBalance",
+
+	7: "extraData",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -6781,22 +7358,28 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(3, v.TokenUrl)
 	}
+
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Balance)
 	}
+
 	if !(v.LastUsedOn == 0) {
 		writer.WriteUint(5, v.LastUsedOn)
 	}
+
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(6, v.CreditBalance)
 	}
 
+	writer.WriteBytes(7, v.extraData)
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
 	return buffer.Bytes(), err
 }
@@ -6844,8 +7427,12 @@ func (v *LiteTokenAccount) IsValid() error {
 }
 
 var fieldNames_MetricsRequest = []string{
+
 	1: "Metric",
+
 	2: "Duration",
+
+	3: "extraData",
 }
 
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
@@ -6855,10 +7442,12 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	if !(len(v.Metric) == 0) {
 		writer.WriteString(1, v.Metric)
 	}
+
 	if !(v.Duration == 0) {
 		writer.WriteDuration(2, v.Duration)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_MetricsRequest)
 	return buffer.Bytes(), err
 }
@@ -6888,8 +7477,12 @@ func (v *MetricsRequest) IsValid() error {
 }
 
 var fieldNames_Object = []string{
+
 	1: "Type",
+
 	2: "Chains",
+
+	3: "extraData",
 }
 
 func (v *Object) MarshalBinary() ([]byte, error) {
@@ -6899,12 +7492,14 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(1, v.Type)
 	}
+
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
 			writer.WriteValue(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Object)
 	return buffer.Bytes(), err
 }
@@ -6934,14 +7529,24 @@ func (v *Object) IsValid() error {
 }
 
 var fieldNames_RCD1Signature = []string{
+
 	1: "Type",
+
 	2: "PublicKey",
+
 	3: "Signature",
+
 	4: "Signer",
+
 	5: "SignerVersion",
+
 	6: "Timestamp",
+
 	7: "Vote",
+
 	8: "TransactionHash",
+
+	9: "extraData",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -6949,28 +7554,36 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
 	}
+
 	if !(len(v.Signature) == 0) {
 		writer.WriteBytes(3, v.Signature)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(4, v.Signer)
 	}
+
 	if !(v.SignerVersion == 0) {
 		writer.WriteUint(5, v.SignerVersion)
 	}
+
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
 	}
+
 	if !(v.Vote == 0) {
 		writer.WriteEnum(7, v.Vote)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
 	return buffer.Bytes(), err
 }
@@ -7013,9 +7626,14 @@ func (v *RCD1Signature) IsValid() error {
 }
 
 var fieldNames_Receipt = []string{
+
 	1: "Start",
+
 	2: "Result",
+
 	3: "Entries",
+
+	4: "extraData",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -7025,15 +7643,18 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Start) == 0) {
 		writer.WriteBytes(1, v.Start)
 	}
+
 	if !(len(v.Result) == 0) {
 		writer.WriteBytes(2, v.Result)
 	}
+
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
 			writer.WriteValue(3, &v)
 		}
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Receipt)
 	return buffer.Bytes(), err
 }
@@ -7068,8 +7689,12 @@ func (v *Receipt) IsValid() error {
 }
 
 var fieldNames_ReceiptEntry = []string{
+
 	1: "Right",
+
 	2: "Hash",
+
+	3: "extraData",
 }
 
 func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
@@ -7079,10 +7704,12 @@ func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
 	if !(!v.Right) {
 		writer.WriteBool(1, v.Right)
 	}
+
 	if !(len(v.Hash) == 0) {
 		writer.WriteBytes(2, v.Hash)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ReceiptEntry)
 	return buffer.Bytes(), err
 }
@@ -7112,10 +7739,16 @@ func (v *ReceiptEntry) IsValid() error {
 }
 
 var fieldNames_ReceiptSignature = []string{
+
 	1: "Type",
+
 	2: "SourceNetwork",
+
 	3: "Receipt",
+
 	4: "TransactionHash",
+
+	5: "extraData",
 }
 
 func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
@@ -7123,14 +7756,18 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(2, v.SourceNetwork)
 	}
+
 	writer.WriteValue(3, &v.Receipt)
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ReceiptSignature)
 	return buffer.Bytes(), err
 }
@@ -7161,8 +7798,12 @@ func (v *ReceiptSignature) IsValid() error {
 }
 
 var fieldNames_RemoteTransaction = []string{
+
 	1: "Type",
+
 	2: "Hash",
+
+	3: "extraData",
 }
 
 func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
@@ -7170,10 +7811,12 @@ func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Hash == ([32]byte{})) {
 		writer.WriteHash(2, &v.Hash)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RemoteTransaction)
 	return buffer.Bytes(), err
 }
@@ -7196,8 +7839,12 @@ func (v *RemoteTransaction) IsValid() error {
 }
 
 var fieldNames_RemoveAccountAuthorityOperation = []string{
+
 	1: "Type",
+
 	2: "Authority",
+
+	3: "extraData",
 }
 
 func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
@@ -7205,10 +7852,12 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RemoveAccountAuthorityOperation)
 	return buffer.Bytes(), err
 }
@@ -7236,8 +7885,12 @@ func (v *RemoveAccountAuthorityOperation) IsValid() error {
 }
 
 var fieldNames_RemoveKeyOperation = []string{
+
 	1: "Type",
+
 	2: "Entry",
+
+	3: "extraData",
 }
 
 func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
@@ -7245,10 +7898,12 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !((v.Entry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.Entry)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RemoveKeyOperation)
 	return buffer.Bytes(), err
 }
@@ -7276,9 +7931,14 @@ func (v *RemoveKeyOperation) IsValid() error {
 }
 
 var fieldNames_RemoveValidator = []string{
+
 	1: "Type",
+
 	2: "PubKey",
+
 	3: "Owner",
+
+	4: "extraData",
 }
 
 func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
@@ -7286,13 +7946,16 @@ func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PubKey) == 0) {
 		writer.WriteBytes(2, v.PubKey)
 	}
+
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RemoveValidator)
 	return buffer.Bytes(), err
 }
@@ -7320,10 +7983,16 @@ func (v *RemoveValidator) IsValid() error {
 }
 
 var fieldNames_SegWitDataEntry = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "EntryUrl",
+
 	4: "EntryHash",
+
+	5: "extraData",
 }
 
 func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
@@ -7331,14 +8000,18 @@ func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !(v.EntryUrl == nil) {
 		writer.WriteUrl(3, v.EntryUrl)
 	}
+
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.EntryHash)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SegWitDataEntry)
 	return buffer.Bytes(), err
 }
@@ -7374,10 +8047,16 @@ func (v *SegWitDataEntry) IsValid() error {
 }
 
 var fieldNames_SendTokens = []string{
+
 	1: "Type",
+
 	2: "Hash",
+
 	3: "Meta",
+
 	4: "To",
+
+	5: "extraData",
 }
 
 func (v *SendTokens) MarshalBinary() ([]byte, error) {
@@ -7385,18 +8064,22 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Hash == ([32]byte{})) {
 		writer.WriteHash(2, &v.Hash)
 	}
+
 	if !(len(v.Meta) == 0) {
 		writer.WriteBytes(3, v.Meta)
 	}
+
 	if !(len(v.To) == 0) {
 		for _, v := range v.To {
 			writer.WriteValue(4, v)
 		}
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SendTokens)
 	return buffer.Bytes(), err
 }
@@ -7424,8 +8107,12 @@ func (v *SendTokens) IsValid() error {
 }
 
 var fieldNames_SendTransaction = []string{
+
 	1: "Payload",
+
 	2: "Recipient",
+
+	3: "extraData",
 }
 
 func (v *SendTransaction) MarshalBinary() ([]byte, error) {
@@ -7435,10 +8122,12 @@ func (v *SendTransaction) MarshalBinary() ([]byte, error) {
 	if !(v.Payload == nil) {
 		writer.WriteValue(1, v.Payload)
 	}
+
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SendTransaction)
 	return buffer.Bytes(), err
 }
@@ -7468,8 +8157,12 @@ func (v *SendTransaction) IsValid() error {
 }
 
 var fieldNames_SetThresholdKeyPageOperation = []string{
+
 	1: "Type",
+
 	2: "Threshold",
+
+	3: "extraData",
 }
 
 func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
@@ -7477,10 +8170,12 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Threshold == 0) {
 		writer.WriteUint(2, v.Threshold)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SetThresholdKeyPageOperation)
 	return buffer.Bytes(), err
 }
@@ -7508,15 +8203,26 @@ func (v *SetThresholdKeyPageOperation) IsValid() error {
 }
 
 var fieldNames_SyntheticAnchor = []string{
+
 	1: "Type",
+
 	2: "Source",
+
 	3: "Major",
+
 	4: "RootAnchor",
+
 	5: "RootIndex",
+
 	6: "AcmeBurnt",
+
 	7: "Block",
+
 	8: "AcmeOraclePrice",
+
 	9: "Receipts",
+
+	10: "extraData",
 }
 
 func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
@@ -7524,33 +8230,42 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Source == nil) {
 		writer.WriteUrl(2, v.Source)
 	}
+
 	if !(!v.Major) {
 		writer.WriteBool(3, v.Major)
 	}
+
 	if !(v.RootAnchor == ([32]byte{})) {
 		writer.WriteHash(4, &v.RootAnchor)
 	}
+
 	if !(v.RootIndex == 0) {
 		writer.WriteUint(5, v.RootIndex)
 	}
+
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(6, &v.AcmeBurnt)
 	}
+
 	if !(v.Block == 0) {
 		writer.WriteUint(7, v.Block)
 	}
+
 	if !(v.AcmeOraclePrice == 0) {
 		writer.WriteUint(8, v.AcmeOraclePrice)
 	}
+
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
 			writer.WriteValue(9, &v)
 		}
 	}
 
+	writer.WriteBytes(10, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticAnchor)
 	return buffer.Bytes(), err
 }
@@ -7613,9 +8328,14 @@ func (v *SyntheticAnchor) IsValid() error {
 }
 
 var fieldNames_SyntheticBurnTokens = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "Amount",
+
+	4: "extraData",
 }
 
 func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
@@ -7623,11 +8343,14 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticBurnTokens)
 	return buffer.Bytes(), err
 }
@@ -7658,9 +8381,14 @@ func (v *SyntheticBurnTokens) IsValid() error {
 }
 
 var fieldNames_SyntheticCreateChain = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "Chains",
+
+	4: "extraData",
 }
 
 func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
@@ -7668,13 +8396,16 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
 			writer.WriteValue(3, &v)
 		}
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticCreateChain)
 	return buffer.Bytes(), err
 }
@@ -7705,9 +8436,14 @@ func (v *SyntheticCreateChain) IsValid() error {
 }
 
 var fieldNames_SyntheticDepositCredits = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "Amount",
+
+	4: "extraData",
 }
 
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
@@ -7715,11 +8451,14 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !(v.Amount == 0) {
 		writer.WriteUint(3, v.Amount)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
 	return buffer.Bytes(), err
 }
@@ -7750,10 +8489,16 @@ func (v *SyntheticDepositCredits) IsValid() error {
 }
 
 var fieldNames_SyntheticDepositTokens = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "Token",
+
 	4: "Amount",
+
+	5: "extraData",
 }
 
 func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
@@ -7761,14 +8506,18 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !(v.Token == nil) {
 		writer.WriteUrl(3, v.Token)
 	}
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Amount)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositTokens)
 	return buffer.Bytes(), err
 }
@@ -7804,9 +8553,14 @@ func (v *SyntheticDepositTokens) IsValid() error {
 }
 
 var fieldNames_SyntheticForwardTransaction = []string{
+
 	1: "Type",
+
 	2: "Signatures",
+
 	3: "Transaction",
+
+	4: "extraData",
 }
 
 func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
@@ -7814,15 +8568,18 @@ func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	if !(v.Transaction == nil) {
 		writer.WriteValue(3, v.Transaction)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticForwardTransaction)
 	return buffer.Bytes(), err
 }
@@ -7850,9 +8607,14 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 }
 
 var fieldNames_SyntheticLedger = []string{
+
 	1: "Nonce",
+
 	2: "Unsigned",
+
 	3: "Unsent",
+
+	4: "extraData",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -7862,17 +8624,20 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Nonce == 0) {
 		writer.WriteUint(1, v.Nonce)
 	}
+
 	if !(len(v.Unsigned) == 0) {
 		for _, v := range v.Unsigned {
 			writer.WriteHash(2, &v)
 		}
 	}
+
 	if !(len(v.Unsent) == 0) {
 		for _, v := range v.Unsent {
 			writer.WriteHash(3, &v)
 		}
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticLedger)
 	return buffer.Bytes(), err
 }
@@ -7907,12 +8672,20 @@ func (v *SyntheticLedger) IsValid() error {
 }
 
 var fieldNames_SyntheticLedgerEntry = []string{
+
 	1: "TransactionHash",
+
 	2: "RootAnchor",
+
 	3: "SynthIndex",
+
 	4: "SynthIndexIndex",
+
 	5: "RootIndexIndex",
+
 	6: "NeedsReceipt",
+
+	7: "extraData",
 }
 
 func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
@@ -7922,22 +8695,28 @@ func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.TransactionHash)
 	}
+
 	if !(v.RootAnchor == ([32]byte{})) {
 		writer.WriteHash(2, &v.RootAnchor)
 	}
+
 	if !(v.SynthIndex == 0) {
 		writer.WriteUint(3, v.SynthIndex)
 	}
+
 	if !(v.SynthIndexIndex == 0) {
 		writer.WriteUint(4, v.SynthIndexIndex)
 	}
+
 	if !(v.RootIndexIndex == 0) {
 		writer.WriteUint(5, v.RootIndexIndex)
 	}
+
 	if !(!v.NeedsReceipt) {
 		writer.WriteBool(6, v.NeedsReceipt)
 	}
 
+	writer.WriteBytes(7, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticLedgerEntry)
 	return buffer.Bytes(), err
 }
@@ -7987,8 +8766,12 @@ func (v *SyntheticLedgerEntry) IsValid() error {
 }
 
 var fieldNames_SyntheticMirror = []string{
+
 	1: "Type",
+
 	2: "Objects",
+
+	3: "extraData",
 }
 
 func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
@@ -7996,12 +8779,14 @@ func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Objects) == 0) {
 		for _, v := range v.Objects {
 			writer.WriteValue(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticMirror)
 	return buffer.Bytes(), err
 }
@@ -8029,8 +8814,12 @@ func (v *SyntheticMirror) IsValid() error {
 }
 
 var fieldNames_SyntheticOrigin = []string{
+
 	1: "Source",
+
 	2: "Cause",
+
+	3: "extraData",
 }
 
 func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
@@ -8040,10 +8829,12 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 	if !(v.Source == nil) {
 		writer.WriteUrl(1, v.Source)
 	}
+
 	if !(v.Cause == ([32]byte{})) {
 		writer.WriteHash(2, &v.Cause)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticOrigin)
 	return buffer.Bytes(), err
 }
@@ -8073,10 +8864,16 @@ func (v *SyntheticOrigin) IsValid() error {
 }
 
 var fieldNames_SyntheticReceipt = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "SynthTxHash",
+
 	4: "Status",
+
+	5: "extraData",
 }
 
 func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
@@ -8084,14 +8881,18 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !(v.SynthTxHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.SynthTxHash)
 	}
+
 	if !(v.Status == nil) {
 		writer.WriteValue(4, v.Status)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticReceipt)
 	return buffer.Bytes(), err
 }
@@ -8127,11 +8928,18 @@ func (v *SyntheticReceipt) IsValid() error {
 }
 
 var fieldNames_SyntheticSignature = []string{
+
 	1: "Type",
+
 	2: "SourceNetwork",
+
 	3: "DestinationNetwork",
+
 	4: "SequenceNumber",
+
 	5: "TransactionHash",
+
+	6: "extraData",
 }
 
 func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
@@ -8139,19 +8947,24 @@ func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(2, v.SourceNetwork)
 	}
+
 	if !(v.DestinationNetwork == nil) {
 		writer.WriteUrl(3, v.DestinationNetwork)
 	}
+
 	if !(v.SequenceNumber == 0) {
 		writer.WriteUint(4, v.SequenceNumber)
 	}
+
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(5, &v.TransactionHash)
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticSignature)
 	return buffer.Bytes(), err
 }
@@ -8189,9 +9002,14 @@ func (v *SyntheticSignature) IsValid() error {
 }
 
 var fieldNames_SyntheticWriteData = []string{
+
 	1: "Type",
+
 	2: "SyntheticOrigin",
+
 	3: "Entry",
+
+	4: "extraData",
 }
 
 func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
@@ -8199,11 +9017,14 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	writer.WriteValue(2, &v.SyntheticOrigin)
+
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(3, &v.Entry)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SyntheticWriteData)
 	return buffer.Bytes(), err
 }
@@ -8234,12 +9055,20 @@ func (v *SyntheticWriteData) IsValid() error {
 }
 
 var fieldNames_TokenAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
 	4: "TokenUrl",
+
 	5: "Balance",
+
 	6: "Scratch",
+
+	7: "extraData",
 }
 
 func (v *TokenAccount) MarshalBinary() ([]byte, error) {
@@ -8247,20 +9076,26 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
+
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(4, v.TokenUrl)
 	}
+
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(5, &v.Balance)
 	}
+
 	if !(!v.Scratch) {
 		writer.WriteBool(6, v.Scratch)
 	}
 
+	writer.WriteBytes(7, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TokenAccount)
 	return buffer.Bytes(), err
 }
@@ -8301,14 +9136,24 @@ func (v *TokenAccount) IsValid() error {
 }
 
 var fieldNames_TokenIssuer = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "AccountAuth",
+
 	4: "Symbol",
+
 	5: "Precision",
+
 	6: "Properties",
+
 	7: "Issued",
+
 	8: "SupplyLimit",
+
+	9: "extraData",
 }
 
 func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
@@ -8316,26 +9161,34 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	writer.WriteValue(3, &v.AccountAuth)
+
 	if !(len(v.Symbol) == 0) {
 		writer.WriteString(4, v.Symbol)
 	}
+
 	if !(v.Precision == 0) {
 		writer.WriteUint(5, v.Precision)
 	}
+
 	if !(v.Properties == nil) {
 		writer.WriteUrl(6, v.Properties)
 	}
+
 	if !((v.Issued).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(7, &v.Issued)
 	}
+
 	if !(v.SupplyLimit == nil) {
 		writer.WriteBigInt(8, v.SupplyLimit)
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TokenIssuer)
 	return buffer.Bytes(), err
 }
@@ -8386,8 +9239,12 @@ func (v *TokenIssuer) IsValid() error {
 }
 
 var fieldNames_TokenRecipient = []string{
+
 	1: "Url",
+
 	2: "Amount",
+
+	3: "extraData",
 }
 
 func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
@@ -8397,10 +9254,12 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
+
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TokenRecipient)
 	return buffer.Bytes(), err
 }
@@ -8430,8 +9289,12 @@ func (v *TokenRecipient) IsValid() error {
 }
 
 var fieldNames_Transaction = []string{
+
 	1: "Header",
+
 	2: "Body",
+
+	1: "extraData",
 }
 
 func (v *Transaction) MarshalBinary() ([]byte, error) {
@@ -8441,10 +9304,12 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	if !((v.Header).Equal(new(TransactionHeader))) {
 		writer.WriteValue(1, &v.Header)
 	}
+
 	if !(v.Body == nil) {
 		writer.WriteValue(2, v.Body)
 	}
 
+	writer.WriteBytes(1, v.extraData)
 	_, _, err := writer.Reset(fieldNames_Transaction)
 	return buffer.Bytes(), err
 }
@@ -8474,10 +9339,16 @@ func (v *Transaction) IsValid() error {
 }
 
 var fieldNames_TransactionHeader = []string{
+
 	1: "Principal",
+
 	2: "Initiator",
+
 	3: "Memo",
+
 	4: "Metadata",
+
+	5: "extraData",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -8487,16 +9358,20 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(v.Principal == nil) {
 		writer.WriteUrl(1, v.Principal)
 	}
+
 	if !(v.Initiator == ([32]byte{})) {
 		writer.WriteHash(2, &v.Initiator)
 	}
+
 	if !(len(v.Memo) == 0) {
 		writer.WriteString(3, v.Memo)
 	}
+
 	if !(len(v.Metadata) == 0) {
 		writer.WriteBytes(4, v.Metadata)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
 	return buffer.Bytes(), err
 }
@@ -8526,7 +9401,10 @@ func (v *TransactionHeader) IsValid() error {
 }
 
 var fieldNames_TransactionResultSet = []string{
+
 	1: "Results",
+
+	2: "extraData",
 }
 
 func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
@@ -8539,6 +9417,7 @@ func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TransactionResultSet)
 	return buffer.Bytes(), err
 }
@@ -8563,8 +9442,12 @@ func (v *TransactionResultSet) IsValid() error {
 }
 
 var fieldNames_TransactionSignature = []string{
+
 	1: "Transaction",
+
 	2: "Signature",
+
+	3: "extraData",
 }
 
 func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
@@ -8574,10 +9457,12 @@ func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == ([32]byte{})) {
 		writer.WriteHash(1, &v.Transaction)
 	}
+
 	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TransactionSignature)
 	return buffer.Bytes(), err
 }
@@ -8607,15 +9492,26 @@ func (v *TransactionSignature) IsValid() error {
 }
 
 var fieldNames_TransactionStatus = []string{
+
 	1: "Remote",
+
 	2: "Delivered",
+
 	3: "Pending",
+
 	4: "Code",
+
 	5: "Message",
+
 	6: "Error",
+
 	7: "Result",
+
 	8: "Initiator",
+
 	9: "Signers",
+
+	10: "extraData",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -8625,33 +9521,42 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(!v.Remote) {
 		writer.WriteBool(1, v.Remote)
 	}
+
 	if !(!v.Delivered) {
 		writer.WriteBool(2, v.Delivered)
 	}
+
 	if !(!v.Pending) {
 		writer.WriteBool(3, v.Pending)
 	}
+
 	if !(v.Code == 0) {
 		writer.WriteUint(4, v.Code)
 	}
+
 	if !(len(v.Message) == 0) {
 		writer.WriteString(5, v.Message)
 	}
+
 	if !(v.Error == nil) {
 		writer.WriteValue(6, v.Error)
 	}
+
 	if !(v.Result == nil) {
 		writer.WriteValue(7, v.Result)
 	}
+
 	if !(v.Initiator == nil) {
 		writer.WriteUrl(8, v.Initiator)
 	}
+
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
 			writer.WriteValue(9, v)
 		}
 	}
 
+	writer.WriteBytes(10, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
 	return buffer.Bytes(), err
 }
@@ -8716,8 +9621,12 @@ func (v *TransactionStatus) IsValid() error {
 }
 
 var fieldNames_UnknownAccount = []string{
+
 	1: "Type",
+
 	2: "Url",
+
+	3: "extraData",
 }
 
 func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
@@ -8725,10 +9634,12 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UnknownAccount)
 	return buffer.Bytes(), err
 }
@@ -8756,9 +9667,14 @@ func (v *UnknownAccount) IsValid() error {
 }
 
 var fieldNames_UnknownSigner = []string{
+
 	1: "Type",
+
 	2: "Url",
+
 	3: "Version",
+
+	4: "extraData",
 }
 
 func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
@@ -8766,13 +9682,16 @@ func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	if !(v.Version == 0) {
 		writer.WriteUint(3, v.Version)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UnknownSigner)
 	return buffer.Bytes(), err
 }
@@ -8805,8 +9724,12 @@ func (v *UnknownSigner) IsValid() error {
 }
 
 var fieldNames_UpdateAccountAuth = []string{
+
 	1: "Type",
+
 	2: "Operations",
+
+	3: "extraData",
 }
 
 func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
@@ -8814,12 +9737,14 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Operations) == 0) {
 		for _, v := range v.Operations {
 			writer.WriteValue(2, v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
 	return buffer.Bytes(), err
 }
@@ -8847,9 +9772,14 @@ func (v *UpdateAccountAuth) IsValid() error {
 }
 
 var fieldNames_UpdateAllowedKeyPageOperation = []string{
+
 	1: "Type",
+
 	2: "Allow",
+
 	3: "Deny",
+
+	4: "extraData",
 }
 
 func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
@@ -8857,17 +9787,20 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Allow) == 0) {
 		for _, v := range v.Allow {
 			writer.WriteEnum(2, v)
 		}
 	}
+
 	if !(len(v.Deny) == 0) {
 		for _, v := range v.Deny {
 			writer.WriteEnum(3, v)
 		}
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UpdateAllowedKeyPageOperation)
 	return buffer.Bytes(), err
 }
@@ -8890,8 +9823,12 @@ func (v *UpdateAllowedKeyPageOperation) IsValid() error {
 }
 
 var fieldNames_UpdateKey = []string{
+
 	1: "Type",
+
 	2: "NewKeyHash",
+
+	3: "extraData",
 }
 
 func (v *UpdateKey) MarshalBinary() ([]byte, error) {
@@ -8899,10 +9836,12 @@ func (v *UpdateKey) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.NewKeyHash) == 0) {
 		writer.WriteBytes(2, v.NewKeyHash)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UpdateKey)
 	return buffer.Bytes(), err
 }
@@ -8930,9 +9869,14 @@ func (v *UpdateKey) IsValid() error {
 }
 
 var fieldNames_UpdateKeyOperation = []string{
+
 	1: "Type",
+
 	2: "OldEntry",
+
 	3: "NewEntry",
+
+	4: "extraData",
 }
 
 func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
@@ -8940,13 +9884,16 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !((v.OldEntry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.OldEntry)
 	}
+
 	if !((v.NewEntry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(3, &v.NewEntry)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UpdateKeyOperation)
 	return buffer.Bytes(), err
 }
@@ -8979,8 +9926,12 @@ func (v *UpdateKeyOperation) IsValid() error {
 }
 
 var fieldNames_UpdateKeyPage = []string{
+
 	1: "Type",
+
 	2: "Operation",
+
+	3: "extraData",
 }
 
 func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
@@ -8988,12 +9939,14 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.Operation) == 0) {
 		for _, v := range v.Operation {
 			writer.WriteValue(2, v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UpdateKeyPage)
 	return buffer.Bytes(), err
 }
@@ -9021,9 +9974,14 @@ func (v *UpdateKeyPage) IsValid() error {
 }
 
 var fieldNames_UpdateValidatorKey = []string{
+
 	1: "Type",
+
 	2: "PubKey",
+
 	3: "NewPubKey",
+
+	4: "extraData",
 }
 
 func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
@@ -9031,13 +9989,16 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(len(v.PubKey) == 0) {
 		writer.WriteBytes(2, v.PubKey)
 	}
+
 	if !(len(v.NewPubKey) == 0) {
 		writer.WriteBytes(3, v.NewPubKey)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
 	return buffer.Bytes(), err
 }
@@ -9070,8 +10031,12 @@ func (v *UpdateValidatorKey) IsValid() error {
 }
 
 var fieldNames_WriteData = []string{
+
 	1: "Type",
+
 	2: "Entry",
+
+	3: "extraData",
 }
 
 func (v *WriteData) MarshalBinary() ([]byte, error) {
@@ -9079,10 +10044,12 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_WriteData)
 	return buffer.Bytes(), err
 }
@@ -9110,10 +10077,16 @@ func (v *WriteData) IsValid() error {
 }
 
 var fieldNames_WriteDataResult = []string{
+
 	1: "Type",
+
 	2: "EntryHash",
+
 	3: "AccountUrl",
+
 	4: "AccountID",
+
+	5: "extraData",
 }
 
 func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
@@ -9121,16 +10094,20 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
 	}
+
 	if !(v.AccountUrl == nil) {
 		writer.WriteUrl(3, v.AccountUrl)
 	}
+
 	if !(len(v.AccountID) == 0) {
 		writer.WriteBytes(4, v.AccountID)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_WriteDataResult)
 	return buffer.Bytes(), err
 }
@@ -9168,9 +10145,14 @@ func (v *WriteDataResult) IsValid() error {
 }
 
 var fieldNames_WriteDataTo = []string{
+
 	1: "Type",
+
 	2: "Recipient",
+
 	3: "Entry",
+
+	4: "extraData",
 }
 
 func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
@@ -9178,13 +10160,16 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
+
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(3, &v.Entry)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_WriteDataTo)
 	return buffer.Bytes(), err
 }
@@ -9217,11 +10202,9 @@ func (v *WriteDataTo) IsValid() error {
 }
 
 func (v *ADI) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ADI) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -9234,18 +10217,19 @@ func (v *ADI) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ADI)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AccountAuth) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x := new(AuthorityEntry); reader.ReadValue(1, x.UnmarshalBinary) {
@@ -9254,18 +10238,19 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AccountAuth)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AcmeFaucet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9277,34 +10262,36 @@ func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AcmeFaucet)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AcmeOracle) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AcmeOracle) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Price = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AcmeOracle)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AddAccountAuthorityOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AddAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountAuthOperationType
 	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
@@ -9316,18 +10303,19 @@ func (v *AddAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AddAccountAuthorityOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AddCredits) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9345,18 +10333,19 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.Oracle = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AddCredits)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AddCreditsResult) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9374,18 +10363,19 @@ func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.Oracle = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AddCreditsResult)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AddKeyOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType KeyPageOperationType
 	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
@@ -9397,18 +10387,19 @@ func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AddKeyOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AddValidator) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9423,18 +10414,19 @@ func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AddValidator)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *Anchor) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *Anchor) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -9447,18 +10439,19 @@ func (v *Anchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_Anchor)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	reader.ReadValue(1, v.ChainMetadata.UnmarshalBinary)
 	if x, ok := reader.ReadUrl(2); ok {
@@ -9476,18 +10469,19 @@ func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(6); ok {
 		v.Entry = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AnchorMetadata)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AnchoredRecord) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AnchoredRecord) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBytes(1); ok {
 		v.Record = x
@@ -9495,18 +10489,19 @@ func (v *AnchoredRecord) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Anchor = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AnchoredRecord)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *AuthorityEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
@@ -9514,18 +10509,19 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(2); ok {
 		v.Disabled = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_AuthorityEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *BTCLegacySignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *BTCLegacySignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -9555,18 +10551,19 @@ func (v *BTCLegacySignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_BTCLegacySignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *BTCSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -9596,18 +10593,19 @@ func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_BTCSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *BurnTokens) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *BurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9619,18 +10617,19 @@ func (v *BurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(2); ok {
 		v.Amount = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_BurnTokens)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ChainMetadata) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ChainMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Name = x
@@ -9638,18 +10637,19 @@ func (v *ChainMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(ChainType); reader.ReadEnum(2, x) {
 		v.Type = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ChainMetadata)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ChainParams) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ChainParams) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBytes(1); ok {
 		v.Data = x
@@ -9657,18 +10657,19 @@ func (v *ChainParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(2); ok {
 		v.IsUpdate = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ChainParams)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9689,18 +10690,19 @@ func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(5); ok {
 		v.Scratch = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CreateDataAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *CreateIdentity) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9721,18 +10723,19 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(5); ok {
 		v.Manager = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CreateIdentity)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *CreateKeyBook) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9750,18 +10753,19 @@ func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(4); ok {
 		v.Manager = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CreateKeyBook)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *CreateKeyPage) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CreateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9780,18 +10784,19 @@ func (v *CreateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Manager = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CreateKeyPage)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *CreateToken) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9821,18 +10826,19 @@ func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(8); ok {
 		v.Manager = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CreateToken)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -9856,18 +10862,19 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(6); ok {
 		v.Manager = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DataAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -9883,18 +10890,19 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(4); ok {
 		v.Scratch = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DataAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x, ok := reader.ReadBytes(1); ok {
@@ -9903,34 +10911,36 @@ func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DataEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DirectoryIndexMetadata) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DirectoryIndexMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Count = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DirectoryIndexMetadata)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DisableAccountAuthOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountAuthOperationType
 	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
@@ -9942,18 +10952,19 @@ func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DisableAccountAuthOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ED25519Signature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -9983,18 +10994,19 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ED25519Signature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ETHSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ETHSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -10024,18 +11036,19 @@ func (v *ETHSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ETHSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *EmptyResult) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *EmptyResult) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10044,18 +11057,19 @@ func (v *EmptyResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_EmptyResult)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *EnableAccountAuthOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *EnableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountAuthOperationType
 	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
@@ -10067,18 +11081,19 @@ func (v *EnableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_EnableAccountAuthOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *Envelope) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		ok := reader.ReadValue(1, func(b []byte) error {
@@ -10102,18 +11117,19 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_Envelope)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ForwardedSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ForwardedSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -10136,18 +11152,19 @@ func (v *ForwardedSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ForwardedSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *HashSet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x, ok := reader.ReadHash(1); ok {
@@ -10156,18 +11173,19 @@ func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_HashSet)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *IndexEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Source = x
@@ -10181,18 +11199,19 @@ func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTime(4); ok {
 		v.BlockTime = &x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_IndexEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalGenesis) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalGenesis) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10201,18 +11220,19 @@ func (v *InternalGenesis) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalGenesis)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalLedger) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10243,18 +11263,19 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(9); ok {
 		v.AcmeBurnt = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalLedger)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalSendTransactions) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10270,18 +11291,19 @@ func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalSendTransactions)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -10296,18 +11318,19 @@ func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(3); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalSyntheticLedger) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10327,18 +11350,19 @@ func (v *InternalSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalSyntheticLedger)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalTransactionsSent) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalTransactionsSent) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10354,18 +11378,19 @@ func (v *InternalTransactionsSent) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalTransactionsSent)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *InternalTransactionsSigned) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *InternalTransactionsSigned) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10381,18 +11406,19 @@ func (v *InternalTransactionsSigned) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_InternalTransactionsSigned)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *IssueTokens) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10407,18 +11433,19 @@ func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_IssueTokens)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *KeyBook) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10434,18 +11461,19 @@ func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.PageCount = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_KeyBook)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *KeyPage) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10485,18 +11513,19 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(AllowedTransactions); reader.ReadEnum(10, x) {
 		v.TransactionBlacklist = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_KeyPage)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *KeySpec) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBytes(1); ok {
 		v.PublicKeyHash = x
@@ -10507,18 +11536,19 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_KeySpec)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBytes(1); ok {
 		v.KeyHash = x
@@ -10526,18 +11556,19 @@ func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Owner = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_KeySpecParams)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *LegacyED25519Signature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -10567,18 +11598,19 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_LegacyED25519Signature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *LiteDataAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10593,18 +11625,19 @@ func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Tail = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_LiteDataAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *LiteIdentity) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10616,18 +11649,19 @@ func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_LiteIdentity)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *LiteTokenAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -10651,18 +11685,19 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(6); ok {
 		v.CreditBalance = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Metric = x
@@ -10670,18 +11705,19 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadDuration(2); ok {
 		v.Duration = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_MetricsRequest)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *Object) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x := new(ObjectType); reader.ReadEnum(1, x) {
 		v.Type = *x
@@ -10693,18 +11729,19 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_Object)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -10734,18 +11771,19 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *Receipt) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBytes(1); ok {
 		v.Start = x
@@ -10760,18 +11798,19 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_Receipt)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ReceiptEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ReceiptEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBool(1); ok {
 		v.Right = x
@@ -10779,18 +11818,19 @@ func (v *ReceiptEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Hash = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ReceiptEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ReceiptSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -10806,18 +11846,19 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(4); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ReceiptSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RemoteTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RemoteTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10829,18 +11870,19 @@ func (v *RemoteTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Hash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RemoteTransaction)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RemoveAccountAuthorityOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RemoveAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountAuthOperationType
 	if x := new(AccountAuthOperationType); reader.ReadEnum(1, x) {
@@ -10852,18 +11894,19 @@ func (v *RemoveAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) erro
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RemoveAccountAuthorityOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RemoveKeyOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType KeyPageOperationType
 	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
@@ -10875,18 +11918,19 @@ func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RemoveKeyOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RemoveValidator) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10901,18 +11945,19 @@ func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Owner = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RemoveValidator)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SegWitDataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SegWitDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10928,18 +11973,19 @@ func (v *SegWitDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(4); ok {
 		v.EntryHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SegWitDataEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SendTokens) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -10961,18 +12007,19 @@ func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SendTokens)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SendTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SendTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	reader.ReadValue(1, func(b []byte) error {
 		x, err := UnmarshalTransactionBody(b)
@@ -10984,18 +12031,19 @@ func (v *SendTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SendTransaction)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SetThresholdKeyPageOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SetThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType KeyPageOperationType
 	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
@@ -11007,18 +12055,19 @@ func (v *SetThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Threshold = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SetThresholdKeyPageOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11055,18 +12104,19 @@ func (v *SyntheticAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticAnchor)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticBurnTokens) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11079,18 +12129,19 @@ func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticBurnTokens)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticCreateChain) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11107,18 +12158,19 @@ func (v *SyntheticCreateChain) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticCreateChain)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11131,18 +12183,19 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Amount = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticDepositCredits)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticDepositTokens) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11158,18 +12211,19 @@ func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(4); ok {
 		v.Amount = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticDepositTokens)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticForwardTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticForwardTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11188,18 +12242,19 @@ func (v *SyntheticForwardTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Transaction); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Transaction = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticForwardTransaction)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticLedger) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Nonce = x
@@ -11218,18 +12273,19 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticLedger)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticLedgerEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticLedgerEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadHash(1); ok {
 		v.TransactionHash = *x
@@ -11249,18 +12305,19 @@ func (v *SyntheticLedgerEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(6); ok {
 		v.NeedsReceipt = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticLedgerEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticMirror) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticMirror) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11276,18 +12333,19 @@ func (v *SyntheticMirror) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticMirror)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticOrigin) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Source = x
@@ -11295,18 +12353,19 @@ func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Cause = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticOrigin)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticReceipt) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11322,18 +12381,19 @@ func (v *SyntheticReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(TransactionStatus); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Status = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticReceipt)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType SignatureType
 	if x := new(SignatureType); reader.ReadEnum(1, x) {
@@ -11354,18 +12414,19 @@ func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(5); ok {
 		v.TransactionHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SyntheticWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11378,18 +12439,19 @@ func (v *SyntheticWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(DataEntry); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SyntheticWriteData)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TokenAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -11411,18 +12473,19 @@ func (v *TokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(6); ok {
 		v.Scratch = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TokenAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TokenIssuer) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -11450,18 +12513,19 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(8); ok {
 		v.SupplyLimit = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TokenIssuer)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TokenRecipient) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TokenRecipient) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
@@ -11469,18 +12533,19 @@ func (v *TokenRecipient) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(2); ok {
 		v.Amount = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TokenRecipient)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *Transaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x := new(TransactionHeader); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.Header = *x
@@ -11492,18 +12557,19 @@ func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_Transaction)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TransactionHeader) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Principal = x
@@ -11517,18 +12583,19 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.Metadata = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TransactionResultSet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TransactionResultSet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x := new(TransactionStatus); reader.ReadValue(1, x.UnmarshalBinary) {
@@ -11537,18 +12604,19 @@ func (v *TransactionResultSet) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TransactionResultSet)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TransactionSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TransactionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadHash(1); ok {
 		v.Transaction = *x
@@ -11560,18 +12628,19 @@ func (v *TransactionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TransactionSignature)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBool(1); ok {
 		v.Remote = x
@@ -11613,18 +12682,19 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TransactionStatus)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UnknownAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -11636,18 +12706,19 @@ func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UnknownAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UnknownSigner) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UnknownSigner) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType AccountType
 	if x := new(AccountType); reader.ReadEnum(1, x) {
@@ -11662,18 +12733,19 @@ func (v *UnknownSigner) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Version = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UnknownSigner)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UpdateAccountAuth) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11694,18 +12766,19 @@ func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UpdateAccountAuth)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UpdateAllowedKeyPageOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType KeyPageOperationType
 	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
@@ -11728,18 +12801,19 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error 
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UpdateAllowedKeyPageOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UpdateKey) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11751,18 +12825,19 @@ func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.NewKeyHash = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UpdateKey)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UpdateKeyOperation) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UpdateKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType KeyPageOperationType
 	if x := new(KeyPageOperationType); reader.ReadEnum(1, x) {
@@ -11777,18 +12852,19 @@ func (v *UpdateKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(KeySpecParams); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.NewEntry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UpdateKeyOperation)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11809,18 +12885,19 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UpdateKeyPage)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *UpdateValidatorKey) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11835,18 +12912,19 @@ func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(3); ok {
 		v.NewPubKey = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_UpdateValidatorKey)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *WriteData) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11858,18 +12936,19 @@ func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_WriteData)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *WriteDataResult) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *WriteDataResult) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11887,18 +12966,19 @@ func (v *WriteDataResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(4); ok {
 		v.AccountID = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_WriteDataResult)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	var vType TransactionType
 	if x := new(TransactionType); reader.ReadEnum(1, x) {
@@ -11913,9 +12993,12 @@ func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(DataEntry); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_WriteDataTo)
 	v.fieldsSet = seen
+
 	return err
 }
 

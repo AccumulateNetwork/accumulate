@@ -22,6 +22,7 @@ type ChainState struct {
 	Type      protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Height    uint64             `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	Roots     [][]byte           `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
+	extraData []byte
 }
 
 type DirectoryQueryResult struct {
@@ -29,6 +30,7 @@ type DirectoryQueryResult struct {
 	Entries         []string           `json:"entries,omitempty" form:"entries" query:"entries"`
 	ExpandedEntries []protocol.Account `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
 	Total           uint64             `json:"total" form:"total" query:"total" validate:"required"`
+	extraData       []byte
 }
 
 type GeneralReceipt struct {
@@ -37,6 +39,7 @@ type GeneralReceipt struct {
 	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
 	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	Error          string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	extraData      []byte
 }
 
 type MultiResponse struct {
@@ -46,12 +49,14 @@ type MultiResponse struct {
 	Start     uint64   `json:"start" form:"start" query:"start" validate:"required"`
 	Count     uint64   `json:"count" form:"count" query:"count" validate:"required"`
 	Total     uint64   `json:"total" form:"total" query:"total" validate:"required"`
+	extraData []byte
 }
 
 type RequestDataEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash"`
+	extraData []byte
 }
 
 type RequestDataEntrySet struct {
@@ -60,12 +65,14 @@ type RequestDataEntrySet struct {
 	Start        uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Count        uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	ExpandChains bool     `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
+	extraData    []byte
 }
 
 type RequestKeyPageIndex struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Key       []byte   `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	extraData []byte
 }
 
 type RequestMinorBlocks struct {
@@ -75,6 +82,7 @@ type RequestMinorBlocks struct {
 	Limit                        uint64      `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
 	TxFetchMode                  TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
 	FilterSynthAnchorsOnlyBlocks bool        `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks" validate:"required"`
+	extraData                    []byte
 }
 
 type RequestTxHistory struct {
@@ -82,6 +90,7 @@ type RequestTxHistory struct {
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	extraData []byte
 }
 
 type ResponseAccount struct {
@@ -89,6 +98,7 @@ type ResponseAccount struct {
 	Account    protocol.Account `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	ChainState []ChainState     `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
 	Receipt    *GeneralReceipt  `json:"receipt,omitempty" form:"receipt" query:"receipt"`
+	extraData  []byte
 }
 
 type ResponseByTxId struct {
@@ -101,6 +111,7 @@ type ResponseByTxId struct {
 	ChainState   [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
 	Receipts     []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	Signers      []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData    []byte
 }
 
 type ResponseChainEntry struct {
@@ -110,6 +121,7 @@ type ResponseChainEntry struct {
 	Entry     []byte             `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	State     [][]byte           `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Receipt   *GeneralReceipt    `json:"receipt,omitempty" form:"receipt" query:"receipt"`
+	extraData []byte
 }
 
 type ResponseChainRange struct {
@@ -119,18 +131,21 @@ type ResponseChainRange struct {
 	End       int64              `json:"end" form:"end" query:"end" validate:"required"`
 	Total     int64              `json:"total" form:"total" query:"total" validate:"required"`
 	Entries   [][]byte           `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type ResponseDataEntry struct {
 	fieldsSet []bool
 	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type ResponseDataEntrySet struct {
 	fieldsSet   []bool
 	DataEntries []ResponseDataEntry `json:"dataEntries,omitempty" form:"dataEntries" query:"dataEntries" validate:"required"`
 	Total       uint64              `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	extraData   []byte
 }
 
 type ResponseKeyPageIndex struct {
@@ -138,6 +153,7 @@ type ResponseKeyPageIndex struct {
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 	Signer    *url.URL `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
+	extraData []byte
 }
 
 type ResponseMinorBlocks struct {
@@ -146,6 +162,7 @@ type ResponseMinorBlocks struct {
 	End       uint64                `json:"end" form:"end" query:"end" validate:"required"`
 	Total     uint64                `json:"total" form:"total" query:"total" validate:"required"`
 	Entries   []*ResponseMinorEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type ResponseMinorEntry struct {
@@ -159,11 +176,13 @@ type ResponseMinorEntry struct {
 	TxIds   [][]byte `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
 	// Transactions the transactions within this block.
 	Transactions []*ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type ResponsePending struct {
 	fieldsSet    []bool
 	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type ResponseTxHistory struct {
@@ -172,19 +191,22 @@ type ResponseTxHistory struct {
 	End          uint64           `json:"end" form:"end" query:"end" validate:"required"`
 	Total        uint64           `json:"total" form:"total" query:"total" validate:"required"`
 	Transactions []ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type SignatureSet struct {
 	fieldsSet  []bool
 	Account    protocol.Account     `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	extraData  []byte
 }
 
 type TxReceipt struct {
 	fieldsSet []bool
 	GeneralReceipt
-	Account *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Chain   string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain     string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	extraData []byte
 }
 
 func (v *ChainState) Copy() *ChainState {
@@ -1012,10 +1034,16 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 }
 
 var fieldNames_ChainState = []string{
+
 	1: "Name",
+
 	2: "Type",
+
 	3: "Height",
+
 	4: "Roots",
+
+	5: "extraData",
 }
 
 func (v *ChainState) MarshalBinary() ([]byte, error) {
@@ -1025,18 +1053,22 @@ func (v *ChainState) MarshalBinary() ([]byte, error) {
 	if !(len(v.Name) == 0) {
 		writer.WriteString(1, v.Name)
 	}
+
 	if !(v.Type == 0) {
 		writer.WriteEnum(2, v.Type)
 	}
+
 	if !(v.Height == 0) {
 		writer.WriteUint(3, v.Height)
 	}
+
 	if !(len(v.Roots) == 0) {
 		for _, v := range v.Roots {
 			writer.WriteBytes(4, v)
 		}
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ChainState)
 	return buffer.Bytes(), err
 }
@@ -1076,9 +1108,14 @@ func (v *ChainState) IsValid() error {
 }
 
 var fieldNames_DirectoryQueryResult = []string{
+
 	1: "Entries",
+
 	2: "ExpandedEntries",
+
 	3: "Total",
+
+	4: "extraData",
 }
 
 func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
@@ -1090,13 +1127,16 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 			writer.WriteString(1, v)
 		}
 	}
+
 	if !(len(v.ExpandedEntries) == 0) {
 		for _, v := range v.ExpandedEntries {
 			writer.WriteValue(2, v)
 		}
 	}
+
 	writer.WriteUint(3, v.Total)
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DirectoryQueryResult)
 	return buffer.Bytes(), err
 }
@@ -1119,10 +1159,16 @@ func (v *DirectoryQueryResult) IsValid() error {
 }
 
 var fieldNames_GeneralReceipt = []string{
+
 	1: "LocalBlock",
+
 	2: "DirectoryBlock",
+
 	3: "Receipt",
+
 	4: "Error",
+
+	5: "extraData",
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
@@ -1132,16 +1178,20 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.LocalBlock == 0) {
 		writer.WriteUint(1, v.LocalBlock)
 	}
+
 	if !(v.DirectoryBlock == 0) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
+
 	if !((v.Receipt).Equal(new(protocol.Receipt))) {
 		writer.WriteValue(3, &v.Receipt)
 	}
+
 	if !(len(v.Error) == 0) {
 		writer.WriteString(4, v.Error)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_GeneralReceipt)
 	return buffer.Bytes(), err
 }
@@ -1181,11 +1231,18 @@ func (v *GeneralReceipt) IsValid() error {
 }
 
 var fieldNames_MultiResponse = []string{
+
 	1: "Type",
+
 	2: "Items",
+
 	3: "Start",
+
 	4: "Count",
+
 	5: "Total",
+
+	6: "extraData",
 }
 
 func (v *MultiResponse) MarshalBinary() ([]byte, error) {
@@ -1195,15 +1252,20 @@ func (v *MultiResponse) MarshalBinary() ([]byte, error) {
 	if !(len(v.Type) == 0) {
 		writer.WriteString(1, v.Type)
 	}
+
 	if !(len(v.Items) == 0) {
 		for _, v := range v.Items {
 			writer.WriteString(2, v)
 		}
 	}
+
 	writer.WriteUint(3, v.Start)
+
 	writer.WriteUint(4, v.Count)
+
 	writer.WriteUint(5, v.Total)
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_MultiResponse)
 	return buffer.Bytes(), err
 }
@@ -1242,8 +1304,12 @@ func (v *MultiResponse) IsValid() error {
 }
 
 var fieldNames_RequestDataEntry = []string{
+
 	1: "Url",
+
 	2: "EntryHash",
+
+	3: "extraData",
 }
 
 func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
@@ -1253,10 +1319,12 @@ func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
+
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RequestDataEntry)
 	return buffer.Bytes(), err
 }
@@ -1281,10 +1349,16 @@ func (v *RequestDataEntry) IsValid() error {
 }
 
 var fieldNames_RequestDataEntrySet = []string{
+
 	1: "Url",
+
 	2: "Start",
+
 	3: "Count",
+
 	4: "ExpandChains",
+
+	5: "extraData",
 }
 
 func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
@@ -1294,16 +1368,20 @@ func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
+
 	if !(v.Start == 0) {
 		writer.WriteUint(2, v.Start)
 	}
+
 	if !(v.Count == 0) {
 		writer.WriteUint(3, v.Count)
 	}
+
 	if !(!v.ExpandChains) {
 		writer.WriteBool(4, v.ExpandChains)
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RequestDataEntrySet)
 	return buffer.Bytes(), err
 }
@@ -1338,8 +1416,12 @@ func (v *RequestDataEntrySet) IsValid() error {
 }
 
 var fieldNames_RequestKeyPageIndex = []string{
+
 	1: "Url",
+
 	2: "Key",
+
+	3: "extraData",
 }
 
 func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -1349,10 +1431,12 @@ func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
+
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(2, v.Key)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RequestKeyPageIndex)
 	return buffer.Bytes(), err
 }
@@ -1382,11 +1466,18 @@ func (v *RequestKeyPageIndex) IsValid() error {
 }
 
 var fieldNames_RequestMinorBlocks = []string{
+
 	1: "Account",
+
 	2: "Start",
+
 	3: "Limit",
+
 	4: "TxFetchMode",
+
 	5: "FilterSynthAnchorsOnlyBlocks",
+
+	6: "extraData",
 }
 
 func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
@@ -1396,19 +1487,24 @@ func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteUrl(1, v.Account)
 	}
+
 	if !(v.Start == 0) {
 		writer.WriteUint(2, v.Start)
 	}
+
 	if !(v.Limit == 0) {
 		writer.WriteUint(3, v.Limit)
 	}
+
 	if !(v.TxFetchMode == 0) {
 		writer.WriteEnum(4, v.TxFetchMode)
 	}
+
 	if !(!v.FilterSynthAnchorsOnlyBlocks) {
 		writer.WriteBool(5, v.FilterSynthAnchorsOnlyBlocks)
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
 	return buffer.Bytes(), err
 }
@@ -1453,9 +1549,14 @@ func (v *RequestMinorBlocks) IsValid() error {
 }
 
 var fieldNames_RequestTxHistory = []string{
+
 	1: "Account",
+
 	2: "Start",
+
 	3: "Limit",
+
+	4: "extraData",
 }
 
 func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
@@ -1465,13 +1566,16 @@ func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteUrl(1, v.Account)
 	}
+
 	if !(v.Start == 0) {
 		writer.WriteUint(2, v.Start)
 	}
+
 	if !(v.Limit == 0) {
 		writer.WriteUint(3, v.Limit)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_RequestTxHistory)
 	return buffer.Bytes(), err
 }
@@ -1506,9 +1610,14 @@ func (v *RequestTxHistory) IsValid() error {
 }
 
 var fieldNames_ResponseAccount = []string{
+
 	1: "Account",
+
 	2: "ChainState",
+
 	3: "Receipt",
+
+	4: "extraData",
 }
 
 func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
@@ -1518,15 +1627,18 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteValue(1, v.Account)
 	}
+
 	if !(len(v.ChainState) == 0) {
 		for _, v := range v.ChainState {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	if !(v.Receipt == nil) {
 		writer.WriteValue(3, v.Receipt)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseAccount)
 	return buffer.Bytes(), err
 }
@@ -1556,14 +1668,24 @@ func (v *ResponseAccount) IsValid() error {
 }
 
 var fieldNames_ResponseByTxId = []string{
+
 	1: "TxId",
+
 	2: "Envelope",
+
 	3: "Status",
+
 	4: "TxSynthTxIds",
+
 	5: "Height",
+
 	6: "ChainState",
+
 	7: "Receipts",
+
 	8: "Signers",
+
+	9: "extraData",
 }
 
 func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
@@ -1573,32 +1695,40 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	if !(v.TxId == ([32]byte{})) {
 		writer.WriteHash(1, &v.TxId)
 	}
+
 	if !(v.Envelope == nil) {
 		writer.WriteValue(2, v.Envelope)
 	}
+
 	if !(v.Status == nil) {
 		writer.WriteValue(3, v.Status)
 	}
+
 	if !(len(v.TxSynthTxIds) == 0) {
 		writer.WriteBytes(4, v.TxSynthTxIds)
 	}
+
 	writer.WriteInt(5, v.Height)
+
 	if !(len(v.ChainState) == 0) {
 		for _, v := range v.ChainState {
 			writer.WriteBytes(6, v)
 		}
 	}
+
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
 			writer.WriteValue(7, v)
 		}
 	}
+
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
 			writer.WriteValue(8, &v)
 		}
 	}
 
+	writer.WriteBytes(9, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseByTxId)
 	return buffer.Bytes(), err
 }
@@ -1656,11 +1786,18 @@ func (v *ResponseByTxId) IsValid() error {
 }
 
 var fieldNames_ResponseChainEntry = []string{
+
 	1: "Type",
+
 	2: "Height",
+
 	3: "Entry",
+
 	4: "State",
+
 	5: "Receipt",
+
+	6: "extraData",
 }
 
 func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
@@ -1670,19 +1807,24 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(1, v.Type)
 	}
+
 	writer.WriteInt(2, v.Height)
+
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(3, v.Entry)
 	}
+
 	if !(len(v.State) == 0) {
 		for _, v := range v.State {
 			writer.WriteBytes(4, v)
 		}
 	}
+
 	if !(v.Receipt == nil) {
 		writer.WriteValue(5, v.Receipt)
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseChainEntry)
 	return buffer.Bytes(), err
 }
@@ -1720,11 +1862,18 @@ func (v *ResponseChainEntry) IsValid() error {
 }
 
 var fieldNames_ResponseChainRange = []string{
+
 	1: "Type",
+
 	2: "Start",
+
 	3: "End",
+
 	4: "Total",
+
 	5: "Entries",
+
+	6: "extraData",
 }
 
 func (v *ResponseChainRange) MarshalBinary() ([]byte, error) {
@@ -1734,15 +1883,20 @@ func (v *ResponseChainRange) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(1, v.Type)
 	}
+
 	writer.WriteInt(2, v.Start)
+
 	writer.WriteInt(3, v.End)
+
 	writer.WriteInt(4, v.Total)
+
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
 			writer.WriteBytes(5, v)
 		}
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseChainRange)
 	return buffer.Bytes(), err
 }
@@ -1781,8 +1935,12 @@ func (v *ResponseChainRange) IsValid() error {
 }
 
 var fieldNames_ResponseDataEntry = []string{
+
 	1: "EntryHash",
+
 	2: "Entry",
+
+	3: "extraData",
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
@@ -1792,10 +1950,12 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
+
 	if !((v.Entry).Equal(new(protocol.DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
 	return buffer.Bytes(), err
 }
@@ -1825,8 +1985,12 @@ func (v *ResponseDataEntry) IsValid() error {
 }
 
 var fieldNames_ResponseDataEntrySet = []string{
+
 	1: "DataEntries",
+
 	2: "Total",
+
+	3: "extraData",
 }
 
 func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
@@ -1838,10 +2002,12 @@ func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, &v)
 		}
 	}
+
 	if !(v.Total == 0) {
 		writer.WriteUint(2, v.Total)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntrySet)
 	return buffer.Bytes(), err
 }
@@ -1871,9 +2037,14 @@ func (v *ResponseDataEntrySet) IsValid() error {
 }
 
 var fieldNames_ResponseKeyPageIndex = []string{
+
 	1: "Authority",
+
 	2: "Signer",
+
 	3: "Index",
+
+	4: "extraData",
 }
 
 func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -1883,11 +2054,14 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 	if !(v.Authority == nil) {
 		writer.WriteUrl(1, v.Authority)
 	}
+
 	if !(v.Signer == nil) {
 		writer.WriteUrl(2, v.Signer)
 	}
+
 	writer.WriteUint(3, v.Index)
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseKeyPageIndex)
 	return buffer.Bytes(), err
 }
@@ -1920,10 +2094,16 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 }
 
 var fieldNames_ResponseMinorBlocks = []string{
+
 	1: "Start",
+
 	2: "End",
+
 	3: "Total",
+
 	4: "Entries",
+
+	5: "extraData",
 }
 
 func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
@@ -1931,14 +2111,18 @@ func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, v.Start)
+
 	writer.WriteUint(2, v.End)
+
 	writer.WriteUint(3, v.Total)
+
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
 			writer.WriteValue(4, v)
 		}
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseMinorBlocks)
 	return buffer.Bytes(), err
 }
@@ -1972,11 +2156,18 @@ func (v *ResponseMinorBlocks) IsValid() error {
 }
 
 var fieldNames_ResponseMinorEntry = []string{
+
 	1: "BlockIndex",
+
 	2: "BlockTime",
+
 	3: "TxCount",
+
 	4: "TxIds",
+
 	5: "Transactions",
+
+	6: "extraData",
 }
 
 func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
@@ -1986,23 +2177,28 @@ func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 	if !(v.BlockIndex == 0) {
 		writer.WriteUint(1, v.BlockIndex)
 	}
+
 	if !(v.BlockTime == nil) {
 		writer.WriteTime(2, *v.BlockTime)
 	}
+
 	if !(v.TxCount == 0) {
 		writer.WriteUint(3, v.TxCount)
 	}
+
 	if !(len(v.TxIds) == 0) {
 		for _, v := range v.TxIds {
 			writer.WriteBytes(4, v)
 		}
 	}
+
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(5, v)
 		}
 	}
 
+	writer.WriteBytes(6, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseMinorEntry)
 	return buffer.Bytes(), err
 }
@@ -2047,7 +2243,10 @@ func (v *ResponseMinorEntry) IsValid() error {
 }
 
 var fieldNames_ResponsePending = []string{
+
 	1: "Transactions",
+
+	2: "extraData",
 }
 
 func (v *ResponsePending) MarshalBinary() ([]byte, error) {
@@ -2060,6 +2259,7 @@ func (v *ResponsePending) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponsePending)
 	return buffer.Bytes(), err
 }
@@ -2084,10 +2284,16 @@ func (v *ResponsePending) IsValid() error {
 }
 
 var fieldNames_ResponseTxHistory = []string{
+
 	1: "Start",
+
 	2: "End",
+
 	3: "Total",
+
 	4: "Transactions",
+
+	5: "extraData",
 }
 
 func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
@@ -2095,14 +2301,18 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteUint(1, v.Start)
+
 	writer.WriteUint(2, v.End)
+
 	writer.WriteUint(3, v.Total)
+
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(4, &v)
 		}
 	}
 
+	writer.WriteBytes(5, v.extraData)
 	_, _, err := writer.Reset(fieldNames_ResponseTxHistory)
 	return buffer.Bytes(), err
 }
@@ -2136,8 +2346,12 @@ func (v *ResponseTxHistory) IsValid() error {
 }
 
 var fieldNames_SignatureSet = []string{
+
 	1: "Account",
+
 	2: "Signatures",
+
+	3: "extraData",
 }
 
 func (v *SignatureSet) MarshalBinary() ([]byte, error) {
@@ -2147,12 +2361,14 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteValue(1, v.Account)
 	}
+
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
 			writer.WriteValue(2, v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SignatureSet)
 	return buffer.Bytes(), err
 }
@@ -2182,9 +2398,14 @@ func (v *SignatureSet) IsValid() error {
 }
 
 var fieldNames_TxReceipt = []string{
+
 	1: "GeneralReceipt",
+
 	2: "Account",
+
 	3: "Chain",
+
+	4: "extraData",
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {
@@ -2192,13 +2413,16 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteValue(1, &v.GeneralReceipt)
+
 	if !(v.Account == nil) {
 		writer.WriteUrl(2, v.Account)
 	}
+
 	if !(len(v.Chain) == 0) {
 		writer.WriteString(3, v.Chain)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_TxReceipt)
 	return buffer.Bytes(), err
 }
@@ -2231,11 +2455,9 @@ func (v *TxReceipt) IsValid() error {
 }
 
 func (v *ChainState) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ChainState) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Name = x
@@ -2253,18 +2475,19 @@ func (v *ChainState) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ChainState)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DirectoryQueryResult) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x, ok := reader.ReadString(1); ok {
@@ -2288,18 +2511,19 @@ func (v *DirectoryQueryResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Total = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DirectoryQueryResult)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *GeneralReceipt) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.LocalBlock = x
@@ -2313,18 +2537,19 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(4); ok {
 		v.Error = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_GeneralReceipt)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *MultiResponse) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *MultiResponse) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Type = x
@@ -2345,18 +2570,19 @@ func (v *MultiResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.Total = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_MultiResponse)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RequestDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
@@ -2364,18 +2590,19 @@ func (v *RequestDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.EntryHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RequestDataEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RequestDataEntrySet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RequestDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
@@ -2389,18 +2616,19 @@ func (v *RequestDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(4); ok {
 		v.ExpandChains = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RequestDataEntrySet)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RequestKeyPageIndex) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
@@ -2408,18 +2636,19 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.Key = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RequestKeyPageIndex)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Account = x
@@ -2436,18 +2665,19 @@ func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(5); ok {
 		v.FilterSynthAnchorsOnlyBlocks = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *RequestTxHistory) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *RequestTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Account = x
@@ -2458,18 +2688,19 @@ func (v *RequestTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Limit = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_RequestTxHistory)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	reader.ReadValue(1, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
@@ -2488,18 +2719,19 @@ func (v *ResponseAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(GeneralReceipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Receipt = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseAccount)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseByTxId) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadHash(1); ok {
 		v.TxId = *x
@@ -2537,18 +2769,19 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseByTxId)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseChainEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x := new(protocol.ChainType); reader.ReadEnum(1, x) {
 		v.Type = *x
@@ -2569,18 +2802,19 @@ func (v *ResponseChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(GeneralReceipt); reader.ReadValue(5, x.UnmarshalBinary) {
 		v.Receipt = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseChainEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseChainRange) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseChainRange) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x := new(protocol.ChainType); reader.ReadEnum(1, x) {
 		v.Type = *x
@@ -2601,18 +2835,19 @@ func (v *ResponseChainRange) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseChainRange)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseDataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadHash(1); ok {
 		v.EntryHash = *x
@@ -2620,18 +2855,19 @@ func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseDataEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseDataEntrySet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x := new(ResponseDataEntry); reader.ReadValue(1, x.UnmarshalBinary) {
@@ -2643,18 +2879,19 @@ func (v *ResponseDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Total = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseDataEntrySet)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseKeyPageIndex) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Authority = x
@@ -2665,18 +2902,19 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Index = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseKeyPageIndex)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseMinorBlocks) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Start = x
@@ -2694,18 +2932,19 @@ func (v *ResponseMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseMinorBlocks)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseMinorEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseMinorEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.BlockIndex = x
@@ -2730,18 +2969,19 @@ func (v *ResponseMinorEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseMinorEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponsePending) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponsePending) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x, ok := reader.ReadHash(1); ok {
@@ -2750,18 +2990,19 @@ func (v *ResponsePending) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponsePending)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *ResponseTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Start = x
@@ -2779,18 +3020,19 @@ func (v *ResponseTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_ResponseTxHistory)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *SignatureSet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	reader.ReadValue(1, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
@@ -2811,18 +3053,19 @@ func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SignatureSet)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *TxReceipt) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	reader.ReadValue(1, v.GeneralReceipt.UnmarshalBinary)
 	if x, ok := reader.ReadUrl(2); ok {
@@ -2831,9 +3074,12 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(3); ok {
 		v.Chain = x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_TxReceipt)
 	v.fieldsSet = seen
+
 	return err
 }
 

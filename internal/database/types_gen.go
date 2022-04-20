@@ -19,24 +19,28 @@ type SigOrTxn struct {
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Hash        [32]byte              `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData   []byte
 }
 
 type exampleFullAccountState struct {
 	fieldsSet []bool
 	State     protocol.Account `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Chains    []*merkleState   `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	extraData []byte
 }
 
 type merkleState struct {
 	fieldsSet []bool
 	Count     uint64     `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	extraData []byte
 }
 
 type sigSetData struct {
 	fieldsSet []bool
 	Version   uint64          `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Entries   []sigSetKeyData `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type sigSetKeyData struct {
@@ -44,11 +48,13 @@ type sigSetKeyData struct {
 	System    bool     `json:"system,omitempty" form:"system" query:"system" validate:"required"`
 	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	extraData []byte
 }
 
 type txSyntheticTxns struct {
 	fieldsSet []bool
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
+	extraData []byte
 }
 
 func (v *SigOrTxn) Copy() *SigOrTxn {
@@ -233,9 +239,14 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 }
 
 var fieldNames_SigOrTxn = []string{
+
 	1: "Transaction",
+
 	2: "Signature",
+
 	3: "Hash",
+
+	4: "extraData",
 }
 
 func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
@@ -245,13 +256,16 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == nil) {
 		writer.WriteValue(1, v.Transaction)
 	}
+
 	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
+
 	if !(v.Hash == ([32]byte{})) {
 		writer.WriteHash(3, &v.Hash)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_SigOrTxn)
 	return buffer.Bytes(), err
 }
@@ -286,8 +300,12 @@ func (v *SigOrTxn) IsValid() error {
 }
 
 var fieldNames_exampleFullAccountState = []string{
+
 	1: "State",
+
 	2: "Chains",
+
+	3: "extraData",
 }
 
 func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
@@ -297,12 +315,14 @@ func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
 	if !(v.State == nil) {
 		writer.WriteValue(1, v.State)
 	}
+
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
 			writer.WriteValue(2, v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_exampleFullAccountState)
 	return buffer.Bytes(), err
 }
@@ -332,8 +352,12 @@ func (v *exampleFullAccountState) IsValid() error {
 }
 
 var fieldNames_merkleState = []string{
+
 	1: "Count",
+
 	2: "Pending",
+
+	3: "extraData",
 }
 
 func (v *merkleState) MarshalBinary() ([]byte, error) {
@@ -343,12 +367,14 @@ func (v *merkleState) MarshalBinary() ([]byte, error) {
 	if !(v.Count == 0) {
 		writer.WriteUint(1, v.Count)
 	}
+
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
 			writer.WriteHash(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_merkleState)
 	return buffer.Bytes(), err
 }
@@ -378,8 +404,12 @@ func (v *merkleState) IsValid() error {
 }
 
 var fieldNames_sigSetData = []string{
+
 	1: "Version",
+
 	2: "Entries",
+
+	3: "extraData",
 }
 
 func (v *sigSetData) MarshalBinary() ([]byte, error) {
@@ -389,12 +419,14 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 	if !(v.Version == 0) {
 		writer.WriteUint(1, v.Version)
 	}
+
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
 			writer.WriteValue(2, &v)
 		}
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_sigSetData)
 	return buffer.Bytes(), err
 }
@@ -424,9 +456,14 @@ func (v *sigSetData) IsValid() error {
 }
 
 var fieldNames_sigSetKeyData = []string{
+
 	1: "System",
+
 	2: "KeyHash",
+
 	3: "EntryHash",
+
+	4: "extraData",
 }
 
 func (v *sigSetKeyData) MarshalBinary() ([]byte, error) {
@@ -436,13 +473,16 @@ func (v *sigSetKeyData) MarshalBinary() ([]byte, error) {
 	if !(!v.System) {
 		writer.WriteBool(1, v.System)
 	}
+
 	if !(v.KeyHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.KeyHash)
 	}
+
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.EntryHash)
 	}
 
+	writer.WriteBytes(4, v.extraData)
 	_, _, err := writer.Reset(fieldNames_sigSetKeyData)
 	return buffer.Bytes(), err
 }
@@ -477,7 +517,10 @@ func (v *sigSetKeyData) IsValid() error {
 }
 
 var fieldNames_txSyntheticTxns = []string{
+
 	1: "Txids",
+
+	2: "extraData",
 }
 
 func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
@@ -490,6 +533,7 @@ func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
 	return buffer.Bytes(), err
 }
@@ -514,11 +558,9 @@ func (v *txSyntheticTxns) IsValid() error {
 }
 
 func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.Transaction = x
@@ -533,18 +575,19 @@ func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(3); ok {
 		v.Hash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_SigOrTxn)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *exampleFullAccountState) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	reader.ReadValue(1, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
@@ -560,18 +603,19 @@ func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_exampleFullAccountState)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *merkleState) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Count = x
@@ -583,18 +627,19 @@ func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_merkleState)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *sigSetData) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Version = x
@@ -606,18 +651,19 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_sigSetData)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *sigSetKeyData) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *sigSetKeyData) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadBool(1); ok {
 		v.System = x
@@ -628,18 +674,19 @@ func (v *sigSetKeyData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(3); ok {
 		v.EntryHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_sigSetKeyData)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x, ok := reader.ReadHash(1); ok {
@@ -648,9 +695,12 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_txSyntheticTxns)
 	v.fieldsSet = seen
+
 	return err
 }
 

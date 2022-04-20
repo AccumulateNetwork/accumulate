@@ -20,14 +20,16 @@ import (
 )
 
 type ChainEntry struct {
-	Height int64       `json:"height" form:"height" query:"height" validate:"required"`
-	Entry  []byte      `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	State  [][]byte    `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	Value  interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Height    int64       `json:"height" form:"height" query:"height" validate:"required"`
+	Entry     []byte      `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	State     [][]byte    `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
 }
 
 type ChainIdQuery struct {
-	ChainId []byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	ChainId   []byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	extraData []byte
 }
 
 type ChainQueryResponse struct {
@@ -37,67 +39,80 @@ type ChainQueryResponse struct {
 	Data      interface{}           `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	ChainId   []byte                `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 	Receipt   *query.GeneralReceipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	extraData []byte
 }
 
 type DataEntry struct {
 	fieldsSet []bool
 	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
 }
 
 type DataEntryQuery struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash"`
+	extraData []byte
 }
 
 type DataEntryQueryResponse struct {
 	fieldsSet []bool
 	EntryHash [32]byte  `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type DataEntrySetQuery struct {
 	UrlQuery
 	QueryPagination
 	QueryOptions
+	extraData []byte
 }
 
 type DescriptionResponse struct {
-	Subnet config.Network `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	Subnet    config.Network `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	extraData []byte
 }
 
 type DirectoryQuery struct {
 	UrlQuery
 	QueryPagination
 	QueryOptions
+	extraData []byte
 }
 
 type GeneralQuery struct {
 	UrlQuery
 	QueryOptions
+	extraData []byte
 }
 
 type KeyPage struct {
-	Version uint64 `json:"version,omitempty" form:"version" query:"version"`
+	Version   uint64 `json:"version,omitempty" form:"version" query:"version"`
+	extraData []byte
 }
 
 type KeyPageIndexQuery struct {
 	UrlQuery
-	Key []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	extraData []byte
 }
 
 type MerkleState struct {
-	Height uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
-	Roots  [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
+	Height    uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	Roots     [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
+	extraData []byte
 }
 
 type MetricsQuery struct {
-	Metric   string        `json:"metric,omitempty" form:"metric" query:"metric" validate:"required"`
-	Duration time.Duration `json:"duration,omitempty" form:"duration" query:"duration" validate:"required"`
+	Metric    string        `json:"metric,omitempty" form:"metric" query:"metric" validate:"required"`
+	Duration  time.Duration `json:"duration,omitempty" form:"duration" query:"duration" validate:"required"`
+	extraData []byte
 }
 
 type MetricsResponse struct {
-	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
 }
 
 type MinorBlocksQuery struct {
@@ -105,6 +120,7 @@ type MinorBlocksQuery struct {
 	QueryPagination
 	TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
 	FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
+	extraData                    []byte
 }
 
 type MinorQueryResponse struct {
@@ -117,6 +133,7 @@ type MinorQueryResponse struct {
 	TxCount      uint64                      `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
 	TxIds        [][]byte                    `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
 	Transactions []*TransactionQueryResponse `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type MultiResponse struct {
@@ -126,27 +143,32 @@ type MultiResponse struct {
 	Count      uint64        `json:"count" form:"count" query:"count" validate:"required"`
 	Total      uint64        `json:"total" form:"total" query:"total" validate:"required"`
 	OtherItems []interface{} `json:"otherItems,omitempty" form:"otherItems" query:"otherItems" validate:"required"`
+	extraData  []byte
 }
 
 type QueryOptions struct {
-	Expand bool   `json:"expand,omitempty" form:"expand" query:"expand"`
-	Height uint64 `json:"height,omitempty" form:"height" query:"height"`
-	Prove  bool   `json:"prove,omitempty" form:"prove" query:"prove"`
+	Expand    bool   `json:"expand,omitempty" form:"expand" query:"expand"`
+	Height    uint64 `json:"height,omitempty" form:"height" query:"height"`
+	Prove     bool   `json:"prove,omitempty" form:"prove" query:"prove"`
+	extraData []byte
 }
 
 type QueryPagination struct {
-	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
-	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
+	Start     uint64 `json:"start,omitempty" form:"start" query:"start"`
+	Count     uint64 `json:"count,omitempty" form:"count" query:"count"`
+	extraData []byte
 }
 
 type SignatureBook struct {
 	Authority *url.URL         `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 	Pages     []*SignaturePage `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+	extraData []byte
 }
 
 type SignaturePage struct {
 	Signer     SignerMetadata       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	extraData  []byte
 }
 
 type Signer struct {
@@ -157,27 +179,32 @@ type Signer struct {
 	SignatureType protocol.SignatureType `json:"signatureType,omitempty" form:"signatureType" query:"signatureType"`
 	// UseSimpleHash tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash.
 	UseSimpleHash bool `json:"useSimpleHash,omitempty" form:"useSimpleHash" query:"useSimpleHash"`
+	extraData     []byte
 }
 
 type SignerMetadata struct {
 	Type            protocol.AccountType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Url             *url.URL             `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AcceptThreshold uint64               `json:"acceptThreshold,omitempty" form:"acceptThreshold" query:"acceptThreshold" validate:"required"`
+	extraData       []byte
 }
 
 type StatusResponse struct {
-	Ok bool `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+	Ok        bool `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+	extraData []byte
 }
 
 type TokenDeposit struct {
-	Url    *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Amount big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
-	Txid   []byte   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Txid      []byte   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	extraData []byte
 }
 
 type TokenSend struct {
-	From *url.URL       `json:"from,omitempty" form:"from" query:"from" validate:"required"`
-	To   []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	From      *url.URL       `json:"from,omitempty" form:"from" query:"from" validate:"required"`
+	To        []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
 }
 
 type TransactionQueryResponse struct {
@@ -192,11 +219,13 @@ type TransactionQueryResponse struct {
 	SyntheticTxids  [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
 	Receipts        []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty" form:"signatureBooks" query:"signatureBooks" validate:"required"`
+	extraData       []byte
 }
 
 type TxHistoryQuery struct {
 	UrlQuery
 	QueryPagination
+	extraData []byte
 }
 
 type TxRequest struct {
@@ -206,11 +235,12 @@ type TxRequest struct {
 	Signer     Signer   `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Signature  []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	// KeyPage is deprecated.
-	KeyPage  KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	TxHash   []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
-	Payload  interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
-	Memo     string      `json:"memo,omitempty" form:"memo" query:"memo"`
-	Metadata []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash    []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	Memo      string      `json:"memo,omitempty" form:"memo" query:"memo"`
+	Metadata  []byte      `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	extraData []byte
 }
 
 type TxResponse struct {
@@ -221,6 +251,7 @@ type TxResponse struct {
 	Message         string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Delivered       bool        `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	Result          interface{} `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	extraData       []byte
 }
 
 type TxnQuery struct {
@@ -229,10 +260,12 @@ type TxnQuery struct {
 	Wait time.Duration `json:"wait,omitempty" form:"wait" query:"wait"`
 	// IgnorePending tells QueryTx to ignore pending transactions.
 	IgnorePending bool `json:"ignorePending,omitempty" form:"ignorePending" query:"ignorePending"`
+	extraData     []byte
 }
 
 type UrlQuery struct {
-	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type VersionResponse struct {
@@ -240,6 +273,7 @@ type VersionResponse struct {
 	Commit         string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
 	IsTestNet      bool   `json:"isTestNet,omitempty" form:"isTestNet" query:"isTestNet" validate:"required"`
+	extraData      []byte
 }
 
 func (v *DataEntry) Copy() *DataEntry {
@@ -320,7 +354,10 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 }
 
 var fieldNames_DataEntry = []string{
+
 	1: "Data",
+
+	2: "extraData",
 }
 
 func (v *DataEntry) MarshalBinary() ([]byte, error) {
@@ -333,6 +370,7 @@ func (v *DataEntry) MarshalBinary() ([]byte, error) {
 		}
 	}
 
+	writer.WriteBytes(2, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DataEntry)
 	return buffer.Bytes(), err
 }
@@ -357,8 +395,12 @@ func (v *DataEntry) IsValid() error {
 }
 
 var fieldNames_DataEntryQuery = []string{
+
 	1: "Url",
+
 	2: "EntryHash",
+
+	3: "extraData",
 }
 
 func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
@@ -368,10 +410,12 @@ func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
+
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DataEntryQuery)
 	return buffer.Bytes(), err
 }
@@ -396,8 +440,12 @@ func (v *DataEntryQuery) IsValid() error {
 }
 
 var fieldNames_DataEntryQueryResponse = []string{
+
 	1: "EntryHash",
+
 	2: "Entry",
+
+	3: "extraData",
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
@@ -407,10 +455,12 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
+
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
 
+	writer.WriteBytes(3, v.extraData)
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
 	return buffer.Bytes(), err
 }
@@ -440,11 +490,9 @@ func (v *DataEntryQueryResponse) IsValid() error {
 }
 
 func (v *DataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	for {
 		if x, ok := reader.ReadBytes(1); ok {
@@ -453,18 +501,19 @@ func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DataEntry)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DataEntryQuery) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DataEntryQuery) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
@@ -472,18 +521,19 @@ func (v *DataEntryQuery) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.EntryHash = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DataEntryQuery)
 	v.fieldsSet = seen
+
 	return err
 }
 
 func (v *DataEntryQueryResponse) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
 
-func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
+	rreader := bytes.NewReader(data)
+	reader := encoding.NewReader(rreader)
 
 	if x, ok := reader.ReadHash(1); ok {
 		v.EntryHash = *x
@@ -491,9 +541,12 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Entry = *x
 	}
-
+	var buf = make([]byte, rreader.Len())
+	_, err := io.ReadFull(rreader, buf)
+	v.extraData = buf
 	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
 	v.fieldsSet = seen
+
 	return err
 }
 
