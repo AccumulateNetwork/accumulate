@@ -545,19 +545,17 @@ func printReflection(field, indent string, value reflect.Value) string {
 }
 
 func getHashString(value reflect.Value) string {
-	var hashString string
 	hash, ok := value.Interface().([32]uint8)
 	if ok {
-		hashString = hex.EncodeToString(hash[:])
+		return hex.EncodeToString(hash[:])
 	} else {
 		hash, ok := value.Interface().([]uint8)
 		if ok {
-			hashString = hex.EncodeToString(hash)
+			return hex.EncodeToString(hash)
 		} else {
-			hashString = "(unknown hash format)"
+			return "(unknown hash format)"
 		}
 	}
-	return hashString
 }
 
 func outputTransactionResultForHumans(t protocol.TransactionResult) string {
