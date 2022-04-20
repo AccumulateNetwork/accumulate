@@ -50,7 +50,15 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 	st.Update(account)
 
+	m := make(map[[32]byte]bool)
 	for i, u := range recipients {
+		id := u.AccountID32()
+		_, ok := m[id]
+		if !ok {
+			m[id] = true
+		} else {
+			return nil, fmt.Errorf("duplicate recipient passed in request")
+		}
 		deposit := new(protocol.SyntheticDepositTokens)
 		deposit.Token = account.GetTokenUrl()
 		deposit.Amount = body.To[i].Amount
