@@ -11,6 +11,8 @@ function section {
 # die <message> - Print an error message and exit
 function die {
     echo -e '\033[1;31m'"$@"'\033[0m'
+    echo the output was:
+    cat /tmp/minor.txt
     exit 1
 }
 
