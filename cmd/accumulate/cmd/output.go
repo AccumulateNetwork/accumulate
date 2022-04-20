@@ -499,8 +499,7 @@ func printReflection(field, indent string, value reflect.Value) string {
 		return printReflection(field, indent, value.Elem())
 	case reflect.Slice, reflect.Array:
 		if value.Len() == 32 && value.Index(0).Type().Bits() == 8 {
-			out += " "
-			out += fmt.Sprintf("%s%s\n", indent+"   ", getHashString(value))
+			out += fmt.Sprintf(" %s\n", getHashString(value))
 		} else {
 			out += "\n"
 			for i, n := 0, value.Len(); i < n; i++ {
