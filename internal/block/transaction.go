@@ -320,6 +320,7 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		status.Remote = false
+		status.Pending = false
 		status.Delivered = true
 		status.Message = failure.Error()
 
