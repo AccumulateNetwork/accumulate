@@ -247,6 +247,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			str += s
 			str += fmt.Sprintln()
 		}
+		out += str
 	}
 
 	return out, nil
@@ -497,9 +498,13 @@ func printReflection(field, indent string, value reflect.Value) string {
 		}
 		return printReflection(field, indent, value.Elem())
 	case reflect.Slice, reflect.Array:
-		out += "\n"
-		for i, n := 0, value.Len(); i < n; i++ {
-			out += printReflection(fmt.Sprintf("%d (elem)", i), indent+"   ", value.Index(i))
+		if value.Len() == 32 && value.Index(0).Type().Bits() == 8 {
+			out += fmt.Sprintf(" %s\n", getHashString(value))
+		} else {
+			out += "\n"
+			for i, n := 0, value.Len(); i < n; i++ {
+				out += printReflection(fmt.Sprintf("%d (elem)", i), indent+"   ", value.Index(i))
+			}
 		}
 		return out
 	case reflect.Map:
@@ -535,6 +540,20 @@ func printReflection(field, indent string, value reflect.Value) string {
 		return out
 	default:
 		return out + " " + fmt.Sprint(value) + "\n"
+	}
+}
+
+func getHashString(value reflect.Value) string {
+	hash, ok := value.Interface().([32]uint8)
+	if ok {
+		return hex.EncodeToString(hash[:])
+	} else {
+		hash, ok := value.Interface().([]uint8)
+		if ok {
+			return hex.EncodeToString(hash)
+		} else {
+			return "(unknown hash format)"
+		}
 	}
 }
 
