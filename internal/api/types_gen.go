@@ -273,7 +273,7 @@ func (v *SubmitOptions) Copy() *SubmitOptions {
 func (v *SubmitOptions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AccountRecord) Equal(u *AccountRecord) bool {
-	if !(v.Account == u.Account) {
+	if !(protocol.EqualAccount(v.Account, u.Account)) {
 		return false
 	}
 	if len(v.Chains) != len(u.Chains) {

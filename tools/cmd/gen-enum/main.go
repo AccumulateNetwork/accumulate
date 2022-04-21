@@ -51,5 +51,5 @@ func run(_ *cobra.Command, args []string) {
 
 	w := new(bytes.Buffer)
 	check(Templates.Execute(w, flags.Language, ttypes))
-	check(typegen.WriteFile(flags.Language, flags.Out, w))
+	check(typegen.WriteFile(flags.Out, w))
 }
