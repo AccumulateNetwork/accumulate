@@ -31,7 +31,7 @@ func testCase4_1(t *testing.T, tc *testCmd) {
 func testCase4_2(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "book create acc://RedWagon red1 acc://RedWagon/book red2")
+	r, err := tc.executeTx(t, "book create acc://RedWagon red1 acc://RedWagon/book0 red2")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -40,10 +40,10 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[2])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 10", liteAccounts[2])
 	require.NoError(t, err)
 
-	r, err := tc.executeTx(t, "page key add acc://RedWagon/book/1 red2 red4")
+	r, err := tc.executeTx(t, "page key add acc://RedWagon/book0/1 red2 red4")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -53,11 +53,11 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "page create acc://RedWagon/book red2 red3")
+	r, err := tc.executeTx(t, "page create acc://RedWagon/book0 red2 red3")
 	require.NoError(t, err)
 	t.Log(r)
 
-	r, err = tc.executeTx(t, "page create acc://RedWagon/book red2 red5")
+	r, err = tc.executeTx(t, "page create acc://RedWagon/book0 red2 red5")
 	require.NoError(t, err)
 	t.Log(r)
 
@@ -67,7 +67,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 func testCase4_5(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "account create token acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book")
+	r, err := tc.executeTx(t, "account create token acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book0")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -78,7 +78,7 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//remove red4
-	r, err := tc.executeTx(t, "page key remove acc://RedWagon/book/1 red2 red4")
+	r, err := tc.executeTx(t, "page key remove acc://RedWagon/book0/1 red2 red4")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -89,7 +89,7 @@ func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//replace key3 with key 4
-	r, err := tc.executeTx(t, "page key update acc://RedWagon/book/1 red2 red2 red5")
+	r, err := tc.executeTx(t, "page key update acc://RedWagon/book0/1 red2 red2 red5")
 	require.NoError(t, err)
 
 	t.Log(r)
