@@ -366,13 +366,12 @@ func (v *DataEntry) MarshalBinary() ([]byte, error) {
 			writer.WriteBytes(1, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_DataEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -410,13 +409,12 @@ func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_DataEntryQuery)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -454,13 +452,12 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

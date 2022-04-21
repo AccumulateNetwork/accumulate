@@ -257,13 +257,12 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	if !(v.Hash == ([32]byte{})) {
 		writer.WriteHash(3, &v.Hash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SigOrTxn)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -313,13 +312,12 @@ func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_exampleFullAccountState)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -364,13 +362,12 @@ func (v *merkleState) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_merkleState)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -415,13 +412,12 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_sigSetData)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -468,13 +464,12 @@ func (v *sigSetKeyData) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.EntryHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_sigSetKeyData)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -520,13 +515,12 @@ func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(1, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

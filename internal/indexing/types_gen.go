@@ -301,13 +301,12 @@ func (v *BlockChainUpdatesIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_BlockChainUpdatesIndex)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -343,13 +342,12 @@ func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_BlockStateIndex)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -387,13 +385,12 @@ func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 	if !(v.ChainEntry == 0) {
 		writer.WriteUint(2, v.ChainEntry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_BlockStateSynthTxnEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -456,13 +453,12 @@ func (v *ChainUpdate) MarshalBinary() ([]byte, error) {
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(7, v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ChainUpdate)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -528,13 +524,12 @@ func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(1, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_PendingTransactionsIndex)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -580,13 +575,12 @@ func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
 	if !(v.AnchorIndex == 0) {
 		writer.WriteUint(4, v.AnchorIndex)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -637,13 +631,12 @@ func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_TransactionChainIndex)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

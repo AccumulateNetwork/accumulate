@@ -1058,13 +1058,12 @@ func (v *ChainState) MarshalBinary() ([]byte, error) {
 			writer.WriteBytes(4, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ChainState)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1123,13 +1122,12 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 		}
 	}
 	writer.WriteUint(3, v.Total)
+
 	_, _, err := writer.Reset(fieldNames_DirectoryQueryResult)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1173,13 +1171,12 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Error) == 0) {
 		writer.WriteString(4, v.Error)
 	}
+
 	_, _, err := writer.Reset(fieldNames_GeneralReceipt)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1240,13 +1237,12 @@ func (v *MultiResponse) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(3, v.Start)
 	writer.WriteUint(4, v.Count)
 	writer.WriteUint(5, v.Total)
+
 	_, _, err := writer.Reset(fieldNames_MultiResponse)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1298,13 +1294,12 @@ func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.EntryHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RequestDataEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1350,13 +1345,12 @@ func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
 	if !(!v.ExpandChains) {
 		writer.WriteBool(4, v.ExpandChains)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RequestDataEntrySet)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1404,13 +1398,12 @@ func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(2, v.Key)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RequestKeyPageIndex)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1465,13 +1458,12 @@ func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 	if !(!v.FilterSynthAnchorsOnlyBlocks) {
 		writer.WriteBool(5, v.FilterSynthAnchorsOnlyBlocks)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1533,13 +1525,12 @@ func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
 	if !(v.Limit == 0) {
 		writer.WriteUint(3, v.Limit)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RequestTxHistory)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1593,13 +1584,12 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Receipt == nil) {
 		writer.WriteValue(3, v.Receipt)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1670,13 +1660,12 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(8, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseByTxId)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1759,13 +1748,12 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Receipt == nil) {
 		writer.WriteValue(5, v.Receipt)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseChainEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1824,13 +1812,12 @@ func (v *ResponseChainRange) MarshalBinary() ([]byte, error) {
 			writer.WriteBytes(5, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseChainRange)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1882,13 +1869,12 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(protocol.DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1933,13 +1919,12 @@ func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 	if !(v.Total == 0) {
 		writer.WriteUint(2, v.Total)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntrySet)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1984,13 +1969,12 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Signer)
 	}
 	writer.WriteUint(3, v.Index)
+
 	_, _, err := writer.Reset(fieldNames_ResponseKeyPageIndex)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -2040,13 +2024,12 @@ func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(4, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseMinorBlocks)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -2109,13 +2092,12 @@ func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(5, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseMinorEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -2171,13 +2153,12 @@ func (v *ResponsePending) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(1, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponsePending)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -2219,13 +2200,12 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(4, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ResponseTxHistory)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -2274,13 +2254,12 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_SignatureSet)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -2325,13 +2304,12 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Chain) == 0) {
 		writer.WriteString(3, v.Chain)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TxReceipt)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

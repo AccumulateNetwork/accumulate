@@ -117,13 +117,12 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 	if !(v.Line == 0) {
 		writer.WriteInt(3, v.Line)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CallSite)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -179,13 +178,12 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 	if !(v.CallSite == nil) {
 		writer.WriteValue(4, v.CallSite)
 	}
+
 	_, _, err := writer.Reset(fieldNames_Error)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

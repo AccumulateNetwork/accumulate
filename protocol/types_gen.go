@@ -4238,13 +4238,12 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Url)
 	}
 	writer.WriteValue(3, &v.AccountAuth)
+
 	_, _, err := writer.Reset(fieldNames_ADI)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4286,13 +4285,12 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_AccountAuth)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4328,13 +4326,12 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AcmeFaucet)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4371,13 +4368,12 @@ func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
 	if !(v.Price == 0) {
 		writer.WriteUint(1, v.Price)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AcmeOracle)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4413,13 +4409,12 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AddAccountAuthorityOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4466,13 +4461,12 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	if !(v.Oracle == 0) {
 		writer.WriteUint(4, v.Oracle)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AddCredits)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4524,13 +4518,12 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 	if !(v.Oracle == 0) {
 		writer.WriteUint(4, v.Oracle)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AddCreditsResult)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4579,13 +4572,12 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AddKeyOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4628,13 +4620,12 @@ func (v *AddValidator) MarshalBinary() ([]byte, error) {
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AddValidator)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4675,13 +4666,12 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Url)
 	}
 	writer.WriteValue(3, &v.AccountAuth)
+
 	_, _, err := writer.Reset(fieldNames_Anchor)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4739,13 +4729,12 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(6, v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AnchorMetadata)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4806,13 +4795,12 @@ func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
 	if !(v.Anchor == ([32]byte{})) {
 		writer.WriteHash(2, &v.Anchor)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AnchoredRecord)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4855,13 +4843,12 @@ func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
 	if !(!v.Disabled) {
 		writer.WriteBool(2, v.Disabled)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AuthorityEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -4926,13 +4913,12 @@ func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_BTCLegacySignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5010,13 +4996,12 @@ func (v *BTCSignature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_BTCSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5070,13 +5055,12 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_BurnTokens)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5117,13 +5101,12 @@ func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(2, v.Type)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ChainMetadata)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5166,13 +5149,12 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	if !(!v.IsUpdate) {
 		writer.WriteBool(2, v.IsUpdate)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ChainParams)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5225,13 +5207,12 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	if !(!v.Scratch) {
 		writer.WriteBool(5, v.Scratch)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CreateDataAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5282,13 +5263,12 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	if !(v.Manager == nil) {
 		writer.WriteUrl(5, v.Manager)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CreateIdentity)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5335,13 +5315,12 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	if !(v.Manager == nil) {
 		writer.WriteUrl(4, v.Manager)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CreateKeyBook)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5391,13 +5370,12 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 	if !(v.Manager == nil) {
 		writer.WriteUrl(3, v.Manager)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CreateKeyPage)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5460,13 +5438,12 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	if !(v.Manager == nil) {
 		writer.WriteUrl(8, v.Manager)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CreateToken)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5531,13 +5508,12 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Manager == nil) {
 		writer.WriteUrl(6, v.Manager)
 	}
+
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5587,13 +5563,12 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	if !(!v.Scratch) {
 		writer.WriteBool(4, v.Scratch)
 	}
+
 	_, _, err := writer.Reset(fieldNames_DataAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5635,13 +5610,12 @@ func (v *DataEntry) MarshalBinary() ([]byte, error) {
 			writer.WriteBytes(1, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_DataEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5675,13 +5649,12 @@ func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
 	if !(v.Count == 0) {
 		writer.WriteUint(1, v.Count)
 	}
+
 	_, _, err := writer.Reset(fieldNames_DirectoryIndexMetadata)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5717,13 +5690,12 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
+
 	_, _, err := writer.Reset(fieldNames_DisableAccountAuthOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5786,13 +5758,12 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ED25519Signature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5870,13 +5841,12 @@ func (v *ETHSignature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ETHSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5926,13 +5896,12 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	_, _, err := writer.Reset(fieldNames_EmptyResult)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -5966,13 +5935,12 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
+
 	_, _, err := writer.Reset(fieldNames_EnableAccountAuthOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6021,13 +5989,12 @@ func (v *Envelope) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(3, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_Envelope)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6067,13 +6034,12 @@ func (v *ForwardedSignature) MarshalBinary() ([]byte, error) {
 	if !(v.Signer == nil) {
 		writer.WriteValue(3, v.Signer)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ForwardedSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6117,13 +6083,12 @@ func (v *HashSet) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(1, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_HashSet)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6169,13 +6134,12 @@ func (v *IndexEntry) MarshalBinary() ([]byte, error) {
 	if !(v.BlockTime == nil) {
 		writer.WriteTime(4, *v.BlockTime)
 	}
+
 	_, _, err := writer.Reset(fieldNames_IndexEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6222,13 +6186,12 @@ func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
+
 	_, _, err := writer.Reset(fieldNames_InternalGenesis)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6288,13 +6251,12 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(9, &v.AcmeBurnt)
 	}
+
 	_, _, err := writer.Reset(fieldNames_InternalLedger)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6368,13 +6330,12 @@ func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_InternalSendTransactions)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6417,13 +6378,12 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_InternalSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6470,13 +6430,12 @@ func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(4, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_InternalSyntheticLedger)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6525,13 +6484,12 @@ func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_InternalTransactionsSent)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6572,13 +6530,12 @@ func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_InternalTransactionsSigned)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6621,13 +6578,12 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_IssueTokens)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6677,13 +6633,12 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	if !(v.PageCount == 0) {
 		writer.WriteUint(4, v.PageCount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_KeyBook)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6764,13 +6719,12 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionBlacklist == nil) {
 		writer.WriteEnum(10, *v.TransactionBlacklist)
 	}
+
 	_, _, err := writer.Reset(fieldNames_KeyPage)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6850,13 +6804,12 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
 	}
+
 	_, _, err := writer.Reset(fieldNames_KeySpec)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6904,13 +6857,12 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	if !(v.Owner == nil) {
 		writer.WriteUrl(2, v.Owner)
 	}
+
 	_, _, err := writer.Reset(fieldNames_KeySpecParams)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -6970,13 +6922,12 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_LegacyED25519Signature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7039,13 +6990,12 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	if !(len(v.Tail) == 0) {
 		writer.WriteBytes(3, v.Tail)
 	}
+
 	_, _, err := writer.Reset(fieldNames_LiteDataAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7089,13 +7039,12 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7150,13 +7099,12 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(6, v.CreditBalance)
 	}
+
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7217,13 +7165,12 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	if !(v.Duration == 0) {
 		writer.WriteDuration(2, v.Duration)
 	}
+
 	_, _, err := writer.Reset(fieldNames_MetricsRequest)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7268,13 +7215,12 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_Object)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7339,13 +7285,12 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7407,13 +7352,12 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(3, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_Receipt)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7461,13 +7405,12 @@ func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
 	if !(len(v.Hash) == 0) {
 		writer.WriteBytes(2, v.Hash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ReceiptEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7514,13 +7457,12 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_ReceiptSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7562,13 +7504,12 @@ func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
 	if !(v.Hash == ([32]byte{})) {
 		writer.WriteHash(2, &v.Hash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RemoteTransaction)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7602,13 +7543,12 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	if !(v.Authority == nil) {
 		writer.WriteUrl(2, v.Authority)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RemoveAccountAuthorityOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7647,13 +7587,12 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(2, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RemoveKeyOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7696,13 +7635,12 @@ func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
 	if !(v.Owner == nil) {
 		writer.WriteUrl(3, v.Owner)
 	}
+
 	_, _, err := writer.Reset(fieldNames_RemoveValidator)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7747,13 +7685,12 @@ func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.EntryHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SegWitDataEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7810,13 +7747,12 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(4, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_SendTokens)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7857,13 +7793,12 @@ func (v *SendTransaction) MarshalBinary() ([]byte, error) {
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SendTransaction)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7904,13 +7839,12 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 	if !(v.Threshold == 0) {
 		writer.WriteUint(2, v.Threshold)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SetThresholdKeyPageOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -7979,13 +7913,12 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(9, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticAnchor)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8061,13 +7994,12 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticBurnTokens)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8113,13 +8045,12 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(3, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticCreateChain)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8163,13 +8094,12 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	if !(v.Amount == 0) {
 		writer.WriteUint(3, v.Amount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8217,13 +8147,12 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Amount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositTokens)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8276,13 +8205,12 @@ func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == nil) {
 		writer.WriteValue(3, v.Transaction)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticForwardTransaction)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8331,13 +8259,12 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 			writer.WriteHash(3, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticLedger)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8401,13 +8328,12 @@ func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
 	if !(!v.NeedsReceipt) {
 		writer.WriteBool(6, v.NeedsReceipt)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticLedgerEntry)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8470,13 +8396,12 @@ func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, &v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticMirror)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8517,13 +8442,12 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 	if !(v.Cause == ([32]byte{})) {
 		writer.WriteHash(2, &v.Cause)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticOrigin)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8570,13 +8494,12 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.Status == nil) {
 		writer.WriteValue(4, v.Status)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticReceipt)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8635,13 +8558,12 @@ func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(5, &v.TransactionHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8692,13 +8614,12 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(3, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SyntheticWriteData)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8754,13 +8675,12 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	if !(!v.Scratch) {
 		writer.WriteBool(6, v.Scratch)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TokenAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8834,13 +8754,12 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	if !(v.SupplyLimit == nil) {
 		writer.WriteBigInt(8, v.SupplyLimit)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TokenIssuer)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8904,13 +8823,12 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(2, &v.Amount)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TokenRecipient)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -8953,13 +8871,12 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	if !(v.Body == nil) {
 		writer.WriteValue(2, v.Body)
 	}
+
 	_, _, err := writer.Reset(fieldNames_Transaction)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9010,13 +8927,12 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	if !(len(v.Metadata) == 0) {
 		writer.WriteBytes(4, v.Metadata)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9057,13 +8973,12 @@ func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(1, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_TransactionResultSet)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9101,13 +9016,12 @@ func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
 	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
+
 	_, _, err := writer.Reset(fieldNames_TransactionSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9180,13 +9094,12 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(9, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9262,13 +9175,12 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	_, _, err := writer.Reset(fieldNames_UnknownAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9311,13 +9223,12 @@ func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
 	if !(v.Version == 0) {
 		writer.WriteUint(3, v.Version)
 	}
+
 	_, _, err := writer.Reset(fieldNames_UnknownSigner)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9363,13 +9274,12 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9416,13 +9326,12 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 			writer.WriteEnum(3, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_UpdateAllowedKeyPageOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9456,13 +9365,12 @@ func (v *UpdateKey) MarshalBinary() ([]byte, error) {
 	if !(len(v.NewKeyHash) == 0) {
 		writer.WriteBytes(2, v.NewKeyHash)
 	}
+
 	_, _, err := writer.Reset(fieldNames_UpdateKey)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9505,13 +9413,12 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 	if !((v.NewEntry).Equal(new(KeySpecParams))) {
 		writer.WriteValue(3, &v.NewEntry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_UpdateKeyOperation)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9557,13 +9464,12 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_UpdateKeyPage)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9606,13 +9512,12 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 	if !(len(v.NewPubKey) == 0) {
 		writer.WriteBytes(3, v.NewPubKey)
 	}
+
 	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9656,13 +9561,12 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(2, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_WriteData)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9709,13 +9613,12 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 	if !(len(v.AccountID) == 0) {
 		writer.WriteBytes(4, v.AccountID)
 	}
+
 	_, _, err := writer.Reset(fieldNames_WriteDataResult)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -9768,13 +9671,12 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	if !((v.Entry).Equal(new(DataEntry))) {
 		writer.WriteValue(3, &v.Entry)
 	}
+
 	_, _, err := writer.Reset(fieldNames_WriteDataTo)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

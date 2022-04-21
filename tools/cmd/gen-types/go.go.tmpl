@@ -125,13 +125,12 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	{{- end}}
 	{{- end}}
 	{{- end}}
+
 	_, _, err := writer.Reset(fieldNames_{{.Name}})
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

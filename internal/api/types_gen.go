@@ -493,13 +493,12 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	if !(v.Receipt == nil) {
 		writer.WriteValue(4, v.Receipt)
 	}
+
 	_, _, err := writer.Reset(fieldNames_AccountRecord)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -560,13 +559,12 @@ func (v *ChainState) MarshalBinary() ([]byte, error) {
 			writer.WriteBytes(4, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_ChainState)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -615,13 +613,12 @@ func (v *NetworkMetrics) MarshalBinary() ([]byte, error) {
 	if !(v.TPS == 0) {
 		writer.WriteFloat(1, v.TPS)
 	}
+
 	_, _, err := writer.Reset(fieldNames_NetworkMetrics)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -655,13 +652,12 @@ func (v *NodeMetrics) MarshalBinary() ([]byte, error) {
 	if !(v.TPS == 0) {
 		writer.WriteFloat(1, v.TPS)
 	}
+
 	_, _, err := writer.Reset(fieldNames_NodeMetrics)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -695,13 +691,12 @@ func (v *NodeStatus) MarshalBinary() ([]byte, error) {
 	if !(!v.Ok) {
 		writer.WriteBool(1, v.Ok)
 	}
+
 	_, _, err := writer.Reset(fieldNames_NodeStatus)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -747,13 +742,12 @@ func (v *NodeVersion) MarshalBinary() ([]byte, error) {
 	if !(!v.IsTestNet) {
 		writer.WriteBool(4, v.IsTestNet)
 	}
+
 	_, _, err := writer.Reset(fieldNames_NodeVersion)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -810,13 +804,12 @@ func (v *QuerySetOptions) MarshalBinary() ([]byte, error) {
 	if !(!v.Count) {
 		writer.WriteBool(3, v.Count)
 	}
+
 	_, _, err := writer.Reset(fieldNames_QuerySetOptions)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -856,13 +849,12 @@ func (v *QueryStateOptions) MarshalBinary() ([]byte, error) {
 	if !(!v.Delivered) {
 		writer.WriteBool(4, v.Delivered)
 	}
+
 	_, _, err := writer.Reset(fieldNames_QueryStateOptions)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -902,13 +894,12 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(v.Error == nil) {
 		writer.WriteValue(4, v.Error)
 	}
+
 	_, _, err := writer.Reset(fieldNames_Receipt)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -957,13 +948,12 @@ func (v *SearchOptions) MarshalBinary() ([]byte, error) {
 	if !(len(v.Kind) == 0) {
 		writer.WriteString(1, v.Kind)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SearchOptions)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1011,13 +1001,12 @@ func (v *Submission) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(3, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_Submission)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -1061,13 +1050,12 @@ func (v *SubmitOptions) MarshalBinary() ([]byte, error) {
 	if !(v.Mode == 0) {
 		writer.WriteEnum(1, v.Mode)
 	}
+
 	_, _, err := writer.Reset(fieldNames_SubmitOptions)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 

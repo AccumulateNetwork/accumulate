@@ -261,13 +261,12 @@ func (v *FakeAccount) MarshalBinary() ([]byte, error) {
 
 	writer.WriteValue(1, &v.FakeLiteAccount)
 	writer.WriteValue(2, &v.AccountAuth)
+
 	_, _, err := writer.Reset(fieldNames_FakeAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -304,13 +303,12 @@ func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
 	if !(v.Signers == nil) {
 		writer.WriteUrl(2, v.Signers)
 	}
+
 	_, _, err := writer.Reset(fieldNames_FakeAuthority)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -351,13 +349,12 @@ func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+
 	_, _, err := writer.Reset(fieldNames_FakeLiteAccount)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -416,13 +413,12 @@ func (v *FakeSignature) MarshalBinary() ([]byte, error) {
 	if !(v.Timestamp == 0) {
 		writer.WriteUint(6, v.Timestamp)
 	}
+
 	_, _, err := writer.Reset(fieldNames_FakeSignature)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -492,13 +488,12 @@ func (v *FakeSigner) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(5, v)
 		}
 	}
+
 	_, _, err := writer.Reset(fieldNames_FakeSigner)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
@@ -550,13 +545,12 @@ func (v *FakeTransactionBody) MarshalBinary() ([]byte, error) {
 	if !(v.TheType == 0) {
 		writer.WriteEnum(1, v.TheType)
 	}
+
 	_, _, err := writer.Reset(fieldNames_FakeTransactionBody)
 	if err != nil {
 		return nil, err
 	}
-
 	buffer.Write(v.extraData)
-
 	return buffer.Bytes(), err
 }
 
