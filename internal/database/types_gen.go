@@ -147,7 +147,7 @@ func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
 	case !((v.Transaction).Equal(u.Transaction)):
 		return false
 	}
-	if !(v.Signature == u.Signature) {
+	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
 		return false
 	}
 	if !(v.Hash == u.Hash) {
@@ -158,7 +158,7 @@ func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
 }
 
 func (v *exampleFullAccountState) Equal(u *exampleFullAccountState) bool {
-	if !(v.State == u.State) {
+	if !(protocol.EqualAccount(v.State, u.State)) {
 		return false
 	}
 	if len(v.Chains) != len(u.Chains) {
