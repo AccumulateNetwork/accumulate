@@ -18,17 +18,20 @@ import (
 type BlockChainUpdatesIndex struct {
 	fieldsSet []bool
 	Entries   []*ChainUpdate `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type BlockStateIndex struct {
 	fieldsSet         []bool
 	ProducedSynthTxns []*BlockStateSynthTxnEntry `json:"producedSynthTxns,omitempty" form:"producedSynthTxns" query:"producedSynthTxns" validate:"required"`
+	extraData         []byte
 }
 
 type BlockStateSynthTxnEntry struct {
 	fieldsSet   []bool
 	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	ChainEntry  uint64 `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
+	extraData   []byte
 }
 
 type ChainUpdate struct {
@@ -40,11 +43,13 @@ type ChainUpdate struct {
 	SourceIndex uint64             `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
 	SourceBlock uint64             `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
 	Entry       []byte             `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData   []byte
 }
 
 type PendingTransactionsIndex struct {
 	fieldsSet    []bool
 	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type TransactionChainEntry struct {
@@ -56,11 +61,13 @@ type TransactionChainEntry struct {
 	ChainIndex uint64 `json:"chainIndex,omitempty" form:"chainIndex" query:"chainIndex" validate:"required"`
 	// AnchorIndex is the index of the entry in the anchor chain's index chain.
 	AnchorIndex uint64 `json:"anchorIndex,omitempty" form:"anchorIndex" query:"anchorIndex" validate:"required"`
+	extraData   []byte
 }
 
 type TransactionChainIndex struct {
 	fieldsSet []bool
 	Entries   []*TransactionChainEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 func (v *BlockChainUpdatesIndex) Copy() *BlockChainUpdatesIndex {
@@ -296,6 +303,10 @@ func (v *BlockChainUpdatesIndex) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockChainUpdatesIndex)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -333,6 +344,10 @@ func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockStateIndex)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -372,6 +387,10 @@ func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockStateSynthTxnEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -436,6 +455,10 @@ func (v *ChainUpdate) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainUpdate)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -503,6 +526,10 @@ func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_PendingTransactionsIndex)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -550,6 +577,10 @@ func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -602,6 +633,10 @@ func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionChainIndex)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -640,7 +675,11 @@ func (v *BlockChainUpdatesIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockChainUpdatesIndex)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -660,7 +699,11 @@ func (v *BlockStateIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockStateIndex)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -679,7 +722,11 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockStateSynthTxnEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -713,7 +760,11 @@ func (v *ChainUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainUpdate)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -733,7 +784,11 @@ func (v *PendingTransactionsIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PendingTransactionsIndex)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -758,7 +813,11 @@ func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -778,7 +837,11 @@ func (v *TransactionChainIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionChainIndex)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
