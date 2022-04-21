@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -102,15 +101,15 @@ func PrintTXPendingGet() {
 }
 
 func PrintTXCreate() {
-	fmt.Println("  accumulate tx create [from] [to] [amount]	Create new token tx")
+	fmt.Println("  accumulate tx create [origin url] [signing key name] [key index (optional)] [key height (optional)] [to] [amount]	Create new token tx")
 }
 
 func PrintTXExecute() {
-	fmt.Println("  accumulate tx execute [from] [payload]	Execute an arbitrary transaction")
+	fmt.Println("  accumulate tx execute [origin url] [signing key name] [key index (optional)] [key height (optional)] [payload]	Execute an arbitrary transaction")
 }
 
 func PrintTxSign() {
-	fmt.Println("  accumulate tx sign [origin] [signing key name] [key index (optional)] [key height (optional)] [txid]	Sign a pending transaction")
+	fmt.Println("  accumulate tx sign [origin url] [signing key name] [key index (optional)] [key height (optional)] [txid]	Sign a pending transaction")
 }
 
 func PrintTXHistoryGet() {
