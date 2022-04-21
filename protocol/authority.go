@@ -21,6 +21,10 @@ type Signer interface {
 	EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)
 }
 
+func EqualSigner(a, b Signer) bool {
+	return EqualAccount(a, b)
+}
+
 func UnmarshalSigner(data []byte) (Signer, error) {
 	account, err := UnmarshalAccount(data)
 	if err != nil {
