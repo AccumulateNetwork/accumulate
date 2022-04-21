@@ -116,9 +116,6 @@ var goFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
-	"inc": func(i uint) uint {
-		return i + 1
-	},
 }
 
 func GoGetField(field *Field) string {

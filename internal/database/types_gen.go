@@ -239,14 +239,9 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 }
 
 var fieldNames_SigOrTxn = []string{
-
 	1: "Transaction",
-
 	2: "Signature",
-
 	3: "Hash",
-
-	4: "extraData",
 }
 
 func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
@@ -302,12 +297,8 @@ func (v *SigOrTxn) IsValid() error {
 }
 
 var fieldNames_exampleFullAccountState = []string{
-
 	1: "State",
-
 	2: "Chains",
-
-	3: "extraData",
 }
 
 func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
@@ -357,12 +348,8 @@ func (v *exampleFullAccountState) IsValid() error {
 }
 
 var fieldNames_merkleState = []string{
-
 	1: "Count",
-
 	2: "Pending",
-
-	3: "extraData",
 }
 
 func (v *merkleState) MarshalBinary() ([]byte, error) {
@@ -412,12 +399,8 @@ func (v *merkleState) IsValid() error {
 }
 
 var fieldNames_sigSetData = []string{
-
 	1: "Version",
-
 	2: "Entries",
-
-	3: "extraData",
 }
 
 func (v *sigSetData) MarshalBinary() ([]byte, error) {
@@ -467,14 +450,9 @@ func (v *sigSetData) IsValid() error {
 }
 
 var fieldNames_sigSetKeyData = []string{
-
 	1: "System",
-
 	2: "KeyHash",
-
 	3: "EntryHash",
-
-	4: "extraData",
 }
 
 func (v *sigSetKeyData) MarshalBinary() ([]byte, error) {
@@ -530,10 +508,7 @@ func (v *sigSetKeyData) IsValid() error {
 }
 
 var fieldNames_txSyntheticTxns = []string{
-
 	1: "Txids",
-
-	2: "extraData",
 }
 
 func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {

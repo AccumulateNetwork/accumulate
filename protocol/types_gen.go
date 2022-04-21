@@ -4224,14 +4224,9 @@ func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
 }
 
 var fieldNames_ADI = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
-	4: "extraData",
 }
 
 func (v *ADI) MarshalBinary() ([]byte, error) {
@@ -4279,10 +4274,7 @@ func (v *ADI) IsValid() error {
 }
 
 var fieldNames_AccountAuth = []string{
-
 	1: "Authorities",
-
-	2: "extraData",
 }
 
 func (v *AccountAuth) MarshalBinary() ([]byte, error) {
@@ -4324,12 +4316,8 @@ func (v *AccountAuth) IsValid() error {
 }
 
 var fieldNames_AcmeFaucet = []string{
-
 	1: "Type",
-
 	2: "Url",
-
-	3: "extraData",
 }
 
 func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
@@ -4373,10 +4361,7 @@ func (v *AcmeFaucet) IsValid() error {
 }
 
 var fieldNames_AcmeOracle = []string{
-
 	1: "Price",
-
-	2: "extraData",
 }
 
 func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
@@ -4416,12 +4401,8 @@ func (v *AcmeOracle) IsValid() error {
 }
 
 var fieldNames_AddAccountAuthorityOperation = []string{
-
 	1: "Type",
-
 	2: "Authority",
-
-	3: "extraData",
 }
 
 func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
@@ -4465,16 +4446,10 @@ func (v *AddAccountAuthorityOperation) IsValid() error {
 }
 
 var fieldNames_AddCredits = []string{
-
 	1: "Type",
-
 	2: "Recipient",
-
 	3: "Amount",
-
 	4: "Oracle",
-
-	5: "extraData",
 }
 
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
@@ -4529,16 +4504,10 @@ func (v *AddCredits) IsValid() error {
 }
 
 var fieldNames_AddCreditsResult = []string{
-
 	1: "Type",
-
 	2: "Amount",
-
 	3: "Credits",
-
 	4: "Oracle",
-
-	5: "extraData",
 }
 
 func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
@@ -4598,12 +4567,8 @@ func (v *AddCreditsResult) IsValid() error {
 }
 
 var fieldNames_AddKeyOperation = []string{
-
 	1: "Type",
-
 	2: "Entry",
-
-	3: "extraData",
 }
 
 func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
@@ -4647,14 +4612,9 @@ func (v *AddKeyOperation) IsValid() error {
 }
 
 var fieldNames_AddValidator = []string{
-
 	1: "Type",
-
 	2: "PubKey",
-
 	3: "Owner",
-
-	4: "extraData",
 }
 
 func (v *AddValidator) MarshalBinary() ([]byte, error) {
@@ -4701,14 +4661,9 @@ func (v *AddValidator) IsValid() error {
 }
 
 var fieldNames_Anchor = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
-	4: "extraData",
 }
 
 func (v *Anchor) MarshalBinary() ([]byte, error) {
@@ -4756,20 +4711,12 @@ func (v *Anchor) IsValid() error {
 }
 
 var fieldNames_AnchorMetadata = []string{
-
 	1: "ChainMetadata",
-
 	2: "Account",
-
 	3: "Index",
-
 	4: "SourceIndex",
-
 	5: "SourceBlock",
-
 	6: "Entry",
-
-	7: "extraData",
 }
 
 func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
@@ -4845,12 +4792,8 @@ func (v *AnchorMetadata) IsValid() error {
 }
 
 var fieldNames_AnchoredRecord = []string{
-
 	1: "Record",
-
 	2: "Anchor",
-
-	3: "extraData",
 }
 
 func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
@@ -4898,12 +4841,8 @@ func (v *AnchoredRecord) IsValid() error {
 }
 
 var fieldNames_AuthorityEntry = []string{
-
 	1: "Url",
-
 	2: "Disabled",
-
-	3: "extraData",
 }
 
 func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
@@ -4951,24 +4890,14 @@ func (v *AuthorityEntry) IsValid() error {
 }
 
 var fieldNames_BTCLegacySignature = []string{
-
 	1: "Type",
-
 	2: "PublicKey",
-
 	3: "Signature",
-
 	4: "Signer",
-
 	5: "SignerVersion",
-
 	6: "Timestamp",
-
 	7: "Vote",
-
 	8: "TransactionHash",
-
-	9: "extraData",
 }
 
 func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
@@ -5045,24 +4974,14 @@ func (v *BTCLegacySignature) IsValid() error {
 }
 
 var fieldNames_BTCSignature = []string{
-
 	1: "Type",
-
 	2: "PublicKey",
-
 	3: "Signature",
-
 	4: "Signer",
-
 	5: "SignerVersion",
-
 	6: "Timestamp",
-
 	7: "Vote",
-
 	8: "TransactionHash",
-
-	9: "extraData",
 }
 
 func (v *BTCSignature) MarshalBinary() ([]byte, error) {
@@ -5139,12 +5058,8 @@ func (v *BTCSignature) IsValid() error {
 }
 
 var fieldNames_BurnTokens = []string{
-
 	1: "Type",
-
 	2: "Amount",
-
-	3: "extraData",
 }
 
 func (v *BurnTokens) MarshalBinary() ([]byte, error) {
@@ -5188,12 +5103,8 @@ func (v *BurnTokens) IsValid() error {
 }
 
 var fieldNames_ChainMetadata = []string{
-
 	1: "Name",
-
 	2: "Type",
-
-	3: "extraData",
 }
 
 func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
@@ -5241,12 +5152,8 @@ func (v *ChainMetadata) IsValid() error {
 }
 
 var fieldNames_ChainParams = []string{
-
 	1: "Data",
-
 	2: "IsUpdate",
-
-	3: "extraData",
 }
 
 func (v *ChainParams) MarshalBinary() ([]byte, error) {
@@ -5294,18 +5201,11 @@ func (v *ChainParams) IsValid() error {
 }
 
 var fieldNames_CreateDataAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "KeyBookUrl",
-
 	4: "ManagerKeyBookUrl",
-
 	5: "Scratch",
-
-	6: "extraData",
 }
 
 func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
@@ -5358,18 +5258,11 @@ func (v *CreateDataAccount) IsValid() error {
 }
 
 var fieldNames_CreateIdentity = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "KeyHash",
-
 	4: "KeyBookUrl",
-
 	5: "Manager",
-
-	6: "extraData",
 }
 
 func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
@@ -5422,16 +5315,10 @@ func (v *CreateIdentity) IsValid() error {
 }
 
 var fieldNames_CreateKeyBook = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "PublicKeyHash",
-
 	4: "Manager",
-
-	5: "extraData",
 }
 
 func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
@@ -5486,14 +5373,9 @@ func (v *CreateKeyBook) IsValid() error {
 }
 
 var fieldNames_CreateKeyPage = []string{
-
 	1: "Type",
-
 	2: "Keys",
-
 	3: "Manager",
-
-	4: "extraData",
 }
 
 func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
@@ -5542,24 +5424,14 @@ func (v *CreateKeyPage) IsValid() error {
 }
 
 var fieldNames_CreateToken = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "KeyBookUrl",
-
 	4: "Symbol",
-
 	5: "Precision",
-
 	6: "Properties",
-
 	7: "SupplyLimit",
-
 	8: "Manager",
-
-	9: "extraData",
 }
 
 func (v *CreateToken) MarshalBinary() ([]byte, error) {
@@ -5631,20 +5503,12 @@ func (v *CreateToken) IsValid() error {
 }
 
 var fieldNames_CreateTokenAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "TokenUrl",
-
 	4: "KeyBookUrl",
-
 	5: "Scratch",
-
 	6: "Manager",
-
-	7: "extraData",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5705,16 +5569,10 @@ func (v *CreateTokenAccount) IsValid() error {
 }
 
 var fieldNames_DataAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
 	4: "Scratch",
-
-	5: "extraData",
 }
 
 func (v *DataAccount) MarshalBinary() ([]byte, error) {
@@ -5765,10 +5623,7 @@ func (v *DataAccount) IsValid() error {
 }
 
 var fieldNames_DataEntry = []string{
-
 	1: "Data",
-
-	2: "extraData",
 }
 
 func (v *DataEntry) MarshalBinary() ([]byte, error) {
@@ -5810,10 +5665,7 @@ func (v *DataEntry) IsValid() error {
 }
 
 var fieldNames_DirectoryIndexMetadata = []string{
-
 	1: "Count",
-
-	2: "extraData",
 }
 
 func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
@@ -5853,12 +5705,8 @@ func (v *DirectoryIndexMetadata) IsValid() error {
 }
 
 var fieldNames_DisableAccountAuthOperation = []string{
-
 	1: "Type",
-
 	2: "Authority",
-
-	3: "extraData",
 }
 
 func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
@@ -5902,24 +5750,14 @@ func (v *DisableAccountAuthOperation) IsValid() error {
 }
 
 var fieldNames_ED25519Signature = []string{
-
 	1: "Type",
-
 	2: "PublicKey",
-
 	3: "Signature",
-
 	4: "Signer",
-
 	5: "SignerVersion",
-
 	6: "Timestamp",
-
 	7: "Vote",
-
 	8: "TransactionHash",
-
-	9: "extraData",
 }
 
 func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
@@ -5996,24 +5834,14 @@ func (v *ED25519Signature) IsValid() error {
 }
 
 var fieldNames_ETHSignature = []string{
-
 	1: "Type",
-
 	2: "PublicKey",
-
 	3: "Signature",
-
 	4: "Signer",
-
 	5: "SignerVersion",
-
 	6: "Timestamp",
-
 	7: "Vote",
-
 	8: "TransactionHash",
-
-	9: "extraData",
 }
 
 func (v *ETHSignature) MarshalBinary() ([]byte, error) {
@@ -6090,10 +5918,7 @@ func (v *ETHSignature) IsValid() error {
 }
 
 var fieldNames_EmptyResult = []string{
-
 	1: "Type",
-
-	2: "extraData",
 }
 
 func (v *EmptyResult) MarshalBinary() ([]byte, error) {
@@ -6129,12 +5954,8 @@ func (v *EmptyResult) IsValid() error {
 }
 
 var fieldNames_EnableAccountAuthOperation = []string{
-
 	1: "Type",
-
 	2: "Authority",
-
-	3: "extraData",
 }
 
 func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
@@ -6178,14 +5999,9 @@ func (v *EnableAccountAuthOperation) IsValid() error {
 }
 
 var fieldNames_Envelope = []string{
-
 	1: "Signatures",
-
 	2: "TxHash",
-
 	3: "Transaction",
-
-	4: "extraData",
 }
 
 func (v *Envelope) MarshalBinary() ([]byte, error) {
@@ -6235,14 +6051,9 @@ func (v *Envelope) IsValid() error {
 }
 
 var fieldNames_ForwardedSignature = []string{
-
 	1: "Type",
-
 	2: "Signature",
-
 	3: "Signer",
-
-	4: "extraData",
 }
 
 func (v *ForwardedSignature) MarshalBinary() ([]byte, error) {
@@ -6294,10 +6105,7 @@ func (v *ForwardedSignature) IsValid() error {
 }
 
 var fieldNames_HashSet = []string{
-
 	1: "Hashes",
-
-	2: "extraData",
 }
 
 func (v *HashSet) MarshalBinary() ([]byte, error) {
@@ -6339,16 +6147,10 @@ func (v *HashSet) IsValid() error {
 }
 
 var fieldNames_IndexEntry = []string{
-
 	1: "Source",
-
 	2: "Anchor",
-
 	3: "BlockIndex",
-
 	4: "BlockTime",
-
-	5: "extraData",
 }
 
 func (v *IndexEntry) MarshalBinary() ([]byte, error) {
@@ -6412,10 +6214,7 @@ func (v *IndexEntry) IsValid() error {
 }
 
 var fieldNames_InternalGenesis = []string{
-
 	1: "Type",
-
-	2: "extraData",
 }
 
 func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
@@ -6451,26 +6250,15 @@ func (v *InternalGenesis) IsValid() error {
 }
 
 var fieldNames_InternalLedger = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
 	4: "Index",
-
 	5: "Timestamp",
-
 	6: "Synthetic",
-
 	7: "PendingOracle",
-
 	8: "ActiveOracle",
-
 	9: "AcmeBurnt",
-
-	10: "extraData",
 }
 
 func (v *InternalLedger) MarshalBinary() ([]byte, error) {
@@ -6566,12 +6354,8 @@ func (v *InternalLedger) IsValid() error {
 }
 
 var fieldNames_InternalSendTransactions = []string{
-
 	1: "Type",
-
 	2: "Transactions",
-
-	3: "extraData",
 }
 
 func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
@@ -6617,14 +6401,9 @@ func (v *InternalSendTransactions) IsValid() error {
 }
 
 var fieldNames_InternalSignature = []string{
-
 	1: "Type",
-
 	2: "Network",
-
 	3: "TransactionHash",
-
-	4: "extraData",
 }
 
 func (v *InternalSignature) MarshalBinary() ([]byte, error) {
@@ -6671,16 +6450,10 @@ func (v *InternalSignature) IsValid() error {
 }
 
 var fieldNames_InternalSyntheticLedger = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
 	4: "Pending",
-
-	5: "extraData",
 }
 
 func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -6738,12 +6511,8 @@ func (v *InternalSyntheticLedger) IsValid() error {
 }
 
 var fieldNames_InternalTransactionsSent = []string{
-
 	1: "Type",
-
 	2: "Transactions",
-
-	3: "extraData",
 }
 
 func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
@@ -6789,12 +6558,8 @@ func (v *InternalTransactionsSent) IsValid() error {
 }
 
 var fieldNames_InternalTransactionsSigned = []string{
-
 	1: "Type",
-
 	2: "Transactions",
-
-	3: "extraData",
 }
 
 func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
@@ -6840,14 +6605,9 @@ func (v *InternalTransactionsSigned) IsValid() error {
 }
 
 var fieldNames_IssueTokens = []string{
-
 	1: "Type",
-
 	2: "Recipient",
-
 	3: "Amount",
-
-	4: "extraData",
 }
 
 func (v *IssueTokens) MarshalBinary() ([]byte, error) {
@@ -6899,16 +6659,10 @@ func (v *IssueTokens) IsValid() error {
 }
 
 var fieldNames_KeyBook = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
 	4: "PageCount",
-
-	5: "extraData",
 }
 
 func (v *KeyBook) MarshalBinary() ([]byte, error) {
@@ -6964,28 +6718,16 @@ func (v *KeyBook) IsValid() error {
 }
 
 var fieldNames_KeyPage = []string{
-
-	1: "Type",
-
-	2: "Url",
-
-	3: "CreditBalance",
-
-	4: "AcceptThreshold",
-
-	5: "RejectThreshold",
-
-	6: "ResponseThreshold",
-
-	7: "BlockThreshold",
-
-	8: "Version",
-
-	9: "Keys",
-
+	1:  "Type",
+	2:  "Url",
+	3:  "CreditBalance",
+	4:  "AcceptThreshold",
+	5:  "RejectThreshold",
+	6:  "ResponseThreshold",
+	7:  "BlockThreshold",
+	8:  "Version",
+	9:  "Keys",
 	10: "TransactionBlacklist",
-
-	11: "extraData",
 }
 
 func (v *KeyPage) MarshalBinary() ([]byte, error) {
@@ -7090,14 +6832,9 @@ func (v *KeyPage) IsValid() error {
 }
 
 var fieldNames_KeySpec = []string{
-
 	1: "PublicKeyHash",
-
 	2: "LastUsedOn",
-
 	3: "Owner",
-
-	4: "extraData",
 }
 
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
@@ -7153,12 +6890,8 @@ func (v *KeySpec) IsValid() error {
 }
 
 var fieldNames_KeySpecParams = []string{
-
 	1: "KeyHash",
-
 	2: "Owner",
-
-	3: "extraData",
 }
 
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
@@ -7201,24 +6934,14 @@ func (v *KeySpecParams) IsValid() error {
 }
 
 var fieldNames_LegacyED25519Signature = []string{
-
 	1: "Type",
-
 	2: "Timestamp",
-
 	3: "PublicKey",
-
 	4: "Signature",
-
 	5: "Signer",
-
 	6: "SignerVersion",
-
 	7: "Vote",
-
 	8: "TransactionHash",
-
-	9: "extraData",
 }
 
 func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
@@ -7300,14 +7023,9 @@ func (v *LegacyED25519Signature) IsValid() error {
 }
 
 var fieldNames_LiteDataAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "Tail",
-
-	4: "extraData",
 }
 
 func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
@@ -7359,12 +7077,8 @@ func (v *LiteDataAccount) IsValid() error {
 }
 
 var fieldNames_LiteIdentity = []string{
-
 	1: "Type",
-
 	2: "Url",
-
-	3: "extraData",
 }
 
 func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
@@ -7408,20 +7122,12 @@ func (v *LiteIdentity) IsValid() error {
 }
 
 var fieldNames_LiteTokenAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "TokenUrl",
-
 	4: "Balance",
-
 	5: "LastUsedOn",
-
 	6: "CreditBalance",
-
-	7: "extraData",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -7497,12 +7203,8 @@ func (v *LiteTokenAccount) IsValid() error {
 }
 
 var fieldNames_MetricsRequest = []string{
-
 	1: "Metric",
-
 	2: "Duration",
-
-	3: "extraData",
 }
 
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
@@ -7550,12 +7252,8 @@ func (v *MetricsRequest) IsValid() error {
 }
 
 var fieldNames_Object = []string{
-
 	1: "Type",
-
 	2: "Chains",
-
-	3: "extraData",
 }
 
 func (v *Object) MarshalBinary() ([]byte, error) {
@@ -7605,24 +7303,14 @@ func (v *Object) IsValid() error {
 }
 
 var fieldNames_RCD1Signature = []string{
-
 	1: "Type",
-
 	2: "PublicKey",
-
 	3: "Signature",
-
 	4: "Signer",
-
 	5: "SignerVersion",
-
 	6: "Timestamp",
-
 	7: "Vote",
-
 	8: "TransactionHash",
-
-	9: "extraData",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -7699,14 +7387,9 @@ func (v *RCD1Signature) IsValid() error {
 }
 
 var fieldNames_Receipt = []string{
-
 	1: "Start",
-
 	2: "Result",
-
 	3: "Entries",
-
-	4: "extraData",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -7764,12 +7447,8 @@ func (v *Receipt) IsValid() error {
 }
 
 var fieldNames_ReceiptEntry = []string{
-
 	1: "Right",
-
 	2: "Hash",
-
-	3: "extraData",
 }
 
 func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
@@ -7817,16 +7496,10 @@ func (v *ReceiptEntry) IsValid() error {
 }
 
 var fieldNames_ReceiptSignature = []string{
-
 	1: "Type",
-
 	2: "SourceNetwork",
-
 	3: "Receipt",
-
 	4: "TransactionHash",
-
-	5: "extraData",
 }
 
 func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
@@ -7877,12 +7550,8 @@ func (v *ReceiptSignature) IsValid() error {
 }
 
 var fieldNames_RemoteTransaction = []string{
-
 	1: "Type",
-
 	2: "Hash",
-
-	3: "extraData",
 }
 
 func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
@@ -7921,12 +7590,8 @@ func (v *RemoteTransaction) IsValid() error {
 }
 
 var fieldNames_RemoveAccountAuthorityOperation = []string{
-
 	1: "Type",
-
 	2: "Authority",
-
-	3: "extraData",
 }
 
 func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
@@ -7970,12 +7635,8 @@ func (v *RemoveAccountAuthorityOperation) IsValid() error {
 }
 
 var fieldNames_RemoveKeyOperation = []string{
-
 	1: "Type",
-
 	2: "Entry",
-
-	3: "extraData",
 }
 
 func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
@@ -8019,14 +7680,9 @@ func (v *RemoveKeyOperation) IsValid() error {
 }
 
 var fieldNames_RemoveValidator = []string{
-
 	1: "Type",
-
 	2: "PubKey",
-
 	3: "Owner",
-
-	4: "extraData",
 }
 
 func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
@@ -8073,16 +7729,10 @@ func (v *RemoveValidator) IsValid() error {
 }
 
 var fieldNames_SegWitDataEntry = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "EntryUrl",
-
 	4: "EntryHash",
-
-	5: "extraData",
 }
 
 func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
@@ -8138,16 +7788,10 @@ func (v *SegWitDataEntry) IsValid() error {
 }
 
 var fieldNames_SendTokens = []string{
-
 	1: "Type",
-
 	2: "Hash",
-
 	3: "Meta",
-
 	4: "To",
-
-	5: "extraData",
 }
 
 func (v *SendTokens) MarshalBinary() ([]byte, error) {
@@ -8199,12 +7843,8 @@ func (v *SendTokens) IsValid() error {
 }
 
 var fieldNames_SendTransaction = []string{
-
 	1: "Payload",
-
 	2: "Recipient",
-
-	3: "extraData",
 }
 
 func (v *SendTransaction) MarshalBinary() ([]byte, error) {
@@ -8252,12 +7892,8 @@ func (v *SendTransaction) IsValid() error {
 }
 
 var fieldNames_SetThresholdKeyPageOperation = []string{
-
 	1: "Type",
-
 	2: "Threshold",
-
-	3: "extraData",
 }
 
 func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
@@ -8301,26 +7937,15 @@ func (v *SetThresholdKeyPageOperation) IsValid() error {
 }
 
 var fieldNames_SyntheticAnchor = []string{
-
 	1: "Type",
-
 	2: "Source",
-
 	3: "Major",
-
 	4: "RootAnchor",
-
 	5: "RootIndex",
-
 	6: "AcmeBurnt",
-
 	7: "Block",
-
 	8: "AcmeOraclePrice",
-
 	9: "Receipts",
-
-	10: "extraData",
 }
 
 func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
@@ -8422,14 +8047,9 @@ func (v *SyntheticAnchor) IsValid() error {
 }
 
 var fieldNames_SyntheticBurnTokens = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "Amount",
-
-	4: "extraData",
 }
 
 func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
@@ -8477,14 +8097,9 @@ func (v *SyntheticBurnTokens) IsValid() error {
 }
 
 var fieldNames_SyntheticCreateChain = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "Chains",
-
-	4: "extraData",
 }
 
 func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
@@ -8534,14 +8149,9 @@ func (v *SyntheticCreateChain) IsValid() error {
 }
 
 var fieldNames_SyntheticDepositCredits = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "Amount",
-
-	4: "extraData",
 }
 
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
@@ -8589,16 +8199,10 @@ func (v *SyntheticDepositCredits) IsValid() error {
 }
 
 var fieldNames_SyntheticDepositTokens = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "Token",
-
 	4: "Amount",
-
-	5: "extraData",
 }
 
 func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
@@ -8654,14 +8258,9 @@ func (v *SyntheticDepositTokens) IsValid() error {
 }
 
 var fieldNames_SyntheticForwardTransaction = []string{
-
 	1: "Type",
-
 	2: "Signatures",
-
 	3: "Transaction",
-
-	4: "extraData",
 }
 
 func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
@@ -8710,14 +8309,9 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 }
 
 var fieldNames_SyntheticLedger = []string{
-
 	1: "Nonce",
-
 	2: "Unsigned",
-
 	3: "Unsent",
-
-	4: "extraData",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -8777,20 +8371,12 @@ func (v *SyntheticLedger) IsValid() error {
 }
 
 var fieldNames_SyntheticLedgerEntry = []string{
-
 	1: "TransactionHash",
-
 	2: "RootAnchor",
-
 	3: "SynthIndex",
-
 	4: "SynthIndexIndex",
-
 	5: "RootIndexIndex",
-
 	6: "NeedsReceipt",
-
-	7: "extraData",
 }
 
 func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
@@ -8870,12 +8456,8 @@ func (v *SyntheticLedgerEntry) IsValid() error {
 }
 
 var fieldNames_SyntheticMirror = []string{
-
 	1: "Type",
-
 	2: "Objects",
-
-	3: "extraData",
 }
 
 func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
@@ -8921,12 +8503,8 @@ func (v *SyntheticMirror) IsValid() error {
 }
 
 var fieldNames_SyntheticOrigin = []string{
-
 	1: "Source",
-
 	2: "Cause",
-
-	3: "extraData",
 }
 
 func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
@@ -8974,16 +8552,10 @@ func (v *SyntheticOrigin) IsValid() error {
 }
 
 var fieldNames_SyntheticReceipt = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "SynthTxHash",
-
 	4: "Status",
-
-	5: "extraData",
 }
 
 func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
@@ -9039,18 +8611,11 @@ func (v *SyntheticReceipt) IsValid() error {
 }
 
 var fieldNames_SyntheticSignature = []string{
-
 	1: "Type",
-
 	2: "SourceNetwork",
-
 	3: "DestinationNetwork",
-
 	4: "SequenceNumber",
-
 	5: "TransactionHash",
-
-	6: "extraData",
 }
 
 func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
@@ -9113,14 +8678,9 @@ func (v *SyntheticSignature) IsValid() error {
 }
 
 var fieldNames_SyntheticWriteData = []string{
-
 	1: "Type",
-
 	2: "SyntheticOrigin",
-
 	3: "Entry",
-
-	4: "extraData",
 }
 
 func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
@@ -9168,20 +8728,12 @@ func (v *SyntheticWriteData) IsValid() error {
 }
 
 var fieldNames_TokenAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
 	4: "TokenUrl",
-
 	5: "Balance",
-
 	6: "Scratch",
-
-	7: "extraData",
 }
 
 func (v *TokenAccount) MarshalBinary() ([]byte, error) {
@@ -9248,24 +8800,14 @@ func (v *TokenAccount) IsValid() error {
 }
 
 var fieldNames_TokenIssuer = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "AccountAuth",
-
 	4: "Symbol",
-
 	5: "Precision",
-
 	6: "Properties",
-
 	7: "Issued",
-
 	8: "SupplyLimit",
-
-	9: "extraData",
 }
 
 func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
@@ -9348,12 +8890,8 @@ func (v *TokenIssuer) IsValid() error {
 }
 
 var fieldNames_TokenRecipient = []string{
-
 	1: "Url",
-
 	2: "Amount",
-
-	3: "extraData",
 }
 
 func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
@@ -9401,12 +8939,8 @@ func (v *TokenRecipient) IsValid() error {
 }
 
 var fieldNames_Transaction = []string{
-
 	1: "Header",
-
 	2: "Body",
-
-	3: "extraData",
 }
 
 func (v *Transaction) MarshalBinary() ([]byte, error) {
@@ -9454,16 +8988,10 @@ func (v *Transaction) IsValid() error {
 }
 
 var fieldNames_TransactionHeader = []string{
-
 	1: "Principal",
-
 	2: "Initiator",
-
 	3: "Memo",
-
 	4: "Metadata",
-
-	5: "extraData",
 }
 
 func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
@@ -9517,10 +9045,7 @@ func (v *TransactionHeader) IsValid() error {
 }
 
 var fieldNames_TransactionResultSet = []string{
-
 	1: "Results",
-
-	2: "extraData",
 }
 
 func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
@@ -9562,12 +9087,8 @@ func (v *TransactionResultSet) IsValid() error {
 }
 
 var fieldNames_TransactionSignature = []string{
-
 	1: "Transaction",
-
 	2: "Signature",
-
-	3: "extraData",
 }
 
 func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
@@ -9615,26 +9136,15 @@ func (v *TransactionSignature) IsValid() error {
 }
 
 var fieldNames_TransactionStatus = []string{
-
 	1: "Remote",
-
 	2: "Delivered",
-
 	3: "Pending",
-
 	4: "Code",
-
 	5: "Message",
-
 	6: "Error",
-
 	7: "Result",
-
 	8: "Initiator",
-
 	9: "Signers",
-
-	10: "extraData",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -9740,12 +9250,8 @@ func (v *TransactionStatus) IsValid() error {
 }
 
 var fieldNames_UnknownAccount = []string{
-
 	1: "Type",
-
 	2: "Url",
-
-	3: "extraData",
 }
 
 func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
@@ -9789,14 +9295,9 @@ func (v *UnknownAccount) IsValid() error {
 }
 
 var fieldNames_UnknownSigner = []string{
-
 	1: "Type",
-
 	2: "Url",
-
 	3: "Version",
-
-	4: "extraData",
 }
 
 func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
@@ -9848,12 +9349,8 @@ func (v *UnknownSigner) IsValid() error {
 }
 
 var fieldNames_UpdateAccountAuth = []string{
-
 	1: "Type",
-
 	2: "Operations",
-
-	3: "extraData",
 }
 
 func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
@@ -9899,14 +9396,9 @@ func (v *UpdateAccountAuth) IsValid() error {
 }
 
 var fieldNames_UpdateAllowedKeyPageOperation = []string{
-
 	1: "Type",
-
 	2: "Allow",
-
 	3: "Deny",
-
-	4: "extraData",
 }
 
 func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
@@ -9952,12 +9444,8 @@ func (v *UpdateAllowedKeyPageOperation) IsValid() error {
 }
 
 var fieldNames_UpdateKey = []string{
-
 	1: "Type",
-
 	2: "NewKeyHash",
-
-	3: "extraData",
 }
 
 func (v *UpdateKey) MarshalBinary() ([]byte, error) {
@@ -10001,14 +9489,9 @@ func (v *UpdateKey) IsValid() error {
 }
 
 var fieldNames_UpdateKeyOperation = []string{
-
 	1: "Type",
-
 	2: "OldEntry",
-
 	3: "NewEntry",
-
-	4: "extraData",
 }
 
 func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
@@ -10060,12 +9543,8 @@ func (v *UpdateKeyOperation) IsValid() error {
 }
 
 var fieldNames_UpdateKeyPage = []string{
-
 	1: "Type",
-
 	2: "Operation",
-
-	3: "extraData",
 }
 
 func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
@@ -10111,14 +9590,9 @@ func (v *UpdateKeyPage) IsValid() error {
 }
 
 var fieldNames_UpdateValidatorKey = []string{
-
 	1: "Type",
-
 	2: "PubKey",
-
 	3: "NewPubKey",
-
-	4: "extraData",
 }
 
 func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
@@ -10170,12 +9644,8 @@ func (v *UpdateValidatorKey) IsValid() error {
 }
 
 var fieldNames_WriteData = []string{
-
 	1: "Type",
-
 	2: "Entry",
-
-	3: "extraData",
 }
 
 func (v *WriteData) MarshalBinary() ([]byte, error) {
@@ -10219,16 +9689,10 @@ func (v *WriteData) IsValid() error {
 }
 
 var fieldNames_WriteDataResult = []string{
-
 	1: "Type",
-
 	2: "EntryHash",
-
 	3: "AccountUrl",
-
 	4: "AccountID",
-
-	5: "extraData",
 }
 
 func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
@@ -10288,14 +9752,9 @@ func (v *WriteDataResult) IsValid() error {
 }
 
 var fieldNames_WriteDataTo = []string{
-
 	1: "Type",
-
 	2: "Recipient",
-
 	3: "Entry",
-
-	4: "extraData",
 }
 
 func (v *WriteDataTo) MarshalBinary() ([]byte, error) {

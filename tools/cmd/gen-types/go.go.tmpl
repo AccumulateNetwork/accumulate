@@ -98,11 +98,7 @@ func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 
 {{range .Types}}{{if .IsBinary}}
 var fieldNames_{{.Name}} = []string{
-	{{$index := 0}}
 	{{- range .Fields}}
-	{{- if gt .Number $index }}
-	{{$index = .Number}}
-	{{- end}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	{{.Number}}: "{{.Name}}",
@@ -111,8 +107,6 @@ var fieldNames_{{.Name}} = []string{
 	{{- end}}
 	{{- end}}
 	{{- end}}
-	{{$index = (inc $index)}}
-	{{$index}}: "extraData",
 }
 
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {

@@ -471,16 +471,10 @@ func (v *SubmitOptions) Equal(u *SubmitOptions) bool {
 }
 
 var fieldNames_AccountRecord = []string{
-
 	1: "Type",
-
 	2: "Account",
-
 	3: "Chains",
-
 	4: "Receipt",
-
-	5: "extraData",
 }
 
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
@@ -542,16 +536,10 @@ func (v *AccountRecord) IsValid() error {
 }
 
 var fieldNames_ChainState = []string{
-
 	1: "Name",
-
 	2: "Type",
-
 	3: "Height",
-
 	4: "Roots",
-
-	5: "extraData",
 }
 
 func (v *ChainState) MarshalBinary() ([]byte, error) {
@@ -617,10 +605,7 @@ func (v *ChainState) IsValid() error {
 }
 
 var fieldNames_NetworkMetrics = []string{
-
 	1: "TPS",
-
-	2: "extraData",
 }
 
 func (v *NetworkMetrics) MarshalBinary() ([]byte, error) {
@@ -660,10 +645,7 @@ func (v *NetworkMetrics) IsValid() error {
 }
 
 var fieldNames_NodeMetrics = []string{
-
 	1: "TPS",
-
-	2: "extraData",
 }
 
 func (v *NodeMetrics) MarshalBinary() ([]byte, error) {
@@ -703,10 +685,7 @@ func (v *NodeMetrics) IsValid() error {
 }
 
 var fieldNames_NodeStatus = []string{
-
 	1: "Ok",
-
-	2: "extraData",
 }
 
 func (v *NodeStatus) MarshalBinary() ([]byte, error) {
@@ -746,16 +725,10 @@ func (v *NodeStatus) IsValid() error {
 }
 
 var fieldNames_NodeVersion = []string{
-
 	1: "Version",
-
 	2: "Commit",
-
 	3: "VersionIsKnown",
-
 	4: "IsTestNet",
-
-	5: "extraData",
 }
 
 func (v *NodeVersion) MarshalBinary() ([]byte, error) {
@@ -819,14 +792,9 @@ func (v *NodeVersion) IsValid() error {
 }
 
 var fieldNames_QuerySetOptions = []string{
-
 	1: "Expand",
-
 	2: "Start",
-
 	3: "Count",
-
-	4: "extraData",
 }
 
 func (v *QuerySetOptions) MarshalBinary() ([]byte, error) {
@@ -866,16 +834,10 @@ func (v *QuerySetOptions) IsValid() error {
 }
 
 var fieldNames_QueryStateOptions = []string{
-
 	1: "Prove",
-
 	2: "Expand",
-
 	3: "Wait",
-
 	4: "Delivered",
-
-	5: "extraData",
 }
 
 func (v *QueryStateOptions) MarshalBinary() ([]byte, error) {
@@ -918,16 +880,10 @@ func (v *QueryStateOptions) IsValid() error {
 }
 
 var fieldNames_Receipt = []string{
-
 	1: "LocalBlock",
-
 	2: "DirectoryBlock",
-
 	3: "Proof",
-
 	4: "Error",
-
-	5: "extraData",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -991,10 +947,7 @@ func (v *Receipt) IsValid() error {
 }
 
 var fieldNames_SearchOptions = []string{
-
 	1: "Kind",
-
-	2: "extraData",
 }
 
 func (v *SearchOptions) MarshalBinary() ([]byte, error) {
@@ -1034,14 +987,9 @@ func (v *SearchOptions) IsValid() error {
 }
 
 var fieldNames_Submission = []string{
-
 	1: "TransactionHashes",
-
 	2: "SignatureHashes",
-
 	3: "Status",
-
-	4: "extraData",
 }
 
 func (v *Submission) MarshalBinary() ([]byte, error) {
@@ -1103,10 +1051,7 @@ func (v *Submission) IsValid() error {
 }
 
 var fieldNames_SubmitOptions = []string{
-
 	1: "Mode",
-
-	2: "extraData",
 }
 
 func (v *SubmitOptions) MarshalBinary() ([]byte, error) {

@@ -99,14 +99,9 @@ func (v *Error) Equal(u *Error) bool {
 }
 
 var fieldNames_CallSite = []string{
-
 	1: "FuncName",
-
 	2: "File",
-
 	3: "Line",
-
-	4: "extraData",
 }
 
 func (v *CallSite) MarshalBinary() ([]byte, error) {
@@ -162,16 +157,10 @@ func (v *CallSite) IsValid() error {
 }
 
 var fieldNames_Error = []string{
-
 	1: "Message",
-
 	2: "Code",
-
 	3: "Cause",
-
 	4: "CallSite",
-
-	5: "extraData",
 }
 
 func (v *Error) MarshalBinary() ([]byte, error) {

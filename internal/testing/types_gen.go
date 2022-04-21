@@ -251,12 +251,8 @@ func (v *FakeTransactionBody) Equal(u *FakeTransactionBody) bool {
 }
 
 var fieldNames_FakeAccount = []string{
-
 	1: "FakeLiteAccount",
-
 	2: "AccountAuth",
-
-	3: "extraData",
 }
 
 func (v *FakeAccount) MarshalBinary() ([]byte, error) {
@@ -296,12 +292,8 @@ func (v *FakeAccount) IsValid() error {
 }
 
 var fieldNames_FakeAuthority = []string{
-
 	1: "FakeAccount",
-
 	2: "Signers",
-
-	3: "extraData",
 }
 
 func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
@@ -345,12 +337,8 @@ func (v *FakeAuthority) IsValid() error {
 }
 
 var fieldNames_FakeLiteAccount = []string{
-
 	1: "TheType",
-
 	2: "Url",
-
-	3: "extraData",
 }
 
 func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
@@ -398,20 +386,12 @@ func (v *FakeLiteAccount) IsValid() error {
 }
 
 var fieldNames_FakeSignature = []string{
-
 	1: "TheType",
-
 	2: "Vote",
-
 	3: "PublicKey",
-
 	4: "Signer",
-
 	5: "SignerVersion",
-
 	6: "Timestamp",
-
-	7: "extraData",
 }
 
 func (v *FakeSignature) MarshalBinary() ([]byte, error) {
@@ -486,18 +466,11 @@ func (v *FakeSignature) IsValid() error {
 }
 
 var fieldNames_FakeSigner = []string{
-
 	1: "FakeLiteAccount",
-
 	2: "CreditBalance",
-
 	3: "Threshold",
-
 	4: "Version",
-
 	5: "Keys",
-
-	6: "extraData",
 }
 
 func (v *FakeSigner) MarshalBinary() ([]byte, error) {
@@ -567,10 +540,7 @@ func (v *FakeSigner) IsValid() error {
 }
 
 var fieldNames_FakeTransactionBody = []string{
-
 	1: "TheType",
-
-	2: "extraData",
 }
 
 func (v *FakeTransactionBody) MarshalBinary() ([]byte, error) {

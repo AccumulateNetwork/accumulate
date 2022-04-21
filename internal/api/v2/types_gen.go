@@ -354,10 +354,7 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 }
 
 var fieldNames_DataEntry = []string{
-
 	1: "Data",
-
-	2: "extraData",
 }
 
 func (v *DataEntry) MarshalBinary() ([]byte, error) {
@@ -399,12 +396,8 @@ func (v *DataEntry) IsValid() error {
 }
 
 var fieldNames_DataEntryQuery = []string{
-
 	1: "Url",
-
 	2: "EntryHash",
-
-	3: "extraData",
 }
 
 func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
@@ -447,12 +440,8 @@ func (v *DataEntryQuery) IsValid() error {
 }
 
 var fieldNames_DataEntryQueryResponse = []string{
-
 	1: "EntryHash",
-
 	2: "Entry",
-
-	3: "extraData",
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {

@@ -1034,16 +1034,10 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 }
 
 var fieldNames_ChainState = []string{
-
 	1: "Name",
-
 	2: "Type",
-
 	3: "Height",
-
 	4: "Roots",
-
-	5: "extraData",
 }
 
 func (v *ChainState) MarshalBinary() ([]byte, error) {
@@ -1109,14 +1103,9 @@ func (v *ChainState) IsValid() error {
 }
 
 var fieldNames_DirectoryQueryResult = []string{
-
 	1: "Entries",
-
 	2: "ExpandedEntries",
-
 	3: "Total",
-
-	4: "extraData",
 }
 
 func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
@@ -1162,16 +1151,10 @@ func (v *DirectoryQueryResult) IsValid() error {
 }
 
 var fieldNames_GeneralReceipt = []string{
-
 	1: "LocalBlock",
-
 	2: "DirectoryBlock",
-
 	3: "Receipt",
-
 	4: "Error",
-
-	5: "extraData",
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
@@ -1235,18 +1218,11 @@ func (v *GeneralReceipt) IsValid() error {
 }
 
 var fieldNames_MultiResponse = []string{
-
 	1: "Type",
-
 	2: "Items",
-
 	3: "Start",
-
 	4: "Count",
-
 	5: "Total",
-
-	6: "extraData",
 }
 
 func (v *MultiResponse) MarshalBinary() ([]byte, error) {
@@ -1308,12 +1284,8 @@ func (v *MultiResponse) IsValid() error {
 }
 
 var fieldNames_RequestDataEntry = []string{
-
 	1: "Url",
-
 	2: "EntryHash",
-
-	3: "extraData",
 }
 
 func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
@@ -1356,16 +1328,10 @@ func (v *RequestDataEntry) IsValid() error {
 }
 
 var fieldNames_RequestDataEntrySet = []string{
-
 	1: "Url",
-
 	2: "Start",
-
 	3: "Count",
-
 	4: "ExpandChains",
-
-	5: "extraData",
 }
 
 func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
@@ -1424,12 +1390,8 @@ func (v *RequestDataEntrySet) IsValid() error {
 }
 
 var fieldNames_RequestKeyPageIndex = []string{
-
 	1: "Url",
-
 	2: "Key",
-
-	3: "extraData",
 }
 
 func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -1477,18 +1439,11 @@ func (v *RequestKeyPageIndex) IsValid() error {
 }
 
 var fieldNames_RequestMinorBlocks = []string{
-
 	1: "Account",
-
 	2: "Start",
-
 	3: "Limit",
-
 	4: "TxFetchMode",
-
 	5: "FilterSynthAnchorsOnlyBlocks",
-
-	6: "extraData",
 }
 
 func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
@@ -1560,14 +1515,9 @@ func (v *RequestMinorBlocks) IsValid() error {
 }
 
 var fieldNames_RequestTxHistory = []string{
-
 	1: "Account",
-
 	2: "Start",
-
 	3: "Limit",
-
-	4: "extraData",
 }
 
 func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
@@ -1623,14 +1573,9 @@ func (v *RequestTxHistory) IsValid() error {
 }
 
 var fieldNames_ResponseAccount = []string{
-
 	1: "Account",
-
 	2: "ChainState",
-
 	3: "Receipt",
-
-	4: "extraData",
 }
 
 func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
@@ -1683,24 +1628,14 @@ func (v *ResponseAccount) IsValid() error {
 }
 
 var fieldNames_ResponseByTxId = []string{
-
 	1: "TxId",
-
 	2: "Envelope",
-
 	3: "Status",
-
 	4: "TxSynthTxIds",
-
 	5: "Height",
-
 	6: "ChainState",
-
 	7: "Receipts",
-
 	8: "Signers",
-
-	9: "extraData",
 }
 
 func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
@@ -1798,18 +1733,11 @@ func (v *ResponseByTxId) IsValid() error {
 }
 
 var fieldNames_ResponseChainEntry = []string{
-
 	1: "Type",
-
 	2: "Height",
-
 	3: "Entry",
-
 	4: "State",
-
 	5: "Receipt",
-
-	6: "extraData",
 }
 
 func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
@@ -1874,18 +1802,11 @@ func (v *ResponseChainEntry) IsValid() error {
 }
 
 var fieldNames_ResponseChainRange = []string{
-
 	1: "Type",
-
 	2: "Start",
-
 	3: "End",
-
 	4: "Total",
-
 	5: "Entries",
-
-	6: "extraData",
 }
 
 func (v *ResponseChainRange) MarshalBinary() ([]byte, error) {
@@ -1947,12 +1868,8 @@ func (v *ResponseChainRange) IsValid() error {
 }
 
 var fieldNames_ResponseDataEntry = []string{
-
 	1: "EntryHash",
-
 	2: "Entry",
-
-	3: "extraData",
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
@@ -2000,12 +1917,8 @@ func (v *ResponseDataEntry) IsValid() error {
 }
 
 var fieldNames_ResponseDataEntrySet = []string{
-
 	1: "DataEntries",
-
 	2: "Total",
-
-	3: "extraData",
 }
 
 func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
@@ -2055,14 +1968,9 @@ func (v *ResponseDataEntrySet) IsValid() error {
 }
 
 var fieldNames_ResponseKeyPageIndex = []string{
-
 	1: "Authority",
-
 	2: "Signer",
-
 	3: "Index",
-
-	4: "extraData",
 }
 
 func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -2114,16 +2022,10 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 }
 
 var fieldNames_ResponseMinorBlocks = []string{
-
 	1: "Start",
-
 	2: "End",
-
 	3: "Total",
-
 	4: "Entries",
-
-	5: "extraData",
 }
 
 func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
@@ -2177,18 +2079,11 @@ func (v *ResponseMinorBlocks) IsValid() error {
 }
 
 var fieldNames_ResponseMinorEntry = []string{
-
 	1: "BlockIndex",
-
 	2: "BlockTime",
-
 	3: "TxCount",
-
 	4: "TxIds",
-
 	5: "Transactions",
-
-	6: "extraData",
 }
 
 func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
@@ -2264,10 +2159,7 @@ func (v *ResponseMinorEntry) IsValid() error {
 }
 
 var fieldNames_ResponsePending = []string{
-
 	1: "Transactions",
-
-	2: "extraData",
 }
 
 func (v *ResponsePending) MarshalBinary() ([]byte, error) {
@@ -2309,16 +2201,10 @@ func (v *ResponsePending) IsValid() error {
 }
 
 var fieldNames_ResponseTxHistory = []string{
-
 	1: "Start",
-
 	2: "End",
-
 	3: "Total",
-
 	4: "Transactions",
-
-	5: "extraData",
 }
 
 func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
@@ -2372,12 +2258,8 @@ func (v *ResponseTxHistory) IsValid() error {
 }
 
 var fieldNames_SignatureSet = []string{
-
 	1: "Account",
-
 	2: "Signatures",
-
-	3: "extraData",
 }
 
 func (v *SignatureSet) MarshalBinary() ([]byte, error) {
@@ -2427,14 +2309,9 @@ func (v *SignatureSet) IsValid() error {
 }
 
 var fieldNames_TxReceipt = []string{
-
 	1: "GeneralReceipt",
-
 	2: "Account",
-
 	3: "Chain",
-
-	4: "extraData",
 }
 
 func (v *TxReceipt) MarshalBinary() ([]byte, error) {

@@ -289,10 +289,7 @@ func (v *TransactionChainIndex) Equal(u *TransactionChainIndex) bool {
 }
 
 var fieldNames_BlockChainUpdatesIndex = []string{
-
 	1: "Entries",
-
-	2: "extraData",
 }
 
 func (v *BlockChainUpdatesIndex) MarshalBinary() ([]byte, error) {
@@ -334,10 +331,7 @@ func (v *BlockChainUpdatesIndex) IsValid() error {
 }
 
 var fieldNames_BlockStateIndex = []string{
-
 	1: "ProducedSynthTxns",
-
-	2: "extraData",
 }
 
 func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
@@ -379,12 +373,8 @@ func (v *BlockStateIndex) IsValid() error {
 }
 
 var fieldNames_BlockStateSynthTxnEntry = []string{
-
 	1: "Transaction",
-
 	2: "ChainEntry",
-
-	3: "extraData",
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
@@ -432,22 +422,13 @@ func (v *BlockStateSynthTxnEntry) IsValid() error {
 }
 
 var fieldNames_ChainUpdate = []string{
-
 	1: "Account",
-
 	2: "Name",
-
 	3: "Type",
-
 	4: "Index",
-
 	5: "SourceIndex",
-
 	6: "SourceBlock",
-
 	7: "Entry",
-
-	8: "extraData",
 }
 
 func (v *ChainUpdate) MarshalBinary() ([]byte, error) {
@@ -535,10 +516,7 @@ func (v *ChainUpdate) IsValid() error {
 }
 
 var fieldNames_PendingTransactionsIndex = []string{
-
 	1: "Transactions",
-
-	2: "extraData",
 }
 
 func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
@@ -580,16 +558,10 @@ func (v *PendingTransactionsIndex) IsValid() error {
 }
 
 var fieldNames_TransactionChainEntry = []string{
-
 	1: "Account",
-
 	2: "Chain",
-
 	3: "ChainIndex",
-
 	4: "AnchorIndex",
-
-	5: "extraData",
 }
 
 func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
@@ -653,10 +625,7 @@ func (v *TransactionChainEntry) IsValid() error {
 }
 
 var fieldNames_TransactionChainIndex = []string{
-
 	1: "Entries",
-
-	2: "extraData",
 }
 
 func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
