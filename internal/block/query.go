@@ -532,24 +532,6 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		}
 	}
 
-	// If we have an account, lookup if it's a scratch chain. If so, filter out older records
-	account := txState.Transaction.Header.Principal
-	if account != nil {
-		isScratch, err := isScratchAccount(batch, account)
-		if err != nil {
-			return nil, err
-		}
-		if isScratch {
-			isAfterScratchDate, err := m.isAfterScratchDate(batch, txid)
-			if err != nil {
-				return nil, err
-			}
-			if !isAfterScratchDate {
-				return nil, errors.NotFound("transaction %X not found", txid[:4])
-			}
-		}
-	}
-
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
@@ -557,6 +539,18 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
+	}
+
+	// If we have an account, lookup if it's a scratch chain. If so, filter out older records
+	account := txState.Transaction.Header.Principal
+	if account != nil && isScratchAccount(batch, account) {
+		isAfterScratchDate, err := m.isAfterScratchDate(batch, txid)
+		if err != nil {
+			return nil, err
+		}
+		if !isAfterScratchDate {
+			return nil, errors.NotFound("transaction %X not found", txid[:4])
+		}
 	}
 
 	qr := query.ResponseByTxId{}
@@ -1066,21 +1060,20 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	return receipt, nil
 }
 
-func isScratchAccount(batch *database.Batch, account *url.URL) (bool, error) {
+func isScratchAccount(batch *database.Batch, account *url.URL) bool {
 	acc := batch.Account(account)
 	state, err := acc.GetState()
 	if err != nil {
-		return false, err
+		return false // Account may not exist, don't emit an error because waitForTxns will not get back the tx for this BVN and fail
 	}
 
 	switch v := state.(type) {
 	case *protocol.DataAccount:
-		return v.Scratch, nil
+		return v.Scratch
 	case *protocol.TokenAccount:
-		return v.Scratch, nil
+		return v.Scratch
 	}
-
-	return false, nil
+	return false
 }
 
 func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte) (bool, error) {
