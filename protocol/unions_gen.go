@@ -95,7 +95,6 @@ func EqualAccount(a, b Account) bool {
 	default:
 		return false
 	}
-
 }
 
 // UnmarshalAccountType unmarshals the AccountType from the start of a Account.
@@ -365,7 +364,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	default:
 		return false
 	}
-
 }
 
 // UnmarshalTransactionType unmarshals the TransactionType from the start of a TransactionBody.
@@ -485,7 +483,6 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 	default:
 		return false
 	}
-
 }
 
 // UnmarshalAccountAuthOperationType unmarshals the AccountAuthOperationType from the start of a AccountAuthOperation.
@@ -610,7 +607,6 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 	default:
 		return false
 	}
-
 }
 
 // UnmarshalKeyPageOperationType unmarshals the KeyPageOperationType from the start of a KeyPageOperation.
@@ -760,7 +756,6 @@ func EqualSignature(a, b Signature) bool {
 	default:
 		return false
 	}
-
 }
 
 // UnmarshalSignatureType unmarshals the SignatureType from the start of a Signature.

@@ -30,7 +30,6 @@ func EqualRecord(a, b Record) bool {
 	default:
 		return false
 	}
-
 }
 
 // UnmarshalRecordType unmarshals the RecordType from the start of a Record.
