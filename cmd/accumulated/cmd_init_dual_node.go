@@ -40,7 +40,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	// configure the BVN first so we know how to setup the bvn.
 	flagMain.WorkDir = path.Join(workDir, "dn")
-	args = []string{u.String()}
+	args = []string{"0", u.String()}
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
 	dnNodePath := path.Join(flagMain.WorkDir, "Node0")
@@ -110,7 +110,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvnBasePort)
 	flagMain.WorkDir = path.Join(workDir, "bvn")
-	args = []string{bvnHost.Address}
+	args = []string{"0", bvnHost.Address}
 	initNode(cmd, args)
 
 	bvnNodePath := path.Join(flagMain.WorkDir, "Node0")
