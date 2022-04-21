@@ -541,14 +541,14 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
-	// If we have an account, lookup if it's a scratch chain. If so, filter out older records
+	// If we have an account, lookup if it's a scratch chain. If so, filter out records that should have been pruned
 	account := txState.Transaction.Header.Principal
 	if account != nil && isScratchAccount(batch, account) {
-		isAfterScratchDate, err := m.isAfterScratchDate(batch, txid)
+		shouldBePruned, err := m.shouldBePruned(batch, txid)
 		if err != nil {
 			return nil, err
 		}
-		if !isAfterScratchDate {
+		if shouldBePruned {
 			return nil, errors.NotFound("transaction %X not found", txid[:4])
 		}
 	}
@@ -1076,7 +1076,7 @@ func isScratchAccount(batch *database.Batch, account *url.URL) bool {
 	return false
 }
 
-func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte) (bool, error) {
+func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, error) {
 
 	// Load the tx chain
 	txChain, err := indexing.TransactionChain(batch, txid).Get()
@@ -1084,7 +1084,7 @@ func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte) (bool,
 		return false, err
 	}
 
-	scratchTime := time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
+	pruneTime := time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
 
 	// preload the minor root index chain
 	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
@@ -1101,10 +1101,10 @@ func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte) (bool,
 			if err != nil {
 				return false, err
 			}
-			if indexEntry.BlockTime.After(scratchTime) {
+			if indexEntry.BlockTime.Before(pruneTime) {
 				return true, nil
 			}
-			break
+			return false, nil
 		}
 	}
 	return false, nil
