@@ -87,12 +87,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		ledger.Index = protocol.GenesisBlock
 		records = append(records, ledger)
 
-		// Create the synth ledger
-		synthLedger := new(protocol.InternalSyntheticLedger)
-		synthLedger.Url = uAdi.JoinPath(protocol.SyntheticLedgerPath)
-		synthLedger.AddAuthority(uBook)
-		records = append(records, synthLedger)
-
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
 		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)

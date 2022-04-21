@@ -664,11 +664,6 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		}
 	}
 
-	err = m.buildSynthReceipts(block, rootChain.Anchor(), int64(synthIndexIndex), int64(rootIndexIndex))
-	if err != nil {
-		return err
-	}
-
 	return m.buildAnchorTxn(block, ledgerState, rootChain)
 }
 
@@ -746,50 +741,6 @@ func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger,
 	})
 
 	return rootChain.AddEntry(root, false)
-}
-
-// buildSynthReceipts builds partial receipts for produced synthetic
-// transactions and stores them in the synthetic transaction ledger.
-func (m *Executor) buildSynthReceipts(block *Block, rootAnchor []byte, synthIndexIndex, rootIndexIndex int64) error {
-	ledger := block.Batch.Account(m.Network.SyntheticLedger())
-	ledgerState := new(protocol.InternalSyntheticLedger)
-	err := ledger.GetStateAs(&ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to load the synthetic transaction ledger: %w", err)
-	}
-
-	synthChain, err := block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
-	if err != nil {
-		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
-	}
-
-	height := synthChain.Height()
-	offset := height - int64(len(block.State.ProducedTxns))
-	for i, txn := range block.State.ProducedTxns {
-		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
-			// Do not generate a receipt for the anchor
-			continue
-		}
-
-		entry := new(protocol.SyntheticLedgerEntry)
-		entry.TransactionHash = *(*[32]byte)(txn.GetHash())
-		entry.RootAnchor = *(*[32]byte)(rootAnchor)
-		entry.SynthIndex = uint64(offset) + uint64(i)
-		entry.RootIndexIndex = uint64(rootIndexIndex)
-		entry.SynthIndexIndex = uint64(synthIndexIndex)
-		if m.Network.Type != config.Directory {
-			entry.NeedsReceipt = true
-		}
-		ledgerState.Pending = append(ledgerState.Pending, entry)
-		m.logDebug("Adding synthetic transaction to the ledger", "hash", logging.AsHex(txn.GetHash()), "type", txn.Type(), "anchor", logging.AsHex(rootAnchor), "module", "synthetic")
-	}
-
-	err = ledger.PutState(ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to store the synthetic transaction ledger: %w", err)
-	}
-
-	return nil
 }
 
 // buildAnchorTxn builds the anchor transaction for the block.

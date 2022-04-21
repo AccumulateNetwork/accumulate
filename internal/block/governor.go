@@ -36,12 +36,11 @@ type govStop struct{}
 type govPing struct{}
 
 type govDidCommit struct {
-	mirrorAdi   bool
-	block       Block
-	ledger      *protocol.InternalLedger
-	synthLedger *protocol.InternalSyntheticLedger
-	rootAnchor  []byte
-	rootHeight  int64
+	mirrorAdi  bool
+	block      Block
+	ledger     *protocol.InternalLedger
+	rootAnchor []byte
+	rootHeight int64
 }
 
 func newGovernor(opts ExecutorOptions, db *database.Database) *governor {
@@ -81,12 +80,6 @@ func (g *governor) DidCommit(batch *database.Batch, mirrorAdi bool, block *Block
 
 	ledger := batch.Account(g.Network.Ledger())
 	err := ledger.GetStateAs(&msg.ledger)
-	if err != nil {
-		return err
-	}
-
-	synthLedger := batch.Account(g.Network.SyntheticLedger())
-	err = synthLedger.GetStateAs(&msg.synthLedger)
 	if err != nil {
 		return err
 	}
