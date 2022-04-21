@@ -106,6 +106,10 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
 	return bytes.Equal(txnInitHash, sigInitHash) || bytes.Equal(txnInitHash, sigMetaHash)
 }
 
+func EqualKeySignature(a, b KeySignature) bool {
+	return EqualSignature(a, b)
+}
+
 func UnmarshalKeySignature(data []byte) (KeySignature, error) {
 	sig, err := UnmarshalSignature(data)
 	if err != nil {
