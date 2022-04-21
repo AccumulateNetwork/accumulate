@@ -19,8 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-type chainParams struct {
-	chain           *database.Chain
+type scratchParams struct {
 	isScratch       bool
 	minorIndexChain *database.Chain
 	scratchTime     time.Time
@@ -539,6 +538,24 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		}
 	}
 
+	// If we have an account, lookup if it's a scratch chain. If so, filter out older records
+	account := txState.Transaction.Header.Principal
+	if account != nil {
+		scratchParams, err := m.getScratchParams(batch, account, protocol.MainChain)
+		if err != nil {
+			return nil, err
+		}
+		if scratchParams.isScratch {
+			isAfterScratchDate, err := m.isAfterScratchDate(batch, txid, scratchParams.minorIndexChain, scratchParams.scratchTime)
+			if err != nil {
+				return nil, err
+			}
+			if !isAfterScratchDate {
+				return nil, errors.NotFound("transaction %X not found", txid[:4])
+			}
+		}
+	}
+
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
@@ -610,18 +627,17 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 }
 
 func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
-
-	chainParams, err := m.getChainParams(batch, account, chainName)
+	chain, err := batch.Account(account).ReadChain(chainName)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: err}
+		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
 
 	thr := query.ResponseTxHistory{}
 	thr.Start = start
 	thr.End = end
-	thr.Total = uint64(chainParams.chain.Height())
+	thr.Total = uint64(chain.Height())
 
-	txids, err := chainParams.chain.Entries(int64(start), int64(end))
+	txids, err := chain.Entries(int64(start), int64(end))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
@@ -629,20 +645,12 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	for _, txid := range txids {
 		qr, err := m.queryByTxId(batch, txid, false)
 		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				continue // txs can be filtered out for scratch accounts
+			}
 			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
-
-		var isAfterScratchDate bool
-		if chainParams.isScratch {
-			isAfterScratchDate, err = m.isAfterScratchDate(batch, txid, chainParams.minorIndexChain, chainParams.scratchTime)
-			if err != nil {
-				return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
-			}
-		}
-
-		if !chainParams.isScratch || isAfterScratchDate {
-			thr.Transactions = append(thr.Transactions, *qr)
-		}
+		thr.Transactions = append(thr.Transactions, *qr)
 	}
 
 	return &thr, nil
@@ -1089,15 +1097,11 @@ func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte, minorI
 	return false, nil
 }
 
-func (m *Executor) getChainParams(batch *database.Batch, account *url.URL, chainName string) (*chainParams, error) {
+func (m *Executor) getScratchParams(batch *database.Batch, account *url.URL, chainName string) (*scratchParams, error) {
 	var err error
-	chainParams := new(chainParams)
+	chainParams := new(scratchParams)
 
 	acc := batch.Account(account)
-	chainParams.chain, err = acc.ReadChain(chainName)
-	if err != nil {
-		return nil, fmt.Errorf("error obtaining txid range %v", err)
-	}
 	state, err := acc.GetState()
 	if err != nil {
 		return nil, err
