@@ -27,10 +27,18 @@ func New{{.Interface}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 
 //Equal{{.Interface}} is used to compare the values of the union
 func Equal{{.Interface}}(a,b {{.Interface}}) bool {
-dat1,_:=a.MarshalBinary()
-dat2,_:=b.MarshalBinary()
-return bytes.Compare(dat1,dat2)==0
+switch a:=a.(type){
+{{- range .Members}}
+case *{{.Type.Name}}:
+		b, ok := b.(*{{.Type.Name}})
+		return ok && a.Equal(b)
+{{- end}}
+	default:
+		return false
+	}
+
 }
+
 
 // Unmarshal{{.Enumeration}} unmarshals the {{.Enumeration}} from the start of a {{.Interface}}.
 func Unmarshal{{.Enumeration}}(r io.Reader) ({{.Enumeration}}, error) {

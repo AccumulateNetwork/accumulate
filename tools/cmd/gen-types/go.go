@@ -334,7 +334,6 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 	default:
 		switch field.MarshalAs {
 		case Union:
-			// TODO Fix
 			a := fmt.Sprint(field.Type)
 			arr := strings.Split(a, ".")
 			str := arr[len(arr)-1]
