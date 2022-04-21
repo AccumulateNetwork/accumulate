@@ -7,11 +7,12 @@ import (
 	"go/token"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
-func WriteFile(language, file string, buf *bytes.Buffer) error {
-	switch language {
-	case "go", "Go":
+func WriteFile(file string, buf *bytes.Buffer) error {
+	switch filepath.Ext(file) {
+	case ".go":
 		return GoFmt(file, buf)
 	default:
 		f, err := os.Create(file)

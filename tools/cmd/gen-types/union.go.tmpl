@@ -27,12 +27,12 @@ func New{{.Interface}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 
 //Equal{{.Interface}} is used to compare the values of the union
 func Equal{{.Interface}}(a,b {{.Interface}}) bool {
-switch a:=a.(type){
-{{- range .Members}}
-case *{{.Type.Name}}:
+	switch a := a.(type){
+	{{- range .Members}}
+	case *{{.Type.Name}}:
 		b, ok := b.(*{{.Type.Name}})
 		return ok && a.Equal(b)
-{{- end}}
+	{{- end}}
 	default:
 		return false
 	}

@@ -2950,10 +2950,10 @@ func (v *Envelope) Equal(u *Envelope) bool {
 }
 
 func (v *ForwardedSignature) Equal(u *ForwardedSignature) bool {
-	if !(v.Signature == u.Signature) {
+	if !(EqualKeySignature(v.Signature, u.Signature)) {
 		return false
 	}
-	if !(v.Signer == u.Signer) {
+	if !(EqualSigner(v.Signer, u.Signer)) {
 		return false
 	}
 
@@ -3952,7 +3952,7 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	case !((v.Error).Equal(u.Error)):
 		return false
 	}
-	if !(v.Result == u.Result) {
+	if !(EqualTransactionResult(v.Result, u.Result)) {
 		return false
 	}
 	switch {
@@ -3967,7 +3967,7 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	for i := range v.Signers {
-		if !(v.Signers[i] == u.Signers[i]) {
+		if !(EqualSigner(v.Signers[i], u.Signers[i])) {
 			return false
 		}
 	}

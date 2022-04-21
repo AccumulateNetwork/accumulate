@@ -334,22 +334,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 	default:
 		switch field.MarshalAs {
 		case Union:
-			a := fmt.Sprint(field.Type)
-			arr := strings.Split(a, ".")
-			str := arr[len(arr)-1]
-			typ := fmt.Sprint(field.Type)
-
-			if field.Name != "Result" && typ != "KeySignature" && typ != "Signer" {
-				if PackagePath == "protocol" {
-					expr, wantPtr = fmt.Sprint("Equal", typ, "(%[1]s%[2]s,%[1]s%[3]s)"), false
-
-				} else {
-
-					expr, wantPtr = fmt.Sprint("protocol.Equal", str, "(%[1]s%[2]s,%[1]s%[3]s)"), false
-				}
-			} else {
-				expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
-			}
+			expr, wantPtr = goUnionMethod(field, "Equal")+"(%[1]s%[2]s,%[1]s%[3]s)", false
 		case Reference:
 			expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
 		case Value, Enum:
