@@ -16,6 +16,7 @@ type CallSite struct {
 	FuncName  string `json:"funcName,omitempty" form:"funcName" query:"funcName" validate:"required"`
 	File      string `json:"file,omitempty" form:"file" query:"file" validate:"required"`
 	Line      int64  `json:"line,omitempty" form:"line" query:"line" validate:"required"`
+	extraData []byte
 }
 
 type Error struct {
@@ -24,6 +25,7 @@ type Error struct {
 	Code      Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Cause     *Error    `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	CallSite  *CallSite `json:"callSite,omitempty" form:"callSite" query:"callSite" validate:"required"`
+	extraData []byte
 }
 
 func (v *CallSite) Copy() *CallSite {
@@ -117,6 +119,10 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CallSite)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -174,6 +180,10 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_Error)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -229,7 +239,11 @@ func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CallSite)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -254,6 +268,10 @@ func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Error)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }

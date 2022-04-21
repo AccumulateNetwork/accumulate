@@ -19,24 +19,28 @@ type SigOrTxn struct {
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Hash        [32]byte              `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData   []byte
 }
 
 type exampleFullAccountState struct {
 	fieldsSet []bool
 	State     protocol.Account `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Chains    []*merkleState   `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	extraData []byte
 }
 
 type merkleState struct {
 	fieldsSet []bool
 	Count     uint64     `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	extraData []byte
 }
 
 type sigSetData struct {
 	fieldsSet []bool
 	Version   uint64          `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Entries   []sigSetKeyData `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type sigSetKeyData struct {
@@ -44,11 +48,13 @@ type sigSetKeyData struct {
 	System    bool     `json:"system,omitempty" form:"system" query:"system" validate:"required"`
 	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	extraData []byte
 }
 
 type txSyntheticTxns struct {
 	fieldsSet []bool
 	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
+	extraData []byte
 }
 
 func (v *SigOrTxn) Copy() *SigOrTxn {
@@ -253,6 +259,10 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SigOrTxn)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -304,6 +314,10 @@ func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_exampleFullAccountState)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -350,6 +364,10 @@ func (v *merkleState) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_merkleState)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -396,6 +414,10 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_sigSetData)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -444,6 +466,10 @@ func (v *sigSetKeyData) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_sigSetKeyData)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -491,6 +517,10 @@ func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -535,7 +565,11 @@ func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SigOrTxn)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -562,7 +596,11 @@ func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_exampleFullAccountState)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -585,7 +623,11 @@ func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_merkleState)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -608,7 +650,11 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_sigSetData)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -630,7 +676,11 @@ func (v *sigSetKeyData) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_sigSetKeyData)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -650,7 +700,11 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_txSyntheticTxns)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
