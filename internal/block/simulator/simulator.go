@@ -330,7 +330,10 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	statuses := []*protocol.TransactionStatus{status}
 	transactions := []*protocol.Transaction{state.Transaction}
 	for _, id := range synth.Hashes {
-		st, txn := s.WaitForTransactionFlow(statusCheck, id[:])
+		// Wait for synthetic transactions to be delivered
+		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
+			return status.Delivered
+		}, id[:])
 		statuses = append(statuses, st...)
 		transactions = append(transactions, txn...)
 	}

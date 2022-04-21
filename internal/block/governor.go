@@ -153,16 +153,6 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	unsignedCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsigned)
 	unsentCount := countExceptAnchors(batch, msg.ledger.Synthetic.Unsent)
 
-	unsent := msg.ledger.Synthetic.Unsent
-	for _, entry := range msg.synthLedger.Pending {
-		if entry.NeedsReceipt {
-			unsignedCount++
-		} else {
-			unsent = append(unsent, entry.TransactionHash)
-			unsentCount++
-		}
-	}
-
 	g.logger.Info("Did commit",
 		"height", msg.block.Index,
 		"time", msg.block.Time,
@@ -183,7 +173,7 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 
 	// Sign and send produced synthetic transactions
 	g.signTransactions(batch, msg.ledger)
-	g.sendTransactions(batch, msg, unsent)
+	g.sendTransactions(batch, msg)
 
 	// Dispatch transactions asynchronously
 	errs := g.dispatcher.Send(context.Background())
@@ -276,16 +266,16 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 	g.sendInternal(batch, body)
 }
 
-func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit, unsent [][32]byte) {
-	if len(unsent) == 0 {
+func (g *governor) sendTransactions(batch *database.Batch, msg *govDidCommit) {
+	if len(msg.ledger.Synthetic.Unsent) == 0 {
 		return
 	}
 
 	body := new(protocol.InternalTransactionsSent)
-	body.Transactions = make([][32]byte, 0, len(unsent))
+	body.Transactions = make([][32]byte, 0, len(msg.ledger.Synthetic.Unsent))
 
 	// For each unsent synthetic transaction
-	for _, id := range unsent {
+	for _, id := range msg.ledger.Synthetic.Unsent {
 		// Load state
 		obj := batch.Transaction(id[:])
 		pending, err := obj.GetState()

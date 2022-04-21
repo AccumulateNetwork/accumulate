@@ -38,12 +38,6 @@ func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
 		return err
 	}
 
-	for _, d := range deliveries {
-		if d.Transaction.Type() == protocol.TransactionTypeRemote {
-			print("")
-		}
-	}
-
 	batch := d.batches[subnet]
 	if batch == nil {
 		batch = new(protocol.Envelope)

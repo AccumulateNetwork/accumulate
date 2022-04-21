@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -14,11 +13,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
@@ -299,6 +300,11 @@ func (m *Executor) BeginBlock(block *Block) (err error) {
 		}
 	}
 
+	err = m.buildSyntheticTransactionReceipts(block)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "build synthetic transaction receipts: %w", err)
+	}
+
 	return nil
 }
 
@@ -349,6 +355,111 @@ func (m *Executor) processInternalDataTransaction(block *Block, internalAccountP
 
 	_, err = st.Commit()
 	return err
+}
+
+func (m *Executor) buildSyntheticTransactionReceipts(block *Block) error {
+	// Load the root chain's index chain
+	chain, err := block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.MinorRootIndexChain)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load root index chain: %w", err)
+	}
+	if chain.Height() == 0 {
+		return errors.Format(errors.StatusUnknown, "root index chain is empty")
+	}
+
+	// Get the latest entry
+	entry := new(protocol.IndexEntry)
+	err = chain.EntryAs(chain.Height()-1, entry)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load entry %d of root index chain: %w", chain.Height()-1, err)
+	}
+	rootAnchor := entry.Source
+
+	// Load the synthetic transaction chain's index chain
+	chain, err = block.Batch.Account(m.Network.Ledger()).ReadIndexChain(protocol.SyntheticChain, false)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load synthetic transaction index chain: %w", err)
+	}
+	if chain.Height() == 0 {
+		return nil // Nothing to do
+	}
+
+	// Get the latest entry
+	entry = new(protocol.IndexEntry)
+	err = chain.EntryAs(chain.Height()-1, entry)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load entry %d of synthetic transaction index chain: %w", chain.Height()-1, err)
+	}
+	synthEnd, synthAnchor := entry.Source, entry.Anchor
+
+	// Get the previous entry
+	var synthStart uint64
+	if chain.Height() > 1 {
+		entry = new(protocol.IndexEntry)
+		err = chain.EntryAs(chain.Height()-2, entry)
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "load entry %d of synthetic transaction index chain: %w", chain.Height()-2, err)
+		}
+		synthStart = entry.Source + 1
+	}
+
+	// Load the root chain
+	chain, err = block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+	}
+
+	// Prove the synthetic transaction chain anchor
+	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
+	}
+
+	// Load the synthetic transaction chain
+	chain, err = block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+	}
+
+	// Get transaction hashes
+	hashes, err := chain.Entries(int64(synthStart), int64(synthEnd)+1)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load entries %d through %d of synthetic transaction chain: %w", synthStart, synthEnd, err)
+	}
+
+	// For each synthetic transaction from the last block
+	for i, hash := range hashes {
+		// Prove the synthetic transaction
+		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
+		}
+
+		r, err := managed.CombineReceipts(synthProof, rootProof)
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
+		}
+
+		sig := new(protocol.ReceiptSignature)
+		sig.SourceNetwork = m.Network.NodeUrl()
+		sig.TransactionHash = *(*[32]byte)(hash)
+		sig.Receipt = *protocol.ReceiptFromManaged(r)
+
+		err = block.Batch.Transaction(sig.Hash()).PutState(&database.SigOrTxn{
+			Hash:      sig.TransactionHash,
+			Signature: sig,
+		})
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
+		}
+
+		_, err = block.Batch.Transaction(hash).AddSignature(sig)
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", hash[:4], err)
+		}
+	}
+
+	return nil
 }
 
 // EndBlock implements ./Chain

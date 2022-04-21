@@ -99,6 +99,15 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start), "to", logging.AsHex(body.RootAnchor), "block", body.Block, "source", body.Source, "module", "synthetic")
 		anchors[*(*[32]byte)(receipt.Start)] = &body.Receipts[i]
+
+		synth, err := st.batch.Account(st.nodeUrl.JoinPath(protocol.Ledger)).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		if err != nil {
+			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
+		}
+		for _, hash := range synth {
+			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
+			st.state.ProcessAdditionalTransaction(d)
+		}
 	}
 
 	var synthLedgerState *protocol.InternalSyntheticLedger

@@ -9,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
@@ -42,7 +41,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Basic validation
-	if !signature.Verify(delivery.Transaction.GetHash()) {
+	if signature.Type() != protocol.SignatureTypeReceipt && !signature.Verify(delivery.Transaction.GetHash()) {
 		return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 	}
 
@@ -454,37 +453,13 @@ func verifySyntheticSignature(net *config.Network, _ *database.Batch, transactio
 	return nil
 }
 
-func verifyReceiptSignature(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, signature *protocol.ReceiptSignature, isInitiator bool) error {
+func verifyReceiptSignature(_ *config.Network, _ *database.Batch, transaction *protocol.Transaction, _ *protocol.ReceiptSignature, isInitiator bool) error {
 	if !transaction.Body.Type().IsSynthetic() {
 		return fmt.Errorf("receipt signatures are not allowed for non-synthetic transactions")
 	}
 
 	if isInitiator {
 		return fmt.Errorf("receipt signatures must not be the initiator")
-	}
-
-	// TODO We should add something so we know which subnet originated
-	// the transaction. That way, the DN can also check receipts.
-	if net.Type == config.Directory {
-		// TODO Check receipts on the DN
-		return nil
-	}
-
-	// Load the anchor chain
-	anchorChain, err := batch.Account(net.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
-	if err != nil {
-		return fmt.Errorf("unable to load the DN intermediate anchor chain: %w", err)
-	}
-
-	// Is the result a valid DN anchor?
-	_, err = anchorChain.HeightOf(signature.Result)
-	switch {
-	case err == nil:
-		// OK
-	case errors.Is(err, storage.ErrNotFound):
-		return fmt.Errorf("invalid receipt: result is not a known DN anchor")
-	default:
-		return fmt.Errorf("unable to check if a DN anchor is valid: %w", err)
 	}
 
 	return nil

@@ -173,15 +173,15 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	if !gotSynthSig {
 		return fmt.Errorf("missing synthetic transaction origin")
 	}
+	if !gotED25519Sig {
+		return fmt.Errorf("missing ED25519 signature")
+	}
 	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
-		if !gotED25519Sig {
-			return fmt.Errorf("missing ED25519 signature")
-		}
-	} else {
-		if !gotReceiptSig {
-			return fmt.Errorf("missing synthetic transaction receipt")
-		}
+		return nil
 	}
 
+	if !gotReceiptSig {
+		return fmt.Errorf("missing synthetic transaction receipt")
+	}
 	return nil
 }

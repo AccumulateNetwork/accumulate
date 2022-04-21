@@ -343,10 +343,10 @@ func (n *FakeNode) MustWaitForTxns(ids ...[]byte) {
 }
 
 func (n *FakeNode) WaitForTxns(ids ...[]byte) error {
-	return n.waitForTxns(nil, ids...)
+	return n.waitForTxns(nil, false, ids...)
 }
 
-func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) error {
+func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) error {
 	n.t.Helper()
 
 	for _, id := range ids {
@@ -355,11 +355,11 @@ func (n *FakeNode) waitForTxns(cause []byte, ids ...[]byte) error {
 		} else {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
 		}
-		res, err := n.api.QueryTx(id, 1*time.Second, false, api2.QueryOptions{})
+		res, err := n.api.QueryTx(id, 1*time.Second, ignorePending, api2.QueryOptions{})
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
-		err = n.waitForTxns(id, convertIds32(res.SyntheticTxids...)...)
+		err = n.waitForTxns(id, true, convertIds32(res.SyntheticTxids...)...)
 		if err != nil {
 			return err
 		}
