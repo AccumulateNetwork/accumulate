@@ -28,10 +28,12 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		return nil, err
 	}
 
-	bookUrl := selectBookUrl(body)
-	err = validateKeyBookUrl(bookUrl, body.Url)
-	if err != nil {
-		return nil, err
+	bookUrl := body.KeyBookUrl
+	if bookUrl != nil {
+		err = validateKeyBookUrl(bookUrl, body.Url)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	identity := new(protocol.ADI)
@@ -43,6 +45,10 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if bookUrl == nil {
+		return nil, fmt.Errorf("key book url is required to create identity")
 	}
 
 	accounts := []protocol.Account{identity}
@@ -101,13 +107,6 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) erro
 	}
 
 	return nil
-}
-
-func selectBookUrl(body *protocol.CreateIdentity) *url.URL {
-	if body.KeyBookUrl == nil {
-		return body.Url.JoinPath(protocol.DefaultKeyBook)
-	}
-	return body.KeyBookUrl
 }
 
 func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {

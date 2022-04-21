@@ -105,7 +105,7 @@ func testCase2_6a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//attempt to add 1000 credits with only 9 acme with 15% slippage
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 9 15.0", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 9 15.0", liteAccounts[1])
 	require.NoError(t, err)
 
 	r, err := tc.executeTx(t, "adi create acc://RedWagon red1 acc://Redstone red2")
@@ -143,7 +143,7 @@ func testCase2_6b(t *testing.T, tc *testCmd) {
 func testCase2_7a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 10", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
 	r, err := tc.executeTx(t, "adi create acc://RedWagon red1 acc://RedWagon/sub1 red2")
@@ -161,7 +161,7 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 func testCase2_7b(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 10", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
 	_, err = tc.executeTx(t, "adi create acc://RedWagon red1 acc://RedWagon/sub1/sub2 red2")
