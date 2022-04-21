@@ -2515,11 +2515,7 @@ func (v *ChainState) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
@@ -2558,11 +2554,7 @@ func (v *DirectoryQueryResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *GeneralReceipt) UnmarshalBinary(data []byte) error {
@@ -2591,11 +2583,7 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *MultiResponse) UnmarshalBinary(data []byte) error {
@@ -2631,11 +2619,7 @@ func (v *MultiResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
@@ -2658,11 +2642,7 @@ func (v *RequestDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *RequestDataEntrySet) UnmarshalBinary(data []byte) error {
@@ -2691,11 +2671,7 @@ func (v *RequestDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *RequestKeyPageIndex) UnmarshalBinary(data []byte) error {
@@ -2718,11 +2694,7 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
@@ -2754,11 +2726,7 @@ func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *RequestTxHistory) UnmarshalBinary(data []byte) error {
@@ -2784,11 +2752,7 @@ func (v *RequestTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseAccount) UnmarshalBinary(data []byte) error {
@@ -2822,11 +2786,7 @@ func (v *ResponseAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseByTxId) UnmarshalBinary(data []byte) error {
@@ -2879,11 +2839,7 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseChainEntry) UnmarshalBinary(data []byte) error {
@@ -2919,11 +2875,7 @@ func (v *ResponseChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseChainRange) UnmarshalBinary(data []byte) error {
@@ -2959,11 +2911,7 @@ func (v *ResponseChainRange) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseDataEntry) UnmarshalBinary(data []byte) error {
@@ -2986,11 +2934,7 @@ func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseDataEntrySet) UnmarshalBinary(data []byte) error {
@@ -3017,11 +2961,7 @@ func (v *ResponseDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseKeyPageIndex) UnmarshalBinary(data []byte) error {
@@ -3047,11 +2987,7 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseMinorBlocks) UnmarshalBinary(data []byte) error {
@@ -3084,11 +3020,7 @@ func (v *ResponseMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseMinorEntry) UnmarshalBinary(data []byte) error {
@@ -3128,11 +3060,7 @@ func (v *ResponseMinorEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponsePending) UnmarshalBinary(data []byte) error {
@@ -3156,11 +3084,7 @@ func (v *ResponsePending) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
@@ -3193,11 +3117,7 @@ func (v *ResponseTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *SignatureSet) UnmarshalBinary(data []byte) error {
@@ -3233,11 +3153,7 @@ func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *TxReceipt) UnmarshalBinary(data []byte) error {
@@ -3261,11 +3177,7 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ChainState) MarshalJSON() ([]byte, error) {

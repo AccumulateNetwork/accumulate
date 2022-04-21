@@ -601,11 +601,7 @@ func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *exampleFullAccountState) UnmarshalBinary(data []byte) error {
@@ -636,11 +632,7 @@ func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *merkleState) UnmarshalBinary(data []byte) error {
@@ -667,11 +659,7 @@ func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *sigSetData) UnmarshalBinary(data []byte) error {
@@ -698,11 +686,7 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *sigSetKeyData) UnmarshalBinary(data []byte) error {
@@ -728,11 +712,7 @@ func (v *sigSetKeyData) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
@@ -756,11 +736,7 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *SigOrTxn) MarshalJSON() ([]byte, error) {

@@ -718,11 +718,7 @@ func (v *BlockChainUpdatesIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *BlockStateIndex) UnmarshalBinary(data []byte) error {
@@ -746,11 +742,7 @@ func (v *BlockStateIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
@@ -773,11 +765,7 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ChainUpdate) UnmarshalBinary(data []byte) error {
@@ -815,11 +803,7 @@ func (v *ChainUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *PendingTransactionsIndex) UnmarshalBinary(data []byte) error {
@@ -843,11 +827,7 @@ func (v *PendingTransactionsIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
@@ -876,11 +856,7 @@ func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *TransactionChainIndex) UnmarshalBinary(data []byte) error {
@@ -904,11 +880,7 @@ func (v *TransactionChainIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *BlockChainUpdatesIndex) MarshalJSON() ([]byte, error) {

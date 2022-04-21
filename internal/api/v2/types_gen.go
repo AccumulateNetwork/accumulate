@@ -520,11 +520,7 @@ func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *DataEntryQuery) UnmarshalBinary(data []byte) error {
@@ -547,11 +543,7 @@ func (v *DataEntryQuery) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *DataEntryQueryResponse) UnmarshalBinary(data []byte) error {
@@ -574,11 +566,7 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {

@@ -194,17 +194,13 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	{{- end}}
 	{{- end}}
 
-   seen, err := reader.Reset(fieldNames_{{.Name}})
+	seen, err := reader.Reset(fieldNames_{{.Name}})
 	if err != nil {
 		return err
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return err
-	}
 	return err
-
 }
 {{end}}{{end}}
 
