@@ -574,7 +574,7 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 		return false
 	}
 	for i := range v.ExpandedEntries {
-		if !(v.ExpandedEntries[i] == u.ExpandedEntries[i]) {
+		if !(protocol.EqualAccount(v.ExpandedEntries[i], u.ExpandedEntries[i])) {
 			return false
 		}
 	}
@@ -701,7 +701,7 @@ func (v *RequestTxHistory) Equal(u *RequestTxHistory) bool {
 }
 
 func (v *ResponseAccount) Equal(u *ResponseAccount) bool {
-	if !(v.Account == u.Account) {
+	if !(protocol.EqualAccount(v.Account, u.Account)) {
 		return false
 	}
 	if len(v.ChainState) != len(u.ChainState) {
@@ -977,14 +977,14 @@ func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 }
 
 func (v *SignatureSet) Equal(u *SignatureSet) bool {
-	if !(v.Account == u.Account) {
+	if !(protocol.EqualAccount(v.Account, u.Account)) {
 		return false
 	}
 	if len(v.Signatures) != len(u.Signatures) {
 		return false
 	}
 	for i := range v.Signatures {
-		if !(v.Signatures[i] == u.Signatures[i]) {
+		if !(protocol.EqualSignature(v.Signatures[i], u.Signatures[i])) {
 			return false
 		}
 	}
