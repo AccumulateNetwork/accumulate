@@ -19,18 +19,21 @@ type FakeAccount struct {
 	fieldsSet []bool
 	FakeLiteAccount
 	protocol.AccountAuth
+	extraData []byte
 }
 
 type FakeAuthority struct {
 	fieldsSet []bool
 	FakeAccount
-	Signers *url.URL `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	Signers   *url.URL `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData []byte
 }
 
 type FakeLiteAccount struct {
 	fieldsSet []bool
 	TheType   protocol.AccountType `json:"theType,omitempty" form:"theType" query:"theType" validate:"required"`
 	Url       *url.URL             `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type FakeSignature struct {
@@ -41,6 +44,7 @@ type FakeSignature struct {
 	Signer        *url.URL               `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	SignerVersion uint64                 `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
 	Timestamp     uint64                 `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	extraData     []byte
 }
 
 type FakeSigner struct {
@@ -50,11 +54,13 @@ type FakeSigner struct {
 	Threshold     uint64              `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
 	Version       uint64              `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys          []*protocol.KeySpec `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
+	extraData     []byte
 }
 
 type FakeTransactionBody struct {
 	fieldsSet []bool
 	TheType   protocol.TransactionType `json:"theType,omitempty" form:"theType" query:"theType" validate:"required"`
+	extraData []byte
 }
 
 func (v *FakeAccount) Copy() *FakeAccount {
@@ -257,6 +263,10 @@ func (v *FakeAccount) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(2, &v.AccountAuth)
 
 	_, _, err := writer.Reset(fieldNames_FakeAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -295,6 +305,10 @@ func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_FakeAuthority)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -337,6 +351,10 @@ func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_FakeLiteAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -397,6 +415,10 @@ func (v *FakeSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_FakeSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -468,6 +490,10 @@ func (v *FakeSigner) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_FakeSigner)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -521,6 +547,10 @@ func (v *FakeTransactionBody) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_FakeTransactionBody)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -554,7 +584,11 @@ func (v *FakeAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader.ReadValue(2, v.AccountAuth.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_FakeAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -571,7 +605,11 @@ func (v *FakeAuthority) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FakeAuthority)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -590,7 +628,11 @@ func (v *FakeLiteAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FakeLiteAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -621,7 +663,11 @@ func (v *FakeSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FakeSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -651,7 +697,11 @@ func (v *FakeSigner) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FakeSigner)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -667,7 +717,11 @@ func (v *FakeTransactionBody) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FakeTransactionBody)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 

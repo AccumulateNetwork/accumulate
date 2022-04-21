@@ -50,6 +50,7 @@ type {{.Name}} struct {
 	{{-     end}}
 	{{-   end}}
 	{{- end}}
+    extraData []byte
 }
 {{end}}
 
@@ -111,8 +112,7 @@ var fieldNames_{{.Name}} = []string{
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
-
-	{{  range .Fields}}
+   	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	writer.WriteValue({{.Number}}, &v.{{get .}})
@@ -127,6 +127,10 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	{{- end}}
 
 	_, _, err := writer.Reset(fieldNames_{{.Name}})
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -169,8 +173,7 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 
 func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
-
-	{{  range .Fields}}
+  	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
 	reader.ReadValue({{.Number}}, v.{{get .}}.UnmarshalBinary)
@@ -185,7 +188,11 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	{{- end}}
 
 	seen, err := reader.Reset(fieldNames_{{.Name}})
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 {{end}}{{end}}
