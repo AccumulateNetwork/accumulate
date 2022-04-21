@@ -345,5 +345,12 @@ func (r *Reader) ReadEnum(n uint, v EnumValueSetter) bool {
 
 //ReadAll reads the entire value from the current position
 func (r *Reader) ReadAll() ([]byte, error) {
+	if r.current != 0 {
+		// Return the field number
+		err := r.r.UnreadByte()
+		if err != nil {
+			return nil, err
+		}
+	}
 	return io.ReadAll(r.r)
 }
