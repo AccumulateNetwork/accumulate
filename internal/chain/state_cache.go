@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -151,11 +150,4 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 	}
 
 	return mdi.Put(data)
-}
-
-// statusEqual compares TransactionStatus objects with the contents of TransactionResult. (The auto-gen code does result == result)
-func statusEqual(v *protocol.TransactionStatus, u *protocol.TransactionStatus) bool {
-	vb, _ := v.MarshalBinary()
-	ub, _ := u.MarshalBinary()
-	return bytes.Equal(vb, ub)
 }
