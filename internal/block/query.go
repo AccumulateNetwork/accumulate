@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -17,6 +18,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
+
+type chainParams struct {
+	chain           *database.Chain
+	isScratch       bool
+	minorIndexChain *database.Chain
+	scratchTime     time.Time
+}
 
 func (m *Executor) queryAccount(batch *database.Batch, account *database.Account, prove bool) (*query.ResponseAccount, error) {
 	resp := new(query.ResponseAccount)
@@ -602,66 +610,39 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 }
 
 func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
-	acc := batch.Account(account)
-	chain, err := acc.ReadChain(chainName)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
-	}
-	state, err := acc.GetState()
+
+	chainParams, err := m.getChainParams(batch, account, chainName)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: err}
-	}
-
-	var isScratch bool
-	switch v := state.(type) {
-	case *protocol.DataAccount:
-		isScratch = v.Scratch
-	default:
-		isScratch = false
 	}
 
 	thr := query.ResponseTxHistory{}
 	thr.Start = start
 	thr.End = end
-	thr.Total = uint64(chain.Height())
+	thr.Total = uint64(chainParams.chain.Height())
 
-	txids, err := chain.Entries(int64(start), int64(end))
+	txids, err := chainParams.chain.Entries(int64(start), int64(end))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid, false) // TODO move back after debug
+		qr, err := m.queryByTxId(batch, txid, false)
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
 
-		if isScratch {
-			chainIndex, err := indexing.TransactionChain(batch, txid).Get()
+		var isAfterScratchDate bool
+		if chainParams.isScratch {
+			isAfterScratchDate, err = m.isAfterScratchDate(batch, txid, chainParams.minorIndexChain, chainParams.scratchTime)
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 			}
-			for _, entry := range chainIndex.Entries {
-				if entry.Chain == protocol.MainChain {
-
-					// Load the chain
-					minorIndexChain, err := acc.ReadChain(protocol.MinorRootIndexChain)
-					if err != nil {
-						return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
-					}
-
-					// Load the entry
-					entry := new(protocol.IndexEntry)
-					err = chain.EntryAs(minorIndexChain.Height(), entry)
-					if err != nil {
-						return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
-					}
-
-					break
-				}
-			}
 		}
-		thr.Transactions = append(thr.Transactions, *qr)
+
+		if !chainParams.isScratch || isAfterScratchDate {
+			thr.Transactions = append(thr.Transactions, *qr)
+		}
 	}
 
 	return &thr, nil
@@ -746,6 +727,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
+
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()
 		if err != nil {
@@ -1080,4 +1062,63 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	receipt.LocalBlock = block
 	receipt.Receipt = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
+}
+
+func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte, minorIndexChain *database.Chain, scratchDate time.Time) (bool, error) {
+
+	// Load the tx chain
+	txChain, err := indexing.TransactionChain(batch, txid).Get()
+	if err != nil {
+		return false, err
+	}
+
+	for _, txChainEntry := range txChain.Entries {
+		if txChainEntry.Chain == protocol.MainChain {
+			// Load the index entry
+			indexEntry := new(protocol.IndexEntry)
+			err = minorIndexChain.EntryAs(int64(txChainEntry.AnchorIndex), indexEntry)
+			if err != nil {
+				return false, err
+			}
+			if indexEntry.BlockTime.After(scratchDate) {
+				return true, nil
+			}
+			break
+		}
+	}
+	return false, nil
+}
+
+func (m *Executor) getChainParams(batch *database.Batch, account *url.URL, chainName string) (*chainParams, error) {
+	var err error
+	chainParams := new(chainParams)
+
+	acc := batch.Account(account)
+	chainParams.chain, err = acc.ReadChain(chainName)
+	if err != nil {
+		return nil, fmt.Errorf("error obtaining txid range %v", err)
+	}
+	state, err := acc.GetState()
+	if err != nil {
+		return nil, err
+	}
+
+	switch v := state.(type) {
+	case *protocol.DataAccount:
+		chainParams.isScratch = v.Scratch
+		if chainParams.isScratch {
+			chainParams.scratchTime = time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
+
+			// preload the minor root index chain
+			ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+			chainParams.minorIndexChain, err = ledger.ReadChain(protocol.MinorRootIndexChain)
+			if err != nil {
+				return nil, err
+			}
+		}
+	default:
+		chainParams.isScratch = false
+	}
+
+	return chainParams, nil
 }

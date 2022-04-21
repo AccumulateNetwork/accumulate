@@ -77,6 +77,9 @@ const (
 
 	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
 	ValidatorMofNFactor = 2.0 / 3.0
+
+	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
+	ScratchPrunePeriodDays = 14
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
