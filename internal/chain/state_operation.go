@@ -108,7 +108,7 @@ func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
 	}
 
 	// Only update the status when changed
-	if curStatus != nil && statusEqual(curStatus, u.status) {
+	if curStatus != nil && curStatus.Equal(u.status) {
 		return nil, nil
 	}
 

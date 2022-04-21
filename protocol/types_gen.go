@@ -21,27 +21,32 @@ type ADI struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
+	extraData []byte
 }
 
 type AccountAuth struct {
 	fieldsSet   []bool
 	Authorities []AuthorityEntry `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	extraData   []byte
 }
 
 type AcmeFaucet struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type AcmeOracle struct {
 	fieldsSet []bool
 	Price     uint64 `json:"price,omitempty" form:"price" query:"price" validate:"required"`
+	extraData []byte
 }
 
 type AddAccountAuthorityOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to add.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type AddCredits struct {
@@ -49,6 +54,7 @@ type AddCredits struct {
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	Oracle    uint64   `json:"oracle,omitempty" form:"oracle" query:"oracle"`
+	extraData []byte
 }
 
 type AddCreditsResult struct {
@@ -56,24 +62,28 @@ type AddCreditsResult struct {
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	Credits   uint64  `json:"credits,omitempty" form:"credits" query:"credits" validate:"required"`
 	Oracle    uint64  `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
+	extraData []byte
 }
 
 type AddKeyOperation struct {
 	fieldsSet []bool
 	Entry     KeySpecParams `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type AddValidator struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
-	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	extraData []byte
 }
 
 type Anchor struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
+	extraData []byte
 }
 
 type AnchorMetadata struct {
@@ -84,19 +94,22 @@ type AnchorMetadata struct {
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
 	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
 	Entry       []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData   []byte
 }
 
 type AnchoredRecord struct {
 	fieldsSet []bool
 	Record    []byte   `json:"record,omitempty" form:"record" query:"record" validate:"required"`
 	Anchor    [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	extraData []byte
 }
 
 type AuthorityEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	// Disabled disables auth checks for this authority, allowing anyone to sign for it.
-	Disabled bool `json:"disabled,omitempty" form:"disabled" query:"disabled" validate:"required"`
+	Disabled  bool `json:"disabled,omitempty" form:"disabled" query:"disabled" validate:"required"`
+	extraData []byte
 }
 
 type BTCLegacySignature struct {
@@ -108,6 +121,7 @@ type BTCLegacySignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type BTCSignature struct {
@@ -119,23 +133,27 @@ type BTCSignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type BurnTokens struct {
 	fieldsSet []bool
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type ChainMetadata struct {
 	fieldsSet []bool
 	Name      string    `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	Type      ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	extraData []byte
 }
 
 type ChainParams struct {
 	fieldsSet []bool
 	Data      []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	IsUpdate  bool   `json:"isUpdate,omitempty" form:"isUpdate" query:"isUpdate" validate:"required"`
+	extraData []byte
 }
 
 type CreateDataAccount struct {
@@ -144,6 +162,7 @@ type CreateDataAccount struct {
 	KeyBookUrl        *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	ManagerKeyBookUrl *url.URL `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl"`
 	Scratch           bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	extraData         []byte
 }
 
 type CreateIdentity struct {
@@ -152,6 +171,7 @@ type CreateIdentity struct {
 	KeyHash    []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData  []byte
 }
 
 type CreateKeyBook struct {
@@ -159,12 +179,14 @@ type CreateKeyBook struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	Manager       *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData     []byte
 }
 
 type CreateKeyPage struct {
 	fieldsSet []bool
 	Keys      []*KeySpecParams `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	Manager   *url.URL         `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData []byte
 }
 
 type CreateToken struct {
@@ -176,6 +198,7 @@ type CreateToken struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
 	Manager     *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData   []byte
 }
 
 type CreateTokenAccount struct {
@@ -185,29 +208,34 @@ type CreateTokenAccount struct {
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Scratch    bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	extraData  []byte
 }
 
 type DataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	Scratch bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	Scratch   bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	extraData []byte
 }
 
 type DataEntry struct {
 	fieldsSet []bool
 	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
 }
 
 type DirectoryIndexMetadata struct {
 	fieldsSet []bool
 	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	extraData []byte
 }
 
 type DisableAccountAuthOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to enable authorization for.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type ED25519Signature struct {
@@ -219,6 +247,7 @@ type ED25519Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type ETHSignature struct {
@@ -230,16 +259,19 @@ type ETHSignature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type EmptyResult struct {
 	fieldsSet []bool
+	extraData []byte
 }
 
 type EnableAccountAuthOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to enable authorization for.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type Envelope struct {
@@ -247,6 +279,7 @@ type Envelope struct {
 	Signatures  []Signature    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	TxHash      []byte         `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Transaction []*Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
+	extraData   []byte
 }
 
 // ForwardedSignature is used when forwarding signatures from one subnet to another.
@@ -254,11 +287,13 @@ type ForwardedSignature struct {
 	fieldsSet []bool
 	Signature KeySignature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	Signer    Signer       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	extraData []byte
 }
 
 type HashSet struct {
 	fieldsSet []bool
 	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
+	extraData []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -272,10 +307,12 @@ type IndexEntry struct {
 	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
 	// BlockTime is the start time of the block. Only include when indexing the root anchor chain.
 	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	extraData []byte
 }
 
 type InternalGenesis struct {
 	fieldsSet []bool
+	extraData []byte
 }
 
 type InternalLedger struct {
@@ -288,11 +325,13 @@ type InternalLedger struct {
 	PendingOracle uint64          `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
 	ActiveOracle  uint64          `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
 	AcmeBurnt     big.Int         `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	extraData     []byte
 }
 
 type InternalSendTransactions struct {
 	fieldsSet    []bool
 	Transactions []SendTransaction `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 // InternalSignature is used when executing transactions internally.
@@ -301,29 +340,34 @@ type InternalSignature struct {
 	// Network is the network that produced the transaction.
 	Network         *url.URL `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type InternalSyntheticLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	Pending []*SyntheticLedgerEntry `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Pending   []*SyntheticLedgerEntry `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	extraData []byte
 }
 
 type InternalTransactionsSent struct {
 	fieldsSet    []bool
 	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type InternalTransactionsSigned struct {
 	fieldsSet    []bool
 	Transactions []TransactionSignature `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type IssueTokens struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type KeyBook struct {
@@ -331,6 +375,7 @@ type KeyBook struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
 	PageCount uint64 `json:"pageCount,omitempty" form:"pageCount" query:"pageCount" validate:"required"`
+	extraData []byte
 }
 
 type KeyPage struct {
@@ -348,6 +393,7 @@ type KeyPage struct {
 	Version              uint64               `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Keys                 []*KeySpec           `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 	TransactionBlacklist *AllowedTransactions `json:"transactionBlacklist,omitempty" form:"transactionBlacklist" query:"transactionBlacklist"`
+	extraData            []byte
 }
 
 type KeySpec struct {
@@ -355,12 +401,14 @@ type KeySpec struct {
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	Owner         *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	extraData     []byte
 }
 
 type KeySpecParams struct {
 	fieldsSet []bool
 	KeyHash   []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	extraData []byte
 }
 
 type LegacyED25519Signature struct {
@@ -372,17 +420,20 @@ type LegacyED25519Signature struct {
 	SignerVersion   uint64   `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type LiteDataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Tail      []byte   `json:"tail,omitempty" form:"tail" query:"tail" validate:"required"`
+	extraData []byte
 }
 
 type LiteIdentity struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type LiteTokenAccount struct {
@@ -392,16 +443,19 @@ type LiteTokenAccount struct {
 	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
 	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	extraData     []byte
 }
 
 type MetricsRequest struct {
 	fieldsSet []bool
 	Metric    string        `json:"metric,omitempty" form:"metric" query:"metric" validate:"required"`
 	Duration  time.Duration `json:"duration,omitempty" form:"duration" query:"duration" validate:"required"`
+	extraData []byte
 }
 
 type MetricsResponse struct {
-	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
 }
 
 type Object struct {
@@ -409,7 +463,8 @@ type Object struct {
 	// Type is the object's type.
 	Type ObjectType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	// Chains lists the object's chains.
-	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Chains    []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	extraData []byte
 }
 
 type RCD1Signature struct {
@@ -421,6 +476,7 @@ type RCD1Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type Receipt struct {
@@ -428,12 +484,14 @@ type Receipt struct {
 	Start     []byte         `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Result    []byte         `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	Entries   []ReceiptEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type ReceiptEntry struct {
 	fieldsSet []bool
 	Right     bool   `json:"right,omitempty" form:"right" query:"right" validate:"required"`
 	Hash      []byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
 }
 
 type ReceiptSignature struct {
@@ -442,29 +500,34 @@ type ReceiptSignature struct {
 	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
 	Receipt
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type RemoteTransaction struct {
 	fieldsSet []bool
 	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash"`
+	extraData []byte
 }
 
 type RemoveAccountAuthorityOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to add.
 	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	extraData []byte
 }
 
 type RemoveKeyOperation struct {
 	fieldsSet []bool
 	Entry     KeySpecParams `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type RemoveValidator struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
-	Owner *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	extraData []byte
 }
 
 type SegWitDataEntry struct {
@@ -472,6 +535,7 @@ type SegWitDataEntry struct {
 	SyntheticOrigin
 	EntryUrl  *url.URL `json:"entryUrl,omitempty" form:"entryUrl" query:"entryUrl" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	extraData []byte
 }
 
 type SendTokens struct {
@@ -479,17 +543,20 @@ type SendTokens struct {
 	Hash      [32]byte          `json:"hash,omitempty" form:"hash" query:"hash"`
 	Meta      json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta"`
 	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+	extraData []byte
 }
 
 type SendTransaction struct {
 	fieldsSet []bool
 	Payload   TransactionBody `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 	Recipient *url.URL        `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	extraData []byte
 }
 
 type SetThresholdKeyPageOperation struct {
 	fieldsSet []bool
 	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticAnchor struct {
@@ -508,38 +575,44 @@ type SyntheticAnchor struct {
 	Block           uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	AcmeOraclePrice uint64 `json:"acmeOraclePrice,omitempty" form:"acmeOraclePrice" query:"acmeOraclePrice" validate:"required"`
 	// Receipts are receipts for anchors from other subnets that were included in the block.
-	Receipts []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Receipts  []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticBurnTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticCreateChain struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Chains []ChainParams `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Chains    []ChainParams `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticDepositCredits struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticDepositTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Token  *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
-	Amount big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
+	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticForwardTransaction struct {
 	fieldsSet   []bool
 	Signatures  []ForwardedSignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Transaction *Transaction         `json:"transaction,omitempty" form:"transaction" query:"transaction"`
+	extraData   []byte
 }
 
 type SyntheticLedger struct {
@@ -547,6 +620,7 @@ type SyntheticLedger struct {
 	Nonce     uint64     `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
 	Unsigned  [][32]byte `json:"unsigned,omitempty" form:"unsigned" query:"unsigned" validate:"required"`
 	Unsent    [][32]byte `json:"unsent,omitempty" form:"unsent" query:"unsent" validate:"required"`
+	extraData []byte
 }
 
 // SyntheticLedgerEntry contains the information needed to produce a receipt for a synthetic transaction that was produced in some block.
@@ -564,18 +638,21 @@ type SyntheticLedgerEntry struct {
 	RootIndexIndex uint64 `json:"rootIndexIndex,omitempty" form:"rootIndexIndex" query:"rootIndexIndex" validate:"required"`
 	// NeedsReceipt indicates whether the synthetic transaction is waiting for a receipt.
 	NeedsReceipt bool `json:"needsReceipt,omitempty" form:"needsReceipt" query:"needsReceipt" validate:"required"`
+	extraData    []byte
 }
 
 type SyntheticMirror struct {
 	fieldsSet []bool
 	Objects   []AnchoredRecord `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticOrigin struct {
 	fieldsSet []bool
 	// Source is the principal of the transaction that produced this transaction.
-	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	Cause  [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	Source    *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Cause     [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticReceipt struct {
@@ -583,6 +660,7 @@ type SyntheticReceipt struct {
 	SyntheticOrigin
 	SynthTxHash [32]byte           `json:"synthTxHash,omitempty" form:"synthTxHash" query:"synthTxHash" validate:"required"`
 	Status      *TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	extraData   []byte
 }
 
 // SyntheticSignature is used to initiate transactions between BVNs.
@@ -595,21 +673,24 @@ type SyntheticSignature struct {
 	// SequenceNumber is the sequence number of the transaction.
 	SequenceNumber  uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
 }
 
 type SyntheticWriteData struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type TokenAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	TokenUrl *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
-	Balance  big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	Scratch  bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	extraData []byte
 }
 
 type TokenIssuer struct {
@@ -621,12 +702,14 @@ type TokenIssuer struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
 	Issued      big.Int  `json:"issued,omitempty" form:"issued" query:"issued" validate:"required"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
+	extraData   []byte
 }
 
 type TokenRecipient struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	extraData []byte
 }
 
 type Transaction struct {
@@ -634,6 +717,7 @@ type Transaction struct {
 	Header    TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
 	Body      TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash      []byte
+	extraData []byte
 }
 
 type TransactionHeader struct {
@@ -642,17 +726,20 @@ type TransactionHeader struct {
 	Initiator [32]byte `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	Memo      string   `json:"memo,omitempty" form:"memo" query:"memo"`
 	Metadata  []byte   `json:"metadata,omitempty" form:"metadata" query:"metadata"`
+	extraData []byte
 }
 
 type TransactionResultSet struct {
 	fieldsSet []bool
 	Results   []*TransactionStatus `json:"results,omitempty" form:"results" query:"results" validate:"required"`
+	extraData []byte
 }
 
 type TransactionSignature struct {
 	fieldsSet   []bool
 	Transaction [32]byte  `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signature   Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	extraData   []byte
 }
 
 type TransactionStatus struct {
@@ -669,56 +756,66 @@ type TransactionStatus struct {
 	// Initiator is the signer that initiated the transaction.
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// Signers lists accounts that have signed the transaction.
-	Signers []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	Signers   []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData []byte
 }
 
 type UnknownAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
 }
 
 type UnknownSigner struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Version   uint64   `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	extraData []byte
 }
 
 type UpdateAccountAuth struct {
 	fieldsSet  []bool
 	Operations []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	extraData  []byte
 }
 
 type UpdateAllowedKeyPageOperation struct {
 	fieldsSet []bool
 	Allow     []TransactionType `json:"allow,omitempty" form:"allow" query:"allow"`
 	Deny      []TransactionType `json:"deny,omitempty" form:"deny" query:"deny"`
+	extraData []byte
 }
 
 type UpdateKey struct {
 	fieldsSet  []bool
 	NewKeyHash []byte `json:"newKeyHash,omitempty" form:"newKeyHash" query:"newKeyHash" validate:"required"`
+	extraData  []byte
 }
 
 type UpdateKeyOperation struct {
 	fieldsSet []bool
 	OldEntry  KeySpecParams `json:"oldEntry,omitempty" form:"oldEntry" query:"oldEntry" validate:"required"`
 	NewEntry  KeySpecParams `json:"newEntry,omitempty" form:"newEntry" query:"newEntry" validate:"required"`
+	extraData []byte
 }
 
 type UpdateKeyPage struct {
 	fieldsSet []bool
 	Operation []KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
+	extraData []byte
 }
 
 type UpdateValidatorKey struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	NewPubKey []byte `json:"newPubKey,omitempty" form:"newPubKey" query:"newPubKey" validate:"required"`
+	extraData []byte
 }
 
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 type WriteDataResult struct {
@@ -726,12 +823,14 @@ type WriteDataResult struct {
 	EntryHash  [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	AccountUrl *url.URL `json:"accountUrl,omitempty" form:"accountUrl" query:"accountUrl" validate:"required"`
 	AccountID  []byte   `json:"accountID,omitempty" form:"accountID" query:"accountID" validate:"required"`
+	extraData  []byte
 }
 
 type WriteDataTo struct {
 	fieldsSet []bool
 	Recipient *url.URL  `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
 }
 
 func (*ADI) Type() AccountType { return AccountTypeIdentity }
@@ -2930,7 +3029,7 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		return false
 	}
 	for i := range v.Signatures {
-		if !(v.Signatures[i] == u.Signatures[i]) {
+		if !(EqualSignature(v.Signatures[i], u.Signatures[i])) {
 			return false
 		}
 	}
@@ -2950,10 +3049,10 @@ func (v *Envelope) Equal(u *Envelope) bool {
 }
 
 func (v *ForwardedSignature) Equal(u *ForwardedSignature) bool {
-	if !(v.Signature == u.Signature) {
+	if !(EqualKeySignature(v.Signature, u.Signature)) {
 		return false
 	}
-	if !(v.Signer == u.Signer) {
+	if !(EqualSigner(v.Signer, u.Signer)) {
 		return false
 	}
 
@@ -3511,7 +3610,7 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 }
 
 func (v *SendTransaction) Equal(u *SendTransaction) bool {
-	if !(v.Payload == u.Payload) {
+	if !(EqualTransactionBody(v.Payload, u.Payload)) {
 		return false
 	}
 	switch {
@@ -3875,7 +3974,7 @@ func (v *Transaction) Equal(u *Transaction) bool {
 	if !((&v.Header).Equal(&u.Header)) {
 		return false
 	}
-	if !(v.Body == u.Body) {
+	if !(EqualTransactionBody(v.Body, u.Body)) {
 		return false
 	}
 
@@ -3921,7 +4020,7 @@ func (v *TransactionSignature) Equal(u *TransactionSignature) bool {
 	if !(v.Transaction == u.Transaction) {
 		return false
 	}
-	if !(v.Signature == u.Signature) {
+	if !(EqualSignature(v.Signature, u.Signature)) {
 		return false
 	}
 
@@ -3952,7 +4051,7 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	case !((v.Error).Equal(u.Error)):
 		return false
 	}
-	if !(v.Result == u.Result) {
+	if !(EqualTransactionResult(v.Result, u.Result)) {
 		return false
 	}
 	switch {
@@ -3967,7 +4066,7 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	for i := range v.Signers {
-		if !(v.Signers[i] == u.Signers[i]) {
+		if !(EqualSigner(v.Signers[i], u.Signers[i])) {
 			return false
 		}
 	}
@@ -4009,7 +4108,7 @@ func (v *UpdateAccountAuth) Equal(u *UpdateAccountAuth) bool {
 		return false
 	}
 	for i := range v.Operations {
-		if !(v.Operations[i] == u.Operations[i]) {
+		if !(EqualAccountAuthOperation(v.Operations[i], u.Operations[i])) {
 			return false
 		}
 	}
@@ -4062,7 +4161,7 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		return false
 	}
 	for i := range v.Operation {
-		if !(v.Operation[i] == u.Operation[i]) {
+		if !(EqualKeyPageOperation(v.Operation[i], u.Operation[i])) {
 			return false
 		}
 	}
@@ -4141,6 +4240,10 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(3, &v.AccountAuth)
 
 	_, _, err := writer.Reset(fieldNames_ADI)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4184,6 +4287,10 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountAuth)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4221,6 +4328,10 @@ func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AcmeFaucet)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4259,6 +4370,10 @@ func (v *AcmeOracle) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AcmeOracle)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4296,6 +4411,10 @@ func (v *AddAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddAccountAuthorityOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4344,6 +4463,10 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddCredits)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4397,6 +4520,10 @@ func (v *AddCreditsResult) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddCreditsResult)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4447,6 +4574,10 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddKeyOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4491,6 +4622,10 @@ func (v *AddValidator) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddValidator)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4533,6 +4668,10 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(3, &v.AccountAuth)
 
 	_, _, err := writer.Reset(fieldNames_Anchor)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4592,6 +4731,10 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AnchorMetadata)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4654,6 +4797,10 @@ func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AnchoredRecord)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4698,6 +4845,10 @@ func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_AuthorityEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4764,6 +4915,10 @@ func (v *BTCLegacySignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_BTCLegacySignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4843,6 +4998,10 @@ func (v *BTCSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_BTCSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4898,6 +5057,10 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_BurnTokens)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4940,6 +5103,10 @@ func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainMetadata)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -4984,6 +5151,10 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ChainParams)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5038,6 +5209,10 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateDataAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5090,6 +5265,10 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateIdentity)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5138,6 +5317,10 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateKeyBook)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5189,6 +5372,10 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateKeyPage)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5253,6 +5440,10 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateToken)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5319,6 +5510,10 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5370,6 +5565,10 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5413,6 +5612,10 @@ func (v *DataEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5448,6 +5651,10 @@ func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_DirectoryIndexMetadata)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5485,6 +5692,10 @@ func (v *DisableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_DisableAccountAuthOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5549,6 +5760,10 @@ func (v *ED25519Signature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ED25519Signature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5628,6 +5843,10 @@ func (v *ETHSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ETHSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5679,6 +5898,10 @@ func (v *EmptyResult) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 
 	_, _, err := writer.Reset(fieldNames_EmptyResult)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5714,6 +5937,10 @@ func (v *EnableAccountAuthOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_EnableAccountAuthOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5764,6 +5991,10 @@ func (v *Envelope) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_Envelope)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5805,6 +6036,10 @@ func (v *ForwardedSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ForwardedSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5850,6 +6085,10 @@ func (v *HashSet) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_HashSet)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5897,6 +6136,10 @@ func (v *IndexEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_IndexEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -5945,6 +6188,10 @@ func (v *InternalGenesis) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 
 	_, _, err := writer.Reset(fieldNames_InternalGenesis)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6006,6 +6253,10 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalLedger)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6081,6 +6332,10 @@ func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalSendTransactions)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6125,6 +6380,10 @@ func (v *InternalSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6173,6 +6432,10 @@ func (v *InternalSyntheticLedger) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalSyntheticLedger)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6223,6 +6486,10 @@ func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalTransactionsSent)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6265,6 +6532,10 @@ func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalTransactionsSigned)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6309,6 +6580,10 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_IssueTokens)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6360,6 +6635,10 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyBook)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6442,6 +6721,10 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyPage)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6523,6 +6806,10 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpec)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6572,6 +6859,10 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpecParams)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6633,6 +6924,10 @@ func (v *LegacyED25519Signature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_LegacyED25519Signature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6697,6 +6992,10 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteDataAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6742,6 +7041,10 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6798,6 +7101,10 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6860,6 +7167,10 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_MetricsRequest)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6906,6 +7217,10 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_Object)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -6972,6 +7287,10 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7035,6 +7354,10 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7084,6 +7407,10 @@ func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ReceiptEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7132,6 +7459,10 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_ReceiptSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7175,6 +7506,10 @@ func (v *RemoteTransaction) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoteTransaction)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7210,6 +7545,10 @@ func (v *RemoveAccountAuthorityOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoveAccountAuthorityOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7250,6 +7589,10 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoveKeyOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7294,6 +7637,10 @@ func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoveValidator)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7340,6 +7687,10 @@ func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SegWitDataEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7398,6 +7749,10 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7440,6 +7795,10 @@ func (v *SendTransaction) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SendTransaction)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7482,6 +7841,10 @@ func (v *SetThresholdKeyPageOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SetThresholdKeyPageOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7552,6 +7915,10 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticAnchor)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7629,6 +7996,10 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticBurnTokens)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7676,6 +8047,10 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticCreateChain)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7721,6 +8096,10 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7770,6 +8149,10 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositTokens)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7824,6 +8207,10 @@ func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticForwardTransaction)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7874,6 +8261,10 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticLedger)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -7939,6 +8330,10 @@ func (v *SyntheticLedgerEntry) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticLedgerEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8003,6 +8398,10 @@ func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticMirror)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8045,6 +8444,10 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticOrigin)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8093,6 +8496,10 @@ func (v *SyntheticReceipt) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticReceipt)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8153,6 +8560,10 @@ func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8205,6 +8616,10 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticWriteData)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8262,6 +8677,10 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8337,6 +8756,10 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenIssuer)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8402,6 +8825,10 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenRecipient)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8446,6 +8873,10 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_Transaction)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8498,6 +8929,10 @@ func (v *TransactionHeader) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionHeader)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8540,6 +8975,10 @@ func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionResultSet)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8579,6 +9018,10 @@ func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8653,6 +9096,10 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8730,6 +9177,10 @@ func (v *UnknownAccount) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UnknownAccount)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8774,6 +9225,10 @@ func (v *UnknownSigner) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UnknownSigner)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8821,6 +9276,10 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8869,6 +9328,10 @@ func (v *UpdateAllowedKeyPageOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateAllowedKeyPageOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8904,6 +9367,10 @@ func (v *UpdateKey) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateKey)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8948,6 +9415,10 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateKeyOperation)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -8995,6 +9466,10 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateKeyPage)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -9039,6 +9514,10 @@ func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -9084,6 +9563,10 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_WriteData)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -9132,6 +9615,10 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_WriteDataResult)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -9186,6 +9673,10 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_WriteDataTo)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -9236,7 +9727,11 @@ func (v *ADI) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_ADI)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9256,7 +9751,11 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountAuth)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9279,7 +9778,11 @@ func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AcmeFaucet)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9295,7 +9798,11 @@ func (v *AcmeOracle) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AcmeOracle)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9318,7 +9825,11 @@ func (v *AddAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddAccountAuthorityOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9347,7 +9858,11 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddCredits)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9376,7 +9891,11 @@ func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddCreditsResult)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9399,7 +9918,11 @@ func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddKeyOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9425,7 +9948,11 @@ func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddValidator)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9449,7 +9976,11 @@ func (v *Anchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_Anchor)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9478,7 +10009,11 @@ func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AnchorMetadata)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9497,7 +10032,11 @@ func (v *AnchoredRecord) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AnchoredRecord)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9516,7 +10055,11 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AuthorityEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9557,7 +10100,11 @@ func (v *BTCLegacySignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BTCLegacySignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9598,7 +10145,11 @@ func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BTCSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9621,7 +10172,11 @@ func (v *BurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BurnTokens)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9640,7 +10195,11 @@ func (v *ChainMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainMetadata)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9659,7 +10218,11 @@ func (v *ChainParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainParams)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9691,7 +10254,11 @@ func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateDataAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9723,7 +10290,11 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateIdentity)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9752,7 +10323,11 @@ func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateKeyBook)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9782,7 +10357,11 @@ func (v *CreateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateKeyPage)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9823,7 +10402,11 @@ func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateToken)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9858,7 +10441,11 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9885,7 +10472,11 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DataAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9905,7 +10496,11 @@ func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DataEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9921,7 +10516,11 @@ func (v *DirectoryIndexMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DirectoryIndexMetadata)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9944,7 +10543,11 @@ func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DisableAccountAuthOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -9985,7 +10588,11 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ED25519Signature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10026,7 +10633,11 @@ func (v *ETHSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ETHSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10046,7 +10657,11 @@ func (v *EmptyResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_EmptyResult)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10069,7 +10684,11 @@ func (v *EnableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_EnableAccountAuthOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10104,7 +10723,11 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10138,7 +10761,11 @@ func (v *ForwardedSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_ForwardedSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10158,7 +10785,11 @@ func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_HashSet)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10183,7 +10814,11 @@ func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_IndexEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10203,7 +10838,11 @@ func (v *InternalGenesis) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalGenesis)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10245,7 +10884,11 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalLedger)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10272,7 +10915,11 @@ func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalSendTransactions)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10298,7 +10945,11 @@ func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10329,7 +10980,11 @@ func (v *InternalSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalSyntheticLedger)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10356,7 +11011,11 @@ func (v *InternalTransactionsSent) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalTransactionsSent)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10383,7 +11042,11 @@ func (v *InternalTransactionsSigned) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalTransactionsSigned)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10409,7 +11072,11 @@ func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_IssueTokens)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10436,7 +11103,11 @@ func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_KeyBook)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10487,7 +11158,11 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_KeyPage)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10509,7 +11184,11 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_KeySpec)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10528,7 +11207,11 @@ func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_KeySpecParams)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10569,7 +11252,11 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_LegacyED25519Signature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10595,7 +11282,11 @@ func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteDataAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10618,7 +11309,11 @@ func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteIdentity)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10653,7 +11348,11 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10672,7 +11371,11 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_MetricsRequest)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10695,7 +11398,11 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Object)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10736,7 +11443,11 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10762,7 +11473,11 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10781,7 +11496,11 @@ func (v *ReceiptEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ReceiptEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10808,7 +11527,11 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ReceiptSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10831,7 +11554,11 @@ func (v *RemoteTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoteTransaction)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10854,7 +11581,11 @@ func (v *RemoveAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) erro
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoveAccountAuthorityOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10877,7 +11608,11 @@ func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoveKeyOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10903,7 +11638,11 @@ func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoveValidator)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10930,7 +11669,11 @@ func (v *SegWitDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SegWitDataEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10963,7 +11706,11 @@ func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTokens)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -10986,7 +11733,11 @@ func (v *SendTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SendTransaction)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11009,7 +11760,11 @@ func (v *SetThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SetThresholdKeyPageOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11057,7 +11812,11 @@ func (v *SyntheticAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticAnchor)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11081,7 +11840,11 @@ func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticBurnTokens)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11109,7 +11872,11 @@ func (v *SyntheticCreateChain) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticCreateChain)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11133,7 +11900,11 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositCredits)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11160,7 +11931,11 @@ func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositTokens)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11190,7 +11965,11 @@ func (v *SyntheticForwardTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticForwardTransaction)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11220,7 +11999,11 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticLedger)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11251,7 +12034,11 @@ func (v *SyntheticLedgerEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticLedgerEntry)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11278,7 +12065,11 @@ func (v *SyntheticMirror) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticMirror)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11297,7 +12088,11 @@ func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticOrigin)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11324,7 +12119,11 @@ func (v *SyntheticReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticReceipt)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11356,7 +12155,11 @@ func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11380,7 +12183,11 @@ func (v *SyntheticWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticWriteData)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11413,7 +12220,11 @@ func (v *TokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TokenAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11452,7 +12263,11 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TokenIssuer)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11471,7 +12286,11 @@ func (v *TokenRecipient) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TokenRecipient)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11494,7 +12313,11 @@ func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_Transaction)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11519,7 +12342,11 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionHeader)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11539,7 +12366,11 @@ func (v *TransactionResultSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionResultSet)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11562,7 +12393,11 @@ func (v *TransactionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_TransactionSignature)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11615,7 +12450,11 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionStatus)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11638,7 +12477,11 @@ func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UnknownAccount)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11664,7 +12507,11 @@ func (v *UnknownSigner) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UnknownSigner)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11696,7 +12543,11 @@ func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateAccountAuth)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11730,7 +12581,11 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error 
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateAllowedKeyPageOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11753,7 +12608,11 @@ func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateKey)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11779,7 +12638,11 @@ func (v *UpdateKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateKeyOperation)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11811,7 +12674,11 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateKeyPage)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11837,7 +12704,11 @@ func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateValidatorKey)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11860,7 +12731,11 @@ func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_WriteData)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11889,7 +12764,11 @@ func (v *WriteDataResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_WriteDataResult)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -11915,7 +12794,11 @@ func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_WriteDataTo)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 

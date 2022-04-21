@@ -25,6 +25,23 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 	return new(EmptyResult), nil
 }
 
+func EqualTransactionResult(a, b TransactionResult) bool {
+	// TODO Find a way to generate this
+	switch a := a.(type) {
+	case *WriteDataResult:
+		b, ok := b.(*WriteDataResult)
+		return ok && a.Equal(b)
+	case *AddCreditsResult:
+		b, ok := b.(*AddCreditsResult)
+		return ok && a.Equal(b)
+	case *EmptyResult:
+		b, ok := b.(*EmptyResult)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
 func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
 	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
 	if err != nil {
