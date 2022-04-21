@@ -69,9 +69,6 @@ const (
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
 
-	// DefaultKeyBook is the default key book name when not specified
-	DefaultKeyBook = "book0"
-
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
