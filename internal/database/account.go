@@ -48,13 +48,13 @@ func (r *Account) GetObject() (*protocol.Object, error) {
 
 // GetState loads the record state.
 func (r *Account) GetState() (protocol.Account, error) {
-	return r.batch.getAccountState(r.key.State(), nil)
+	return r.batch.getAccountState(r.key.PrimaryState(), nil)
 }
 
 // GetStateAs loads the record state and unmarshals into the given value. In
 // most cases `state` should be a double pointer.
 func (r *Account) GetStateAs(state interface{}) error {
-	return r.batch.getAccountStateAs(r.key.State(), nil, state)
+	return r.batch.getAccountStateAs(r.key.PrimaryState(), nil, state)
 }
 
 // PutState stores the record state and adds the record to the BPT (as a hash).
@@ -76,7 +76,7 @@ func (r *Account) PutState(state protocol.Account) error {
 	}
 
 	// Store the state
-	r.batch.putValue(r.key.State(), state)
+	r.batch.putValue(r.key.PrimaryState(), state)
 	return nil
 }
 
@@ -121,6 +121,35 @@ func (r *Account) Data() (*Data, error) {
 	}
 
 	return &Data{r.batch, r.key, chain}, nil
+}
+
+func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.HashSet, error) {
+	v := new(protocol.HashSet)
+	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (r *Account) AddSyntheticForAnchor(anchor, hash [32]byte) error {
+	set, err := r.getSyntheticForAnchor(anchor)
+	if err != nil {
+		return err
+	}
+
+	set.Add(hash)
+	r.batch.putValue(r.key.SyntheticForAnchor(anchor), set)
+	return nil
+}
+
+func (r *Account) SyntheticForAnchor(anchor [32]byte) ([][32]byte, error) {
+	set, err := r.getSyntheticForAnchor(anchor)
+	if err != nil {
+		return nil, err
+	}
+
+	return set.Hashes, nil
 }
 
 // stateHashes returns a hasher populated with hashes of all of the account's

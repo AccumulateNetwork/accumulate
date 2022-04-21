@@ -39,7 +39,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // GetState loads the transaction state.
 func (t *Transaction) GetState() (*SigOrTxn, error) {
 	v := new(SigOrTxn)
-	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
+	err := t.batch.getValuePtr(t.key.PrimaryState(), v, &v, false)
 	if err != nil {
 		return nil, err
 	}
@@ -48,14 +48,14 @@ func (t *Transaction) GetState() (*SigOrTxn, error) {
 
 // PutState stores the transaction state.
 func (t *Transaction) PutState(v *SigOrTxn) error {
-	t.batch.putValue(t.key.State(), v)
+	t.batch.putValue(t.key.PrimaryState(), v)
 	return nil
 }
 
 // GetStatus loads the transaction status.
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
 	v := new(protocol.TransactionStatus)
-	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
+	err := t.batch.getValuePtr(t.key.SecondaryState(), v, &v, true)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 		v.Result = new(protocol.EmptyResult)
 	}
 
-	t.batch.putValue(t.key.Status(), v)
+	t.batch.putValue(t.key.SecondaryState(), v)
 	return nil
 }
 
