@@ -19,12 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-type scratchParams struct {
-	isScratch       bool
-	minorIndexChain *database.Chain
-	scratchTime     time.Time
-}
-
 func (m *Executor) queryAccount(batch *database.Batch, account *database.Account, prove bool) (*query.ResponseAccount, error) {
 	resp := new(query.ResponseAccount)
 
@@ -541,12 +535,12 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	// If we have an account, lookup if it's a scratch chain. If so, filter out older records
 	account := txState.Transaction.Header.Principal
 	if account != nil {
-		scratchParams, err := m.getScratchParams(batch, account, protocol.MainChain)
+		isScratch, err := isScratchAccount(batch, account)
 		if err != nil {
 			return nil, err
 		}
-		if scratchParams.isScratch {
-			isAfterScratchDate, err := m.isAfterScratchDate(batch, txid, scratchParams.minorIndexChain, scratchParams.scratchTime)
+		if isScratch {
+			isAfterScratchDate, err := m.isAfterScratchDate(batch, txid)
 			if err != nil {
 				return nil, err
 			}
@@ -1072,10 +1066,36 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	return receipt, nil
 }
 
-func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte, minorIndexChain *database.Chain, scratchDate time.Time) (bool, error) {
+func isScratchAccount(batch *database.Batch, account *url.URL) (bool, error) {
+	acc := batch.Account(account)
+	state, err := acc.GetState()
+	if err != nil {
+		return false, err
+	}
+
+	switch v := state.(type) {
+	case *protocol.DataAccount:
+		return v.Scratch, nil
+	case *protocol.TokenAccount:
+		return v.Scratch, nil
+	}
+
+	return false, nil
+}
+
+func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte) (bool, error) {
 
 	// Load the tx chain
 	txChain, err := indexing.TransactionChain(batch, txid).Get()
+	if err != nil {
+		return false, err
+	}
+
+	scratchTime := time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
+
+	// preload the minor root index chain
+	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	minorIndexChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
 	if err != nil {
 		return false, err
 	}
@@ -1088,41 +1108,11 @@ func (m *Executor) isAfterScratchDate(batch *database.Batch, txid []byte, minorI
 			if err != nil {
 				return false, err
 			}
-			if indexEntry.BlockTime.After(scratchDate) {
+			if indexEntry.BlockTime.After(scratchTime) {
 				return true, nil
 			}
 			break
 		}
 	}
 	return false, nil
-}
-
-func (m *Executor) getScratchParams(batch *database.Batch, account *url.URL, chainName string) (*scratchParams, error) {
-	var err error
-	chainParams := new(scratchParams)
-
-	acc := batch.Account(account)
-	state, err := acc.GetState()
-	if err != nil {
-		return nil, err
-	}
-
-	switch v := state.(type) {
-	case *protocol.DataAccount:
-		chainParams.isScratch = v.Scratch
-		if chainParams.isScratch {
-			chainParams.scratchTime = time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
-
-			// preload the minor root index chain
-			ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-			chainParams.minorIndexChain, err = ledger.ReadChain(protocol.MinorRootIndexChain)
-			if err != nil {
-				return nil, err
-			}
-		}
-	default:
-		chainParams.isScratch = false
-	}
-
-	return chainParams, nil
 }
