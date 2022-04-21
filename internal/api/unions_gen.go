@@ -22,9 +22,9 @@ func NewRecord(typ RecordType) (Record, error) {
 }
 
 //EqualRecord is used to compare the values of the union
-func EqualRecord(a, b Record) bool {
-	switch a := a.(type) {
-	case *AccountRecord:
+func EqualRecord(a,b Record) bool {
+switch a:=a.(type){
+case *AccountRecord:
 		b, ok := b.(*AccountRecord)
 		return ok && a.Equal(b)
 	default:
@@ -32,6 +32,7 @@ func EqualRecord(a, b Record) bool {
 	}
 
 }
+
 
 // UnmarshalRecordType unmarshals the RecordType from the start of a Record.
 func UnmarshalRecordType(r io.Reader) (RecordType, error) {
@@ -115,3 +116,4 @@ func UnmarshalRecordJSON(data []byte) (Record, error) {
 
 	return acnt, nil
 }
+
