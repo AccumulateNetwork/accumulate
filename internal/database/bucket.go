@@ -48,6 +48,10 @@ func accountByID(id []byte) accountBucket {
 	return accountBucket{object("Account", id)}
 }
 
+func (b *accountBucket) SyntheticForAnchor(anchor [32]byte) storage.Key {
+	return b.Object().Append("State", "Synthetic", anchor)
+}
+
 // Chain returns the storage key for the given chain of the record.
 func (b *accountBucket) Chain(name string) storage.Key {
 	// Ensure chain names are case insensitive
