@@ -22,8 +22,6 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(DataAccount), nil
 	case AccountTypeInternalLedger:
 		return new(InternalLedger), nil
-	case AccountTypeInternalSyntheticLedger:
-		return new(InternalSyntheticLedger), nil
 	case AccountTypeKeyBook:
 		return new(KeyBook), nil
 	case AccountTypeKeyPage:
@@ -61,9 +59,6 @@ func EqualAccount(a, b Account) bool {
 		return ok && a.Equal(b)
 	case *InternalLedger:
 		b, ok := b.(*InternalLedger)
-		return ok && a.Equal(b)
-	case *InternalSyntheticLedger:
-		b, ok := b.(*InternalSyntheticLedger)
 		return ok && a.Equal(b)
 	case *KeyBook:
 		b, ok := b.(*KeyBook)

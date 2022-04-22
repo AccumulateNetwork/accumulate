@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"reflect"
@@ -70,9 +68,18 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 	})
 
 	//execute the tests
+	var skip bool
 	for _, f := range testMatrix {
 		name := strings.Split(GetFunctionName(f), ".")
-		t.Run(name[len(name)-1], func(t *testing.T) { f(t, tc) })
+		ok := t.Run(name[len(name)-1], func(t *testing.T) {
+			if skip {
+				t.SkipNow()
+			}
+			f(t, tc)
+		})
+		if !ok {
+			skip = true
+		}
 	}
 }
 
@@ -108,6 +115,22 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
+	// Reset flags
+	Client = nil
+	ClientTimeout = 0
+	ClientDebug = false
+	WantJsonOutput = false
+	TxPretend = false
+	Prove = false
+	Memo = ""
+	Metadata = ""
+	SigType = ""
+	Authorities = nil
+	TxWait = 0
+	TxNoWait = false
+	TxWaitSynth = 0
+	TxIgnorePending = false
+
 	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
 		c.jsonRpcAddr, cmdLine)
 	args := strings.Split(fullCommand, " ")
@@ -135,20 +158,5 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 
 func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (string, error) {
 	cmdLine = fmt.Sprintf(cmdLine, args...)
-	out, err := c.execute(t, cmdLine)
-	if err == nil {
-		waitForTxns(t, c, out)
-	}
-	return out, err
-}
-
-func waitForTxns(t *testing.T, tc *testCmd, jsonRes string) {
-	t.Helper()
-
-	var res ActionResponse
-	require.NoError(t, json.Unmarshal([]byte(jsonRes), &res))
-
-	commandLine := fmt.Sprintf("tx get --wait 10s --wait-synth 10s %s", hex.EncodeToString(res.TransactionHash))
-	_, err := tc.execute(t, commandLine)
-	require.NoError(t, err)
+	return c.execute(t, "--wait 10s "+cmdLine)
 }
