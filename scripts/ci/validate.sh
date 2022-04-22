@@ -475,6 +475,16 @@ wait-for-tx $TXID
 MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
+section "Refund on expensive synthetic txn failure"
+BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
+wait-for --no-check cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book
+echo "sleeping for 10 sec"
+sleep 10 &
+wait
+BALANCE1=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
+BALANCE=$((BALANCE-100))
+[ "$BALANCE" -eq "$BALANCE1" ] && success || die "Expected $BALANCE, got $BALANCE1"
+
 section "Token refund on txn failure"
 BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 TXID=$(cli-tx tx create keytest/tokens keytest-2-0 acc://invalid-account 1)

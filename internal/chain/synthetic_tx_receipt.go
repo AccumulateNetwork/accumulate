@@ -26,12 +26,12 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.Trans
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticReceipt), tx.Transaction.Body)
 	}
-
 	if body.Status.Code != 0 {
 		txn, err := st.batch.Transaction(body.Cause[:]).GetState()
 		if err != nil {
 			return nil, err
 		}
+
 		if txn.Transaction.Type() == protocol.TransactionTypeSendTokens {
 			var signer protocol.Signer
 			obj := st.batch.Account(body.Status.Initiator)
@@ -54,6 +54,32 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.Trans
 			}
 			account.CreditTokens(&refund)
 			st.Update(account)
+		}
+
+		paid, err := protocol.ComputeTransactionFee(txn.Transaction)
+		if err != nil {
+			return nil, fmt.Errorf("compute fee error: %w", err)
+		}
+		status, err := st.batch.Transaction(body.Cause[:]).GetStatus()
+		if err != nil {
+			return nil, err
+		}
+		if paid > protocol.FeeFailedMaximum {
+			var signer protocol.Signer
+			obj := st.batch.Account(status.Initiator)
+			err = obj.GetStateAs(&signer)
+			if err != nil {
+				return nil, fmt.Errorf("load initial signer: %w", err)
+			}
+			refundAmount := uint64(paid) - protocol.FeeFailedMaximum.AsUInt64()
+			if txn.Transaction.Header.Principal.LocalTo(signer.GetUrl()) {
+				signer.CreditCredits(refundAmount)
+				st.Update(signer)
+			} else {
+				deposit := new(protocol.SyntheticDepositCredits)
+				deposit.Amount = refundAmount
+				st.Submit(status.Initiator, deposit)
+			}
 		}
 	}
 	st.logger.Debug("received SyntheticReceipt, updating status", "from", body.Source.URL(), "for tx", logging.AsHex(body.SynthTxHash))
