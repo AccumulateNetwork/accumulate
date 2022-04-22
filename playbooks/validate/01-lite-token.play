@@ -73,7 +73,7 @@ Show(Transaction(aliceAddr).
     AddCredits(aliceAddr, 10).
         Oracle(5).
     Initiate(alice).
-	Submit().Wait().Ok()
+	Submit().Wait().Ok())
 Show(Get(aliceAddr))
 ```
 

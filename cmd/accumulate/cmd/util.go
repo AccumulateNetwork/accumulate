@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -233,26 +232,6 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
-	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-
-	return ActionResponseFrom(res).Print()
-}
-
 func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
 	var env *protocol.Envelope
 	var sig protocol.Signature
@@ -322,6 +301,33 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	}
 
 	return &res, nil
+}
+
+func dispatchTxAndWait(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
+	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
+	if err != nil {
+		return nil, err
+	}
+
+	if TxWait == 0 {
+		return res, nil
+	}
+
+	_, err = waitForTxn(res.TransactionHash, TxWait, TxIgnorePending)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
+	res, err := dispatchTxAndWait(action, payload, txHash, origin, signer)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
+
+	return ActionResponseFrom(res).Print()
 }
 
 func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
@@ -418,6 +424,7 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 
 	ar.Code = types.String(fmt.Sprint(result.Code))
 	ar.Error = types.String(result.Message)
+	ar.Result = result
 	return ar
 }
 
