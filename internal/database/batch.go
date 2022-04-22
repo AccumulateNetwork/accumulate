@@ -207,7 +207,7 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v Typed
 			break
 
 		default:
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
@@ -217,14 +217,14 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v Typed
 		// Value is found, unmarshal it
 		v, err := unmarshal(data)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 		b.cacheValue(key, v, false)
 		return v, nil
 
 	default:
-		return nil, err
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 }
 
@@ -244,15 +244,15 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 		// Value is not found, cache the new value
 		v = newValue
 		b.cacheValue(key, v, false)
-		notFound = err
+		notFound = errors.Wrap(errors.StatusUnknown, err)
 
 	default:
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = encoding2.SetPtr(v, target)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	return notFound
 }

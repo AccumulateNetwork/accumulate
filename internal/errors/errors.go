@@ -15,10 +15,10 @@ func Is(err, target error) bool { return errors.Is(err, target) }
 // Unwrap calls stdlib errors.Unwrap.
 func Unwrap(err error) error { return errors.Unwrap(err) }
 
-func make(code Status) *Error {
+func makeError(code Status) *Error {
 	e := new(Error)
 	e.Code = code
-	e.CallSite = callSite(3)
+	e.CallStack = []*CallSite{callSite(3)}
 	return e
 }
 
@@ -48,22 +48,26 @@ func convert(err error) *Error {
 }
 
 func (e *Error) setCause(f *Error) {
-	e.Cause = f
 	if f == nil {
+		e.Cause = f
 		return
 	}
 
 	if e.Code != StatusUnknown {
+		e.Cause = f
 		return
 	}
 
-	if e.Message == "" && e.CallSite == nil {
-		// If e has no information, just overwrite it
-		*e = *e.Cause
-	} else {
-		// Otherwise inherit the code
-		e.Code = e.Cause.Code
+	// Inherit the code
+	e.Code = f.Code
+	if e.Message != "" {
+		e.Cause = f
+		return
 	}
+
+	// Absorb the cause
+	e.Message = f.Message
+	e.CallStack = append(e.CallStack, f.CallStack...)
 }
 
 func New(code Status, v interface{}) *Error {
@@ -71,7 +75,7 @@ func New(code Status, v interface{}) *Error {
 		return nil
 	}
 
-	e := make(code)
+	e := makeError(code)
 	if err, ok := v.(error); ok {
 		e.setCause(convert(err))
 	} else {
@@ -84,7 +88,7 @@ func Wrap(code Status, err error) *Error {
 	if err == nil {
 		return nil
 	}
-	e := make(code)
+	e := makeError(code)
 	e.setCause(convert(err))
 	return e
 }
@@ -92,7 +96,7 @@ func Wrap(code Status, err error) *Error {
 func Format(code Status, format string, args ...interface{}) *Error {
 	err := fmt.Errorf(format, args...)
 
-	e := make(code)
+	e := makeError(code)
 	u, ok := err.(interface {
 		Unwrap() error
 	})
@@ -136,4 +140,15 @@ func (e *Error) Unwrap() error {
 		return e.Cause
 	}
 	return e.Code
+}
+
+func (e *Error) Print() string {
+	str := e.Message + "\n"
+	for e != nil {
+		for _, cs := range e.CallStack {
+			str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
+		}
+		e = e.Cause
+	}
+	return str
 }

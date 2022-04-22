@@ -22,6 +22,7 @@ type Builder struct {
 	InitMode  InitHashMode
 	Type      protocol.SignatureType
 	Url       *url.URL
+	Delegator *url.URL
 	Signer    Signer
 	Version   uint64
 	Timestamp uint64
@@ -54,6 +55,11 @@ func (s *Builder) SetKeyPageUrl(bookUrl *url.URL, pageIndex uint64) *Builder {
 
 func (s *Builder) SetPrivateKey(privKey []byte) *Builder {
 	s.Signer = PrivateKey(privKey)
+	return s
+}
+
+func (s *Builder) SetDelegator(delegator *url.URL) *Builder {
+	s.Delegator = delegator
 	return s
 }
 
@@ -91,7 +97,7 @@ func (s *Builder) UseFaucet() *Builder {
 	return s
 }
 
-func (s *Builder) prepare(init bool) (protocol.Signature, error) {
+func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 	var errs []string
 	if s.Url == nil {
 		errs = append(errs, "missing signer URL")
@@ -176,7 +182,7 @@ func (s *Builder) prepare(init bool) (protocol.Signature, error) {
 	}
 }
 
-func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
+func (s *Builder) sign(sig protocol.KeySignature, hash []byte) error {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
@@ -190,6 +196,8 @@ func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.ETHSignature:
 		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.DelegatedSignature:
+		return s.sign(sig.Signature, hash)
 	default:
 		panic("unreachable")
 	}
@@ -197,30 +205,44 @@ func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
 	return s.Signer.Sign(sig, hash)
 }
 
-func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
+func (s *Builder) Sign(message []byte) (protocol.KeySignature, error) {
 	sig, err := s.prepare(false)
 	if err != nil {
 		return nil, err
 	}
 
+	if s.Delegator != nil {
+		sig = &protocol.DelegatedSignature{
+			Delegator: s.Delegator,
+			Signature: sig,
+		}
+	}
+
 	return sig, s.sign(sig, message)
 }
 
-func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
+func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.KeySignature, error) {
 	sig, err := s.prepare(true)
 	if err != nil {
 		return nil, err
 	}
 
+	if s.Delegator != nil {
+		sig = &protocol.DelegatedSignature{
+			Delegator: s.Delegator,
+			Signature: sig,
+		}
+	}
+
 	if s.InitMode == InitWithSimpleHash {
-		txn.Header.Initiator = *(*[32]byte)(sig.MetadataHash())
+		txn.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
 	} else {
-		init, err := sig.InitiatorHash()
+		init, err := sig.Initiator()
 		if err != nil {
 			return nil, err
 		}
 
-		txn.Header.Initiator = *(*[32]byte)(init)
+		txn.Header.Initiator = *(*[32]byte)(init.MerkleHash())
 	}
 
 	return sig, s.sign(sig, txn.GetHash())
@@ -249,15 +271,15 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 	initSig.SequenceNumber = s.Version
 
 	if s.InitMode == InitWithSimpleHash {
-		txn.Header.Initiator = *(*[32]byte)(initSig.MetadataHash())
+		txn.Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())
 	} else {
-		initHash, err := initSig.InitiatorHash()
+		initHash, err := initSig.Initiator()
 		if err != nil {
 			// This should never happen
 			panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
 		}
 
-		txn.Header.Initiator = *(*[32]byte)(initHash)
+		txn.Header.Initiator = *(*[32]byte)(initHash.MerkleHash())
 	}
 
 	initSig.TransactionHash = *(*[32]byte)(txn.GetHash())

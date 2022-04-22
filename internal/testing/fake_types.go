@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -15,18 +16,19 @@ func (f *FakeTransactionBody) Type() protocol.TransactionType { return f.TheType
 var _ protocol.Signature = (*FakeSignature)(nil)
 var _ protocol.KeySignature = (*FakeSignature)(nil)
 
-func (f *FakeSignature) Type() protocol.SignatureType   { return f.TheType }
-func (f *FakeSignature) GetVote() protocol.VoteType     { return f.Vote }
-func (f *FakeSignature) Verify(hash []byte) bool        { return true }
-func (f *FakeSignature) Hash() []byte                   { return make([]byte, 32) }
-func (f *FakeSignature) MetadataHash() []byte           { return make([]byte, 32) }
-func (f *FakeSignature) InitiatorHash() ([]byte, error) { return make([]byte, 32), nil }
-func (f *FakeSignature) GetSigner() *url.URL            { return f.Signer }
-func (f *FakeSignature) GetSignerVersion() uint64       { return f.SignerVersion }
-func (f *FakeSignature) GetTimestamp() uint64           { return f.Timestamp }
-func (f *FakeSignature) GetPublicKey() []byte           { return f.PublicKey }
-func (f *FakeSignature) GetSignature() []byte           { return make([]byte, 32) }
-func (f *FakeSignature) GetTransactionHash() [32]byte   { return [32]byte{} }
+func (f *FakeSignature) Type() protocol.SignatureType    { return f.TheType }
+func (f *FakeSignature) GetVote() protocol.VoteType      { return f.Vote }
+func (f *FakeSignature) Verify(hash []byte) bool         { return true }
+func (f *FakeSignature) Hash() []byte                    { return make([]byte, 32) }
+func (f *FakeSignature) Metadata() protocol.Signature    { return f }
+func (f *FakeSignature) Initiator() (hash.Hasher, error) { return nil, nil }
+func (f *FakeSignature) GetSigner() *url.URL             { return f.Signer }
+func (f *FakeSignature) RoutingLocation() *url.URL       { return f.Signer }
+func (f *FakeSignature) GetSignerVersion() uint64        { return f.SignerVersion }
+func (f *FakeSignature) GetTimestamp() uint64            { return f.Timestamp }
+func (f *FakeSignature) GetPublicKey() []byte            { return f.PublicKey }
+func (f *FakeSignature) GetSignature() []byte            { return make([]byte, 32) }
+func (f *FakeSignature) GetTransactionHash() [32]byte    { return [32]byte{} }
 
 func (f *FakeSignature) GetPublicKeyHash() []byte {
 	if f.Type() == protocol.SignatureTypeRCD1 {
@@ -67,6 +69,16 @@ func (f *FakeSigner) EntryByKey(key []byte) (int, protocol.KeyEntry, bool) {
 func (f *FakeSigner) EntryByKeyHash(keyHash []byte) (int, protocol.KeyEntry, bool) {
 	for i, entry := range f.Keys {
 		if bytes.Equal(entry.PublicKeyHash, keyHash) {
+			return i, entry, true
+		}
+	}
+
+	return -1, nil, false
+}
+
+func (f *FakeSigner) EntryByDelegate(owner *url.URL) (int, protocol.KeyEntry, bool) {
+	for i, entry := range f.Keys {
+		if owner.Equal(entry.Owner) {
 			return i, entry, true
 		}
 	}
