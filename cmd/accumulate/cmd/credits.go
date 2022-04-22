@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -110,19 +108,5 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Amount = *estAcme
 	credits.Oracle = acmeOracle.Price
 
-	res, err := dispatchTxRequest("add-credits", &credits, nil, u, signer)
-	if err != nil {
-		return "", err
-	}
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("add-credits", &credits, nil, u, signer)
 }

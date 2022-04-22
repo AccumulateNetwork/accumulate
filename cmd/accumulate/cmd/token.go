@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
 	"strconv"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -159,22 +157,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 	params.SupplyLimit = supplyLimit
-	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("create-token", &params, nil, originUrl, signer)
 }
 
 func IssueTokenToRecipient(origin string, args []string) (string, error) {
@@ -206,22 +189,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Recipient = recipient
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("issue-tokens", &params, nil, originUrl, signer)
 }
 
 func BurnTokens(origin string, args []string) (string, error) {
@@ -253,20 +221,5 @@ func BurnTokens(origin string, args []string) (string, error) {
 	params := protocol.BurnTokens{}
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("burn-tokens", &params, nil, originUrl, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("burn-tokens", &params, nil, originUrl, signer)
 }
