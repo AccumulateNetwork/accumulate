@@ -25,21 +25,6 @@ InternalLedger:
     - name: AcmeBurnt
       type: bigint
 
-
-InternalSyntheticLedger:
-  union: { type: account }
-  fields:
-    - name: Url
-      type: url
-      pointer: true
-    - type: AccountAuth
-      marshal-as: reference
-    - name: Pending
-      type: SyntheticLedgerEntry
-      pointer: true
-      repeatable: true
-      marshal-as: reference
-
 ##### Transactions #####
 
 InternalGenesis:
@@ -100,25 +85,3 @@ TransactionSignature:
     - name: Signature
       type: Signature
       marshal-as: union
-
-SyntheticLedgerEntry:
-  description: contains the information needed to produce a receipt for a synthetic transaction that was produced in some block
-  fields:
-    - name: TransactionHash
-      type: chain
-      description: is the hash of the synthetic transaction
-    - name: RootAnchor
-      type: chain
-      description: is the anchor of the root chain from the block
-    - name: SynthIndex
-      type: uint
-      description: is the index of the transaction in the synthetic transaction chain
-    - name: SynthIndexIndex
-      type: uint
-      description: is the index of the synthetic transaction index chain entry from the block
-    - name: RootIndexIndex
-      type: uint
-      description: is the index of the root index chain entry from the block
-    - name: NeedsReceipt
-      type: bool
-      description: indicates whether the synthetic transaction is waiting for a receipt

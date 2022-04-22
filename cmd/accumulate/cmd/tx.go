@@ -88,7 +88,6 @@ var (
 func init() {
 	txCmd.Flags().DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	txCmd.Flags().DurationVar(&TxWaitSynth, "wait-synth", 0, "Wait for synthetic transactions to complete")
-	txCmd.Flags().BoolVar(&TxIgnorePending, "ignore-pending", false, "Ignore pending transactions. Combined with --wait, this waits for transactions to be delivered.")
 }
 
 func PrintTXGet() {
@@ -195,14 +194,14 @@ func GetPendingTx(origin string, args []string) (string, error) {
 
 	return out, perr
 }
-func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
+func getTX(hash []byte, wait time.Duration, ignorePending bool) (*api2.TransactionQueryResponse, error) {
 	var res api2.TransactionQueryResponse
 	var err error
 
 	params := new(api2.TxnQuery)
 	params.Txid = hash
 	params.Prove = Prove
-	params.IgnorePending = TxIgnorePending
+	params.IgnorePending = ignorePending
 
 	if wait > 0 {
 		params.Wait = wait
@@ -232,7 +231,7 @@ func GetTX(hash string) (string, error) {
 		return "", err
 	}
 
-	res, err := getTX(txid, TxWait)
+	res, err := getTX(txid, TxWait, TxIgnorePending)
 	if err != nil {
 		var rpcErr jsonrpc2.Error
 		if errors.As(err, &rpcErr) {
@@ -258,7 +257,7 @@ func GetTX(hash string) (string, error) {
 	for _, txid := range res.SyntheticTxids {
 		txid := txid // Do not capture the loop variable in the closure
 		errg.Go(func() error {
-			res, err := getTX(txid[:], TxWaitSynth)
+			res, err := getTX(txid[:], TxWaitSynth, true)
 			if err != nil {
 				return err
 			}
@@ -353,31 +352,17 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	send.AddRecipient(u2, amt)
 
-	res, err := dispatchTxRequest("send-tokens", send, nil, u, signer)
-	if err != nil {
-		return "", err
-	}
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("send-tokens", send, nil, u, signer)
 }
 
-func waitForTxn(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
-	queryRes, err := getTX(hash, wait)
+func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) (*api2.TransactionQueryResponse, error) {
+	queryRes, err := getTX(hash, wait, ignorePending)
 	if err != nil {
 		return nil, err
 	}
 	if queryRes.SyntheticTxids != nil {
 		for _, txid := range queryRes.SyntheticTxids {
-			_, err := waitForTxn(txid[:], wait)
+			_, err := waitForTxn(txid[:], wait, true)
 			if err != nil {
 				return nil, err
 			}
@@ -416,11 +401,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", txn, nil, u, signer)
-	if err != nil {
-		return "", err
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("execute", txn, nil, u, signer)
 }
 
 func SignTX(sender string, args []string) (string, error) {
@@ -444,9 +425,5 @@ func SignTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to parse transaction hash: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", nil, txHash, u, signer)
-	if err != nil {
-		return "", err
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("execute", nil, txHash, u, signer)
 }
