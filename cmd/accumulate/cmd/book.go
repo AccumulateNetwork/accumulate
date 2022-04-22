@@ -2,10 +2,8 @@ package cmd
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -109,20 +107,5 @@ func CreateKeyBook(args []string) (string, error) {
 	ph := sha256.Sum256(pbkey)
 	publicKeyHash := ph[:]
 	keyBook.PublicKeyHash = publicKeyHash
-	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, originUrl, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("create-key-book", &keyBook, nil, originUrl, signer)
 }

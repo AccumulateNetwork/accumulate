@@ -2,12 +2,12 @@ package block
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -33,18 +33,21 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			continue
 		}
 
-		// TODO This is a workaround for AC-1238. Once the DN anchor race is
-		// fixed, remove this.
-		if sub.Body.Type() == protocol.TransactionTypeSyntheticReceipt {
-			continue
-		}
-
 		swo, ok := sub.Body.(protocol.SynthTxnWithOrigin)
 		if !ok {
 			continue
 		}
 
 		cause, _ := swo.GetSyntheticOrigin()
+		if receipt, ok := sub.Body.(*protocol.SyntheticReceipt); ok {
+			cause = receipt.SynthTxHash[:]
+
+			// If the transaction was successful, skip recording the receipt
+			if receipt.Status.Code == 0 {
+				continue
+			}
+		}
+
 		err = batch.Transaction(cause).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
 		if err != nil {
 			return err
@@ -79,9 +82,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Append the ID
-	if body.Type() == protocol.TransactionTypeSyntheticAnchor {
-		ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, *(*[32]byte)(txn.GetHash()))
-	}
+	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, *(*[32]byte)(txn.GetHash()))
 
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++
@@ -198,4 +199,62 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 	// }
 
 	return nil
+}
+
+func assembleSynthReceipt(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (*protocol.Receipt, *url.URL, error) {
+	// Collect receipts
+	receipts := map[[32]byte]*protocol.ReceiptSignature{}
+	for _, signer := range status.Signers {
+		// Load the signature set
+		sigset, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
+		if err != nil {
+			return nil, nil, errors.Format(errors.StatusUnknown, "load signatures set %v: %w", signer.GetUrl(), err)
+		}
+
+		for _, entryHash := range sigset.EntryHashes() {
+			state, err := batch.Transaction(entryHash[:]).GetState()
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknown, "load signature entry %X: %w", entryHash, err)
+			}
+
+			if state.Signature == nil {
+				// This should not happen
+				continue
+			}
+
+			receipt, ok := state.Signature.(*protocol.ReceiptSignature)
+			if !ok {
+				continue
+			}
+			receipts[*(*[32]byte)(receipt.Start)] = receipt
+		}
+	}
+
+	// Get the first
+	hash := *(*[32]byte)(transaction.GetHash())
+	rsig, ok := receipts[hash]
+	delete(receipts, hash)
+	if !ok {
+		return nil, nil, nil
+	}
+	sourceNet := rsig.SourceNetwork
+
+	// Join the remaining receipts
+	receipt := &rsig.Receipt
+	for len(receipts) > 0 {
+		hash = *(*[32]byte)(rsig.Result)
+		rsig, ok := receipts[hash]
+		delete(receipts, hash)
+		if !ok {
+			continue
+		}
+
+		r := receipt.Combine(&rsig.Receipt)
+		if r != nil {
+			receipt = r
+			sourceNet = rsig.SourceNetwork
+		}
+	}
+
+	return receipt, sourceNet, nil
 }
