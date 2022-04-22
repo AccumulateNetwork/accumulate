@@ -2,12 +2,11 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // faucetCmd represents the faucet command
@@ -32,24 +31,22 @@ func PrintFaucet() {
 }
 
 func Faucet(url string) (string, error) {
-	var res api2.TxResponse
-	params := api2.UrlQuery{}
-
 	u, err := url2.Parse(url)
 	if err != nil {
 		return "", err
 	}
 
-	params.Url = u
-
-	data, err := json.Marshal(&params)
+	res, err := Client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: u})
 	if err != nil {
-		return "", err
-	}
-	if err := Client.RequestAPIv2(context.Background(), "faucet", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	return ActionResponseFrom(&res).Print()
+	if TxWait != 0 {
+		_, err = waitForTxn(res.TransactionHash, TxWait, true)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+	}
 
+	return ActionResponseFrom(res).Print()
 }
