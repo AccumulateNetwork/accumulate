@@ -123,6 +123,35 @@ func (r *Account) Data() (*Data, error) {
 	return &Data{r.batch, r.key, chain}, nil
 }
 
+func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.HashSet, error) {
+	v := new(protocol.HashSet)
+	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (r *Account) AddSyntheticForAnchor(anchor, hash [32]byte) error {
+	set, err := r.getSyntheticForAnchor(anchor)
+	if err != nil {
+		return err
+	}
+
+	set.Add(hash)
+	r.batch.putValue(r.key.SyntheticForAnchor(anchor), set)
+	return nil
+}
+
+func (r *Account) SyntheticForAnchor(anchor [32]byte) ([][32]byte, error) {
+	set, err := r.getSyntheticForAnchor(anchor)
+	if err != nil {
+		return nil, err
+	}
+
+	return set.Hashes, nil
+}
+
 // stateHashes returns a hasher populated with hashes of all of the account's
 // states.
 func (r *Account) stateHashes() (hash.Hasher, error) {

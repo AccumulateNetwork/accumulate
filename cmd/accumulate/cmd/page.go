@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"strconv"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -177,23 +175,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	res, err := dispatchTxRequest("create-key-page", &ckp, nil, bookUrl, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-	return ActionResponseFrom(res).Print()
-
+	return dispatchTxAndPrintResponse("create-key-page", &ckp, nil, bookUrl, signer)
 }
 
 func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []string) (string, error) {
@@ -252,12 +234,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		})
 	}
 
-	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, signer)
-	if err != nil {
-		return "", err
-	}
-
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("update-key-page", &ukp, nil, u, signer)
 }
 
 func setKeyPageThreshold(args []string) (string, error) {
