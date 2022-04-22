@@ -30,9 +30,6 @@ const (
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
 
-	// SyntheticLedgerPath is the path to a node's internal synthetic transaction ledger.
-	SyntheticLedgerPath = "synth-ledger"
-
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
 

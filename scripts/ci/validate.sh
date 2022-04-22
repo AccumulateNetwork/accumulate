@@ -55,7 +55,7 @@ function wait-for-tx {
     fi
 
     for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
-        wait-for-tx $NO_CHECK $IGNORE_PENDING "$TXID" || return 1
+        wait-for-tx $NO_CHECK --ignore-pending "$TXID" || return 1
     done
 }
 

@@ -1,6 +1,10 @@
 package protocol
 
-import "gitlab.com/accumulatenetwork/accumulate/smt/managed"
+import (
+	"bytes"
+
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+)
 
 func (r *Receipt) Convert() *managed.Receipt {
 	m := new(managed.Receipt)
@@ -18,6 +22,25 @@ func (r *Receipt) Convert() *managed.Receipt {
 	}
 
 	return m
+}
+
+// Combine
+// Take a 2nd receipt, attach it to a root receipt, and return the resulting
+// receipt.  The idea is that if this receipt is anchored into another chain,
+// Then we can create a receipt that proves the element in this receipt all
+// the way down to an anchor in the root receipt.
+// Note that both this receipt and the root receipt are expected to be good.
+// Returns nil if the receipts cannot be combined.
+func (r *Receipt) Combine(s *Receipt) *Receipt {
+	if !bytes.Equal(r.Result, s.Start) {
+		return nil
+	}
+	nr := r.Copy()                // Make a copy of the first Receipt
+	nr.Result = s.Result          // The MDRoot will be the one from the appended receipt
+	for _, n := range s.Entries { // Make a copy and append the Entries of the appended receipt
+		nr.Entries = append(nr.Entries, *n.Copy())
+	}
+	return nr
 }
 
 func ReceiptFromManaged(src *managed.Receipt) *Receipt {
