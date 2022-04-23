@@ -32,7 +32,7 @@ func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
 }
 
 func (tb TransactionBuilder) WithDelegator(delegator *url.URL) TransactionBuilder {
-	tb.signer.SetDelegator(delegator)
+	tb.signer.AddDelegator(delegator)
 	return tb
 }
 

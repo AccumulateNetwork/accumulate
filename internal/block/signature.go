@@ -181,25 +181,43 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 // validateSigners verifies that the signer is valid and authorized.
 func validateSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
 	location := signature.RoutingLocation()
-	fwdsig, forwarded := signature.(*protocol.ForwardedSignature)
-	if forwarded {
+	fwdsig, ok := signature.(*protocol.ForwardedSignature)
+	if ok {
 		signature = fwdsig.Signature
 	}
 
+	// Load signers
 	var signers []protocol.Signer
-	signer, err := validateSigner(batch, transaction, location, signature.GetSigner(), fwdsig)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
-	}
-	signers = append(signers, signer)
+	for {
+		var signerUrl *url.URL
+		del, ok := signature.(*protocol.DelegatedSignature)
+		if ok {
+			signerUrl = del.Delegator
+			signature = del.Signature
+		} else {
+			signerUrl = signature.GetSigner()
+		}
 
-	if delsig, ok := signature.(*protocol.DelegatedSignature); ok {
-		delegator, err := validateSigner(batch, transaction, location, delsig.Delegator, fwdsig)
+		signer, err := validateSigner(batch, transaction, location, signerUrl, fwdsig)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
-		signers = append(signers, delegator)
+		signers = append(signers, signer)
 
+		if !ok {
+			break
+		}
+	}
+
+	// Reverse the slice
+	for i := 0; i < len(signers)/2; i++ {
+		j := len(signers) - i - 1
+		signers[i], signers[j] = signers[j], signers[i]
+	}
+
+	// Check delegation
+	for i, delegator := range signers[1:] {
+		signer := signers[i]
 		_, _, found := delegator.EntryByDelegate(signer.GetUrl())
 		if _, unknown := delegator.(*protocol.UnknownSigner); !found && !unknown {
 			return nil, errors.Format(errors.StatusUnauthorized, "%v is not an authorized delegate of %v", signer.GetUrl(), delegator.GetUrl())
@@ -215,7 +233,7 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 		return signers, nil
 	}
 
-	err = verifyPageIsAuthorized(batch, transaction, page)
+	err := verifyPageIsAuthorized(batch, transaction, page)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}

@@ -19,13 +19,13 @@ const (
 )
 
 type Builder struct {
-	InitMode  InitHashMode
-	Type      protocol.SignatureType
-	Url       *url.URL
-	Delegator *url.URL
-	Signer    Signer
-	Version   uint64
-	Timestamp uint64
+	InitMode   InitHashMode
+	Type       protocol.SignatureType
+	Url        *url.URL
+	Delegators []*url.URL
+	Signer     Signer
+	Version    uint64
+	Timestamp  uint64
 }
 
 func (s *Builder) UseSimpleHash() *Builder {
@@ -58,8 +58,8 @@ func (s *Builder) SetPrivateKey(privKey []byte) *Builder {
 	return s
 }
 
-func (s *Builder) SetDelegator(delegator *url.URL) *Builder {
-	s.Delegator = delegator
+func (s *Builder) AddDelegator(delegator *url.URL) *Builder {
+	s.Delegators = append(s.Delegators, delegator)
 	return s
 }
 
@@ -211,9 +211,9 @@ func (s *Builder) Sign(message []byte) (protocol.KeySignature, error) {
 		return nil, err
 	}
 
-	if s.Delegator != nil {
+	for _, delegator := range s.Delegators {
 		sig = &protocol.DelegatedSignature{
-			Delegator: s.Delegator,
+			Delegator: delegator,
 			Signature: sig,
 		}
 	}
@@ -227,9 +227,9 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.KeySignature, er
 		return nil, err
 	}
 
-	if s.Delegator != nil {
+	for _, delegator := range s.Delegators {
 		sig = &protocol.DelegatedSignature{
-			Delegator: s.Delegator,
+			Delegator: delegator,
 			Signature: sig,
 		}
 	}

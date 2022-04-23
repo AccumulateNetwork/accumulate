@@ -48,26 +48,25 @@ func convert(err error) *Error {
 }
 
 func (e *Error) setCause(f *Error) {
+	e.Cause = f
 	if f == nil {
-		e.Cause = f
 		return
 	}
 
 	if e.Code != StatusUnknown {
-		e.Cause = f
 		return
 	}
 
-	// Inherit the code
-	e.Code = f.Code
 	if e.Message != "" {
-		e.Cause = f
+		// Copy the code
+		e.Code = f.Code
 		return
 	}
 
-	// Absorb the cause
-	e.Message = f.Message
-	e.CallStack = append(e.CallStack, f.CallStack...)
+	// Inherit everything
+	cs := e.CallStack
+	*e = *f
+	e.CallStack = append(cs, f.CallStack...)
 }
 
 func New(code Status, v interface{}) *Error {
@@ -96,16 +95,19 @@ func Wrap(code Status, err error) *Error {
 func Format(code Status, format string, args ...interface{}) *Error {
 	err := fmt.Errorf(format, args...)
 
-	e := makeError(code)
 	u, ok := err.(interface {
 		Unwrap() error
 	})
 	if ok {
+		e := makeError(code)
 		e.Message = err.Error()
 		e.setCause(convert(u.Unwrap()))
-	} else {
-		e.setCause(convert(err))
+		return e
 	}
+
+	e := convert(err)
+	e.Code = code
+	e.CallStack = []*CallSite{callSite(2)}
 	return e
 }
 
