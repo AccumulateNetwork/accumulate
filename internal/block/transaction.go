@@ -181,7 +181,7 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 		return true, nil
 	}
 
-	// Check delegates
+	// Check if the threshold has been reached when considering delegates
 	page, ok := signer.(*protocol.KeyPage)
 	if !ok {
 		return false, nil
@@ -192,20 +192,20 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 			continue
 		}
 
-		signer, ok := status.GetSigner(entry.Owner)
+		// Are any of the pages of the owner satisfied?
+		for _, signer := range status.FindSigners(entry.Owner) {
+			ok, err = signerIsSatisfied(txn, status, signer)
+			if err != nil {
+				return false, errors.Wrap(errors.StatusUnknown, err)
+			}
+			if ok {
+				break
+			}
+		}
 		if !ok {
 			continue
 		}
 
-		ok, err := signerIsSatisfied(txn, status, signer)
-		if err != nil {
-			return false, errors.Wrap(errors.StatusUnknown, err)
-		}
-		if !ok {
-			continue
-		}
-
-		// Check if the threshold has been reached when considering delegates
 		required--
 		if required == 0 {
 			return true, nil

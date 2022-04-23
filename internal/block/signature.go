@@ -217,10 +217,15 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 
 	// Check delegation
 	for i, delegator := range signers[1:] {
-		signer := signers[i]
-		_, _, found := delegator.EntryByDelegate(signer.GetUrl())
+		signerAuthority, _, ok := protocol.ParseKeyPageUrl(signers[i].GetUrl())
+		if !ok {
+			// signerAuthority = signers[i].GetUrl()
+			return nil, errors.New(errors.StatusBadRequest, "delegation is only supported for key pages")
+		}
+
+		_, _, found := delegator.EntryByDelegate(signerAuthority)
 		if _, unknown := delegator.(*protocol.UnknownSigner); !found && !unknown {
-			return nil, errors.Format(errors.StatusUnauthorized, "%v is not an authorized delegate of %v", signer.GetUrl(), delegator.GetUrl())
+			return nil, errors.Format(errors.StatusUnauthorized, "%v is not an authorized delegate of %v", signerAuthority, delegator.GetUrl())
 		}
 	}
 
