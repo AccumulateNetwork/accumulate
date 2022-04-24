@@ -2,6 +2,7 @@ package block_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
@@ -54,11 +55,11 @@ func TestDelegatedSignature_Local(t *testing.T) {
 	key1, key2 := acctesting.GenerateKey(alice), acctesting.GenerateKey(alice, 2)
 	sim.CreateIdentity(alice, key1[32:])
 	sim.CreateKeyBook(alice.JoinPath("other-book"), key2[32:])
-	updateAccount(sim, alice.JoinPath("book/1"), func(page *KeyPage) {
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
 		page.Keys = append(page.Keys, &KeySpec{Owner: alice.JoinPath("other-book")})
 	})
-	updateAccount(sim, alice.JoinPath("other-book/1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	updateAccount(sim, alice.JoinPath("other-book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute
@@ -360,5 +361,112 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 }
 
 func TestDelegatedSignature_Multisig(t *testing.T) {
+	var timestamp uint64
+	t.Skip("TODO Implement pending delegated transactions")
 
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	alice, bob, charlie := url.MustParse("alice"), url.MustParse("bob"), url.MustParse("charlie")
+	sim.SetRouteFor(alice, "BVN0")
+	sim.SetRouteFor(bob, "BVN1")
+	sim.SetRouteFor(charlie, "BVN2")
+
+	// Setup
+	bobK1, bobK2, charlieK1, charlieK2 := acctesting.GenerateKey(bob, 1), acctesting.GenerateKey(bob, 2), acctesting.GenerateKey(charlie, 1), acctesting.GenerateKey(charlie, 2)
+	sim.CreateIdentity(alice, acctesting.GenerateKey(alice)[32:])
+	sim.CreateIdentity(bob, bobK1[32:])
+	sim.CreateKeyPage(bob.JoinPath("book"), bobK2[32:])
+	sim.CreateIdentity(charlie, charlieK1[32:], charlieK2[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AcceptThreshold = 2
+		page.Keys = append(page.Keys,
+			&KeySpec{Owner: bob.JoinPath("book")},
+			&KeySpec{Owner: charlie.JoinPath("book")},
+		)
+	})
+	updateAccount(sim, bob.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+	})
+	updateAccount(sim, bob.JoinPath("book", "2"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+	})
+	updateAccount(sim, charlie.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AcceptThreshold = 2
+	})
+	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
+
+	// Initiate with bob/book/1
+	st, txn := sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice.JoinPath("data")).
+			WithBody(&WriteData{
+				Entry: DataEntry{Data: [][]byte{
+					[]byte("foo"),
+				}},
+			}).
+			WithSigner(bob.JoinPath("book", "1"), 1).
+			WithDelegator(alice.JoinPath("book", "1")).
+			WithTimestampVar(&timestamp).
+			Initiate(SignatureTypeED25519, bobK1).
+			Build(),
+	)...)
+	require.False(t, st[0].Delivered)
+	require.True(t, st[0].Pending)
+
+	// Sign with bob/book/2
+	st, _ = sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice.JoinPath("data")).
+			WithTxnHash(txn[0].GetHash()).
+			WithSigner(bob.JoinPath("book", "2"), 1).
+			WithDelegator(alice.JoinPath("book", "1")).
+			WithTimestampVar(&timestamp).
+			Sign(SignatureTypeED25519, bobK2).
+			Build(),
+	)...)
+	require.False(t, st[0].Delivered)
+	require.True(t, st[0].Pending)
+
+	// Sign with charlie/book/1
+	st, _ = sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice.JoinPath("data")).
+			WithTxnHash(txn[0].GetHash()).
+			WithSigner(charlie.JoinPath("book", "1"), 1).
+			WithDelegator(alice.JoinPath("book", "1")).
+			WithTimestampVar(&timestamp).
+			Sign(SignatureTypeED25519, charlieK1).
+			Build(),
+	)...)
+	require.False(t, st[0].Delivered)
+	require.True(t, st[0].Pending)
+
+	// Sign with charlie/book/1
+	st, _ = sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice.JoinPath("data")).
+			WithTxnHash(txn[0].GetHash()).
+			WithSigner(charlie.JoinPath("book", "1"), 1).
+			WithDelegator(alice.JoinPath("book", "1")).
+			WithTimestampVar(&timestamp).
+			Sign(SignatureTypeED25519, charlieK2).
+			Build(),
+	)...)
+	time.Sleep(10 * time.Second)
+	require.True(t, st[0].Delivered)
+	require.False(t, st[0].Pending)
+
+	// Validate
+	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+		data, err := batch.Account(alice.JoinPath("data")).Data()
+		require.NoError(t, err)
+		require.NotZero(t, data.Height())
+		de, err := data.Entry(data.Height() - 1)
+		require.NoError(t, err)
+		require.Equal(t, "foo", string(de.Data[0]))
+	})
 }

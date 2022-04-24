@@ -193,6 +193,7 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 		}
 
 		// Are any of the pages of the owner satisfied?
+		var ok bool
 		for _, signer := range status.FindSigners(entry.Owner) {
 			ok, err = signerIsSatisfied(txn, status, signer)
 			if err != nil {

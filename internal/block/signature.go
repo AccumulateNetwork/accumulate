@@ -458,7 +458,7 @@ func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, si
 	return nil
 }
 
-func processSigner(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
+func processSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
 	signers, err := validateSigners(batch, transaction, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
@@ -498,7 +498,7 @@ func processNormalSignature(batch *database.Batch, delivery *chain.Delivery, sig
 	// Validate the signer. This should not fail, because this signature has
 	// presumably already passed ValidateEnvelope. But defensive programming is
 	// always a good idea.
-	signers, err := processSigner(batch, delivery.Transaction, signature)
+	signers, err := processSigners(batch, delivery.Transaction, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
