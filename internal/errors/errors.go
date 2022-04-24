@@ -35,12 +35,14 @@ func (e *Error) errorf(format string, args ...interface{}) {
 }
 
 func convert(err error) *Error {
-	e, ok := err.(*Error)
-	if ok {
-		return e
+	switch err := err.(type) {
+	case *Error:
+		return err
+	case Status:
+		return &Error{Code: err, Message: err.Error()}
 	}
 
-	e = &Error{Message: err.Error()}
+	e := &Error{Message: err.Error()}
 
 	u, ok := err.(interface{ Unwrap() error })
 	if ok {
@@ -156,4 +158,21 @@ func (e *Error) Print() string {
 		e = e.Cause
 	}
 	return str
+}
+
+func (e *Error) Is(target error) bool {
+	switch f := target.(type) {
+	case *Error:
+		if e.Code == f.Code {
+			return true
+		}
+	case Status:
+		if e.Code == f {
+			return true
+		}
+	}
+	if e.Cause != nil {
+		return e.Cause.Is(target)
+	}
+	return false
 }
