@@ -18,7 +18,10 @@ func Unwrap(err error) error { return errors.Unwrap(err) }
 func makeError(code Status) *Error {
 	e := new(Error)
 	e.Code = code
-	e.CallStack = []*CallSite{callSite(3)}
+	cs := callSite(3)
+	if cs != nil {
+		e.CallStack = []*CallSite{cs}
+	}
 	return e
 }
 
