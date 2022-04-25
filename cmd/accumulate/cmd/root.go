@@ -25,6 +25,7 @@ var (
 	Metadata       string
 	SigType        string
 	Authorities    []string
+	Password       string
 )
 
 var currentUser = func() *user.User {
@@ -158,7 +159,8 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 		ret = new(db.BoltDB)
 	}
-	err := ret.InitDB(filepath.Join(defaultWorkDir, "wallet.db"))
+
+	err := ret.InitDB(filepath.Join(defaultWorkDir, "wallet.db"), Password)
 	if err != nil {
 		log.Fatal(err)
 	}
