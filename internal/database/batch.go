@@ -85,7 +85,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 }
 
 // View runs the function with a read-only transaction.
-func (d *Database) View(fn func(*Batch) error) error {
+func (d *Database) View(fn func(batch *Batch) error) error {
 	batch := d.Begin(false)
 	defer batch.Discard()
 	return fn(batch)
@@ -93,7 +93,7 @@ func (d *Database) View(fn func(*Batch) error) error {
 
 // Update runs the function with a writable transaction and commits if the
 // function succeeds.
-func (d *Database) Update(fn func(*Batch) error) error {
+func (d *Database) Update(fn func(batch *Batch) error) error {
 	batch := d.Begin(true)
 	defer batch.Discard()
 	err := fn(batch)
@@ -104,7 +104,7 @@ func (d *Database) Update(fn func(*Batch) error) error {
 }
 
 // View runs the function with a read-only transaction.
-func (b *Batch) View(fn func(*Batch) error) error {
+func (b *Batch) View(fn func(batch *Batch) error) error {
 	batch := b.Begin(false)
 	defer batch.Discard()
 	return fn(batch)
@@ -112,7 +112,7 @@ func (b *Batch) View(fn func(*Batch) error) error {
 
 // Update runs the function with a writable transaction and commits if the
 // function succeeds.
-func (b *Batch) Update(fn func(*Batch) error) error {
+func (b *Batch) Update(fn func(batch *Batch) error) error {
 	batch := b.Begin(true)
 	defer batch.Discard()
 	err := fn(batch)
@@ -207,7 +207,7 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v Typed
 			break
 
 		default:
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
@@ -217,14 +217,14 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v Typed
 		// Value is found, unmarshal it
 		v, err := unmarshal(data)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 		b.cacheValue(key, v, false)
 		return v, nil
 
 	default:
-		return nil, err
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 }
 
@@ -244,15 +244,15 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 		// Value is not found, cache the new value
 		v = newValue
 		b.cacheValue(key, v, false)
-		notFound = err
+		notFound = errors.Wrap(errors.StatusUnknown, err)
 
 	default:
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = encoding2.SetPtr(v, target)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	return notFound
 }

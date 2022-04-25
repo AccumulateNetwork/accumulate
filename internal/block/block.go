@@ -1,8 +1,6 @@
 package block
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -34,18 +32,12 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 			}
 			block.State.MergeSignature(s)
 
-			if !s.Remote {
-				continue
+			fwd, err := x.prepareToForward(delivery, s, signature)
+			if err != nil {
+				return nil, err
 			}
-
-			keySig, ok := signature.(protocol.KeySignature)
-			if !ok {
-				// This should never happen
-				return nil, fmt.Errorf("unexpected remote signature that is not a key signature: %T", signature)
-			}
-
-			if s.Remote {
-				delivery.Remote = append(delivery.Remote, keySig)
+			if fwd != nil {
+				delivery.Remote = append(delivery.Remote, fwd)
 			}
 		}
 
@@ -57,11 +49,10 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 	// Process remote signatures
 	if len(delivery.Remote) > 0 {
-		fwdTxn, err := x.ProcessRemoteSignatures(block, delivery.Transaction, delivery.Remote)
+		err := x.ProcessRemoteSignatures(block, delivery)
 		if err != nil {
 			return nil, err
 		}
-		delivery.State.DidProduceTxn(delivery.Transaction.Header.Principal, fwdTxn)
 	}
 
 	var status *protocol.TransactionStatus
