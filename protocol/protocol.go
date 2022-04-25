@@ -74,6 +74,9 @@ const (
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
+
+	//Globals is the path to the Directory network's Mutable Protocol costants data account
+	Globals = "globals"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)

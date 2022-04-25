@@ -43,6 +43,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 	err = exec.Genesis(block, func(st *chain.StateManager) error {
 		var records []protocol.Account
+		//create a new Globals account
+		global := new(protocol.DataAccount)
+		global.Url = protocol.DnUrl().JoinPath(protocol.Globals)
+		gconsts := new(protocol.NetworkGlobals)
+		gconsts.ValidatorThreshold.Authorized = uint64(2)
+		gconsts.ValidatorThreshold.Required = uint64(3)
+		wg := new(protocol.WriteData)
+		threshold := new(protocol.NetworkGlobals)
+		threshold.ValidatorThreshold.Authorized = 2
+		threshold.ValidatorThreshold.Required = 3
+		dat, err := threshold.MarshalBinary()
+		wg.Entry.Data = append(wg.Entry.Data, dat)
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
@@ -158,6 +170,10 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			acme.Symbol = "ACME"
 			records = append(records, acme)
 
+			global.AddAuthority(uBook)
+			records = append(records, global)
+			urls = append(urls, global.Url)
+			dataRecords = append(dataRecords, DataRecord{global, &wg.Entry})
 			if protocol.IsTestNet {
 				// On the TestNet, set the issued amount to the faucet balance
 				acme.Issued.SetString(protocol.AcmeFaucetBalance, 10)
