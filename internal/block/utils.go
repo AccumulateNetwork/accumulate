@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -211,12 +212,12 @@ func getAccountAuth(batch *database.Batch, account protocol.Account) (*protocol.
 	case *protocol.KeyPage:
 		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
 		if !ok {
-			return nil, fmt.Errorf("invalid key page URL: %v", account.Url)
+			return nil, errors.Format(errors.StatusInternalError, "invalid key page URL: %v", account.Url)
 		}
 		var book *protocol.KeyBook
 		err := batch.Account(bookUrl).GetStateAs(&book)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 		return book.GetAuth(), nil
 

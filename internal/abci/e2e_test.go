@@ -599,8 +599,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", pageKey.PubKey().Bytes()))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
