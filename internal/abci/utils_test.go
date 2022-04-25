@@ -20,6 +20,6 @@ func newTxn(origin string) acctesting.TransactionBuilder {
 	return acctesting.NewTransaction().
 		WithPrincipal(u).
 		WithTimestampVar(&globalNonce).
-		WithSigner(u, 1)
+		WithSigner(u.RootIdentity(), 1)
 
 }

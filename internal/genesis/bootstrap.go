@@ -177,7 +177,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			if err == nil && subnet == opts.Network.LocalSubnetID {
 				liteId := new(protocol.LiteIdentity)
 				liteId.Url = protocol.FaucetUrl.RootIdentity()
-				liteId.CreditBalance = protocol.AcmeFaucetAmount * protocol.CreditPrecision // TODO What should be the number of credits in the Faucet?
 
 				liteToken := new(protocol.LiteTokenAccount)
 				liteToken.Url = protocol.FaucetUrl

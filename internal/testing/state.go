@@ -69,6 +69,11 @@ func AddCredits(db DB, account *url.URL, credits float64) error {
 	if err != nil {
 		return err
 	}
+	switch state.Type() {
+	case protocol.AccountTypeLiteIdentity, protocol.AccountTypeKeyPage:
+	default:
+		return fmt.Errorf("%s does not refer to a lite identity", account.String())
+	}
 
 	state.(protocol.AccountWithCredits).CreditCredits(uint64(credits * protocol.CreditPrecision))
 	return db.Account(account).PutState(state)
@@ -312,7 +317,7 @@ func AcmeLiteAddress(pubKey []byte) *url.URL {
 		// way to get bugs.
 		panic(err)
 	}
-	return u.RootIdentity() // Credits are now in the LiteIdentity authority / root
+	return u
 }
 
 func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {

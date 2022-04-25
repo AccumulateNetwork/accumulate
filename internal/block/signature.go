@@ -237,11 +237,11 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	return signer, entry, nil
 }
 
-// validateLocalLiteSignature verifies that the lite token account is authorized to
+// validateLocalLiteSignature verifies that the lite token identity is authorized to
 // sign for the principal.
 func validateLocalLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteIdentity) error {
 	// A lite token account is only allowed to sign for itself
-	if !signer.Url.Equal(transaction.Header.Principal) {
+	if !signer.Url.Equal(transaction.Header.Principal.RootIdentity()) {
 		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
 	}
 
