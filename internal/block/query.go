@@ -879,7 +879,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			}
 
 			// For each signer
-			for _, signerUrl := range authority.GetSigners() {
+			for index, signerUrl := range authority.GetSigners() {
 				var signer protocol.Signer
 				err = batch.Account(signerUrl).GetStateAs(&signer)
 				if err != nil {
@@ -887,9 +887,9 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 				}
 
 				// Check for a matching entry
-				index, _, ok := signer.EntryByKeyHash(chr.Key)
+				_, _, ok := signer.EntryByKeyHash(chr.Key)
 				if !ok {
-					index, _, ok = signer.EntryByKey(chr.Key)
+					_, _, ok = signer.EntryByKey(chr.Key)
 					if !ok {
 						continue
 					}
