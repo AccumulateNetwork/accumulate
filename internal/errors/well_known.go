@@ -6,13 +6,13 @@ func (s Status) Error() string {
 }
 
 func NotFound(format string, args ...interface{}) error {
-	e := make(StatusNotFound)
+	e := makeError(StatusNotFound)
 	e.errorf(format, args...)
 	return e
 }
 
 func Unknown(format string, args ...interface{}) error {
-	e := make(StatusUnknown)
+	e := makeError(StatusUnknown)
 	e.errorf(format, args...)
 	return e
 }

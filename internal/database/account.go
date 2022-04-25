@@ -2,10 +2,10 @@ package database
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -43,6 +43,9 @@ func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
 func (r *Account) GetObject() (*protocol.Object, error) {
 	meta := new(protocol.Object)
 	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
+	if err != nil {
+		err = errors.Wrap(errors.StatusUnknown, err)
+	}
 	return meta, err
 }
 
@@ -61,7 +64,7 @@ func (r *Account) GetStateAs(state interface{}) error {
 func (r *Account) PutState(state protocol.Account) error {
 	// Does the record state have a URL?
 	if state.GetUrl() == nil {
-		return errors.New("invalid URL: empty")
+		return errors.New(errors.StatusInternalError, "invalid URL: empty")
 	}
 
 	// Is this the right URL - does it match the record's key?
@@ -211,7 +214,7 @@ func (r *Account) StateReceipt() (*managed.Receipt, error) {
 
 	rState := hasher.Receipt(0, len(hasher)-1)
 	if !bytes.Equal(rState.MDRoot, rBPT.Element) {
-		return nil, errors.New("bpt entry does not match account state")
+		return nil, errors.New(errors.StatusInternalError, "bpt entry does not match account state")
 	}
 
 	receipt, err := rState.Combine(rBPT)

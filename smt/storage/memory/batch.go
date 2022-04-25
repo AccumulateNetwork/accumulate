@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -110,7 +111,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 
 	v, err = b.get(key)
 	if err != nil {
-		return nil, fmt.Errorf("get %v: %w", key, err)
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 	return v, nil
 }
