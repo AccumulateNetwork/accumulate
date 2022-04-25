@@ -60,7 +60,10 @@ SignatureType:
   ETH:
     value: 10
     description: represents an ETH signature
-    
+  Delegated:
+    value: 11
+    description: represents a signature for a delegated authority
+
 KeyPageOperationType:
   Unknown:
     value: 0

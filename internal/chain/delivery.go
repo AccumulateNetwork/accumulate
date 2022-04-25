@@ -111,7 +111,7 @@ type Delivery struct {
 	parent      *Delivery
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
-	Remote      []protocol.KeySignature
+	Remote      []*protocol.ForwardedSignature
 	State       ProcessTransactionState
 }
 
