@@ -284,14 +284,19 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	return nil
 }
 
-func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) {
+func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
 	s.Helper()
 
+	var statuses []*protocol.TransactionStatus
+	var transactions []*protocol.Transaction
 	for _, envelope := range envelopes {
 		for _, delivery := range NormalizeEnvelope(s, envelope) {
-			s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())
+			st, txn := s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())
+			statuses = append(statuses, st...)
+			transactions = append(transactions, txn...)
 		}
 	}
+	return statuses, transactions
 }
 
 func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {

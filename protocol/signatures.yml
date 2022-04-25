@@ -186,9 +186,25 @@ ForwardedSignature:
   union: { type: signature }
   description: is used when forwarding signatures from one subnet to another
   fields:
+    - name: Destination
+      type: url
+      pointer: true
     - name: Signature
       type: KeySignature
       marshal-as: union
-    - name: Signer
+    - name: Signers
       type: Signer
       marshal-as: union
+      repeatable: true
+
+DelegatedSignature:
+  union: { type: signature }
+  description: is used when signing a transaction on behalf of another authority
+  fields:
+    - name: Signature
+      type: KeySignature
+      marshal-as: union
+    - name: Delegator
+      description: is the authority that delegated its authority to the signer
+      type: url
+      pointer: true
