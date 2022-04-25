@@ -9,10 +9,11 @@ Error:
       type: Error
       marshal-as: reference
       pointer: true
-    - name: CallSite
+    - name: CallStack
       type: CallSite
       marshal-as: reference
       pointer: true
+      repeatable: true
 
 CallSite:
   fields:

@@ -177,19 +177,21 @@ func didUpdateKeyPage(page *protocol.KeyPage) {
 }
 
 func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (int, *protocol.KeySpec, bool) {
+	var i int
+	var entry protocol.KeyEntry
+	var ok bool
 	if len(search.KeyHash) > 0 {
-		i, entry, ok := page.EntryByKeyHash(search.KeyHash)
-		var keySpec *protocol.KeySpec
-		if ok {
-			// If this is not true, something is seriously wrong
-			keySpec = entry.(*protocol.KeySpec)
-		}
-		return i, keySpec, ok
+		i, entry, ok = page.EntryByKeyHash(search.KeyHash)
+	} else if search.Owner != nil {
+		i, entry, ok = page.EntryByDelegate(search.Owner)
+	} else {
+		return -1, nil, false
 	}
 
-	if search.Owner != nil {
-		return page.EntryByOwner(search.Owner)
+	var keySpec *protocol.KeySpec
+	if ok {
+		// If this is not true, something is seriously wrong
+		keySpec = entry.(*protocol.KeySpec)
 	}
-
-	return -1, nil, false
+	return i, keySpec, ok
 }

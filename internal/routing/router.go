@@ -143,7 +143,7 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protoc
 			return "", errors.New("cannot route envelope: no signatures")
 		}
 		for _, sig := range env.Signatures {
-			sigRoute, err := routeAccount(sig.GetSigner())
+			sigRoute, err := routeAccount(sig.RoutingLocation())
 			if err != nil {
 				return "", err
 			}
