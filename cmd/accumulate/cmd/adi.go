@@ -4,11 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -172,6 +170,8 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
 		}
+	} else {
+		bookUrl = adiUrl.JoinPath("/book")
 	}
 
 	idc := protocol.CreateIdentity{}
@@ -180,20 +180,9 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	idc.KeyHash = kh[:]
 	idc.KeyBookUrl = bookUrl
 
-	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, signer)
+	res, err := dispatchTxAndWait("create-adi", &idc, nil, origin, signer)
 	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
+		return PrintJsonRpcError(err)
 	}
 
 	ar := ActionResponseFrom(res)

@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -229,20 +227,9 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
 	}
 
-	res, err = dispatchTxRequest("write-data-to", &wdt, nil, u, signer)
+	res, err = dispatchTxAndWait("write-data-to", &wdt, nil, u, signer)
 	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
+		return PrintJsonRpcError(err)
 	}
 
 	return ActionResponseFromLiteData(res, addr.String(), accountId, entryHash).Print()
@@ -263,7 +250,6 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url or 'lite' keyword")
 	}
 
-	var res *api.TxResponse
 	accountUrl, err := url.Parse(args[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid account url %s", args[0])
@@ -285,23 +271,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.KeyBookUrl = keybook
 	cda.Scratch = flagAccount.Scratch
 
-	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("create-data-account", &cda, nil, u, signer)
 }
 
 func WriteData(accountUrl string, args []string) (string, error) {
@@ -322,13 +292,9 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteData{}
 	wd.Entry = *prepareData(args, false)
 
-	res, err := dispatchTxRequest("write-data", &wd, nil, u, signer)
+	res, err := dispatchTxAndWait("write-data", &wd, nil, u, signer)
 	if err != nil {
-		return "", err
-	}
-
-	if WantJsonOutput {
-		return PrintJson(res)
+		return PrintJsonRpcError(err)
 	}
 
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
@@ -390,7 +356,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Entry = *prepareData(args[1:], false)
 
-	res, err := dispatchTxRequest("write-data-to", &wd, nil, u, signer)
+	res, err := dispatchTxAndWait("write-data-to", &wd, nil, u, signer)
 	if err != nil {
 		return "", err
 	}

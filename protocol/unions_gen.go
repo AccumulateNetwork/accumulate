@@ -22,8 +22,6 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(DataAccount), nil
 	case AccountTypeInternalLedger:
 		return new(InternalLedger), nil
-	case AccountTypeInternalSyntheticLedger:
-		return new(InternalSyntheticLedger), nil
 	case AccountTypeKeyBook:
 		return new(KeyBook), nil
 	case AccountTypeKeyPage:
@@ -44,6 +42,53 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(UnknownSigner), nil
 	default:
 		return nil, fmt.Errorf("unknown account %v", typ)
+	}
+}
+
+//EqualAccount is used to compare the values of the union
+func EqualAccount(a, b Account) bool {
+	switch a := a.(type) {
+	case *ADI:
+		b, ok := b.(*ADI)
+		return ok && a.Equal(b)
+	case *Anchor:
+		b, ok := b.(*Anchor)
+		return ok && a.Equal(b)
+	case *DataAccount:
+		b, ok := b.(*DataAccount)
+		return ok && a.Equal(b)
+	case *InternalLedger:
+		b, ok := b.(*InternalLedger)
+		return ok && a.Equal(b)
+	case *KeyBook:
+		b, ok := b.(*KeyBook)
+		return ok && a.Equal(b)
+	case *KeyPage:
+		b, ok := b.(*KeyPage)
+		return ok && a.Equal(b)
+	case *LiteDataAccount:
+		b, ok := b.(*LiteDataAccount)
+		return ok && a.Equal(b)
+	case *LiteIdentity:
+		b, ok := b.(*LiteIdentity)
+		return ok && a.Equal(b)
+	case *LiteTokenAccount:
+		b, ok := b.(*LiteTokenAccount)
+		return ok && a.Equal(b)
+	case *TokenAccount:
+		b, ok := b.(*TokenAccount)
+		return ok && a.Equal(b)
+	case *TokenIssuer:
+		b, ok := b.(*TokenIssuer)
+		return ok && a.Equal(b)
+	case *UnknownAccount:
+		b, ok := b.(*UnknownAccount)
+		return ok && a.Equal(b)
+	case *UnknownSigner:
+		b, ok := b.(*UnknownSigner)
+		return ok && a.Equal(b)
+	default:
+		return false
 	}
 }
 
@@ -206,6 +251,116 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	}
 }
 
+//EqualTransactionBody is used to compare the values of the union
+func EqualTransactionBody(a, b TransactionBody) bool {
+	switch a := a.(type) {
+	case *AcmeFaucet:
+		b, ok := b.(*AcmeFaucet)
+		return ok && a.Equal(b)
+	case *AddCredits:
+		b, ok := b.(*AddCredits)
+		return ok && a.Equal(b)
+	case *AddValidator:
+		b, ok := b.(*AddValidator)
+		return ok && a.Equal(b)
+	case *BurnTokens:
+		b, ok := b.(*BurnTokens)
+		return ok && a.Equal(b)
+	case *CreateDataAccount:
+		b, ok := b.(*CreateDataAccount)
+		return ok && a.Equal(b)
+	case *CreateIdentity:
+		b, ok := b.(*CreateIdentity)
+		return ok && a.Equal(b)
+	case *CreateKeyBook:
+		b, ok := b.(*CreateKeyBook)
+		return ok && a.Equal(b)
+	case *CreateKeyPage:
+		b, ok := b.(*CreateKeyPage)
+		return ok && a.Equal(b)
+	case *CreateToken:
+		b, ok := b.(*CreateToken)
+		return ok && a.Equal(b)
+	case *CreateTokenAccount:
+		b, ok := b.(*CreateTokenAccount)
+		return ok && a.Equal(b)
+	case *InternalGenesis:
+		b, ok := b.(*InternalGenesis)
+		return ok && a.Equal(b)
+	case *InternalSendTransactions:
+		b, ok := b.(*InternalSendTransactions)
+		return ok && a.Equal(b)
+	case *InternalTransactionsSent:
+		b, ok := b.(*InternalTransactionsSent)
+		return ok && a.Equal(b)
+	case *InternalTransactionsSigned:
+		b, ok := b.(*InternalTransactionsSigned)
+		return ok && a.Equal(b)
+	case *IssueTokens:
+		b, ok := b.(*IssueTokens)
+		return ok && a.Equal(b)
+	case *RemoteTransaction:
+		b, ok := b.(*RemoteTransaction)
+		return ok && a.Equal(b)
+	case *RemoveValidator:
+		b, ok := b.(*RemoveValidator)
+		return ok && a.Equal(b)
+	case *SegWitDataEntry:
+		b, ok := b.(*SegWitDataEntry)
+		return ok && a.Equal(b)
+	case *SendTokens:
+		b, ok := b.(*SendTokens)
+		return ok && a.Equal(b)
+	case *SyntheticAnchor:
+		b, ok := b.(*SyntheticAnchor)
+		return ok && a.Equal(b)
+	case *SyntheticBurnTokens:
+		b, ok := b.(*SyntheticBurnTokens)
+		return ok && a.Equal(b)
+	case *SyntheticCreateChain:
+		b, ok := b.(*SyntheticCreateChain)
+		return ok && a.Equal(b)
+	case *SyntheticDepositCredits:
+		b, ok := b.(*SyntheticDepositCredits)
+		return ok && a.Equal(b)
+	case *SyntheticDepositTokens:
+		b, ok := b.(*SyntheticDepositTokens)
+		return ok && a.Equal(b)
+	case *SyntheticForwardTransaction:
+		b, ok := b.(*SyntheticForwardTransaction)
+		return ok && a.Equal(b)
+	case *SyntheticMirror:
+		b, ok := b.(*SyntheticMirror)
+		return ok && a.Equal(b)
+	case *SyntheticReceipt:
+		b, ok := b.(*SyntheticReceipt)
+		return ok && a.Equal(b)
+	case *SyntheticWriteData:
+		b, ok := b.(*SyntheticWriteData)
+		return ok && a.Equal(b)
+	case *UpdateAccountAuth:
+		b, ok := b.(*UpdateAccountAuth)
+		return ok && a.Equal(b)
+	case *UpdateKey:
+		b, ok := b.(*UpdateKey)
+		return ok && a.Equal(b)
+	case *UpdateKeyPage:
+		b, ok := b.(*UpdateKeyPage)
+		return ok && a.Equal(b)
+	case *UpdateValidatorKey:
+		b, ok := b.(*UpdateValidatorKey)
+		return ok && a.Equal(b)
+	case *WriteData:
+		b, ok := b.(*WriteData)
+		return ok && a.Equal(b)
+	case *WriteDataTo:
+		b, ok := b.(*WriteDataTo)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
 // UnmarshalTransactionType unmarshals the TransactionType from the start of a TransactionBody.
 func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
 	var typ TransactionType
@@ -302,6 +457,26 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 		return new(RemoveAccountAuthorityOperation), nil
 	default:
 		return nil, fmt.Errorf("unknown account auth operation %v", typ)
+	}
+}
+
+//EqualAccountAuthOperation is used to compare the values of the union
+func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
+	switch a := a.(type) {
+	case *AddAccountAuthorityOperation:
+		b, ok := b.(*AddAccountAuthorityOperation)
+		return ok && a.Equal(b)
+	case *DisableAccountAuthOperation:
+		b, ok := b.(*DisableAccountAuthOperation)
+		return ok && a.Equal(b)
+	case *EnableAccountAuthOperation:
+		b, ok := b.(*EnableAccountAuthOperation)
+		return ok && a.Equal(b)
+	case *RemoveAccountAuthorityOperation:
+		b, ok := b.(*RemoveAccountAuthorityOperation)
+		return ok && a.Equal(b)
+	default:
+		return false
 	}
 }
 
@@ -406,6 +581,29 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 	}
 }
 
+//EqualKeyPageOperation is used to compare the values of the union
+func EqualKeyPageOperation(a, b KeyPageOperation) bool {
+	switch a := a.(type) {
+	case *AddKeyOperation:
+		b, ok := b.(*AddKeyOperation)
+		return ok && a.Equal(b)
+	case *RemoveKeyOperation:
+		b, ok := b.(*RemoveKeyOperation)
+		return ok && a.Equal(b)
+	case *SetThresholdKeyPageOperation:
+		b, ok := b.(*SetThresholdKeyPageOperation)
+		return ok && a.Equal(b)
+	case *UpdateAllowedKeyPageOperation:
+		b, ok := b.(*UpdateAllowedKeyPageOperation)
+		return ok && a.Equal(b)
+	case *UpdateKeyOperation:
+		b, ok := b.(*UpdateKeyOperation)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
 // UnmarshalKeyPageOperationType unmarshals the KeyPageOperationType from the start of a KeyPageOperation.
 func UnmarshalKeyPageOperationType(r io.Reader) (KeyPageOperationType, error) {
 	var typ KeyPageOperationType
@@ -496,6 +694,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(BTCLegacySignature), nil
 	case SignatureTypeBTC:
 		return new(BTCSignature), nil
+	case SignatureTypeDelegated:
+		return new(DelegatedSignature), nil
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
@@ -514,6 +714,47 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(SyntheticSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature %v", typ)
+	}
+}
+
+//EqualSignature is used to compare the values of the union
+func EqualSignature(a, b Signature) bool {
+	switch a := a.(type) {
+	case *BTCLegacySignature:
+		b, ok := b.(*BTCLegacySignature)
+		return ok && a.Equal(b)
+	case *BTCSignature:
+		b, ok := b.(*BTCSignature)
+		return ok && a.Equal(b)
+	case *DelegatedSignature:
+		b, ok := b.(*DelegatedSignature)
+		return ok && a.Equal(b)
+	case *ED25519Signature:
+		b, ok := b.(*ED25519Signature)
+		return ok && a.Equal(b)
+	case *ETHSignature:
+		b, ok := b.(*ETHSignature)
+		return ok && a.Equal(b)
+	case *ForwardedSignature:
+		b, ok := b.(*ForwardedSignature)
+		return ok && a.Equal(b)
+	case *InternalSignature:
+		b, ok := b.(*InternalSignature)
+		return ok && a.Equal(b)
+	case *LegacyED25519Signature:
+		b, ok := b.(*LegacyED25519Signature)
+		return ok && a.Equal(b)
+	case *RCD1Signature:
+		b, ok := b.(*RCD1Signature)
+		return ok && a.Equal(b)
+	case *ReceiptSignature:
+		b, ok := b.(*ReceiptSignature)
+		return ok && a.Equal(b)
+	case *SyntheticSignature:
+		b, ok := b.(*SyntheticSignature)
+		return ok && a.Equal(b)
+	default:
+		return false
 	}
 }
 

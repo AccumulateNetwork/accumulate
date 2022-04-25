@@ -1,7 +1,6 @@
 package pkg
 
 import (
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -168,13 +167,7 @@ func (s *submittedTxn) Ok() {
 		return
 	}
 
-	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", s.Hash, s.Status.Code, s.Status.Message)
-	for err := s.Status.Error; err != nil; err = err.Cause {
-		if cs := err.CallSite; cs != nil {
-			str += fmt.Sprintf("%s\n\t%s:%d\n", cs.FuncName, cs.File, cs.Line)
-		}
-	}
-	s.s.Abort(errors.New(str))
+	s.s.Abort(fmt.Sprintf("Transaction %X failed with code %d: %s\n%s", s.Hash, s.Status.Code, s.Status.Message, s.Status.Error.Print()))
 }
 
 func (s *submittedTxn) NotOk(message string) *submittedTxn {
@@ -228,13 +221,7 @@ func (c *completedTxn) Ok() *completedTxn {
 		return c
 	}
 
-	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", c.Status.For, c.Status.Code, c.Status.Message)
-	for err := c.Status.Error; err != nil; err = err.Cause {
-		if cs := err.CallSite; cs != nil {
-			str += fmt.Sprintf("%s\n\t%s:%d\n", cs.FuncName, cs.File, cs.Line)
-		}
-	}
-	c.s.Abort(errors.New(str))
+	c.s.Abort(fmt.Sprintf("Transaction %X failed with code %d: %s\n%s", c.Status.For, c.Status.Code, c.Status.Message, c.Status.Error.Print()))
 	panic("unreachable")
 }
 

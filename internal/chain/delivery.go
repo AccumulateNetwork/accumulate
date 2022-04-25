@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -110,7 +111,7 @@ type Delivery struct {
 	parent      *Delivery
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
-	Remote      []protocol.KeySignature
+	Remote      []*protocol.ForwardedSignature
 	State       ProcessTransactionState
 }
 
@@ -123,6 +124,24 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 		e.Signatures[i] = &sig
 	}
 
+	return e
+}
+
+func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *protocol.Receipt) *Delivery {
+	e := new(Delivery)
+	e.parent = d
+	e.Signatures = []protocol.Signature{
+		&protocol.ReceiptSignature{
+			SourceNetwork:   source,
+			Receipt:         *receipt,
+			TransactionHash: hash,
+		},
+	}
+	e.Transaction = &protocol.Transaction{
+		Body: &protocol.RemoteTransaction{
+			Hash: hash,
+		},
+	}
 	return e
 }
 

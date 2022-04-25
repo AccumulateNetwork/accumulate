@@ -60,6 +60,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
 	flags.BoolVar(&Prove, "prove", false, "Request a receipt proving the transaction or account")
 	flags.BoolVar(&TxNoWait, "no-wait", false, "Don't wait for the transaction to complete")
+	flags.BoolVar(&TxIgnorePending, "ignore-pending", false, "Ignore pending transactions. Combined with --wait, this waits for transactions to be delivered.")
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")
 	flags.StringVarP(&Metadata, "metadata", "a", Metadata, "Transaction Metadata")
@@ -85,7 +86,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
 
-	cmd.PersistentPreRunE = func(*cobra.Command, []string) error {
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		switch serverAddr {
 		case "local":
 			serverAddr = "http://127.0.1.1:26660/v2"
@@ -113,6 +114,11 @@ func InitRootCmd(database db.DB) *cobra.Command {
 			cmd.Println("performing account database update")
 			cmd.Println(out)
 		}
+
+		if TxNoWait {
+			TxWait = 0
+		}
+
 		return nil
 	}
 

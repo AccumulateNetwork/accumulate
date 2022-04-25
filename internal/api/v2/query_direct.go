@@ -285,40 +285,48 @@ func (q *queryDirect) QueryTx(id []byte, wait time.Duration, ignorePending bool,
 	copy(req.TxId[:], id)
 
 query:
+	// Execute the query
+	res := new(query.ResponseByTxId)
 	k, v, err := q.query(req, opts)
 	switch {
 	case err == nil:
-		// Found
+		// Check the code
+		if k != "tx" {
+			return nil, fmt.Errorf("unknown response type: want tx, got %q", k)
+		}
+
+		// Unmarshal the response
+		err = res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TX response: %v", err)
+		}
+
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
 		return nil, err
+	}
+
+	// Did we find it?
+	switch {
+	case err == nil && (!res.Status.Pending || !ignorePending):
+		// Found
+		return packTxResponse(res, nil, res.Envelope, res.Status)
+
 	case wait == 0 || time.Since(start) > wait:
-		// Not found, wait not specified or exceeded
+		// Not found or pending, wait not specified or exceeded
+		if err == nil {
+			err = errors.NotFound("transaction %X still pending", id)
+		} else {
+			err = errors.Wrap(errors.StatusUnknown, err)
+		}
 		return nil, err
+
 	default:
-		// Not found, try again, linearly increasing the wait time
+		// Not found or pending, try again, linearly increasing the wait time
 		time.Sleep(sleep)
 		sleep += sleepIncr
 		goto query
 	}
-	if k != "tx" {
-		return nil, fmt.Errorf("unknown response type: want tx, got %q", k)
-	}
-
-	res := new(query.ResponseByTxId)
-	err = res.UnmarshalBinary(v)
-	if err != nil {
-		return nil, fmt.Errorf("invalid TX response: %v", err)
-	}
-
-	if res.Status.Pending && ignorePending {
-		// Pending, try again, linearly increasing the wait time
-		time.Sleep(sleep)
-		sleep += sleepIncr
-		goto query
-	}
-
-	return packTxResponse(res, nil, res.Envelope, res.Status)
 }
 
 func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {

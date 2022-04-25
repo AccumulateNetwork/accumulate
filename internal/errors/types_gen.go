@@ -4,6 +4,7 @@ package errors
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -16,14 +17,16 @@ type CallSite struct {
 	FuncName  string `json:"funcName,omitempty" form:"funcName" query:"funcName" validate:"required"`
 	File      string `json:"file,omitempty" form:"file" query:"file" validate:"required"`
 	Line      int64  `json:"line,omitempty" form:"line" query:"line" validate:"required"`
+	extraData []byte
 }
 
 type Error struct {
 	fieldsSet []bool
-	Message   string    `json:"message,omitempty" form:"message" query:"message" validate:"required"`
-	Code      Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Cause     *Error    `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
-	CallSite  *CallSite `json:"callSite,omitempty" form:"callSite" query:"callSite" validate:"required"`
+	Message   string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Code      Status      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Cause     *Error      `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	CallStack []*CallSite `json:"callStack,omitempty" form:"callStack" query:"callStack" validate:"required"`
+	extraData []byte
 }
 
 func (v *CallSite) Copy() *CallSite {
@@ -46,8 +49,11 @@ func (v *Error) Copy() *Error {
 	if v.Cause != nil {
 		u.Cause = (v.Cause).Copy()
 	}
-	if v.CallSite != nil {
-		u.CallSite = (v.CallSite).Copy()
+	u.CallStack = make([]*CallSite, len(v.CallStack))
+	for i, v := range v.CallStack {
+		if v != nil {
+			u.CallStack[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -84,13 +90,13 @@ func (v *Error) Equal(u *Error) bool {
 	case !((v.Cause).Equal(u.Cause)):
 		return false
 	}
-	switch {
-	case v.CallSite == u.CallSite:
-		// equal
-	case v.CallSite == nil || u.CallSite == nil:
+	if len(v.CallStack) != len(u.CallStack) {
 		return false
-	case !((v.CallSite).Equal(u.CallSite)):
-		return false
+	}
+	for i := range v.CallStack {
+		if !((v.CallStack[i]).Equal(u.CallStack[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -117,6 +123,10 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 	}
 
 	_, _, err := writer.Reset(fieldNames_CallSite)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -153,7 +163,7 @@ var fieldNames_Error = []string{
 	1: "Message",
 	2: "Code",
 	3: "Cause",
-	4: "CallSite",
+	4: "CallStack",
 }
 
 func (v *Error) MarshalBinary() ([]byte, error) {
@@ -169,11 +179,17 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 	if !(v.Cause == nil) {
 		writer.WriteValue(3, v.Cause)
 	}
-	if !(v.CallSite == nil) {
-		writer.WriteValue(4, v.CallSite)
+	if !(len(v.CallStack) == 0) {
+		for _, v := range v.CallStack {
+			writer.WriteValue(4, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_Error)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
 	return buffer.Bytes(), err
 }
 
@@ -196,9 +212,9 @@ func (v *Error) IsValid() error {
 		errs = append(errs, "field Cause is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field CallSite is missing")
-	} else if v.CallSite == nil {
-		errs = append(errs, "field CallSite is not set")
+		errs = append(errs, "field CallStack is missing")
+	} else if len(v.CallStack) == 0 {
+		errs = append(errs, "field CallStack is not set")
 	}
 
 	switch len(errs) {
@@ -229,7 +245,11 @@ func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_CallSite)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
 }
 
@@ -249,11 +269,54 @@ func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Error); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Cause = x
 	}
-	if x := new(CallSite); reader.ReadValue(4, x.UnmarshalBinary) {
-		v.CallSite = x
+	for {
+		if x := new(CallSite); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.CallStack = append(v.CallStack, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_Error)
+	if err != nil {
+		return err
+	}
 	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
 	return err
+}
+
+func (v *Error) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Message   string                       `json:"message,omitempty"`
+		Code      Status                       `json:"code,omitempty"`
+		Cause     *Error                       `json:"cause,omitempty"`
+		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
+	}{}
+	u.Message = v.Message
+	u.Code = v.Code
+	u.Cause = v.Cause
+	u.CallStack = v.CallStack
+	return json.Marshal(&u)
+}
+
+func (v *Error) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Message   string                       `json:"message,omitempty"`
+		Code      Status                       `json:"code,omitempty"`
+		Cause     *Error                       `json:"cause,omitempty"`
+		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
+	}{}
+	u.Message = v.Message
+	u.Code = v.Code
+	u.Cause = v.Cause
+	u.CallStack = v.CallStack
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Message = u.Message
+	v.Code = u.Code
+	v.Cause = u.Cause
+	v.CallStack = u.CallStack
+	return nil
 }

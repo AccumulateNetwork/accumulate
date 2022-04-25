@@ -9,6 +9,7 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -17,6 +18,25 @@ import (
 )
 
 var ErrCannotInitiate = errors.New("signature cannot initiate a transaction: values are missing")
+
+type Signature interface {
+	encoding.BinaryValue
+	Type() SignatureType
+	RoutingLocation() *url.URL
+
+	GetVote() VoteType
+	GetSigner() *url.URL
+	GetSignerVersion() uint64
+	GetTimestamp() uint64
+	GetSignature() []byte
+	GetTransactionHash() [32]byte
+
+	Verify(hash []byte) bool
+	Hash() []byte
+	Metadata() Signature
+	Initiator() (hash.Hasher, error)
+	GetPublicKeyHash() []byte
+}
 
 type KeySignature interface {
 	Signature
@@ -101,9 +121,19 @@ func netVal(u *url.URL) *url.URL {
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
-	sigInitHash, _ := sig.InitiatorHash()
-	sigMetaHash := sig.MetadataHash()
-	return bytes.Equal(txnInitHash, sigInitHash) || bytes.Equal(txnInitHash, sigMetaHash)
+	if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
+		return true
+	}
+
+	init, err := sig.Initiator()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(txnInitHash, init.MerkleHash())
+}
+
+func EqualKeySignature(a, b KeySignature) bool {
+	return EqualSignature(a, b)
 }
 
 func UnmarshalKeySignature(data []byte) (KeySignature, error) {
@@ -139,7 +169,7 @@ func UnmarshalKeySignatureJSON(data []byte) (KeySignature, error) {
  */
 
 func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, txnHash []byte) {
-	data := sig.MetadataHash()
+	data := sig.Metadata().Hash()
 	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -148,6 +178,9 @@ func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, txnHash []byte) 
 
 // GetSigner returns Signer.
 func (s *LegacyED25519Signature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *LegacyED25519Signature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
 func (s *LegacyED25519Signature) GetSignerVersion() uint64 { return s.SignerVersion }
@@ -170,16 +203,16 @@ func (s *LegacyED25519Signature) GetTransactionHash() [32]byte { return s.Transa
 // Hash returns the hash of the signature.
 func (s *LegacyED25519Signature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *LegacyED25519Signature) MetadataHash() []byte {
-	r := *s                        // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *LegacyED25519Signature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
 	r.Signature = nil              // Clear the signature
 	r.TransactionHash = [32]byte{} // And the transaction hash
-	return r.Hash()                // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *LegacyED25519Signature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *LegacyED25519Signature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -189,7 +222,7 @@ func (s *LegacyED25519Signature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.Signer)
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -203,7 +236,7 @@ func (e *LegacyED25519Signature) Verify(txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	data := e.MetadataHash()
+	data := e.Metadata().Hash()
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -215,7 +248,7 @@ func (e *LegacyED25519Signature) Verify(txnHash []byte) bool {
  */
 
 func SignED25519(sig *ED25519Signature, privateKey, txnHash []byte) {
-	data := sig.MetadataHash()
+	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -223,6 +256,9 @@ func SignED25519(sig *ED25519Signature, privateKey, txnHash []byte) {
 
 // GetSigner returns Signer.
 func (s *ED25519Signature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *ED25519Signature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
 func (s *ED25519Signature) GetSignerVersion() uint64 { return s.SignerVersion }
@@ -245,16 +281,16 @@ func (s *ED25519Signature) GetTransactionHash() [32]byte { return s.TransactionH
 // Hash returns the hash of the signature.
 func (s *ED25519Signature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *ED25519Signature) MetadataHash() []byte {
-	r := *s                        // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *ED25519Signature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
 	r.Signature = nil              // Clear the signature
 	r.TransactionHash = [32]byte{} // And the transaction hash
-	return r.Hash()                // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *ED25519Signature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *ED25519Signature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -264,7 +300,7 @@ func (s *ED25519Signature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.Signer)
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -278,7 +314,7 @@ func (e *ED25519Signature) Verify(txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	data := e.MetadataHash()
+	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
@@ -289,7 +325,7 @@ func (e *ED25519Signature) Verify(txnHash []byte) bool {
  */
 
 func SignRCD1(sig *RCD1Signature, privateKey, txnHash []byte) {
-	data := sig.MetadataHash()
+	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -297,6 +333,9 @@ func SignRCD1(sig *RCD1Signature, privateKey, txnHash []byte) {
 
 // GetSigner returns Signer.
 func (s *RCD1Signature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *RCD1Signature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
 func (s *RCD1Signature) GetSignerVersion() uint64 { return s.SignerVersion }
@@ -315,7 +354,7 @@ func (e *RCD1Signature) Verify(txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	data := e.MetadataHash()
+	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
@@ -330,16 +369,16 @@ func (s *RCD1Signature) GetTransactionHash() [32]byte { return s.TransactionHash
 // Hash returns the hash of the signature.
 func (s *RCD1Signature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *RCD1Signature) MetadataHash() []byte {
-	r := *s                        // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *RCD1Signature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
 	r.Signature = nil              // Clear the signature
 	r.TransactionHash = [32]byte{} // And the transaction hash
-	return r.Hash()                // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *RCD1Signature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *RCD1Signature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -349,7 +388,7 @@ func (s *RCD1Signature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.Signer)
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -362,7 +401,7 @@ func (s *RCD1Signature) GetVote() VoteType {
  */
 
 func SignBTC(sig *BTCSignature, privateKey, txnHash []byte) {
-	data := sig.MetadataHash()
+	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -376,6 +415,9 @@ func SignBTC(sig *BTCSignature, privateKey, txnHash []byte) {
 
 // GetSigner returns Signer.
 func (s *BTCSignature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *BTCSignature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
 func (s *BTCSignature) GetSignerVersion() uint64 { return s.SignerVersion }
@@ -398,15 +440,15 @@ func (s *BTCSignature) GetTransactionHash() [32]byte { return s.TransactionHash 
 // Hash returns the hash of the signature.
 func (s *BTCSignature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *BTCSignature) MetadataHash() []byte {
-	r := *s           // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *BTCSignature) Metadata() Signature {
+	r := s.Copy()     // Copy the struct
 	r.Signature = nil // Clear the signature
-	return r.Hash()   // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *BTCSignature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *BTCSignature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -416,7 +458,7 @@ func (s *BTCSignature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.Signer)
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -428,7 +470,7 @@ func (s *BTCSignature) GetVote() VoteType {
 // hash.
 func (e *BTCSignature) Verify(txnHash []byte) bool {
 
-	data := e.MetadataHash()
+	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
@@ -447,7 +489,7 @@ func (e *BTCSignature) Verify(txnHash []byte) bool {
  */
 
 func SignBTCLegacy(sig *BTCLegacySignature, privateKey, txnHash []byte) {
-	data := sig.MetadataHash()
+	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -461,6 +503,9 @@ func SignBTCLegacy(sig *BTCLegacySignature, privateKey, txnHash []byte) {
 
 // GetSigner returns Signer.
 func (s *BTCLegacySignature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *BTCLegacySignature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
 func (s *BTCLegacySignature) GetSignerVersion() uint64 { return s.SignerVersion }
@@ -483,15 +528,15 @@ func (s *BTCLegacySignature) GetTransactionHash() [32]byte { return s.Transactio
 // Hash returns the hash of the signature.
 func (s *BTCLegacySignature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *BTCLegacySignature) MetadataHash() []byte {
-	r := *s           // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *BTCLegacySignature) Metadata() Signature {
+	r := s.Copy()     // Copy the struct
 	r.Signature = nil // Clear the signature
-	return r.Hash()   // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *BTCLegacySignature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *BTCLegacySignature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -501,7 +546,7 @@ func (s *BTCLegacySignature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.Signer)
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -513,7 +558,7 @@ func (s *BTCLegacySignature) GetVote() VoteType {
 // hash.
 func (e *BTCLegacySignature) Verify(txnHash []byte) bool {
 
-	data := e.MetadataHash()
+	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
@@ -532,7 +577,7 @@ func (e *BTCLegacySignature) Verify(txnHash []byte) bool {
  */
 
 func SignETH(sig *ETHSignature, privateKey, txnHash []byte) {
-	data := sig.MetadataHash()
+	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -546,6 +591,9 @@ func SignETH(sig *ETHSignature, privateKey, txnHash []byte) {
 
 // GetSigner returns Signer.
 func (s *ETHSignature) GetSigner() *url.URL { return s.Signer }
+
+// RoutingLocation returns Signer.
+func (s *ETHSignature) RoutingLocation() *url.URL { return s.Signer }
 
 // GetSignerVersion returns SignerVersion.
 func (s *ETHSignature) GetSignerVersion() uint64 { return s.SignerVersion }
@@ -568,15 +616,15 @@ func (s *ETHSignature) GetTransactionHash() [32]byte { return s.TransactionHash 
 // Hash returns the hash of the signature.
 func (s *ETHSignature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *ETHSignature) MetadataHash() []byte {
-	r := *s           // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *ETHSignature) Metadata() Signature {
+	r := s.Copy()     // Copy the struct
 	r.Signature = nil // Clear the signature
-	return r.Hash()   // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *ETHSignature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *ETHSignature) Initiator() (hash.Hasher, error) {
 	if len(s.PublicKey) == 0 || s.Signer == nil || s.SignerVersion == 0 || s.Timestamp == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -586,7 +634,7 @@ func (s *ETHSignature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.Signer)
 	hasher.AddUint(s.SignerVersion)
 	hasher.AddUint(s.Timestamp)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -598,7 +646,7 @@ func (s *ETHSignature) GetVote() VoteType {
 // hash.
 func (e *ETHSignature) Verify(txnHash []byte) bool {
 
-	data := e.MetadataHash()
+	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
@@ -618,6 +666,9 @@ func (e *ETHSignature) Verify(txnHash []byte) bool {
 
 // GetSigner returns SourceNetwork.
 func (s *ReceiptSignature) GetSigner() *url.URL { return netVal(s.SourceNetwork) }
+
+// RoutingLocation returns SourceNetwork.
+func (s *ReceiptSignature) RoutingLocation() *url.URL { return netVal(s.SourceNetwork) }
 
 // GetSignerVersion returns 1.
 func (s *ReceiptSignature) GetSignerVersion() uint64 { return 1 }
@@ -640,15 +691,15 @@ func (s *ReceiptSignature) GetTransactionHash() [32]byte { return s.TransactionH
 // Hash returns the hash of the signature.
 func (s *ReceiptSignature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *ReceiptSignature) MetadataHash() []byte {
-	r := *s                        // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *ReceiptSignature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
 	r.TransactionHash = [32]byte{} // Clear the transaction hash
-	return r.Hash()                // Hash it
+	return r
 }
 
 // InitiatorHash returns an error.
-func (s *ReceiptSignature) InitiatorHash() ([]byte, error) {
+func (s *ReceiptSignature) Initiator() (hash.Hasher, error) {
 	return nil, fmt.Errorf("a receipt signature cannot initiate a transaction")
 }
 
@@ -669,6 +720,9 @@ func (s *ReceiptSignature) Verify(hash []byte) bool {
 // GetSigner returns the URL of the destination network's validator key page.
 func (s *SyntheticSignature) GetSigner() *url.URL { return netVal(s.DestinationNetwork) }
 
+// RoutingLocation returns the URL of the destination network's validator key page.
+func (s *SyntheticSignature) RoutingLocation() *url.URL { return netVal(s.DestinationNetwork) }
+
 // GetSignerVersion returns 1.
 func (s *SyntheticSignature) GetSignerVersion() uint64 { return 1 }
 
@@ -687,15 +741,15 @@ func (s *SyntheticSignature) GetTransactionHash() [32]byte { return s.Transactio
 // Hash returns the hash of the signature.
 func (s *SyntheticSignature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *SyntheticSignature) MetadataHash() []byte {
-	r := *s                        // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *SyntheticSignature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
 	r.TransactionHash = [32]byte{} // Clear the transaction hash
-	return r.Hash()                // Hash it
+	return r
 }
 
-// InitiatorHash calculates the Merkle hash of the signature.
-func (s *SyntheticSignature) InitiatorHash() ([]byte, error) {
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *SyntheticSignature) Initiator() (hash.Hasher, error) {
 	if s.SourceNetwork == nil || s.DestinationNetwork == nil || s.SequenceNumber == 0 {
 		return nil, ErrCannotInitiate
 	}
@@ -704,7 +758,7 @@ func (s *SyntheticSignature) InitiatorHash() ([]byte, error) {
 	hasher.AddUrl(s.SourceNetwork)
 	hasher.AddUrl(s.DestinationNetwork)
 	hasher.AddUint(s.SequenceNumber)
-	return hasher.MerkleHash(), nil
+	return hasher, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -724,6 +778,9 @@ func (s *SyntheticSignature) Verify(hash []byte) bool {
 // GetSigner returns SourceNetwork.
 func (s *InternalSignature) GetSigner() *url.URL { return netVal(s.Network) }
 
+// RoutingLocation returns SourceNetwork.
+func (s *InternalSignature) RoutingLocation() *url.URL { return netVal(s.Network) }
+
 // GetSignerVersion returns 1.
 func (s *InternalSignature) GetSignerVersion() uint64 { return 1 }
 
@@ -742,20 +799,20 @@ func (s *InternalSignature) GetTransactionHash() [32]byte { return s.Transaction
 // Hash returns the hash of the signature.
 func (s *InternalSignature) Hash() []byte { return signatureHash(s) }
 
-// MetadataHash hashes the signature metadata.
-func (s *InternalSignature) MetadataHash() []byte {
-	r := *s                        // Copy the struct
+// Metadata returns the signature's metadata.
+func (s *InternalSignature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
 	r.TransactionHash = [32]byte{} // Clear the transaction hash
-	return r.Hash()                // Hash it
+	return r
 }
 
 // InitiatorHash returns the network account ID.
-func (s *InternalSignature) InitiatorHash() ([]byte, error) {
+func (s *InternalSignature) Initiator() (hash.Hasher, error) {
 	if s.Network == nil {
 		return nil, ErrCannotInitiate
 	}
 
-	return s.Network.AccountID(), nil
+	return hash.Hasher{s.Network.AccountID()}, nil
 }
 
 // GetVote returns how the signer votes on a particular transaction
@@ -772,15 +829,68 @@ func (s *InternalSignature) Verify(hash []byte) bool {
  * Forwarded Signature
  */
 
-func (s *ForwardedSignature) GetVote() VoteType              { return s.Signature.GetVote() }
-func (s *ForwardedSignature) GetSigner() *url.URL            { return s.Signature.GetSigner() }
-func (s *ForwardedSignature) GetSignerVersion() uint64       { return s.Signature.GetSignerVersion() }
-func (s *ForwardedSignature) GetTimestamp() uint64           { return s.Signature.GetTimestamp() }
-func (s *ForwardedSignature) GetSignature() []byte           { return s.Signature.GetSignature() }
-func (s *ForwardedSignature) GetPublicKeyHash() []byte       { return s.Signature.GetPublicKeyHash() }
-func (s *ForwardedSignature) GetTransactionHash() [32]byte   { return s.Signature.GetTransactionHash() }
-func (s *ForwardedSignature) Hash() []byte                   { return s.Signature.Hash() }
-func (s *ForwardedSignature) MetadataHash() []byte           { return s.Signature.MetadataHash() }
-func (s *ForwardedSignature) InitiatorHash() ([]byte, error) { return s.Signature.InitiatorHash() }
-func (s *ForwardedSignature) Verify(hash []byte) bool        { return s.Signature.Verify(hash) }
-func (s *ForwardedSignature) GetPublicKey() []byte           { return s.Signature.GetPublicKey() }
+func (s *ForwardedSignature) GetVote() VoteType               { return s.Signature.GetVote() }
+func (s *ForwardedSignature) GetSigner() *url.URL             { return s.Signature.GetSigner() }
+func (s *ForwardedSignature) GetSignerVersion() uint64        { return s.Signature.GetSignerVersion() }
+func (s *ForwardedSignature) GetTimestamp() uint64            { return s.Signature.GetTimestamp() }
+func (s *ForwardedSignature) GetSignature() []byte            { return s.Signature.GetSignature() }
+func (s *ForwardedSignature) GetPublicKeyHash() []byte        { return s.Signature.GetPublicKeyHash() }
+func (s *ForwardedSignature) GetTransactionHash() [32]byte    { return s.Signature.GetTransactionHash() }
+func (s *ForwardedSignature) Hash() []byte                    { return s.Signature.Hash() }
+func (s *ForwardedSignature) Metadata() Signature             { return s.Signature.Metadata() }
+func (s *ForwardedSignature) Initiator() (hash.Hasher, error) { return s.Signature.Initiator() }
+func (s *ForwardedSignature) Verify(hash []byte) bool         { return s.Signature.Verify(hash) }
+func (s *ForwardedSignature) GetPublicKey() []byte            { return s.Signature.GetPublicKey() }
+
+func (s *ForwardedSignature) RoutingLocation() *url.URL { return s.Destination }
+func (s *ForwardedSignature) Unwrap() Signature         { return s.Signature }
+
+// Signer retrieves the specified signer from the forwarded signature.
+func (s *ForwardedSignature) Signer(signerUrl *url.URL) (Signer, bool) {
+	for _, signer := range s.Signers {
+		if signer.GetUrl().Equal(signerUrl) {
+			return signer, true
+		}
+	}
+	return nil, false
+}
+
+/*
+ * Delegated Signature
+ */
+
+func (s *DelegatedSignature) GetVote() VoteType            { return s.Signature.GetVote() }
+func (s *DelegatedSignature) RoutingLocation() *url.URL    { return s.Signature.RoutingLocation() }
+func (s *DelegatedSignature) GetSigner() *url.URL          { return s.Signature.GetSigner() }
+func (s *DelegatedSignature) GetSignerVersion() uint64     { return s.Signature.GetSignerVersion() }
+func (s *DelegatedSignature) GetTimestamp() uint64         { return s.Signature.GetTimestamp() }
+func (s *DelegatedSignature) GetSignature() []byte         { return s.Signature.GetSignature() }
+func (s *DelegatedSignature) GetPublicKeyHash() []byte     { return s.Signature.GetPublicKeyHash() }
+func (s *DelegatedSignature) GetTransactionHash() [32]byte { return s.Signature.GetTransactionHash() }
+func (s *DelegatedSignature) Verify(hash []byte) bool      { return s.Signature.Verify(hash) }
+func (s *DelegatedSignature) GetPublicKey() []byte         { return s.Signature.GetPublicKey() }
+
+func (s *DelegatedSignature) Hash() []byte      { return signatureHash(s) }
+func (s *DelegatedSignature) Unwrap() Signature { return s.Signature }
+
+// Metadata returns the signature's metadata.
+func (s *DelegatedSignature) Metadata() Signature {
+	r := s.Copy()
+	r.Signature = r.Signature.Metadata().(KeySignature)
+	return r
+}
+
+// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
+	if s.Delegator == nil {
+		return nil, ErrCannotInitiate
+	}
+
+	hasher, err := s.Signature.Initiator()
+	if err != nil {
+		return nil, err
+	}
+
+	hasher.AddUrl(s.Delegator)
+	return hasher, nil
+}

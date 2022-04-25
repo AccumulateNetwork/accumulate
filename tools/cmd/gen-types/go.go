@@ -334,8 +334,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 	default:
 		switch field.MarshalAs {
 		case Union:
-			// TODO Fix
-			expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
+			expr, wantPtr = goUnionMethod(field, "Equal")+"(%[1]s%[2]s,%[1]s%[3]s)", false
 		case Reference:
 			expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
 		case Value, Enum:

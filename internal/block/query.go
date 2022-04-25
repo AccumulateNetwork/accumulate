@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -540,6 +541,18 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
+	// If we have an account, lookup if it's a scratch chain. If so, filter out records that should have been pruned
+	account := txState.Transaction.Header.Principal
+	if account != nil && isScratchAccount(batch, account) {
+		shouldBePruned, err := m.shouldBePruned(batch, txid)
+		if err != nil {
+			return nil, err
+		}
+		if shouldBePruned {
+			return nil, errors.NotFound("transaction %X not found", txid[:4])
+		}
+	}
+
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
@@ -620,6 +633,9 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	for _, txid := range txids {
 		qr, err := m.queryByTxId(batch, txid, false)
 		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				continue // txs can be filtered out for scratch accounts
+			}
 			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
 		thr.Transactions = append(thr.Transactions, *qr)
@@ -707,6 +723,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
+
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()
 		if err != nil {
@@ -862,7 +879,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			}
 
 			// For each signer
-			for _, signerUrl := range authority.GetSigners() {
+			for index, signerUrl := range authority.GetSigners() {
 				var signer protocol.Signer
 				err = batch.Account(signerUrl).GetStateAs(&signer)
 				if err != nil {
@@ -870,9 +887,9 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 				}
 
 				// Check for a matching entry
-				index, _, ok := signer.EntryByKeyHash(chr.Key)
+				_, _, ok := signer.EntryByKeyHash(chr.Key)
 				if !ok {
-					index, _, ok = signer.EntryByKey(chr.Key)
+					_, _, ok = signer.EntryByKey(chr.Key)
 					if !ok {
 						continue
 					}
@@ -1041,4 +1058,54 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	receipt.LocalBlock = block
 	receipt.Receipt = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
+}
+
+func isScratchAccount(batch *database.Batch, account *url.URL) bool {
+	acc := batch.Account(account)
+	state, err := acc.GetState()
+	if err != nil {
+		return false // Account may not exist, don't emit an error because waitForTxns will not get back the tx for this BVN and fail
+	}
+
+	switch v := state.(type) {
+	case *protocol.DataAccount:
+		return v.Scratch
+	case *protocol.TokenAccount:
+		return v.Scratch
+	}
+	return false
+}
+
+func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, error) {
+
+	// Load the tx chain
+	txChain, err := indexing.TransactionChain(batch, txid).Get()
+	if err != nil {
+		return false, err
+	}
+
+	pruneTime := time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
+
+	// preload the minor root index chain
+	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	minorIndexChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	if err != nil {
+		return false, err
+	}
+
+	for _, txChainEntry := range txChain.Entries {
+		if txChainEntry.Chain == protocol.MainChain {
+			// Load the index entry
+			indexEntry := new(protocol.IndexEntry)
+			err = minorIndexChain.EntryAs(int64(txChainEntry.AnchorIndex), indexEntry)
+			if err != nil {
+				return false, err
+			}
+			if indexEntry.BlockTime.Before(pruneTime) {
+				return true, nil
+			}
+			return false, nil
+		}
+	}
+	return false, nil
 }

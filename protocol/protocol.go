@@ -30,9 +30,6 @@ const (
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
 
-	// SyntheticLedgerPath is the path to a node's internal synthetic transaction ledger.
-	SyntheticLedgerPath = "synth-ledger"
-
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
 
@@ -69,14 +66,14 @@ const (
 	// SyntheticChain is the synthetic transaction chain of a subnet.
 	SyntheticChain = "synthetic"
 
-	// DefaultKeyBook is the default key book name when not specified
-	DefaultKeyBook = "book0"
-
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
 	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
 	ValidatorMofNFactor = 2.0 / 3.0
+
+	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
+	ScratchPrunePeriodDays = 14
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -44,7 +45,10 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 
 	//wait for settlement
 	for _, r := range results {
-		waitForTxns(t, tc, r)
+		var res ActionResponse
+		require.NoError(t, json.Unmarshal([]byte(r), &res))
+		_, err := waitForTxn(res.TransactionHash, 10*time.Second, true)
+		require.NoError(t, err)
 	}
 
 	var faucetAmount = strconv.FormatInt(protocol.AcmeFaucetAmount*protocol.AcmePrecision, 10)

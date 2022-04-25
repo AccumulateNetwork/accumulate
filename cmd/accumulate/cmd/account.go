@@ -5,12 +5,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -263,23 +261,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		tac.Manager = authUrl
 	}
 
-	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, signer)
-	if err != nil {
-		return "", err
-	}
-
-	if !TxNoWait && TxWait > 0 {
-		_, err := waitForTxn(res.TransactionHash, TxWait)
-		if err != nil {
-			var rpcErr jsonrpc2.Error
-			if errors.As(err, &rpcErr) {
-				return PrintJsonRpcError(err)
-			}
-			return "", err
-		}
-	}
-
-	return ActionResponseFrom(res).Print()
+	return dispatchTxAndPrintResponse("create-token-account", &tac, nil, u, signer)
 }
 
 func GenerateAccount() (string, error) {

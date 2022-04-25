@@ -2,10 +2,10 @@ package database
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -43,6 +43,9 @@ func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
 func (r *Account) GetObject() (*protocol.Object, error) {
 	meta := new(protocol.Object)
 	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
+	if err != nil {
+		err = errors.Wrap(errors.StatusUnknown, err)
+	}
 	return meta, err
 }
 
@@ -61,7 +64,7 @@ func (r *Account) GetStateAs(state interface{}) error {
 func (r *Account) PutState(state protocol.Account) error {
 	// Does the record state have a URL?
 	if state.GetUrl() == nil {
-		return errors.New("invalid URL: empty")
+		return errors.New(errors.StatusInternalError, "invalid URL: empty")
 	}
 
 	// Is this the right URL - does it match the record's key?
@@ -123,6 +126,35 @@ func (r *Account) Data() (*Data, error) {
 	return &Data{r.batch, r.key, chain}, nil
 }
 
+func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.HashSet, error) {
+	v := new(protocol.HashSet)
+	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (r *Account) AddSyntheticForAnchor(anchor, hash [32]byte) error {
+	set, err := r.getSyntheticForAnchor(anchor)
+	if err != nil {
+		return err
+	}
+
+	set.Add(hash)
+	r.batch.putValue(r.key.SyntheticForAnchor(anchor), set)
+	return nil
+}
+
+func (r *Account) SyntheticForAnchor(anchor [32]byte) ([][32]byte, error) {
+	set, err := r.getSyntheticForAnchor(anchor)
+	if err != nil {
+		return nil, err
+	}
+
+	return set.Hashes, nil
+}
+
 // stateHashes returns a hasher populated with hashes of all of the account's
 // states.
 func (r *Account) stateHashes() (hash.Hasher, error) {
@@ -182,7 +214,7 @@ func (r *Account) StateReceipt() (*managed.Receipt, error) {
 
 	rState := hasher.Receipt(0, len(hasher)-1)
 	if !bytes.Equal(rState.MDRoot, rBPT.Element) {
-		return nil, errors.New("bpt entry does not match account state")
+		return nil, errors.New(errors.StatusInternalError, "bpt entry does not match account state")
 	}
 
 	receipt, err := rState.Combine(rBPT)

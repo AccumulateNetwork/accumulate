@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 //go:generate go run ../tools/cmd/gen-types --language go-union --out unions_gen.go account_auth_operations.yml accounts.yml general.yml internal.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
@@ -21,23 +20,6 @@ type TransactionMax uint64
 
 // VoteType specifies how the user wants to vote on a proposal (e.g. transaction, initiative, etc)
 type VoteType uint64
-
-type Signature interface {
-	encoding.BinaryValue
-	Type() SignatureType
-	Verify(hash []byte) bool
-	Hash() []byte
-	MetadataHash() []byte
-	InitiatorHash() ([]byte, error)
-	GetVote() VoteType
-
-	GetSigner() *url.URL
-	GetSignerVersion() uint64
-	GetTimestamp() uint64
-	GetPublicKeyHash() []byte
-	GetSignature() []byte
-	GetTransactionHash() [32]byte
-}
 
 type TransactionBody interface {
 	encoding.BinaryValue
