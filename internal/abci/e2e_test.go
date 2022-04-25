@@ -1224,6 +1224,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	require.NoError(t, err)
 	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
+	liteId := liteAcmeAddr.RootIdentity()
 
 	underLimit := int64(1000 * fooPrecision)
 	atLimit := int64(maxSupply - underLimit)
@@ -1304,7 +1305,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Oracle = n.GetOraclePrice()
 
 		send(newTxn(liteAcmeAddr.String()).
-			WithSigner(liteAcmeAddr.RootIdentity(), 1).
+			WithSigner(liteId, 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build())

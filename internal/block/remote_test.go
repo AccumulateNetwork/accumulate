@@ -32,10 +32,10 @@ func pending(status *protocol.TransactionStatus) bool {
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
 	aliceTm := tmed25519.PrivKey(alice)
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm)
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm).RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
 
-	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN0")
+	sim.SetRouteFor(aliceUrl, "BVN0")
 	sim.SetRouteFor(bobUrl, "BVN1")
 	sim.SetRouteFor(charlieUrl, "BVN2")
 

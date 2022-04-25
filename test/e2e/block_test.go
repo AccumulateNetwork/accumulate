@@ -35,7 +35,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(aliceUrl).
 		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl, 1).
+		WithSigner(aliceUrl.RootIdentity(), 1).
 		WithBody(exch).
 		Initiate(protocol.SignatureTypeLegacyED25519, alice).
 		Build()
