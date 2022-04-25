@@ -96,7 +96,7 @@ func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
 	txrq.Signer.SignatureType = sig.Type()
 	txrq.Signer.Timestamp = sig.GetTimestamp()
 	txrq.Signer.PublicKey = keySig.GetPublicKey()
-	txrq.Signer.Url = protocol.FaucetUrl
+	txrq.Signer.Url = protocol.FaucetUrl.RootIdentity()
 	txrq.Signer.Version = sig.GetSignerVersion()
 	txrq.Signer.UseSimpleHash = true
 	txrq.Signature = sig.GetSignature()
