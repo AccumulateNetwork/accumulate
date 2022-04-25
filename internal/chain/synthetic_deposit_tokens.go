@@ -30,6 +30,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
 			account = origin
+			origin.GetVersion()
 		case *protocol.TokenAccount:
 			account = origin
 		default:

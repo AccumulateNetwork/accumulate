@@ -175,11 +175,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
-				lite := new(protocol.LiteTokenAccount)
-				lite.Url = protocol.FaucetUrl
-				lite.TokenUrl = protocol.AcmeUrl()
-				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
-				records = append(records, lite)
+				liteId := new(protocol.LiteIdentity)
+				liteId.Url = protocol.FaucetUrl.RootIdentity()
+				liteId.CreditBalance = protocol.AcmeFaucetAmount * protocol.CreditPrecision // TODO What should be the number of credits in the Faucet?
+
+				liteToken := new(protocol.LiteTokenAccount)
+				liteToken.Url = protocol.FaucetUrl
+				liteToken.TokenUrl = protocol.AcmeUrl()
+				liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+				records = append(records, liteId, liteToken)
 			}
 		}
 

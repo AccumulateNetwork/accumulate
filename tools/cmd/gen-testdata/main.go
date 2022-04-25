@@ -146,7 +146,10 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&TokenAccount{Url: parseUrl("adi/foo"), AccountAuth: *simpleAuth, TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{Url: parseUrl("lite-token-account"), TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
+		testdata.NewAcntTest(&LiteTokenAccount{Url: parseUrl("lite-token-account"), TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345)}),
+	}},
+	{Name: "LiteIdentity", Cases: []*TC{
+		testdata.NewAcntTest(&LiteIdentity{Url: parseUrl("lite-identity"), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
 		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),

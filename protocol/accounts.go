@@ -19,7 +19,7 @@ type FullAccount interface {
 func (a *UnknownAccount) GetUrl() *url.URL { return a.Url }
 
 func (a *LiteDataAccount) GetUrl() *url.URL  { return a.Url }
-func (a *LiteIdentity) GetUrl() *url.URL     { return a.Url }
+func (li *LiteIdentity) GetUrl() *url.URL    { return li.Url }
 func (a *LiteTokenAccount) GetUrl() *url.URL { return a.Url }
 
 func (a *ADI) GetUrl() *url.URL            { return a.Url }

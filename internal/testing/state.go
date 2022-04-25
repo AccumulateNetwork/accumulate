@@ -80,8 +80,8 @@ func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, cre
 	if err != nil {
 		return err
 	}
-
-	return AddCredits(db, url, credits)
+	liteIdUrl := url.RootIdentity()
+	return CreateLiteIdentity(db, liteIdUrl.String(), credits)
 }
 
 func WriteStates(db DB, chains ...protocol.Account) error {
@@ -173,6 +173,20 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, cre
 	}
 
 	return AddCredits(db, u.JoinPath("book0/1"), credits)
+}
+
+func CreateLiteIdentity(db DB, accUrl string, credits float64) error {
+	u, err := url.Parse(accUrl)
+	if err != nil {
+		return err
+	}
+
+	var chain protocol.Account
+	account := new(protocol.LiteIdentity)
+	account.Url = u
+	account.CreditBalance = uint64(credits * protocol.CreditPrecision)
+	chain = account
+	return db.Account(u).PutState(chain)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
@@ -298,7 +312,7 @@ func AcmeLiteAddress(pubKey []byte) *url.URL {
 		// way to get bugs.
 		panic(err)
 	}
-	return u
+	return u.RootIdentity() // Credits are now in the LiteIdentity authority / root
 }
 
 func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {

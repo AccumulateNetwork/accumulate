@@ -440,6 +440,12 @@ func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
 	return acct
 }
 
+func (n *FakeNode) GetLiteIdentity(url string) *protocol.LiteIdentity {
+	acct := new(protocol.LiteIdentity)
+	n.QueryAccountAs(url, acct)
+	return acct
+}
+
 func (n *FakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
 	acct := new(protocol.LiteTokenAccount)
 	n.QueryAccountAs(url, acct)

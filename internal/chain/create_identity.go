@@ -93,7 +93,7 @@ func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) erro
 	}
 
 	switch v := origin.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		// OK
 	case *protocol.ADI:
 		if len(body.Url.Path) > 0 {

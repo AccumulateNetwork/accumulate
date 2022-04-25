@@ -24,7 +24,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 
 	var account protocol.Signer
 	switch origin := st.Origin.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		account = origin
 
 	case *protocol.KeyPage:
@@ -34,6 +34,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
+	account.GetCreditBalance()
 	account.CreditCredits(body.Amount)
 	st.Update(account)
 	return nil, nil

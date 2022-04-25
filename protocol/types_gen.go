@@ -423,19 +423,19 @@ type LiteDataAccount struct {
 }
 
 type LiteIdentity struct {
-	fieldsSet []bool
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	extraData []byte
+	fieldsSet     []bool
+	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
+	extraData     []byte
 }
 
 type LiteTokenAccount struct {
-	fieldsSet     []bool
-	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	TokenUrl      *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
-	Balance       big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
-	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
-	extraData     []byte
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+	extraData []byte
 }
 
 type MetricsRequest struct {
@@ -1685,6 +1685,8 @@ func (v *LiteIdentity) Copy() *LiteIdentity {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
+	u.CreditBalance = v.CreditBalance
+	u.LastUsedOn = v.LastUsedOn
 
 	return u
 }
@@ -1701,8 +1703,6 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 		u.TokenUrl = (v.TokenUrl).Copy()
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
-	u.LastUsedOn = v.LastUsedOn
-	u.CreditBalance = v.CreditBalance
 
 	return u
 }
@@ -3299,6 +3299,12 @@ func (v *LiteIdentity) Equal(u *LiteIdentity) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
+	if !(v.CreditBalance == u.CreditBalance) {
+		return false
+	}
+	if !(v.LastUsedOn == u.LastUsedOn) {
+		return false
+	}
 
 	return true
 }
@@ -3321,12 +3327,6 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 		return false
 	}
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
-		return false
-	}
-	if !(v.LastUsedOn == u.LastUsedOn) {
-		return false
-	}
-	if !(v.CreditBalance == u.CreditBalance) {
 		return false
 	}
 
@@ -6860,6 +6860,8 @@ func (v *LiteDataAccount) IsValid() error {
 var fieldNames_LiteIdentity = []string{
 	1: "Type",
 	2: "Url",
+	3: "CreditBalance",
+	4: "LastUsedOn",
 }
 
 func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
@@ -6869,6 +6871,12 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
+	}
+	if !(v.CreditBalance == 0) {
+		writer.WriteUint(3, v.CreditBalance)
+	}
+	if !(v.LastUsedOn == 0) {
+		writer.WriteUint(4, v.LastUsedOn)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
@@ -6890,6 +6898,16 @@ func (v *LiteIdentity) IsValid() error {
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field CreditBalance is missing")
+	} else if v.CreditBalance == 0 {
+		errs = append(errs, "field CreditBalance is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field LastUsedOn is missing")
+	} else if v.LastUsedOn == 0 {
+		errs = append(errs, "field LastUsedOn is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -6906,8 +6924,6 @@ var fieldNames_LiteTokenAccount = []string{
 	2: "Url",
 	3: "TokenUrl",
 	4: "Balance",
-	5: "LastUsedOn",
-	6: "CreditBalance",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -6923,12 +6939,6 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Balance)
-	}
-	if !(v.LastUsedOn == 0) {
-		writer.WriteUint(5, v.LastUsedOn)
-	}
-	if !(v.CreditBalance == 0) {
-		writer.WriteUint(6, v.CreditBalance)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
@@ -6959,16 +6969,6 @@ func (v *LiteTokenAccount) IsValid() error {
 		errs = append(errs, "field Balance is missing")
 	} else if (v.Balance).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Balance is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field LastUsedOn is missing")
-	} else if v.LastUsedOn == 0 {
-		errs = append(errs, "field LastUsedOn is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field CreditBalance is missing")
-	} else if v.CreditBalance == 0 {
-		errs = append(errs, "field CreditBalance is not set")
 	}
 
 	switch len(errs) {
@@ -11019,6 +11019,12 @@ func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.CreditBalance = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.LastUsedOn = x
+	}
 
 	seen, err := reader.Reset(fieldNames_LiteIdentity)
 	if err != nil {
@@ -11051,12 +11057,6 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBigInt(4); ok {
 		v.Balance = *x
-	}
-	if x, ok := reader.ReadUint(5); ok {
-		v.LastUsedOn = x
-	}
-	if x, ok := reader.ReadUint(6); ok {
-		v.CreditBalance = x
 	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
@@ -13114,31 +13114,31 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 
 func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type AccountType `json:"type"`
-		Url  *url.URL    `json:"url,omitempty"`
+		Type          AccountType `json:"type"`
+		Url           *url.URL    `json:"url,omitempty"`
+		CreditBalance uint64      `json:"creditBalance,omitempty"`
+		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
+		Nonce         uint64      `json:"nonce,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.CreditBalance = v.CreditBalance
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	return json.Marshal(&u)
 }
 
 func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          AccountType `json:"type"`
-		Url           *url.URL    `json:"url,omitempty"`
-		TokenUrl      *url.URL    `json:"tokenUrl,omitempty"`
-		Balance       *string     `json:"balance,omitempty"`
-		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		Nonce         uint64      `json:"nonce,omitempty"`
-		CreditBalance uint64      `json:"creditBalance,omitempty"`
+		Type     AccountType `json:"type"`
+		Url      *url.URL    `json:"url,omitempty"`
+		TokenUrl *url.URL    `json:"tokenUrl,omitempty"`
+		Balance  *string     `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
-	u.CreditBalance = v.CreditBalance
 	return json.Marshal(&u)
 }
 
@@ -14936,11 +14936,17 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 
 func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type AccountType `json:"type"`
-		Url  *url.URL    `json:"url,omitempty"`
+		Type          AccountType `json:"type"`
+		Url           *url.URL    `json:"url,omitempty"`
+		CreditBalance uint64      `json:"creditBalance,omitempty"`
+		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
+		Nonce         uint64      `json:"nonce,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.CreditBalance = v.CreditBalance
+	u.LastUsedOn = v.LastUsedOn
+	u.Nonce = v.LastUsedOn
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14948,26 +14954,26 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	v.CreditBalance = u.CreditBalance
+	if u.LastUsedOn != 0 {
+		v.LastUsedOn = u.LastUsedOn
+	} else {
+		v.LastUsedOn = u.Nonce
+	}
 	return nil
 }
 
 func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          AccountType `json:"type"`
-		Url           *url.URL    `json:"url,omitempty"`
-		TokenUrl      *url.URL    `json:"tokenUrl,omitempty"`
-		Balance       *string     `json:"balance,omitempty"`
-		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		Nonce         uint64      `json:"nonce,omitempty"`
-		CreditBalance uint64      `json:"creditBalance,omitempty"`
+		Type     AccountType `json:"type"`
+		Url      *url.URL    `json:"url,omitempty"`
+		TokenUrl *url.URL    `json:"tokenUrl,omitempty"`
+		Balance  *string     `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
-	u.CreditBalance = v.CreditBalance
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14981,12 +14987,6 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
-	if u.LastUsedOn != 0 {
-		v.LastUsedOn = u.LastUsedOn
-	} else {
-		v.LastUsedOn = u.Nonce
-	}
-	v.CreditBalance = u.CreditBalance
 	return nil
 }
 

@@ -115,7 +115,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 		body.Url = senderUrl
 
 		send(acctesting.NewTransaction().
-			WithPrincipal(protocol.FaucetUrl).
+			WithPrincipal(protocol.FaucetUrl.RootIdentity()).
 			WithBody(body).
 			Faucet())
 	})

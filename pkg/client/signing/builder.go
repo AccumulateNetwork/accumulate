@@ -85,7 +85,7 @@ func (s *Builder) SetTimestampToNow() *Builder {
 func (s *Builder) UseFaucet() *Builder {
 	f := protocol.Faucet.Signer()
 	s.Signer = f
-	s.Url = protocol.FaucetUrl
+	s.Url = protocol.FaucetUrl.RootIdentity()
 	s.Timestamp = f.Timestamp()
 	s.Version = f.Version()
 	return s

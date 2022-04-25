@@ -195,7 +195,7 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 	// Validate type-specific rules
 	var signer protocol.Signer
 	switch account := account.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		signer = account
 		if remote && !forwarded {
 			err = validateRemoteLiteSignature(transaction, account)
@@ -239,7 +239,7 @@ func validateSignature(batch *database.Batch, transaction *protocol.Transaction,
 
 // validateLocalLiteSignature verifies that the lite token account is authorized to
 // sign for the principal.
-func validateLocalLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
+func validateLocalLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteIdentity) error {
 	// A lite token account is only allowed to sign for itself
 	if !signer.Url.Equal(transaction.Header.Principal) {
 		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
@@ -250,7 +250,7 @@ func validateLocalLiteSignature(transaction *protocol.Transaction, signer *proto
 
 // validateRemoteLiteSignature verifies that the lite token account is
 // authorized to sign for the principal.
-func validateRemoteLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteTokenAccount) error {
+func validateRemoteLiteSignature(transaction *protocol.Transaction, signer *protocol.LiteIdentity) error {
 	return errors.Format(errors.StatusUnauthorized, "remote signatures are not supported for lite accounts")
 }
 
@@ -385,7 +385,7 @@ func processForwardedSignature(batch *database.Batch, delivery *chain.Delivery, 
 
 	// Validate type-specific rules
 	switch account := signature.Signer.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		return validateLocalLiteSignature(delivery.Transaction, account)
 	case *protocol.KeyPage:
 		return validateLocalPageSignature(batch, delivery.Transaction, account)
