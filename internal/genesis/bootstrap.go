@@ -46,14 +46,12 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		//create a new Globals account
 		global := new(protocol.DataAccount)
 		global.Url = protocol.DnUrl().JoinPath(protocol.Globals)
-		gconsts := new(protocol.NetworkGlobals)
-		gconsts.ValidatorThreshold.Authorized = uint64(2)
-		gconsts.ValidatorThreshold.Required = uint64(3)
 		wg := new(protocol.WriteData)
 		threshold := new(protocol.NetworkGlobals)
-		threshold.ValidatorThreshold.Authorized = 2
-		threshold.ValidatorThreshold.Required = 3
-		dat, err := threshold.MarshalBinary()
+		threshold.ValidatorThreshold.Numerator = 2
+		threshold.ValidatorThreshold.Denominator = 3
+		var dat []byte
+		dat, err = threshold.MarshalBinary()
 		wg.Entry.Data = append(wg.Entry.Data, dat)
 
 		// Create the ADI
@@ -73,7 +71,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		page := new(protocol.KeyPage)
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
-		page.AcceptThreshold = protocol.GetValidatorsMOfN(len(opts.Validators))
+
+		page.AcceptThreshold = protocol.GetValidatorsMOfN(len(opts.Validators), nil)
 		page.Version = 1
 		records = append(records, page)
 
@@ -154,7 +153,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				return err
 			}
 			wd.Entry.Data = append(wd.Entry.Data, d)
-
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
 			da.AddAuthority(uBook)

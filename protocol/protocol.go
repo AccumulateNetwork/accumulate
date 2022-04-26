@@ -417,8 +417,16 @@ func IndexChain(name string, major bool) string {
 	return "minor-" + name + "-index"
 }
 
-func GetValidatorsMOfN(nrOfValidators int) uint64 {
-	threshold := float64(nrOfValidators) * ValidatorMofNFactor
+func GetValidatorsMOfN(nrOfValidators int, entry *DataEntry) uint64 {
+	var threshold float64
+	threshold = float64(nrOfValidators) * ValidatorMofNFactor
+	if entry != nil {
+		th := new(NetworkGlobals)
+		err := th.UnmarshalBinary(entry.Data[0])
+		if err == nil {
+			//threshold = float64(nrOfValidators) * (float64(th.ValidatorThreshold.Numerator) / float64(th.ValidatorThreshold.Denominator))
+		}
+	}
 	return uint64(math.Round(threshold))
 }
 

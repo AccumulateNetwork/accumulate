@@ -160,9 +160,9 @@ NetworkGlobals:
     
 Rational:
   fields:
-    - name: Required
+    - name: Numerator
       type: uint
-    - name: Authorized
+    - name: Denominator
       type: uint
 
 

@@ -478,10 +478,10 @@ type RCD1Signature struct {
 }
 
 type Rational struct {
-	fieldsSet  []bool
-	Required   uint64 `json:"required,omitempty" form:"required" query:"required" validate:"required"`
-	Authorized uint64 `json:"authorized,omitempty" form:"authorized" query:"authorized" validate:"required"`
-	extraData  []byte
+	fieldsSet   []bool
+	Numerator   uint64 `json:"numerator,omitempty" form:"numerator" query:"numerator" validate:"required"`
+	Denominator uint64 `json:"denominator,omitempty" form:"denominator" query:"denominator" validate:"required"`
+	extraData   []byte
 }
 
 type Receipt struct {
@@ -1778,8 +1778,8 @@ func (v *RCD1Signature) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Rational) Copy() *Rational {
 	u := new(Rational)
 
-	u.Required = v.Required
-	u.Authorized = v.Authorized
+	u.Numerator = v.Numerator
+	u.Denominator = v.Denominator
 
 	return u
 }
@@ -3434,10 +3434,10 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 }
 
 func (v *Rational) Equal(u *Rational) bool {
-	if !(v.Required == u.Required) {
+	if !(v.Numerator == u.Numerator) {
 		return false
 	}
-	if !(v.Authorized == u.Authorized) {
+	if !(v.Denominator == u.Denominator) {
 		return false
 	}
 
@@ -7255,19 +7255,19 @@ func (v *RCD1Signature) IsValid() error {
 }
 
 var fieldNames_Rational = []string{
-	1: "Required",
-	2: "Authorized",
+	1: "Numerator",
+	2: "Denominator",
 }
 
 func (v *Rational) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Required == 0) {
-		writer.WriteUint(1, v.Required)
+	if !(v.Numerator == 0) {
+		writer.WriteUint(1, v.Numerator)
 	}
-	if !(v.Authorized == 0) {
-		writer.WriteUint(2, v.Authorized)
+	if !(v.Denominator == 0) {
+		writer.WriteUint(2, v.Denominator)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Rational)
@@ -7282,14 +7282,14 @@ func (v *Rational) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Required is missing")
-	} else if v.Required == 0 {
-		errs = append(errs, "field Required is not set")
+		errs = append(errs, "field Numerator is missing")
+	} else if v.Numerator == 0 {
+		errs = append(errs, "field Numerator is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Authorized is missing")
-	} else if v.Authorized == 0 {
-		errs = append(errs, "field Authorized is not set")
+		errs = append(errs, "field Denominator is missing")
+	} else if v.Denominator == 0 {
+		errs = append(errs, "field Denominator is not set")
 	}
 
 	switch len(errs) {
@@ -11331,10 +11331,10 @@ func (v *Rational) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUint(1); ok {
-		v.Required = x
+		v.Numerator = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
-		v.Authorized = x
+		v.Denominator = x
 	}
 
 	seen, err := reader.Reset(fieldNames_Rational)

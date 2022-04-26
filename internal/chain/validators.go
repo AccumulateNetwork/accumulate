@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -55,8 +56,22 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
+	acc := st.stateCache.batch.Account(protocol.DnUrl().JoinPath(protocol.Globals))
+	var data *database.Data
+	data, err = acc.Data()
+	if err != nil {
+		//page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
+		return nil, err
 
+	}
+	var entry *protocol.DataEntry
+	_, entry, err = data.GetLatest()
+	if err != nil {
+		//	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
+		return nil, err
+
+	}
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
 	// Record the update
 	didUpdateKeyPage(page)
 	st.Update(page)
@@ -73,7 +88,6 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 	if err != nil {
 		return nil, err
 	}
-
 	// Find the key
 	keyHash := sha256.Sum256(body.PubKey)
 	index, _, found := page.EntryByKeyHash(keyHash[:])
@@ -90,7 +104,23 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
+
+	acc := st.stateCache.batch.Account(protocol.DnUrl().JoinPath(protocol.Globals))
+	var data *database.Data
+	data, err = acc.Data()
+	if err != nil {
+		//page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
+		return nil, err
+
+	}
+	var entry *protocol.DataEntry
+	_, entry, err = data.GetLatest()
+	if err != nil {
+		//	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
+		return nil, err
+
+	}
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
 
 	// Record the update
 	didUpdateKeyPage(page)
