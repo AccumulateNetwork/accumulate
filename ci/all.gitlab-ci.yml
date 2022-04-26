@@ -72,7 +72,7 @@ validate docker:
   - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-minor-blocks.sh
   after_script:
   - docker-compose stop
-  - docker-compose logs > compose.log
+  - docker-compose logs > ../compose.log
 
 lint:
   stage: test
