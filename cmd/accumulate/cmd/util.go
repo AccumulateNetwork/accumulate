@@ -91,7 +91,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 			privKey, err = LookupByLiteIdentityUrl(origin.String())
 		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
+			return nil, nil, fmt.Errorf("unable to find private key for lite token or lite identity account %s %v", origin.String(), err)
 		}
 		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
 		if err != nil {

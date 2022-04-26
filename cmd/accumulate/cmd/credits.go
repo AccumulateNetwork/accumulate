@@ -30,7 +30,7 @@ var creditsCmd = &cobra.Command{
 
 func PrintCredits() {
 	fmt.Println("  accumulate credits [origin lite token account] [lite identity url or key page url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits to send to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits to send to another lite identity or adi key page")
 }
 
 func AddCredits(origin string, args []string) (string, error) {
