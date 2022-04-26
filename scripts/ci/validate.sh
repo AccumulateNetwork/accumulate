@@ -329,20 +329,20 @@ accumulate get keytest/token-issuer 1> /dev/null || die "Cannot find keytest/tok
 success
 
 section "Issue tokens"
-LITE_TOK_I=$(echo $LITE_TOK | cut -d/ -f-3)/keytest/token-issuer
-wait-for cli-tx token issue keytest/token-issuer keytest-1-0 ${LITE_TOK_I} 123.0123456789
-BALANCE=$(accumulate -j account get ${LITE_TOK_I} | jq -r .data.balance)
-[ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK_I} should have 1230123456789 keytest tokens but has ${BALANCE}"
+LITE_TOK_ISS=$(echo $LITE_TOK | cut -d/ -f-3)/keytest/token-issuer
+wait-for cli-tx token issue keytest/token-issuer keytest-1-0 ${LITE_TOK_ISS} 123.0123456789
+BALANCE=$(accumulate -j account get ${LITE_TOK_ISS} | jq -r .data.balance)
+[ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK_ISS} should have 1230123456789 keytest tokens but has ${BALANCE}"
 
 section "Add credits to lite account (TOK)"
-wait-for cli-tx credits ${LITE_TOK_I} ${LITE_ID} 100
+wait-for cli-tx credits ${LITE_TOK_ISS} ${LITE_ID} 100
 BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE_ID} should have at least 100 credits but only has ${BALANCE}"
 
 section "Burn tokens"
-wait-for cli-tx token burn ${LITE_TOK_I} 100
-BALANCE=$(accumulate -j account get ${LITE_TOK_I} | jq -r .data.balance)
-[ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK_I} should have 230123456789 keytest tokens but has ${BALANCE}"
+wait-for cli-tx token burn ${LITE_TOK_ISS} 100
+BALANCE=$(accumulate -j account get ${LITE_TOK_ISS} | jq -r .data.balance)
+[ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK_ISS} should have 230123456789 keytest tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite keytest keytest-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
