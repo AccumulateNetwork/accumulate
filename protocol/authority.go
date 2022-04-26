@@ -118,6 +118,11 @@ func (li *LiteIdentity) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
 	return 0, li, true
 }
 
+// EntryByDelegate returns -1, nil, false.
+func (*LiteIdentity) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
+	return -1, nil, false
+}
+
 /* ***** Lite account auth ***** */
 
 // GetSigners returns the lite address.
