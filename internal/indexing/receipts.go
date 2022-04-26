@@ -10,18 +10,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-// loadLatestIndexEntry loads an entry from an index chain.
-func loadLatestIndexEntry(account *Account, indexChain string) (*protocol.IndexEntry, error) {
+// LoadIndexEntryFromEnd loads the Nth-to-last entry from an index chain.
+// LoadIndexEntryFromEnd will panic if the offset is zero. If the offset is
+// greater than the chain height, LoadIndexEntryFromEnd returns nil, nil.
+func LoadIndexEntryFromEnd(account *Account, indexChain string, offset uint64) (*protocol.IndexEntry, error) {
+	if offset == 0 {
+		panic("offset must be > 0")
+	}
+
 	// Load the chain
 	chain, err := account.ReadChain(indexChain)
 	if err != nil {
 		return nil, errors.Unknown("get account chain %s: %w", indexChain, err)
 	}
 
-	if chain.Height() == 0 {
-		return nil, errors.NotFound("account chain %s is empty", indexChain)
+	if chain.Height() < int64(offset) {
+		return nil, nil
 	}
-	index := uint64(chain.Height()) - 1
+	index := uint64(chain.Height()) - offset
 
 	// Load the entry
 	entry := new(protocol.IndexEntry)
@@ -31,6 +37,24 @@ func loadLatestIndexEntry(account *Account, indexChain string) (*protocol.IndexE
 	}
 
 	return entry, nil
+}
+
+// LoadLastTwoIndexEntries loads the last and next to last entries of the index
+// chain.
+func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLast *protocol.IndexEntry, err error) {
+	last, err = LoadIndexEntryFromEnd(account, indexChain, 1)
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	if last == nil {
+		return
+	}
+
+	nextLast, err = LoadIndexEntryFromEnd(account, indexChain, 2)
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return
 }
 
 func getRootReceipt(net *config.Network, batch *Batch, from, to int64) (*managed.Receipt, error) {
@@ -100,7 +124,7 @@ func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account)
 
 	// Load the latest root index entry
 	ledger := batch.Account(net.Ledger())
-	rootEntry, err := loadLatestIndexEntry(ledger, protocol.MinorRootIndexChain)
+	rootEntry, err := LoadIndexEntryFromEnd(ledger, protocol.MinorRootIndexChain, 1)
 	if err != nil {
 		return 0, nil, errors.Wrap(errors.StatusUnknown, err)
 	}

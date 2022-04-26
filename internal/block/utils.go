@@ -149,34 +149,6 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 	return arec, nil
 }
 
-func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
-	var count int
-	for _, hash := range txids {
-		txn, err := batch.Transaction(hash[:]).GetState()
-		if err != nil {
-			count++
-			continue
-		}
-
-		if txn.Transaction.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
-			count++
-			continue
-		}
-	}
-	return count
-}
-
-func countExceptAnchors2(txns []*protocol.Transaction) int {
-	var count int
-	for _, txn := range txns {
-		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
-			count++
-			continue
-		}
-	}
-	return count
-}
-
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)

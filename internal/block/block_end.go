@@ -3,7 +3,6 @@ package block
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -212,7 +211,7 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		}
 	}
 
-	return m.buildAnchorTxn(block, ledgerState, rootChain)
+	return nil
 }
 
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
@@ -289,75 +288,4 @@ func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger,
 	})
 
 	return rootChain.AddEntry(root, false)
-}
-
-// buildAnchorTxn builds the anchor transaction for the block.
-func (m *Executor) buildAnchorTxn(block *Block, ledger *protocol.InternalLedger, rootChain *database.Chain) error {
-	txn := new(protocol.SyntheticAnchor)
-	txn.Source = m.Network.NodeUrl()
-	txn.RootIndex = uint64(rootChain.Height() - 1)
-	txn.RootAnchor = *(*[32]byte)(rootChain.Anchor())
-	txn.Block = uint64(block.Index)
-	txn.AcmeBurnt, ledger.AcmeBurnt = ledger.AcmeBurnt, *big.NewInt(int64(0))
-	if m.Network.Type == config.Directory {
-		txn.AcmeOraclePrice = ledger.PendingOracle
-	}
-
-	// TODO This is pretty inefficient; we're constructing a receipt for every
-	// anchor. If we were more intelligent about it, we could send just the
-	// Merkle state and a list of transactions, though we would need that for
-	// the root chain and each anchor chain.
-
-	anchorUrl := m.Network.NodeUrl(protocol.AnchorPool)
-	anchor := block.Batch.Account(anchorUrl)
-	for _, update := range block.State.ChainUpdates.Entries {
-		// Is it an anchor chain?
-		if update.Type != protocol.ChainTypeAnchor {
-			continue
-		}
-
-		// Does it belong to our anchor pool?
-		if !update.Account.Equal(anchorUrl) {
-			continue
-		}
-
-		indexChain, err := anchor.ReadIndexChain(update.Name, false)
-		if err != nil {
-			return fmt.Errorf("unable to load minor index chain of intermediate anchor chain %s: %w", update.Name, err)
-		}
-
-		from, to, anchorIndex, err := getRangeFromIndexEntry(indexChain, uint64(indexChain.Height())-1)
-		if err != nil {
-			return fmt.Errorf("unable to load range from minor index chain of intermediate anchor chain %s: %w", update.Name, err)
-		}
-
-		rootReceipt, err := rootChain.Receipt(int64(anchorIndex), rootChain.Height()-1)
-		if err != nil {
-			return fmt.Errorf("unable to build receipt for the root chain: %w", err)
-		}
-
-		anchorChain, err := anchor.ReadChain(update.Name)
-		if err != nil {
-			return fmt.Errorf("unable to load intermediate anchor chain %s: %w", update.Name, err)
-		}
-
-		for i := from; i <= to; i++ {
-			anchorReceipt, err := anchorChain.Receipt(int64(i), int64(to))
-			if err != nil {
-				return fmt.Errorf("unable to build receipt for intermediate anchor chain %s: %w", update.Name, err)
-			}
-
-			receipt, err := anchorReceipt.Combine(rootReceipt)
-			if err != nil {
-				return fmt.Errorf("unable to build receipt for intermediate anchor chain %s: %w", update.Name, err)
-			}
-
-			r := protocol.ReceiptFromManaged(receipt)
-			txn.Receipts = append(txn.Receipts, *r)
-			m.logDebug("Build receipt for an anchor", "chain", update.Name, "anchor", logging.AsHex(r.Start), "block", block.Index, "height", i, "module", "synthetic")
-		}
-	}
-
-	block.Anchor = txn
-	return nil
 }

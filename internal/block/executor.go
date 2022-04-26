@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -21,9 +22,9 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors map[protocol.TransactionType]TransactionExecutor
-	governor  *governor
-	logger    logging.OptionalLogger
+	executors  map[protocol.TransactionType]TransactionExecutor
+	dispatcher *dispatcher
+	logger     logging.OptionalLogger
 
 	// oldBlockMeta blockMetadata
 }
@@ -41,13 +42,10 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
+	m.dispatcher = newDispatcher(opts)
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
-	}
-
-	if !m.isGenesis {
-		m.governor = newGovernor(opts, db)
 	}
 
 	for _, x := range executors {
@@ -81,15 +79,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	return m, nil
 }
 
-// PingGovernor_TESTONLY pings the governor. If runDidCommit is running, this
-// will block until runDidCommit completes.
-func (m *Executor) PingGovernor_TESTONLY() {
-	select {
-	case m.governor.messages <- govPing{}:
-	case <-m.governor.done:
-	}
-}
-
 func (m *Executor) logDebug(msg string, keyVals ...interface{}) {
 	m.logger.Debug(msg, keyVals...)
 }
@@ -100,14 +89,6 @@ func (m *Executor) logInfo(msg string, keyVals ...interface{}) {
 
 func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	m.logger.Error(msg, keyVals...)
-}
-
-func (m *Executor) Start() error {
-	return m.governor.Start()
-}
-
-func (m *Executor) Stop() error {
-	return m.governor.Stop()
 }
 
 func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) error) error {
@@ -145,6 +126,21 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 	state, err := st.Commit()
 	if err != nil {
 		return err
+	}
+
+	mirror, err := m.buildMirror(block.Batch)
+	if err != nil {
+		return err
+	}
+
+	switch m.Network.Type {
+	case config.Directory:
+		for _, bvn := range m.Network.GetBvnNames() {
+			st.Submit(protocol.SubnetUrl(bvn), mirror)
+		}
+
+	case config.BlockValidator:
+		st.Submit(protocol.DnUrl(), mirror)
 	}
 
 	block.State.MergeTransaction(state)
@@ -227,7 +223,38 @@ func (m *Executor) InitChain(block *Block, data []byte) ([]byte, error) {
 	return anchor, nil
 }
 
-// DidCommit implements ./Chain
-func (m *Executor) DidCommit(block *Block, batch *database.Batch) error {
-	return m.governor.DidCommit(batch, false, block)
+func (x *Executor) buildMirror(batch *database.Batch) (*protocol.SyntheticMirror, error) {
+	mirror := new(protocol.SyntheticMirror)
+
+	nodeUrl := x.Network.NodeUrl()
+	rec, err := mirrorRecord(batch, nodeUrl)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load %s: %w", nodeUrl, err)
+	}
+	mirror.Objects = append(mirror.Objects, rec)
+
+	md, err := loadDirectoryMetadata(batch, nodeUrl)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load %s directory: %w", nodeUrl, err)
+	}
+
+	for i := uint64(0); i < md.Count; i++ {
+		s, err := loadDirectoryEntry(batch, nodeUrl, i)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknown, "load %s directory entry %d: %w", nodeUrl, i, err)
+		}
+
+		u, err := url.Parse(s)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknown, "invalid %s directory entry %d: %w", nodeUrl, i, err)
+		}
+
+		rec, err := mirrorRecord(batch, u)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknown, "load %s: %w", u, err)
+		}
+		mirror.Objects = append(mirror.Objects, rec)
+	}
+
+	return mirror, nil
 }

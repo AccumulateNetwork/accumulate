@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -86,10 +87,11 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
 		Network:   network,
 		Logger:    logger,
+		Router:    router,
 		isGenesis: true,
 	}, db)
 }
