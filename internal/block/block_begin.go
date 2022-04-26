@@ -146,8 +146,8 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	return err
 }
 
-// finalizeBlock does all the post-block work that used to be done by the
-// governor
+// finalizeBlock builds the block anchor and signs and sends synthetic
+// transactions (including the block anchor) for the previously committed block.
 func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64) error {
 	// Load the ledger state
 	var ledgerState *protocol.InternalLedger
