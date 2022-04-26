@@ -77,22 +77,22 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
-	isTokenAccount := IsLiteTokenAccount(origin.String())
-	isLiteIdentity := false
-	if !isTokenAccount {
-		isLiteIdentity = IsLiteIdentity(origin.String())
-	}
-	if isTokenAccount || isLiteIdentity {
-		var privKey []byte
-		var err error
-		if isTokenAccount {
-			privKey, err = LookupByLiteTokenUrl(origin.String())
-		} else {
-			privKey, err = LookupByLiteIdentityUrl(origin.String())
-		}
+	var privKey []byte
+	var err error
+	if IsLiteTokenAccount(origin.String()) {
+		privKey, err = LookupByLiteTokenUrl(origin.String())
 		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite token or lite identity account %s %v", origin.String(), err)
+			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
+
+	} else if IsLiteIdentity(origin.String()) {
+		privKey, err = LookupByLiteIdentityUrl(origin.String())
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
+		}
+	}
+
+	if privKey != nil {
 		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
 		if err != nil {
 			return nil, nil, err
@@ -114,7 +114,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		keyName = args[0]
 	}
 
-	privKey, err := resolvePrivateKey(keyName)
+	privKey, err = resolvePrivateKey(keyName)
 	if err != nil {
 		return nil, nil, err
 	}
