@@ -80,9 +80,9 @@ func TestCreateRootIdentity(t *testing.T) {
 
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
+			WithPrincipal(liteUrl.RootIdentity()).
 			WithTimestampVar(&timestamp).
-			WithSigner(liteUrl, 1).
+			WithSigner(liteUrl.RootIdentity(), 1).
 			WithBody(&protocol.CreateIdentity{
 				Url:        alice,
 				KeyHash:    keyHash[:],
