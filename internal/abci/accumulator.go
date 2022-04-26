@@ -243,14 +243,6 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to commit block: %v", err))
 	}
 
-	// Notify the executor that we comitted
-	batch := app.DB.Begin(false)
-	defer batch.Discard()
-	err = app.Executor.DidCommit(block, batch)
-	if err != nil {
-		panic(fmt.Errorf("failed to notify governor: %v", err))
-	}
-
 	return abci.ResponseInitChain{AppHash: root}
 }
 
@@ -449,13 +441,6 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
 	root, err := batch.GetMinorRootChainAnchor(&app.Network)
-	if err != nil {
-		app.fatal(err, true)
-		return abci.ResponseCommit{}
-	}
-
-	// Notify the executor that we committed
-	err = app.Executor.DidCommit(app.block, batch)
 	if err != nil {
 		app.fatal(err, true)
 		return abci.ResponseCommit{}
