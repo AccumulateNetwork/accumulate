@@ -463,6 +463,7 @@ RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities
 success
 
 section "Query the lite identity"
+accumulate -s local get $(dirname $LITE) -j -d
 accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"
 
 section "Query the lite identity directory"
