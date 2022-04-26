@@ -637,26 +637,23 @@ func TestLiteAccountTx(t *testing.T) {
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
 	require.NoError(t, batch.Commit())
 
-	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobAcmeUrl := acctesting.AcmeLiteAddressTmPriv(bob)
-	bobUrl := bobAcmeUrl.RootIdentity().String()
-	charlieAcmeUrl := acctesting.AcmeLiteAddressTmPriv(charlie)
-	charlieUrl := charlieAcmeUrl.RootIdentity().String()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob).String()
+	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
 		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
-		send(newTxn(aliceAcmeUrl.String()).
-			WithSigner(aliceUrl, 1).
+		send(newTxn(aliceUrl.String()).
+			WithSigner(aliceUrl.RootIdentity(), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, alice).
 			Build())
 	})
 
-	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceAcmeUrl.String()).Balance.Int64())
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl).Balance.Int64())
 	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
 }
@@ -1303,12 +1300,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddCredits)
 		//burn the underLimit amount to see if that gets returned to the pool
-		body.Recipient = liteAddr
+		body.Recipient = liteAddr.RootIdentity()
 		body.Amount.SetUint64(100 * protocol.AcmePrecision)
 		body.Oracle = n.GetOraclePrice()
 
 		send(newTxn(liteAcmeAddr.String()).
-			WithSigner(liteId, 1).
+			WithSigner(liteId.RootIdentity(), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build())
