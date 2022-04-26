@@ -175,8 +175,6 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		TxMaxWaitTime: 10 * time.Second,
 	})
 
-	n.Require().NoError(mgr.Start())
-	n.T().Cleanup(func() { _ = mgr.Stop() })
 	n.T().Cleanup(func() { n.client.Shutdown() })
 
 	if !doGenesis {
@@ -190,6 +188,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Network:     *n.network,
 		GenesisTime: time.Now(),
 		Logger:      n.logger,
+		Router:      n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
