@@ -151,11 +151,6 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	err = exec.Start()
-	if err != nil {
-		return fmt.Errorf("failed to start chain executor: %v", err)
-	}
-
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
@@ -255,11 +250,6 @@ func (d *Daemon) Start() (err error) {
 		err := d.api.Shutdown(ctx)
 		if err != nil {
 			d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
-		}
-
-		err = exec.Stop()
-		if err != nil {
-			d.Logger.Error("Error stopping executor", "module", "executor", "error", err)
 		}
 
 		err = d.db.Close()

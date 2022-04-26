@@ -694,6 +694,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(BTCLegacySignature), nil
 	case SignatureTypeBTC:
 		return new(BTCSignature), nil
+	case SignatureTypeDelegated:
+		return new(DelegatedSignature), nil
 	case SignatureTypeED25519:
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
@@ -723,6 +725,9 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	case *BTCSignature:
 		b, ok := b.(*BTCSignature)
+		return ok && a.Equal(b)
+	case *DelegatedSignature:
+		b, ok := b.(*DelegatedSignature)
 		return ok && a.Equal(b)
 	case *ED25519Signature:
 		b, ok := b.(*ED25519Signature)

@@ -89,11 +89,6 @@ func New(t TB, bvnCount int) *Simulator {
 		}
 	}
 
-	for _, subnet := range sim.Subnets {
-		x := sim.Subnet(subnet.ID)
-		require.NoError(sim, x.Executor.Start())
-	}
-
 	return sim
 }
 
@@ -146,11 +141,6 @@ func (s *Simulator) InitChain() {
 		x := s.Subnet(subnet.ID)
 		InitChain(s, x.Database, x.Executor)
 	}
-
-	// Wait for the governor
-	for _, subnet := range s.Subnets {
-		s.Subnet(subnet.ID).Executor.PingGovernor_TESTONLY()
-	}
 }
 
 // ExecuteBlock executes a block after submitting envelopes. If a status channel
@@ -183,11 +173,6 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 	// Wait for all subnets to complete
 	err := errg.Wait()
 	require.NoError(tb{s}, err)
-
-	// Wait for the governor
-	for _, subnet := range s.Subnets {
-		s.Subnet(subnet.ID).Executor.PingGovernor_TESTONLY()
-	}
 
 	if statusChan != nil {
 		close(statusChan)
@@ -284,14 +269,19 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	return nil
 }
 
-func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) {
+func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus) bool, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
 	s.Helper()
 
+	var statuses []*protocol.TransactionStatus
+	var transactions []*protocol.Transaction
 	for _, envelope := range envelopes {
 		for _, delivery := range NormalizeEnvelope(s, envelope) {
-			s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())
+			st, txn := s.WaitForTransactionFlow(status, delivery.Transaction.GetHash())
+			statuses = append(statuses, st...)
+			transactions = append(transactions, txn...)
 		}
 	}
+	return statuses, transactions
 }
 
 func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {

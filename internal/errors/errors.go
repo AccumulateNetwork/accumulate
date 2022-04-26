@@ -15,10 +15,13 @@ func Is(err, target error) bool { return errors.Is(err, target) }
 // Unwrap calls stdlib errors.Unwrap.
 func Unwrap(err error) error { return errors.Unwrap(err) }
 
-func make(code Status) *Error {
+func makeError(code Status) *Error {
 	e := new(Error)
 	e.Code = code
-	e.CallSite = callSite(3)
+	cs := callSite(3)
+	if cs != nil {
+		e.CallStack = []*CallSite{cs}
+	}
 	return e
 }
 
@@ -32,12 +35,14 @@ func (e *Error) errorf(format string, args ...interface{}) {
 }
 
 func convert(err error) *Error {
-	e, ok := err.(*Error)
-	if ok {
-		return e
+	switch err := err.(type) {
+	case *Error:
+		return err
+	case Status:
+		return &Error{Code: err, Message: err.Error()}
 	}
 
-	e = &Error{Message: err.Error()}
+	e := &Error{Message: err.Error()}
 
 	u, ok := err.(interface{ Unwrap() error })
 	if ok {
@@ -57,13 +62,16 @@ func (e *Error) setCause(f *Error) {
 		return
 	}
 
-	if e.Message == "" && e.CallSite == nil {
-		// If e has no information, just overwrite it
-		*e = *e.Cause
-	} else {
-		// Otherwise inherit the code
-		e.Code = e.Cause.Code
+	if e.Message != "" {
+		// Copy the code
+		e.Code = f.Code
+		return
 	}
+
+	// Inherit everything
+	cs := e.CallStack
+	*e = *f
+	e.CallStack = append(cs, f.CallStack...)
 }
 
 func New(code Status, v interface{}) *Error {
@@ -71,7 +79,7 @@ func New(code Status, v interface{}) *Error {
 		return nil
 	}
 
-	e := make(code)
+	e := makeError(code)
 	if err, ok := v.(error); ok {
 		e.setCause(convert(err))
 	} else {
@@ -84,7 +92,7 @@ func Wrap(code Status, err error) *Error {
 	if err == nil {
 		return nil
 	}
-	e := make(code)
+	e := makeError(code)
 	e.setCause(convert(err))
 	return e
 }
@@ -92,16 +100,19 @@ func Wrap(code Status, err error) *Error {
 func Format(code Status, format string, args ...interface{}) *Error {
 	err := fmt.Errorf(format, args...)
 
-	e := make(code)
 	u, ok := err.(interface {
 		Unwrap() error
 	})
 	if ok {
+		e := makeError(code)
 		e.Message = err.Error()
 		e.setCause(convert(u.Unwrap()))
-	} else {
-		e.setCause(convert(err))
+		return e
 	}
+
+	e := convert(err)
+	e.Code = code
+	e.CallStack = []*CallSite{callSite(2)}
 	return e
 }
 
@@ -136,4 +147,32 @@ func (e *Error) Unwrap() error {
 		return e.Cause
 	}
 	return e.Code
+}
+
+func (e *Error) Print() string {
+	str := e.Message + "\n"
+	for e != nil {
+		for _, cs := range e.CallStack {
+			str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
+		}
+		e = e.Cause
+	}
+	return str
+}
+
+func (e *Error) Is(target error) bool {
+	switch f := target.(type) {
+	case *Error:
+		if e.Code == f.Code {
+			return true
+		}
+	case Status:
+		if e.Code == f {
+			return true
+		}
+	}
+	if e.Cause != nil {
+		return e.Cause.Is(target)
+	}
+	return false
 }

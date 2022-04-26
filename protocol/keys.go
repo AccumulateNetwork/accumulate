@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type KeyEntry interface {
@@ -41,17 +39,6 @@ func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
 	}
 
 	return nil
-}
-
-// EntryByOwner finds the entry with a matching owner
-func (p *KeyPage) EntryByOwner(owner *url.URL) (int, *KeySpec, bool) {
-	for i, entry := range p.Keys {
-		if owner.Equal(entry.Owner) {
-			return i, entry, true
-		}
-	}
-
-	return -1, nil, false
 }
 
 // GetMofN

@@ -600,8 +600,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1"))
-		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", pageKey.PubKey().Bytes()))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -723,7 +722,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 }
 
-func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
+func TestAddCreditsBurnAcme(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
@@ -737,6 +736,13 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 
 	require.NoError(t, batch.Commit())
+
+	require.NoError(t, nodes[subnets[0]][0].db.Update(func(batch *database.Batch) error {
+		return acctesting.UpdateAccount(batch, protocol.AcmeUrl(), func(acme *protocol.TokenIssuer) {
+			// Make it easier to read the value
+			acme.Issued.SetUint64(1e3 * protocol.AcmePrecision)
+		})
+	}))
 
 	acmeIssuer := n.GetTokenIssuer("acc://ACME")
 	acmeBeforeBurn := acmeIssuer.Issued
@@ -777,7 +783,9 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	acmeAfterBurn := acmeIssuer.Issued
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
-	require.Equal(t, *acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), acmeAfterBurn)
+	require.Equal(t,
+		protocol.FormatBigAmount(acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), protocol.AcmePrecisionPower),
+		protocol.FormatBigAmount(&acmeAfterBurn, protocol.AcmePrecisionPower))
 }
 
 func TestCreateKeyPage(t *testing.T) {

@@ -41,7 +41,7 @@ func (s *BlockState) Empty() bool {
 }
 
 type ProcessSignatureState struct {
-	Remote bool
+	Signers []protocol.Signer
 }
 
 func (s *ProcessSignatureState) Merge(r *ProcessSignatureState) {

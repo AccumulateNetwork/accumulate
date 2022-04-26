@@ -19,6 +19,7 @@ type Signer interface {
 	GetSignatureThreshold() uint64
 	EntryByKey(key []byte) (int, KeyEntry, bool)
 	EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)
+	EntryByDelegate(owner *url.URL) (int, KeyEntry, bool)
 }
 
 func EqualSigner(a, b Signer) bool {
@@ -61,7 +62,15 @@ func MakeLiteSigner(signer Signer) Signer {
 	case *KeyPage:
 		// Make a copy of the key page with no keys
 		signer = signer.Copy()
-		signer.Keys = nil
+		signer.CreditBalance = 0
+
+		keys := signer.Keys
+		signer.Keys = make([]*KeySpec, 0, len(keys))
+		for _, key := range keys {
+			if key.Owner != nil {
+				signer.Keys = append(signer.Keys, &KeySpec{Owner: key.Owner})
+			}
+		}
 		return signer
 
 	default:
@@ -71,15 +80,16 @@ func MakeLiteSigner(signer Signer) Signer {
 
 /* ***** Unknown signer ***** */
 
-func (s *UnknownSigner) GetUrl() *url.URL                                  { return s.Url }
-func (s *UnknownSigner) GetVersion() uint64                                { return s.Version }
-func (*UnknownSigner) GetSignatureThreshold() uint64                       { return 1 }
-func (*UnknownSigner) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) { return -1, nil, false }
-func (*UnknownSigner) EntryByKey(key []byte) (int, KeyEntry, bool)         { return -1, nil, false }
-func (*UnknownSigner) GetCreditBalance() uint64                            { return 0 }
-func (*UnknownSigner) CreditCredits(amount uint64)                         {}
-func (*UnknownSigner) DebitCredits(amount uint64) bool                     { return false }
-func (*UnknownSigner) CanDebitCredits(amount uint64) bool                  { return false }
+func (s *UnknownSigner) GetUrl() *url.URL                                   { return s.Url }
+func (s *UnknownSigner) GetVersion() uint64                                 { return s.Version }
+func (*UnknownSigner) GetSignatureThreshold() uint64                        { return 1 }
+func (*UnknownSigner) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)  { return -1, nil, false }
+func (*UnknownSigner) EntryByKey(key []byte) (int, KeyEntry, bool)          { return -1, nil, false }
+func (*UnknownSigner) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) { return -1, nil, false }
+func (*UnknownSigner) GetCreditBalance() uint64                             { return 0 }
+func (*UnknownSigner) CreditCredits(amount uint64)                          {}
+func (*UnknownSigner) DebitCredits(amount uint64) bool                      { return false }
+func (*UnknownSigner) CanDebitCredits(amount uint64) bool                   { return false }
 
 /* ***** Lite identity auth ***** */
 
@@ -119,6 +129,11 @@ func (*LiteTokenAccount) GetVersion() uint64 { return 1 }
 // GetSignatureThreshold returns 1.
 func (*LiteTokenAccount) GetSignatureThreshold() uint64 { return 1 }
 
+// EntryByDelegate returns -1, nil, false.
+func (*LiteTokenAccount) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
+	return -1, nil, false
+}
+
 /* ***** ADI account auth ***** */
 
 // GetSigners returns URLs of the book's pages.
@@ -151,6 +166,17 @@ func (p *KeyPage) EntryByKey(key []byte) (int, KeyEntry, bool) {
 func (p *KeyPage) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
 	for i, entry := range p.Keys {
 		if bytes.Equal(entry.PublicKeyHash, keyHash) {
+			return i, entry, true
+		}
+	}
+
+	return -1, nil, false
+}
+
+// EntryByDelegate finds the entry with a matching owner.
+func (p *KeyPage) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
+	for i, entry := range p.Keys {
+		if owner.Equal(entry.Owner) {
 			return i, entry, true
 		}
 	}

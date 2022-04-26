@@ -3,7 +3,6 @@ package testing
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -273,7 +272,7 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	return WriteStates(db, page, book)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) error {
+func CreateKeyBook(db DB, urlStr types.String, publicKey tmed25519.PubKey) error {
 	bookUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -288,28 +287,44 @@ func CreateKeyBook(db DB, urlStr types.String, publicKey ...tmed25519.PubKey) er
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
 
-	if len(publicKey) == 1 {
-		key := new(protocol.KeySpec)
-		hash := sha256.Sum256(publicKey[0])
-		key.PublicKeyHash = hash[:]
-		page.Keys = []*protocol.KeySpec{key}
-	} else if len(publicKey) > 1 {
-		return errors.New("CreateKeyBook only supports one page key at the moment") // TOOO do we need to suport this? (Also in create_book.go)
-	}
+	key := new(protocol.KeySpec)
+	hash := sha256.Sum256(publicKey)
+	key.PublicKeyHash = hash[:]
+	page.Keys = []*protocol.KeySpec{key}
 
 	accounts := []protocol.Account{book, page}
 	return WriteStates(db, accounts...)
 }
 
-func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
-	var page *protocol.KeyPage
-	err := db.Account(account).GetStateAs(&page)
+func CreateAccount(db DB, account protocol.FullAccount) error {
+	auth := account.GetAuth()
+	if len(auth.Authorities) > 0 {
+		return WriteStates(db, account)
+	}
+
+	var identity *protocol.ADI
+	err := db.Account(account.GetUrl().Identity()).GetStateAs(&identity)
 	if err != nil {
 		return err
 	}
 
-	fn(page)
-	return db.Account(account).PutState(page)
+	*auth = *identity.GetAuth()
+	return WriteStates(db, account)
+}
+
+func UpdateKeyPage(db DB, account *url.URL, fn func(*protocol.KeyPage)) error {
+	return UpdateAccount(db, account, fn)
+}
+
+func UpdateAccount[T protocol.Account](db DB, accountUrl *url.URL, fn func(T)) error {
+	var account T
+	err := db.Account(accountUrl).GetStateAs(&account)
+	if err != nil {
+		return err
+	}
+
+	fn(account)
+	return db.Account(accountUrl).PutState(account)
 }
 
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING

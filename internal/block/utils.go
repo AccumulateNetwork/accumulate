@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -148,34 +149,6 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 	return arec, nil
 }
 
-func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
-	var count int
-	for _, hash := range txids {
-		txn, err := batch.Transaction(hash[:]).GetState()
-		if err != nil {
-			count++
-			continue
-		}
-
-		if txn.Transaction.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
-			count++
-			continue
-		}
-	}
-	return count
-}
-
-func countExceptAnchors2(txns []*protocol.Transaction) int {
-	var count int
-	for _, txn := range txns {
-		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
-			count++
-			continue
-		}
-	}
-	return count
-}
-
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)
@@ -211,12 +184,12 @@ func getAccountAuth(batch *database.Batch, account protocol.Account) (*protocol.
 	case *protocol.KeyPage:
 		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
 		if !ok {
-			return nil, fmt.Errorf("invalid key page URL: %v", account.Url)
+			return nil, errors.Format(errors.StatusInternalError, "invalid key page URL: %v", account.Url)
 		}
 		var book *protocol.KeyBook
 		err := batch.Account(bookUrl).GetStateAs(&book)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 		return book.GetAuth(), nil
 

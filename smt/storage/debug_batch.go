@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
@@ -84,7 +85,11 @@ func (b *DebugBatch) Get(key Key) (v []byte, err error) {
 		}()
 	}
 
-	return b.Batch.Get(key)
+	v, err = b.Batch.Get(key)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return v, nil
 }
 
 func (b *DebugBatch) PretendWrite() {
