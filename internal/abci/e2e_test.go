@@ -637,23 +637,26 @@ func TestLiteAccountTx(t *testing.T) {
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
 	require.NoError(t, batch.Commit())
 
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob).String()
-	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	aliceUrl := aliceAcmeUrl.RootIdentity()
+	bobAcmeUrl := acctesting.AcmeLiteAddressTmPriv(bob)
+	bobUrl := bobAcmeUrl.RootIdentity().String()
+	charlieAcmeUrl := acctesting.AcmeLiteAddressTmPriv(charlie)
+	charlieUrl := charlieAcmeUrl.RootIdentity().String()
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
 		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
 		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
-		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl.RootIdentity(), 1).
+		send(newTxn(aliceAcmeUrl.String()).
+			WithSigner(aliceUrl, 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, alice).
 			Build())
 	})
 
-	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
+	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceAcmeUrl.String()).Balance.Int64())
 	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl).Balance.Int64())
 	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
 }

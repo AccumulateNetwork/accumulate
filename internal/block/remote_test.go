@@ -32,7 +32,8 @@ func pending(status *protocol.TransactionStatus) bool {
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
 	aliceTm := tmed25519.PrivKey(alice)
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm).RootIdentity()
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm)
+	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
 
 	sim.SetRouteFor(aliceUrl, "BVN0")
@@ -75,7 +76,7 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 	// Add credits to the key pages
 	envs = sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
+			WithPrincipal(aliceAcmeUrl).
 			WithSigner(aliceUrl, 1).
 			WithTimestampVar(timestamp).
 			WithBody(&AddCredits{
@@ -86,7 +87,7 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 			Initiate(SignatureTypeED25519, alice).
 			Build(),
 		acctesting.NewTransaction().
-			WithPrincipal(aliceUrl).
+			WithPrincipal(aliceAcmeUrl).
 			WithSigner(aliceUrl, 1).
 			WithTimestampVar(timestamp).
 			WithBody(&AddCredits{
@@ -136,12 +137,13 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	sim.InitChain()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs
-	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN0")
+	sim.SetRouteFor(aliceUrl, "BVN0")
 	sim.SetRouteFor(bobUrl, "BVN1")
 	sim.SetRouteFor(charlieUrl, "BVN2")
 
@@ -192,12 +194,13 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	sim.InitChain()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto the same BVN
-	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN1")
+	sim.SetRouteFor(aliceUrl, "BVN1")
 	sim.SetRouteFor(bobUrl, "BVN1")
 	sim.SetRouteFor(charlieUrl, "BVN1")
 
@@ -248,12 +251,13 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	sim.InitChain()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs
-	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN0")
+	sim.SetRouteFor(aliceUrl, "BVN0")
 	sim.SetRouteFor(bobUrl, "BVN1")
 	sim.SetRouteFor(charlieUrl, "BVN2")
 
@@ -307,12 +311,13 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	sim.InitChain()
 
 	alice := acctesting.GenerateKey(t.Name())
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
+	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs
-	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN0")
+	sim.SetRouteFor(aliceUrl, "BVN0")
 	sim.SetRouteFor(bobUrl, "BVN1")
 	sim.SetRouteFor(charlieUrl, "BVN2")
 

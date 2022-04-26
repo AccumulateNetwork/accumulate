@@ -77,8 +77,19 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
-	if IsLiteAccount(origin.String()) {
-		privKey, err := LookupByLite(origin.String())
+	isTokenAccount := IsLiteTokenAccount(origin.String())
+	isLiteIdentity := false
+	if !isTokenAccount {
+		isLiteIdentity = IsLiteIdentity(origin.String())
+	}
+	if isTokenAccount || isLiteIdentity {
+		var privKey []byte
+		var err error
+		if isTokenAccount {
+			privKey, err = LookupByLiteTokenUrl(origin.String())
+		} else {
+			privKey, err = LookupByLiteIdentityUrl(origin.String())
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
@@ -87,7 +98,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 			return nil, nil, err
 		}
 		signer.Type = sigType
-		signer.Url = origin
+		signer.Url = origin.RootIdentity()
 		signer.Version = 1
 		signer.SetPrivateKey(privKey)
 		return args, signer, nil
@@ -154,12 +165,21 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Bui
 	return args, principal, signer, nil
 }
 
-func IsLiteAccount(url string) bool {
+func IsLiteTokenAccount(url string) bool {
 	u, err := url2.Parse(url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	key, _, _ := protocol.ParseLiteTokenAddress(u)
+	return key != nil
+}
+
+func IsLiteIdentity(url string) bool {
+	u, err := url2.Parse(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	key, _, _ := protocol.ParseLiteIdentity(u)
 	return key != nil
 }
 
@@ -472,7 +492,7 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 	var err error
 	var tokenUrl *url2.URL
-	if IsLiteAccount(u.String()) {
+	if IsLiteTokenAccount(u.String()) {
 		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)

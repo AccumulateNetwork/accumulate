@@ -67,10 +67,10 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		// recipient. Most credit transfers will be within the same ADI, so this
 		// should catch most mistakes early.
 		switch recv := recv.(type) {
-		case *protocol.LiteTokenAccount, *protocol.KeyPage:
+		case *protocol.LiteIdentity, *protocol.KeyPage:
 			// OK
 		default:
-			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, recv.Type())
+			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteIdentity, protocol.AccountTypeKeyPage, recv.Type())
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if body.Recipient.Routing() == tx.Transaction.Header.Principal.Routing() {

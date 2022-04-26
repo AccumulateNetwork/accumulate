@@ -52,7 +52,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 
 	return NewTransaction().
 		WithPrincipal(from).
-		WithSigner(from, 1).
+		WithSigner(from.RootIdentity(), 1).
 		WithTimestamp(1).
 		WithBody(&send).
 		Initiate(protocol.SignatureTypeLegacyED25519, sponsor).
@@ -60,8 +60,13 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
-	url := AcmeLiteAddressTmPriv(key).String()
-	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
+	url := AcmeLiteAddressTmPriv(key)
+	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
+	if err != nil {
+		return err
+	}
+	liteIdUrl := url.RootIdentity()
+	return CreateLiteIdentity(db, liteIdUrl.String(), 0)
 }
 
 func AddCredits(db DB, account *url.URL, credits float64) error {

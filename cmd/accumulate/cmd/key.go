@@ -278,7 +278,7 @@ func pubKeyFromString(s string) ([]byte, error) {
 	return pubKey[:], nil
 }
 
-func LookupByLite(lite string) ([]byte, error) {
+func LookupByLiteTokenUrl(lite string) ([]byte, error) {
 	liteKey, isLite := LabelForLiteTokenAccount(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite account %s", liteKey)
@@ -287,6 +287,20 @@ func LookupByLite(lite string) ([]byte, error) {
 	label, err := Db.Get(BucketLite, []byte(liteKey))
 	if err != nil {
 		return nil, fmt.Errorf("lite account not found %s", lite)
+	}
+
+	return LookupByLabel(string(label))
+}
+
+func LookupByLiteIdentityUrl(lite string) ([]byte, error) {
+	liteKey, isLite := LabelForLiteIdentity(lite)
+	if !isLite {
+		return nil, fmt.Errorf("invalid lite identity %s", liteKey)
+	}
+
+	label, err := Db.Get(BucketLite, []byte(liteKey))
+	if err != nil {
+		return nil, fmt.Errorf("lite identity account not found %s", lite)
 	}
 
 	return LookupByLabel(string(label))
@@ -312,6 +326,23 @@ func LabelForLiteTokenAccount(label string) (string, bool) {
 	}
 
 	key, _, err := protocol.ParseLiteTokenAddress(u)
+	if key == nil || err != nil {
+		return label, false
+	}
+
+	return u.Hostname(), true
+}
+
+// LabelForLiteIdentity returns the label of the LiteIdentity if label
+// is a valid LiteIdentity account URL. Otherwise, LabelForLiteIdentity returns the
+// original value.
+func LabelForLiteIdentity(label string) (string, bool) {
+	u, err := url.Parse(label)
+	if err != nil {
+		return label, false
+	}
+
+	key, _, err := protocol.ParseLiteIdentity(u)
 	if key == nil || err != nil {
 		return label, false
 	}
