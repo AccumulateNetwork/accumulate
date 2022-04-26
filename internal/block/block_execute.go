@@ -1,25 +1,34 @@
 package block
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Block struct {
 	BlockMeta
-	State  BlockState
-	Anchor *protocol.SyntheticAnchor
-	Batch  *database.Batch
+	State BlockState
+	Batch *database.Batch
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	err := delivery.LoadTransaction(block.Batch)
-	if err != nil {
-		return nil, err
+	status, err := delivery.LoadTransaction(block.Batch)
+	switch {
+	case err == nil:
+		// Ok
+
+	case !errors.Is(err, errors.StatusDelivered):
+		// Unknown error
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+
+	default:
+		// Transaction has already been delivered
+		status := status.Copy()
+		status.Code = protocol.ErrorCodeAlreadyDelivered.GetEnumValue()
+		return status, nil
 	}
 
 	// Process signatures
@@ -34,18 +43,12 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 			}
 			block.State.MergeSignature(s)
 
-			if !s.Remote {
-				continue
+			fwd, err := x.prepareToForward(delivery, s, signature)
+			if err != nil {
+				return nil, err
 			}
-
-			keySig, ok := signature.(protocol.KeySignature)
-			if !ok {
-				// This should never happen
-				return nil, fmt.Errorf("unexpected remote signature that is not a key signature: %T", signature)
-			}
-
-			if s.Remote {
-				delivery.Remote = append(delivery.Remote, keySig)
+			if fwd != nil {
+				delivery.Remote = append(delivery.Remote, fwd)
 			}
 		}
 
@@ -57,14 +60,12 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 	// Process remote signatures
 	if len(delivery.Remote) > 0 {
-		fwdTxn, err := x.ProcessRemoteSignatures(block, delivery.Transaction, delivery.Remote)
+		err := x.ProcessRemoteSignatures(block, delivery)
 		if err != nil {
 			return nil, err
 		}
-		delivery.State.DidProduceTxn(delivery.Transaction.Header.Principal, fwdTxn)
 	}
 
-	var status *protocol.TransactionStatus
 	if len(delivery.Remote) == len(delivery.Signatures) {
 		// All signatures are remote
 		status = &protocol.TransactionStatus{Remote: true}

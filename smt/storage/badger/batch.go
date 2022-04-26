@@ -95,11 +95,12 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	}
 
 	item, err := b.txn.Get(key[:])
-	if err != nil {
-		// If we didn't find the value, return ErrNotFound
-		if errors.Is(err, badger.ErrKeyNotFound) {
-			err = storage.ErrNotFound
-		}
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, badger.ErrKeyNotFound):
+		return nil, errors.NotFound("key %s not found", key)
+	default:
 		return nil, err
 	}
 

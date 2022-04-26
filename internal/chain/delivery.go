@@ -1,10 +1,10 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -111,7 +111,7 @@ type Delivery struct {
 	parent      *Delivery
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
-	Remote      []protocol.KeySignature
+	Remote      []*protocol.ForwardedSignature
 	State       ProcessTransactionState
 }
 
@@ -163,22 +163,22 @@ func (d *Delivery) VerifySignatures() bool {
 }
 
 // LoadTransaction attempts to load the transaction from the database.
-func (d *Delivery) LoadTransaction(batch *database.Batch) error {
+func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// Check the transaction status
 	status, err := batch.Transaction(d.Transaction.GetHash()).GetStatus()
 	switch {
 	case err != nil:
 		// Unknown error
-		return fmt.Errorf("load transaction status: %w", err)
+		return nil, fmt.Errorf("load transaction status: %w", err)
 
 	case status.Delivered:
 		// Transaction has already been delivered
-		return protocol.Errorf(protocol.ErrorCodeAlreadyDelivered, "transaction has already been delivered")
+		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
 	}
 
 	// Ignore produced synthetic transactions
 	if status.Remote && !status.Pending {
-		return nil
+		return status, nil
 	}
 
 	// Load previous transaction state
@@ -186,31 +186,31 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) error {
 	if err == nil {
 		// Loaded existing the transaction from the database
 		d.Transaction = txState.Transaction
-		return nil
+		return status, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		// Unknown error
-		return fmt.Errorf("load transaction: unknown error: %w", err)
+		return nil, fmt.Errorf("load transaction: unknown error: %w", err)
 	}
 
 	// Did the envelope include the full body?
 	if d.Transaction.Body.Type() != protocol.TransactionTypeRemote {
-		return nil
+		return status, nil
 	}
 
 	// If the remote transaction does not specify a principal, the transaction
 	// must exist locally
 	principal := d.Transaction.Header.Principal
 	if principal == nil {
-		return fmt.Errorf("load transaction: no principal: %w", err)
+		return nil, fmt.Errorf("load transaction: no principal: %w", err)
 	}
 
 	// If any signature is local or forwarded, the transaction must exist
 	// locally
 	for _, signature := range d.Signatures {
 		if signature.Type() == protocol.SignatureTypeForwarded || signature.GetSigner().LocalTo(principal) {
-			return fmt.Errorf("load transaction: local signature: %w", err)
+			return nil, fmt.Errorf("load transaction: local signature: %w", err)
 		}
 	}
 
-	return nil
+	return status, nil
 }
