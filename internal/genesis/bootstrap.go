@@ -25,12 +25,13 @@ type InitOpts struct {
 	Validators  []tmtypes.GenesisValidator
 	GenesisTime time.Time
 	Logger      log.Logger
+	Router      routing.Router
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	db := database.New(kvdb, opts.Logger.With("module", "database"))
 
-	exec, err := block.NewGenesisExecutor(db, opts.Logger, opts.Network)
+	exec, err := block.NewGenesisExecutor(db, opts.Logger, opts.Network, opts.Router)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		ledger.AddAuthority(uBook)
 		ledger.Synthetic.Nonce = 1
 		ledger.ActiveOracle = oraclePrice
-		ledger.PendingOracle = ledger.ActiveOracle
+		ledger.PendingOracle = oraclePrice
 		ledger.Index = protocol.GenesisBlock
 		records = append(records, ledger)
 

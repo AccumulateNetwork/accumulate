@@ -3,21 +3,32 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Block struct {
 	BlockMeta
-	State  BlockState
-	Anchor *protocol.SyntheticAnchor
-	Batch  *database.Batch
+	State BlockState
+	Batch *database.Batch
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	err := delivery.LoadTransaction(block.Batch)
-	if err != nil {
-		return nil, err
+	status, err := delivery.LoadTransaction(block.Batch)
+	switch {
+	case err == nil:
+		// Ok
+
+	case !errors.Is(err, errors.StatusDelivered):
+		// Unknown error
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+
+	default:
+		// Transaction has already been delivered
+		status := status.Copy()
+		status.Code = protocol.ErrorCodeAlreadyDelivered.GetEnumValue()
+		return status, nil
 	}
 
 	// Process signatures
@@ -55,7 +66,6 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		}
 	}
 
-	var status *protocol.TransactionStatus
 	if len(delivery.Remote) == len(delivery.Signatures) {
 		// All signatures are remote
 		status = &protocol.TransactionStatus{Remote: true}

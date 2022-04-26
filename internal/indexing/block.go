@@ -42,6 +42,7 @@ func (bu *BlockChainUpdatesIndexer) Set(updates []ChainUpdate) error {
 
 	v.Entries = make([]*ChainUpdate, len(updates))
 	for i, update := range updates {
+		update := update // Avoid the range variable issue
 		v.Entries[i] = &update
 	}
 

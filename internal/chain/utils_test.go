@@ -17,7 +17,8 @@ func NewStateManagerForTest(t *testing.T, db *database.Database, envelope *proto
 	require.Len(t, delivery, 1)
 	batch := db.Begin(false)
 	defer batch.Discard()
-	require.NoError(t, delivery[0].LoadTransaction(batch))
+	_, err = delivery[0].LoadTransaction(batch)
+	require.NoError(t, err)
 
 	txid := types.Bytes(delivery[0].Transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
