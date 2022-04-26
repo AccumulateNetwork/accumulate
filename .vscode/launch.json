@@ -35,7 +35,8 @@
         "devnet",
         "-w",
         "${workspaceFolder}/.nodes",
-        "--truncate"
+        "--truncate",
+        "--debug",
       ]
     },
     {
@@ -62,7 +63,8 @@
         "devnet",
         "-w",
         "${workspaceFolder}/.nodes",
-        "--truncate"
+        "--truncate",
+        "--debug",
       ]
     },
     {
@@ -74,6 +76,7 @@
       "args": [
         "run-dual",
         "--truncate",
+        "--debug",
         "${workspaceFolder}/.nodes/dn/Node0",
         "${workspaceFolder}/.nodes/bvn0/Node0",
       ]
@@ -90,7 +93,8 @@
         "${workspaceFolder}/.nodes/dn",
         "-n",
         "0",
-        "--truncate"
+        "--truncate",
+        "--debug",
       ]
     },
     {
@@ -101,7 +105,7 @@
       "program": "${workspaceFolder}/tools/test/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
-        "-X=--reset",
+        "-X=--reset,--debug",
       ]
     },
     {
@@ -112,9 +116,9 @@
       "program": "${workspaceFolder}/tools/test/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
-        "-X", "-v=1,-b=1,--reset", "play",
-        // "${workspaceFolder}/playbooks/validate/01-lite-token.play",
-        // "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "-X", "-v=1,-b=1,--reset,--debug", "play",
+        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        "${workspaceFolder}/playbooks/validate/02-identity.play",
         "${workspaceFolder}/playbooks/validate/03-lite-data.play",
       ]
     },
