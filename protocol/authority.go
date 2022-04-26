@@ -123,22 +123,6 @@ func (*LiteIdentity) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
 	return -1, nil, false
 }
 
-/* ***** Lite account auth ***** */
-
-// GetSigners returns the lite address.
-func (l *LiteTokenAccount) GetSigners() []*url.URL { return []*url.URL{l.Url} }
-
-// GetVersion returns 1.
-func (*LiteTokenAccount) GetVersion() uint64 { return 1 }
-
-// GetSignatureThreshold returns 1.
-func (*LiteTokenAccount) GetSignatureThreshold() uint64 { return 1 }
-
-// EntryByDelegate returns -1, nil, false.
-func (*LiteTokenAccount) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
-	return -1, nil, false
-}
-
 /* ***** ADI account auth ***** */
 
 // GetSigners returns URLs of the book's pages.
