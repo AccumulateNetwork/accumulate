@@ -31,7 +31,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Load the transaction
-	err := delivery.LoadTransaction(batch)
+	_, err := delivery.LoadTransaction(batch)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
