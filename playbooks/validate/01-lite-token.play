@@ -31,7 +31,6 @@ acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
 ```go{ id: 2 }
 Show(Faucet(aliceAcme).Wait().Ok())
 Show(Get(aliceAcme))
-Show(Get(aliceIdentity))
 ```
 
 ```{ result_of: 2, id: 1, mime: "text/plain" }
