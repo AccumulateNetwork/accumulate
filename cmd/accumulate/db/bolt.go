@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 var ErrNotOpen = errors.New("database not open")
@@ -29,37 +28,13 @@ var WalletVersion = NewVersion(0, 0, 1, 0)
 //magic is used for encryption verification when a database is opened
 var magic = sha256.Sum256([]byte("accumulate"))
 
-type SecureDBMetaData struct {
-	Salt      []byte
-	Challenge []byte
-}
-
-func (m *SecureDBMetaData) UnmarshalBinary(data []byte) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("error unmarshalling: %v", r)
-		}
-	}()
-
-	m.Salt, data = common.BytesSlice(data)
-	m.Challenge, _ = common.BytesSlice(data)
-
-	return err
-}
-
-func (m *SecureDBMetaData) MarshalBinary() ([]byte, error) {
-	b := bytes.Buffer{}
-	b.Write(common.SliceBytes(m.Salt))
-	b.Write(common.SliceBytes(m.Challenge))
-	return b.Bytes(), nil
-}
-
 type BoltDB struct {
 	db *bolt.DB
 
 	filename string
-	// Metadata includes salt
-	metadata *SecureDBMetaData
+
+	//salt is needed to generate the encryption key from the password
+	salt []byte
 
 	// encryptionkey is a hash of the password and salt
 	encryptionkey []byte
@@ -82,8 +57,8 @@ func (b *BoltDB) Close() error {
 }
 
 func (b *BoltDB) loadAndVerifyMagicIfNecessary(password string) error {
-	//make sure the metadata is clear
-	b.metadata = nil
+	//make sure the salt is clear
+	b.salt = nil
 
 	//now lets read the magic to see this is an encrypted database
 	magicData, err := b.Get(BucketConfig, []byte("magic"))
@@ -97,24 +72,18 @@ func (b *BoltDB) loadAndVerifyMagicIfNecessary(password string) error {
 	}
 
 	//unpack the salt
-	data, err := b.Get(BucketConfig, []byte("config"))
+	b.salt, err = b.Get(BucketConfig, []byte("salt"))
 	if err != nil {
 		return err
 	}
 
-	b.metadata = new(SecureDBMetaData)
-	err = b.metadata.UnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-
-	b.encryptionkey, err = GetKey(password, b.metadata.Salt)
+	b.encryptionkey, err = GetKey(password, b.salt)
 	if err != nil {
 		return err
 	}
 
 	//decrypt data using password
-	data, err = Decrypt(magicData, b.encryptionkey)
+	data, err := Decrypt(magicData, b.encryptionkey)
 	if err != nil {
 		return ErrInvalidPassword
 	}
@@ -147,13 +116,6 @@ func (b *BoltDB) InitDB(filename string, password string) (err error) {
 				return err
 			}
 
-			metadata := new(SecureDBMetaData)
-			metadata.Salt = salt
-			eSalt, err := metadata.MarshalBinary()
-			if err != nil {
-				return err
-			}
-
 			key, err := GetKey(password, salt)
 			if err != nil {
 				return err
@@ -170,7 +132,7 @@ func (b *BoltDB) InitDB(filename string, password string) (err error) {
 			}
 
 			//now store the salt
-			err = b.Put(BucketConfig, []byte("config"), eSalt)
+			err = b.Put(BucketConfig, []byte("salt"), salt)
 			if err != nil {
 				return err
 			}
@@ -188,8 +150,8 @@ func (b *BoltDB) InitDB(filename string, password string) (err error) {
 func (b *BoltDB) decryptIfNecessary(value []byte) ([]byte, error) {
 	var err error
 	//check to see if we need to decrypt the value
-	if b.metadata != nil {
-		//if we have metadata then the database is expected to be encrypted
+	if b.salt != nil {
+		//if we have salt then the database is expected to be encrypted
 		if b.encryptionkey == nil {
 			return nil, ErrNoPassword
 		}
@@ -204,8 +166,8 @@ func (b *BoltDB) decryptIfNecessary(value []byte) ([]byte, error) {
 func (b *BoltDB) encryptIfNecessary(value []byte) ([]byte, error) {
 	var err error
 	//check to see if we need to decrypt the value
-	if b.metadata != nil {
-		//if we have metadata then the database is expected to be encrypted
+	if b.salt != nil {
+		//if we have salt then the database is expected to be encrypted
 		if b.encryptionkey == nil {
 			return nil, ErrNoPassword
 		}
