@@ -23,7 +23,7 @@ function success {
 }
 
 section "Test minor block API omit-tx on BVN0"
-accumulate blocks minor acc://bvn-bvn0 10 5 omit >/tmp/minor.txt
+accumulate --do-not-encrypt-wallet blocks minor acc://bvn-bvn0 10 5 omit >/tmp/minor.txt
 FILESIZE=$(stat -c%s "/tmp/minor.txt")
 if [ "${FILESIZE}" -lt "500" ]; then
   die "minor block result set too small: ${FILESIZE}"
