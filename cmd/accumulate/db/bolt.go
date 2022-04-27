@@ -161,7 +161,10 @@ func (b *BoltDB) InitDB(filename string, password string) (err error) {
 
 			//store the encrypted magic code so we can do some quick decoding checks on startup
 			data, err := Encrypt(magic[:], key)
-			err = b.Put(BucketConfig, []byte("magic"), data)
+			if err != nil {
+				return err
+			}
+			err = b.PutRaw(BucketConfig, []byte("magic"), data)
 			if err != nil {
 				return err
 			}
