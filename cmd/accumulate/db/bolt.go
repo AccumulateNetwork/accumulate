@@ -17,8 +17,16 @@ var ErrNotFound = errors.New("key not found")
 var ErrNoBucket = errors.New("bucket not defined")
 var ErrNoPassword = errors.New("no password specified for encrypted database")
 var ErrInvalidPassword = errors.New("invalid password")
+var ErrMalformedEncryptedDatabase = errors.New("malformed encrypted database")
+var ErrDatabaseNotEncrypted = errors.New("database not encrypted")
+var ErrDatabaseAlreadyEncrypted = errors.New("database already encrypted")
 
-var BucketSecureBucket = []byte("_secure_bucket")
+var BucketConfig = []byte("Config")
+
+//WalletVersion is incremented whenever a bucket format is changed.
+var WalletVersion = NewVersion(0, 0, 1, 0)
+
+//magic is used for encryption verification when a database is opened
 var magic = sha256.Sum256([]byte("accumulate"))
 
 type SecureDBMetaData struct {
@@ -49,6 +57,7 @@ func (m *SecureDBMetaData) MarshalBinary() ([]byte, error) {
 type BoltDB struct {
 	db *bolt.DB
 
+	filename string
 	// Metadata includes salt
 	metadata *SecureDBMetaData
 
@@ -60,6 +69,10 @@ type BoltDB struct {
 	UnlockedUntil time.Time
 }
 
+func (b *BoltDB) Name() string {
+	return b.filename
+}
+
 //Close the database
 func (b *BoltDB) Close() error {
 	if b.db == nil {
@@ -68,66 +81,170 @@ func (b *BoltDB) Close() error {
 	return b.db.Close()
 }
 
+func (b *BoltDB) loadAndVerifyMagicIfNecessary(password string) error {
+	//make sure the metadata is clear
+	b.metadata = nil
+
+	//now lets read the magic to see this is an encrypted database
+	magicData, err := b.Get(BucketConfig, []byte("magic"))
+	if err != nil {
+		return ErrDatabaseNotEncrypted
+	}
+
+	//test to see if the magic is in the clear, if so then return the not encrypted error
+	if bytes.Compare(magic[:], magicData) == 0 {
+		return ErrDatabaseNotEncrypted
+	}
+
+	//unpack the salt
+	data, err := b.Get(BucketConfig, []byte("config"))
+	if err != nil {
+		return err
+	}
+
+	b.metadata = new(SecureDBMetaData)
+	err = b.metadata.UnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	b.encryptionkey, err = GetKey(password, b.metadata.Salt)
+	if err != nil {
+		return err
+	}
+
+	//decrypt data using password
+	data, err = Decrypt(magicData, b.encryptionkey)
+	if err != nil {
+		return ErrInvalidPassword
+	}
+
+	//now do a simple comparison of the decrypted data to what we expect to see
+	if bytes.Compare(data, magic[:]) != 0 {
+		return ErrMalformedEncryptedDatabase
+	}
+
+	return nil
+}
+
 //InitDB will open the database
 func (b *BoltDB) InitDB(filename string, password string) (err error) {
 	b.db, err = bolt.Open(filename, 0600, nil)
-	if password != "" && err != nil {
-		var data []byte
-		data, err = b.Get(BucketSecureBucket, []byte("config"))
-		b.metadata = new(SecureDBMetaData)
+	if err != nil {
+		return ErrNotOpen
+	}
+
+	b.filename = filename
+
+	//if a password is supplied, then check if it is encrypted.
+	if password != "" {
+		_, err := b.Get(BucketConfig, []byte("version"))
 		if err != nil {
+			//if we get here the database is new (or older and not encrypted), so let's get some salt
 			salt := make([]byte, 30)
 			_, err = rand.Read(salt)
 			if err != nil {
 				return err
 			}
 
-			b.metadata.Salt = salt
-		} else {
-			err = b.metadata.UnmarshalBinary(data)
+			metadata := new(SecureDBMetaData)
+			metadata.Salt = salt
+			eSalt, err := metadata.MarshalBinary()
 			if err != nil {
 				return err
 			}
 
-			data, err = b.Get(BucketSecureBucket, []byte("magic"))
-			//TODO decrypt data using password
-			if bytes.Compare(data, magic[:]) == 0 {
-				return ErrInvalidPassword
+			key, err := GetKey(password, salt)
+			if err != nil {
+				return err
 			}
-		}
-	} else {
-		_, err := b.Get(BucketSecureBucket, []byte("magic"))
-		if err == nil {
-			return ErrNoPassword
+
+			//store the encrypted magic code so we can do some quick decoding checks on startup
+			data, err := Encrypt(magic[:], key)
+			err = b.Put(BucketConfig, []byte("magic"), data)
+			if err != nil {
+				return err
+			}
+
+			//now store the salt
+			err = b.Put(BucketConfig, []byte("config"), eSalt)
+			if err != nil {
+				return err
+			}
+
+			err = b.PutRaw(BucketConfig, []byte("version"), WalletVersion.Bytes())
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	return err
+	return b.loadAndVerifyMagicIfNecessary(password)
+}
+
+func (b *BoltDB) decryptIfNecessary(value []byte) ([]byte, error) {
+	var err error
+	//check to see if we need to decrypt the value
+	if b.metadata != nil {
+		//if we have metadata then the database is expected to be encrypted
+		if b.encryptionkey == nil {
+			return nil, ErrNoPassword
+		}
+		value, err = Decrypt(value, b.encryptionkey)
+		if err != nil {
+			return nil, ErrInvalidPassword
+		}
+	}
+	return value, nil
+}
+
+func (b *BoltDB) encryptIfNecessary(value []byte) ([]byte, error) {
+	var err error
+	//check to see if we need to decrypt the value
+	if b.metadata != nil {
+		//if we have metadata then the database is expected to be encrypted
+		if b.encryptionkey == nil {
+			return nil, ErrNoPassword
+		}
+		value, err = Encrypt(value, b.encryptionkey)
+		if err != nil {
+			return nil, ErrInvalidPassword
+		}
+	}
+	return value, nil
 }
 
 //Get will get an entry in the database given a bucket and key
-func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
+func (b *BoltDB) GetRaw(bucket []byte, key []byte) (value []byte, err error) {
 	if b.db == nil {
 		return nil, ErrNotOpen
 	}
 
 	err = b.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket(bucket)
-		if b == nil {
+		bk := tx.Bucket(bucket)
+		if bk == nil {
 			return ErrNoBucket
 		}
-		value = b.Get(key)
+		value = bk.Get(key)
 		if value == nil {
 			return ErrNotFound
 		}
-		return err
+		return nil
 	})
 
 	return value, err
 }
 
-//Put will write data to a given bucket using the key
-func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
+//Get will get an entry in the database given a bucket and key
+func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
+	value, err = b.GetRaw(bucket, key)
+	if err != nil {
+		return nil, err
+	}
+	return b.decryptIfNecessary(value)
+}
+
+func (b *BoltDB) PutRaw(bucket []byte, key []byte, value []byte) error {
 	if b.db == nil {
 		return ErrNotOpen
 	}
@@ -141,6 +258,15 @@ func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
 	})
 }
 
+//Put will write data to a given bucket using the key
+func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
+	value, err := b.encryptIfNecessary(value)
+	if err != nil {
+		return err
+	}
+	return b.PutRaw(bucket, key, value)
+}
+
 //GetBucket will return the contents of a bucket
 func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 	if b.db == nil {
@@ -148,13 +274,17 @@ func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 	}
 
 	err = b.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket(bucket)
-		if b == nil {
+		bk := tx.Bucket(bucket)
+		if bk == nil {
 			return ErrNoBucket
 		}
-		c := b.Cursor()
+		c := bk.Cursor()
 		buck = new(Bucket)
 		for k, v := c.First(); k != nil; k, v = c.Next() {
+			v, err = b.decryptIfNecessary(v)
+			if err != nil {
+				return err
+			}
 			buck.Put(k, v)
 		}
 		return err
