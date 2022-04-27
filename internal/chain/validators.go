@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -56,20 +56,9 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	acc := st.stateCache.batch.Account(protocol.DnUrl().JoinPath(protocol.Globals))
-	var data *database.Data
-	data, err = acc.Data()
+	entry, err := getLatestDataEntry(st, st.nodeUrl.JoinPath(protocol.Globals))
 	if err != nil {
-		//page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
 		return nil, err
-
-	}
-	var entry *protocol.DataEntry
-	_, entry, err = data.GetLatest()
-	if err != nil {
-		//	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
-		return nil, err
-
 	}
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
 	// Record the update
@@ -105,21 +94,11 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 
 	// Update the threshold
 
-	acc := st.stateCache.batch.Account(protocol.DnUrl().JoinPath(protocol.Globals))
-	var data *database.Data
-	data, err = acc.Data()
+	entry, err := getLatestDataEntry(st, st.nodeUrl.JoinPath(protocol.Globals))
 	if err != nil {
-		//page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
 		return nil, err
-
 	}
-	var entry *protocol.DataEntry
-	_, entry, err = data.GetLatest()
-	if err != nil {
-		//	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), nil)
-		return nil, err
-
-	}
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
 
 	// Record the update
@@ -191,4 +170,17 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 	}
 
 	return page, nil
+}
+
+func getLatestDataEntry(st *StateManager, url *url.URL) (*protocol.DataEntry, error) {
+	acc := st.stateCache.batch.Account(url)
+	var entry *protocol.DataEntry
+
+	data, err := acc.Data()
+	if err != nil {
+		return &protocol.DataEntry{}, err
+
+	}
+	_, entry, err = data.GetLatest()
+	return entry, err
 }
