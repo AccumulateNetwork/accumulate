@@ -21,10 +21,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticReceipt{},
 			SyntheticForwardTransaction{},
 
-			InternalSendTransactions{},
-			InternalTransactionsSigned{},
-			InternalTransactionsSent{},
-
 			// for data accounts
 			WriteData{},
 
@@ -71,10 +67,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticWriteData{},
 			SyntheticReceipt{},
 			SyntheticForwardTransaction{},
-
-			InternalSendTransactions{},
-			InternalTransactionsSigned{},
-			InternalTransactionsSent{},
 
 			// TODO Only for TestNet
 			AcmeFaucet{},

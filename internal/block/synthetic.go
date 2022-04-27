@@ -81,9 +81,6 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, err
 	}
 
-	// Append the ID
-	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, *(*[32]byte)(txn.GetHash()))
-
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++
 	err = batch.Account(m.Network.Ledger()).PutState(ledgerState)
