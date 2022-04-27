@@ -165,7 +165,10 @@ func (d *Delivery) VerifySignatures() bool {
 // LoadTransaction attempts to load the transaction from the database.
 func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// Check the transaction status
-	status, err := batch.Transaction(d.Transaction.GetHash()).GetStatus()
+	hash := d.Transaction.GetHash()
+	accurl, _ := batch.Transaction(hash).GetOriginUrl()
+	acc := batch.Account(accurl)
+	status, err := acc.GetStatus(hash)
 	switch {
 	case err != nil:
 		// Unknown error

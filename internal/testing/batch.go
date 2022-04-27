@@ -46,7 +46,10 @@ func (t *BatchTest) AddSignature(txnHash []byte, sig protocol.Signature) {
 }
 
 func (t *BatchTest) GetTxnStatus(txnHash []byte) *protocol.TransactionStatus {
-	status, err := t.Transaction(txnHash).GetStatus()
+	accurl, _ := t.Transaction(txnHash).GetOriginUrl()
+	acc := t.Batch.Account(accurl)
+	status, err := acc.GetStatus(txnHash)
+
 	require.NoError(t, err)
 	return status
 }

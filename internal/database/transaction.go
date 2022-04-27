@@ -20,17 +20,6 @@ func (b *Batch) Transaction(id []byte) *Transaction {
 	return &Transaction{b, transaction(id)}
 }
 
-// ensureSigner ensures that the transaction's status includes the given signer.
-func (t *Transaction) ensureSigner(signer protocol.Signer) error {
-	status, err := t.GetStatus()
-	if err != nil {
-		return err
-	}
-
-	status.AddSigner(signer)
-	return t.PutStatus(status)
-}
-
 // Index returns a value that can read or write an index value.
 func (t *Transaction) Index(key ...interface{}) *Value {
 	return &Value{t.batch, t.key.Index(key...)}
@@ -46,29 +35,34 @@ func (t *Transaction) GetState() (*SigOrTxn, error) {
 	return v, nil
 }
 
+//GetOriginUrl loads the url of the account initiating the transaction
+func (t *Transaction) GetOriginUrl() (*url.URL, error) {
+	txn, err := t.GetState()
+	if err != nil {
+		return new(url.URL), fmt.Errorf("Transaction Not found %x", err)
+	}
+	accurl := txn.Transaction.Header.Principal
+	if accurl == nil {
+		accurl = txn.Signature.GetSigner()
+		if accurl == nil {
+			return new(url.URL), fmt.Errorf("Unable to resolve origin account")
+		}
+	}
+	return accurl, nil
+}
+
+//GetTxHash returns the transaction Hash
+func (t *Transaction) GetTxHash() ([]byte, error) {
+	txn, err := t.GetState()
+	if err != nil {
+		return nil, err
+	}
+	return txn.Hash[:], nil
+}
+
 // PutState stores the transaction state.
 func (t *Transaction) PutState(v *SigOrTxn) error {
 	t.batch.putValue(t.key.State(), v)
-	return nil
-}
-
-// GetStatus loads the transaction status.
-func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
-	v := new(protocol.TransactionStatus)
-	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	return v, nil
-}
-
-// PutStatus stores the transaction status.
-func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
-	if v.Result == nil {
-		v.Result = new(protocol.EmptyResult)
-	}
-
-	t.batch.putValue(t.key.Status(), v)
 	return nil
 }
 

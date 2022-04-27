@@ -259,7 +259,10 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		obj, err := batch.Transaction(hash).GetStatus()
+		accurl, err := batch.Transaction(hash).GetOriginUrl()
+		require.NoError(s, err)
+		acc := batch.Account(accurl)
+		obj, err := acc.GetStatus(hash)
 		require.NoError(s, err)
 		if status(obj) {
 			return x
@@ -305,12 +308,13 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	batch := x.Database.Begin(false)
 	synth, err1 := batch.Transaction(txnHash).GetSyntheticTxns()
 	state, err2 := batch.Transaction(txnHash).GetState()
-	status, err3 := batch.Transaction(txnHash).GetStatus()
+	accurl, _ := batch.Transaction(txnHash).GetOriginUrl()
+	acc := batch.Account(accurl)
+	status, err3 := acc.GetStatus(txnHash)
 	batch.Discard()
 	require.NoError(s, err1)
 	require.NoError(s, err2)
 	require.NoError(s, err3)
-
 	status.For = *(*[32]byte)(txnHash)
 	statuses := []*protocol.TransactionStatus{status}
 	transactions := []*protocol.Transaction{state.Transaction}

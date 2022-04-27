@@ -16,9 +16,11 @@ func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) 
 	if transaction.Body.Type() == protocol.TransactionTypeRemote {
 		return true, nil
 	}
-
 	// Load the transaction status
-	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
+	hash := transaction.GetHash()
+	accurl, _ := batch.Transaction(hash).GetOriginUrl()
+	acc := batch.Account(accurl)
+	status, err := acc.GetStatus(hash)
 	if err != nil {
 		return false, fmt.Errorf("load object metadata: %w", err)
 	}
@@ -466,9 +468,11 @@ func processSigners(batch *database.Batch, transaction *protocol.Transaction, si
 	if !transaction.Header.Principal.LocalTo(signature.RoutingLocation()) {
 		return signers, nil
 	}
-
-	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
+	hash := transaction.GetHash()
+	record := batch.Transaction(hash)
+	accurl, _ := record.GetOriginUrl()
+	acc := batch.Account(accurl)
+	status, err := acc.GetStatus(hash)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -478,7 +482,7 @@ func processSigners(batch *database.Batch, transaction *protocol.Transaction, si
 	for _, signer := range signers {
 		status.AddSigner(signer)
 	}
-	err = record.PutStatus(status)
+	err = acc.PutStatus(status, hash)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}

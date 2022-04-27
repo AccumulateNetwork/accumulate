@@ -269,7 +269,9 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		txn := state.Transaction
 
 		// TODO Can we make this less hacky?
-		status, err := record.GetStatus()
+		accurl, _ := batch.Transaction(hash).GetOriginUrl()
+		acc := batch.Account(accurl)
+		status, err := acc.GetStatus(hash)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
 		}

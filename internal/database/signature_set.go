@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -133,8 +134,18 @@ func (s *SignatureSet) Add(newSignature protocol.Signature) (int, error) {
 	if !s.hashes.Add(newEntry, newSignature) {
 		return len(s.hashes.Entries), nil
 	}
-
-	err = s.txn.ensureSigner(s.signer)
+	var accurl *url.URL
+	accurl, err = s.txn.GetOriginUrl()
+	if err != nil {
+		return 0, err
+	}
+	acc := s.txn.batch.Account(accurl)
+	var hash []byte
+	hash, err = s.txn.GetTxHash()
+	if err != nil {
+		return 0, err
+	}
+	err = acc.ensureSigner(s.signer, hash)
 	if err != nil {
 		return 0, err
 	}

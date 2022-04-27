@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -42,10 +43,14 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 	}
 
 	// Do not update the key page version. Do not reset LastUsedOn.
-
+	var accurl *url.URL
 	// Find the first signature
-	txObj := st.batch.Transaction(tx.Transaction.GetHash())
-	status, err := txObj.GetStatus()
+	hash := tx.Transaction.GetHash()
+	txObj := st.batch.Transaction(hash)
+	accurl, _ = st.batch.Transaction(hash).GetOriginUrl()
+	acc := st.batch.Account(accurl)
+	status, err := acc.GetStatus(hash)
+
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}

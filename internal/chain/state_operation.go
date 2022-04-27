@@ -101,8 +101,9 @@ func (m *StateManager) UpdateStatus(txid []byte, status *protocol.TransactionSta
 
 func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
 	// Load the transaction status & state
-	tx := st.batch.Transaction(u.txid)
-	curStatus, err := tx.GetStatus()
+	accurl, _ := st.batch.Transaction(u.txid).GetOriginUrl()
+	acc := st.batch.Account(accurl)
+	curStatus, err := acc.GetStatus(u.txid)
 	if err != nil {
 		return nil, fmt.Errorf("retrieving status for transaction %s failed: %w", logging.AsHex(u.txid), err)
 	}
@@ -112,7 +113,7 @@ func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, nil
 	}
 
-	err = tx.PutStatus(u.status)
+	err = acc.PutStatus(u.status, u.txid)
 	if err != nil {
 		return nil, err
 	}

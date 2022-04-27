@@ -224,3 +224,33 @@ func (r *Account) StateReceipt() (*managed.Receipt, error) {
 
 	return receipt, nil
 }
+
+// GetStatus loads the transaction status.
+func (a *Account) GetStatus(txHash []byte) (*protocol.TransactionStatus, error) {
+	v := new(protocol.TransactionStatus)
+	err := a.batch.getValuePtr(a.key.Status(txHash[:]), v, &v, true)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+	return v, nil
+}
+
+// PutStatus stores the transaction status.
+func (a *Account) PutStatus(v *protocol.TransactionStatus, txHash []byte) error {
+	if v.Result == nil {
+		v.Result = new(protocol.EmptyResult)
+	}
+
+	a.batch.putValue(a.key.Status(txHash[:]), v)
+	return nil
+}
+
+// ensureSigner ensures that the transaction's status includes the given signer.
+func (a *Account) ensureSigner(signer protocol.Signer, txHash []byte) error {
+	status, err := a.GetStatus(txHash)
+	if err != nil {
+		return err
+	}
+	status.AddSigner(signer)
+	return a.PutStatus(status, txHash)
+}

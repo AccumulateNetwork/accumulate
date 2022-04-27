@@ -401,7 +401,11 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the entry hash in the transaction result
-	txStatus, err := batch.Transaction(synthIds.Hashes[0][:]).GetStatus()
+	var accurl *url.URL
+	accurl, err = batch.Transaction(synthIds.Hashes[0][:]).GetOriginUrl()
+	require.NoError(t, err)
+	acc := batch.Account(accurl)
+	txStatus, err := acc.GetStatus(synthIds.Hashes[0][:])
 	require.NoError(t, err)
 	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
 	txResult := txStatus.Result.(*protocol.WriteDataResult)
@@ -998,7 +1002,10 @@ func TestUpdateKey(t *testing.T) {
 	})
 	batch = n.db.Begin(false)
 	defer batch.Discard()
-	status, err := batch.Transaction(txnHashes[0][:]).GetStatus()
+	accurl, err := batch.Transaction(txnHashes[0][:]).GetOriginUrl()
+	require.NoError(t, err)
+	acc := batch.Account(accurl)
+	status, err := acc.GetStatus(txnHashes[0][:])
 	require.NoError(t, err)
 	require.False(t, status.Pending, "Transaction is still pending")
 
@@ -1402,7 +1409,11 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			}
 			txState, err := batch.Transaction(id).GetState()
 			require.NoError(t, err)
-			txStatus, err := batch.Transaction(id).GetStatus()
+			var accurl *url.URL
+			accurl, err = batch.Transaction(id).GetOriginUrl()
+			require.NoError(t, err)
+			acc := batch.Account(accurl)
+			txStatus, err := acc.GetStatus(id)
 			require.NoError(t, err)
 			if seen[*(*[32]byte)(txState.Transaction.GetHash())] {
 				fmt.Printf("      TX: hash=%X\n", txState.Transaction.GetHash())

@@ -60,7 +60,9 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.Trans
 		if err != nil {
 			return nil, fmt.Errorf("compute fee error: %w", err)
 		}
-		status, err := st.batch.Transaction(body.Cause[:]).GetStatus()
+		accurl, _ := st.batch.Transaction(body.Cause[:]).GetOriginUrl()
+		acc := st.batch.Account(accurl)
+		status, err := acc.GetStatus(body.Cause[:])
 		if err != nil {
 			return nil, err
 		}

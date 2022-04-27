@@ -17,7 +17,8 @@ import (
 // only returns an error in cases like a database failure.
 func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protocol.Transaction) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Load the status
-	status, err := batch.Transaction(transaction.GetHash()).GetStatus()
+	acc := batch.Account(transaction.Header.Principal)
+	status, err := acc.GetStatus(transaction.GetHash())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -268,13 +269,15 @@ func recordTransaction(batch *database.Batch, transaction *protocol.Transaction,
 	}
 
 	// Update the status
-	status, err := db.GetStatus()
+	acc := batch.Account(transaction.Header.Principal)
+	hash := transaction.GetHash()
+	status, err := acc.GetStatus(hash)
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
 	updateStatus(status)
-	err = db.PutStatus(status)
+	err = acc.PutStatus(status, hash)
 	if err != nil {
 		return nil, fmt.Errorf("store transaction status: %w", err)
 	}

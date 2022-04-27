@@ -67,11 +67,6 @@ func transaction(txid []byte) transactionBucket {
 	return transactionBucket{object("Transaction", txid)}
 }
 
-// Status returns the storage key for the transaction's status.
-func (b *transactionBucket) Status() storage.Key {
-	return b.Object().Append("Status")
-}
-
 // Signatures returns the storage key for the transaction's signatures.
 func (b *transactionBucket) Signatures(signer *url.URL) storage.Key {
 	// TODO Handle this through signature chains.
@@ -82,4 +77,8 @@ func (b *transactionBucket) Signatures(signer *url.URL) storage.Key {
 // by the transaction.
 func (b *transactionBucket) Synthetic() storage.Key {
 	return b.Object().Append("Synthetic")
+}
+
+func (a *accountBucket) Status(txHash []byte) storage.Key {
+	return a.Object().Append("Status", txHash)
 }

@@ -532,7 +532,9 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		}
 	}
 
-	status, err := tx.GetStatus()
+	accurl, _ := batch.Transaction(txid).GetOriginUrl()
+	acc := batch.Account(accurl)
+	status, err := acc.GetStatus(txid)
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	} else if !status.Delivered && status.Remote {

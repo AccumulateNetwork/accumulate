@@ -161,7 +161,8 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 	}
 
 	// Update the status
-	err = obj.PutStatus(status)
+	acc := batch.Account(transaction.Header.Principal)
+	err = acc.PutStatus(status, transaction.GetHash())
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)
 	}
