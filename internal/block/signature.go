@@ -198,6 +198,12 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 			signerUrl = signature.GetSigner()
 		}
 
+		// If the user specifies a lite token address, convert it to a lite
+		// identity
+		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+			signerUrl = signerUrl.Identity()
+		}
+
 		signer, err := validateSigner(batch, transaction, location, signerUrl, fwdsig)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
