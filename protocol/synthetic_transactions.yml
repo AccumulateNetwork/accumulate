@@ -8,6 +8,8 @@ SyntheticOrigin:
       pointer: true
     - name: Cause
       type: chain
+    - name: Fee
+      type: uint
 
 SyntheticCreateIdentity:
   union: { type: transaction }
@@ -93,18 +95,6 @@ SyntheticMirror:
       repeatable: true
       type: AnchoredRecord
       marshal-as: reference
-
-SyntheticReceipt:
-  union: { type: transaction }
-  embeddings:
-    - SyntheticOrigin
-  fields:
-    - name: SynthTxHash
-      type: chain
-    - name: Status
-      type: TransactionStatus
-      marshal-as: reference
-      pointer: true
 
 SyntheticForwardTransaction:
   union: { type: transaction, value: SyntheticForwardTransaction }

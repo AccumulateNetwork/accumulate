@@ -15,6 +15,7 @@ import (
 
 type StateManager struct {
 	stateCache
+	fee protocol.Fee
 
 	Origin    protocol.Account
 	OriginUrl *url.URL
@@ -46,7 +47,13 @@ func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protoco
 		return nil, fmt.Errorf("transaction signer set does not include the initiator")
 	}
 
-	return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
+	m := NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger)
+	m.fee, err = protocol.ComputeTransactionFee(transaction)
+	if err != nil {
+		return nil, fmt.Errorf("calculate fee: %w", err)
+	}
+
+	return m, nil
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
@@ -85,7 +92,7 @@ func (m *StateManager) Discard() {
 
 // Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
-	if m.txType.IsSynthetic() && m.txType != protocol.TransactionTypeSyntheticReceipt {
+	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	if url == nil {
@@ -94,7 +101,7 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 
 	swo, ok := body.(protocol.SynthTxnWithOrigin)
 	if ok {
-		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
+		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl, m.fee)
 	}
 
 	m.state.DidProduceTxn(url, body)

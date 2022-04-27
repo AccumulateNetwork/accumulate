@@ -38,16 +38,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			continue
 		}
 
-		cause, _ := swo.GetSyntheticOrigin()
-		if receipt, ok := sub.Body.(*protocol.SyntheticReceipt); ok {
-			cause = receipt.SynthTxHash[:]
-
-			// If the transaction was successful, skip recording the receipt
-			if receipt.Status.Code == 0 {
-				continue
-			}
-		}
-
+		cause, _, _ := swo.GetSyntheticOrigin()
 		err = batch.Transaction(cause).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
 		if err != nil {
 			return err

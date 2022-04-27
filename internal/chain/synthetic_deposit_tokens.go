@@ -19,7 +19,6 @@ func (SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.
 }
 
 func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	// *big.Int, tokenChain, *url.URL
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
@@ -83,4 +82,19 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
 	}
 	return nil, nil
+}
+
+func (SyntheticDepositTokens) DidFail(state *ProcessTransactionState, transaction *protocol.Transaction) error {
+	body, ok := transaction.Body.(*protocol.SyntheticDepositTokens)
+	if !ok {
+		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), transaction.Body)
+	}
+
+	// Send the tokens back on failure
+	refund := new(protocol.SyntheticDepositTokens)
+	refund.SetSyntheticOrigin(transaction.GetHash(), transaction.Header.Principal, 0)
+	refund.Token = body.Token
+	refund.Amount = body.Amount
+	state.DidProduceTxn(body.Source, refund)
+	return nil
 }
