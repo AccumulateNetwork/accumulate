@@ -33,10 +33,16 @@ func (v Version) Bytes() []byte {
 	return b[:]
 }
 
-func (v *Version) FromBytes(data []byte) {
+func (v *Version) FromBytes(data []byte) Version {
 	*v = Version(binary.BigEndian.Uint64(data))
+	return *v
 }
 
 func (v Version) String() string {
 	return fmt.Sprintf("v%d.%d.%d.%d ", v.Major(), v.Minor(), v.Revision(), v.Commit())
+}
+
+// Compare returns < 0 if v < version, returns > 0 if v > version, returns 0 if v == version
+func (v Version) Compare(version Version) uint32 {
+	return uint32(v) - uint32(version)
 }

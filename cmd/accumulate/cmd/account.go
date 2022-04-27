@@ -332,10 +332,15 @@ func ListAccounts() (string, error) {
 func RestoreAccounts() (out string, err error) {
 	walletVersion, err := GetWallet().GetRaw(db.BucketConfig, []byte("version"))
 	if err == nil {
+		var v db.Version
+		v.FromBytes(walletVersion)
 		//if there is no error getting version, check to see if it is the right version
-		if bytes.Compare(walletVersion, db.WalletVersion.Bytes()) == 0 {
-			//no need to attempt to update
+		if db.WalletVersion.Compare(v) == 0 {
+			//no need to update
 			return "", nil
+		}
+		if db.WalletVersion.Compare(v) < 0 {
+			return "", fmt.Errorf("cannot update wallet to an older version, wallet database version is %v, cli version is %v", v.String(), db.WalletVersion.String())
 		}
 	}
 

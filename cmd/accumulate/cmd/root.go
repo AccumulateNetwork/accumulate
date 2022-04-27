@@ -1,46 +1,54 @@
 package cmd
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
-	"syscall"
 	"time"
 
+	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
-	"golang.org/x/term"
 )
 
 func GetWallet() db.DB {
 	if wallet == nil {
 		wallet = initDB(DatabaseDir, false)
+		//upon first use, make sure database format is up-to-date.
+		if !NoWalletVersionCheck {
+			out, err := RestoreAccounts()
+			if err != nil && err != db.ErrNoBucket {
+				log.Fatalf("failed to update wallet database: %v", err)
+			}
+			if out != "" {
+				log.Println("performing account database update")
+				log.Println(out)
+			}
+		}
 	}
 	return wallet
 }
 
 var (
-	Client            *client.Client
-	ClientTimeout     time.Duration
-	ClientDebug       bool
-	DoNotEncrypt      bool
-	wallet            db.DB
-	WantJsonOutput    = false
-	TxPretend         = false
-	Prove             = false
-	Memo              string
-	Metadata          string
-	SigType           string
-	Authorities       []string
-	Password          string
-	DatabaseEncrypted bool
-	DatabaseDir       string
-	ClientMode        bool
+	Client               *client.Client
+	ClientTimeout        time.Duration
+	ClientDebug          bool
+	UseUnencryptedWallet bool
+	wallet               db.DB
+	WantJsonOutput       = false
+	TxPretend            = false
+	Prove                = false
+	Memo                 string
+	Metadata             string
+	SigType              string
+	Authorities          []string
+	Password             string
+	DatabaseDir          string
+	NoWalletVersionCheck bool
 )
 
 var currentUser = func() *user.User {
@@ -70,7 +78,8 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags := cmd.PersistentFlags()
 	flags.StringVarP(&serverAddr, "server", "s", serverAddr, "Accumulated server")
 	flags.DurationVarP(&ClientTimeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
-	flags.BoolVar(&DoNotEncrypt, "do-not-encrypt-wallet", false, "Create an unencrypted wallet (strongly discouraged)")
+	flags.BoolVar(&UseUnencryptedWallet, "use-unencrypted-wallet", false, "Use unencrypted wallet (strongly discouraged) stored at ~/.accumulate/wallet.db")
+	flags.BoolVar(&NoWalletVersionCheck, "no-wallet-version-check", false, "Bypass the check to prevent updating the wallet to the format supported by the cli")
 	flags.BoolVarP(&ClientDebug, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
@@ -80,7 +89,6 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")
 	flags.StringVarP(&Metadata, "metadata", "a", Metadata, "Transaction Metadata")
-	flags.BoolVar(&ClientMode, "client-mode", false, "pipe in password in client mode")
 	flags.StringSliceVar(&Authorities, "authority", nil, "Additional authorities to add when creating an account")
 
 	//add the commands
@@ -123,15 +131,6 @@ func InitRootCmd(database db.DB) *cobra.Command {
 		}
 		Client.Timeout = ClientTimeout
 		Client.DebugRequest = ClientDebug
-
-		out, err := RestoreAccounts()
-		if err != nil && err != db.ErrNoBucket {
-			return err
-		}
-		if out != "" {
-			cmd.Println("performing account database update")
-			cmd.Println(out)
-		}
 
 		if TxNoWait {
 			TxWait = 0
@@ -189,47 +188,41 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 		ret = new(db.BoltDB)
 	}
-	//search for encrypted database first
+	//search for encrypted database first (this is the default)
 	databaseName := filepath.Join(defaultWorkDir, "wallet_encrypted.db")
-	if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) {
-		// path/to/whatever does not exist
+	if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) || UseUnencryptedWallet {
+		// path/to/whatever does not exist -- OR -- we want to fall back to the unencrypted database
 		databaseName = filepath.Join(defaultWorkDir, "wallet.db")
-		if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) && !DoNotEncrypt {
-			//no database exists, so create a new encrypted database
+
+		if _, err = os.Stat(databaseName); errors.Is(err, os.ErrNotExist) && !UseUnencryptedWallet {
+			//no databases exist, so create a new encrypted database unless the user wanted an unencrypted one
 			databaseName = filepath.Join(defaultWorkDir, "wallet_encrypted.db")
-			//lets make an encrypted database...
-			_, err = EncryptDatabase()
+
+			//let's get a new first-time password...
+			Password, err = newPassword()
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
 	} else {
-		if Password == "" {
-			if ClientMode {
-				scanner := bufio.NewScanner(os.Stdin)
-				if scanner.Scan() {
-					Password = scanner.Text()
-				}
-			} else {
-				os.Stderr.WriteString("Password: ")
-				bytepw1, err := term.ReadPassword(int(syscall.Stdin))
-				if err != nil {
-					log.Fatal(db.ErrNoPassword)
-				}
-
-				Password = string(bytepw1)
+		if !UseUnencryptedWallet {
+			bytepw1, err := gopass.GetPasswdPrompt("Password: ", true, os.Stdin, os.Stderr) // term.ReadPassword(int(syscall.Stdin))
+			if err != nil {
+				log.Fatal(db.ErrNoPassword)
 			}
+
+			Password = string(bytepw1)
 		}
 	}
 
 	err := ret.InitDB(databaseName, Password)
 
-	DatabaseEncrypted = true
 	if err != nil {
 		if err != db.ErrDatabaseNotEncrypted {
 			log.Fatal(err)
 		}
-		DatabaseEncrypted = false
+		//so here we want to implicitly indicate to the rest of the code we're using the unencrypted wallet
+		UseUnencryptedWallet = true
 	}
 
 	return ret
