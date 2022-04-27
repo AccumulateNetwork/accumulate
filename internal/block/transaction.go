@@ -40,7 +40,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Check if the transaction is ready to be executed
-	ready, err := x.TransactionIsReady(&x.Network, batch, transaction, status)
+	ready, err := x.TransactionIsReady(batch, transaction, status)
 	if err != nil {
 		return recordFailedTransaction(batch, transaction, err)
 	}
@@ -121,12 +121,12 @@ func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Trans
 	}
 }
 
-func (x *Executor) TransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	switch {
 	case transaction.Body.Type().IsUser():
 		return x.userTransactionIsReady(batch, transaction, status)
 	case transaction.Body.Type().IsSynthetic():
-		return synthTransactionIsReady(net, batch, transaction, status)
+		return synthTransactionIsReady(&x.Network, batch, transaction, status)
 	default:
 		return true, nil
 	}

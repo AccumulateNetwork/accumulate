@@ -348,6 +348,13 @@ func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 
+	case *protocol.UnknownSigner:
+		if !location.LocalTo(transaction.Header.Principal) {
+			break
+		}
+
+		return errors.Format(errors.StatusInternalError, "unknown signer %v", signer.Url)
+
 	default:
 		// This should never happen
 		return errors.Format(errors.StatusInternalError, "unknown signer type %v", signer.Type())

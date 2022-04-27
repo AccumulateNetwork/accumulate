@@ -83,7 +83,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(t.Name(), alice)
 	keyHash := sha256.Sum256(aliceKey[32:])
 
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
 			WithTimestampVar(&timestamp).
@@ -96,6 +96,10 @@ func TestCreateRootIdentity(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, lite).
 			Build(),
 	)...)
+
+	// There should be a synthetic transaction
+	require.Len(t, txn, 2)
+	require.IsType(t, (*SyntheticCreateIdentity)(nil), txn[1].Body)
 
 	// Verify the account is created
 	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
@@ -264,7 +268,7 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
 
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice).
 			WithTimestampVar(&timestamp).
@@ -277,6 +281,9 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build(),
 	)...)
+
+	// There should not be a synthetic transaction
+	require.Len(t, txn, 1)
 
 	// Verify the account is created
 	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
