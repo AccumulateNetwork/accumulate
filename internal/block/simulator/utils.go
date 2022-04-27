@@ -34,6 +34,7 @@ func InitChain(t TB, db *database.Database, exec *Executor) {
 		Network:     exec.Network,
 		GenesisTime: block.Time,
 		Logger:      exec.Logger,
+		Router:      exec.Router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
@@ -93,11 +94,6 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 	// Commit the batch
 	require.NoError(tb{t}, block.Batch.Commit())
 
-	// Notify the executor that we comitted
-	batch := db.Begin(false)
-	defer batch.Discard()
-	require.NoError(tb{t}, exec.DidCommit(block, batch))
-
 	return results, nil
 }
 
@@ -128,25 +124,15 @@ func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 func DeliverTx(t TB, exec *Executor, block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	t.Helper()
 
-	err := delivery.LoadTransaction(block.Batch)
+	status, err := delivery.LoadTransaction(block.Batch)
 	if err != nil {
-		var perr *protocol.Error
-		if !errors.As(err, &perr) {
-			return nil, err
+		if errors.Is(err, errors.StatusDelivered) {
+			return status, nil
 		}
-
-		if perr.Code != protocol.ErrorCodeAlreadyDelivered {
-			return nil, err
-		}
-
-		return &protocol.TransactionStatus{
-			Delivered: true,
-			Code:      perr.Code.GetEnumValue(),
-			Message:   perr.Error(),
-		}, nil
+		return nil, err
 	}
 
-	status, err := exec.ExecuteEnvelope(block, delivery)
+	status, err = exec.ExecuteEnvelope(block, delivery)
 	if err != nil {
 		return nil, err
 	}
