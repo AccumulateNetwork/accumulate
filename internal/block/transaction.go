@@ -40,7 +40,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Check if the transaction is ready to be executed
-	ready, err := TransactionIsReady(&x.Network, batch, transaction, status)
+	ready, err := x.TransactionIsReady(&x.Network, batch, transaction, status)
 	if err != nil {
 		return recordFailedTransaction(batch, transaction, err)
 	}
@@ -112,10 +112,10 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 	}
 }
 
-func TransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) TransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	switch {
 	case transaction.Body.Type().IsUser():
-		return userTransactionIsReady(batch, transaction, status)
+		return x.userTransactionIsReady(batch, transaction, status)
 	case transaction.Body.Type().IsSynthetic():
 		return synthTransactionIsReady(net, batch, transaction, status)
 	default:
@@ -123,7 +123,7 @@ func TransactionIsReady(net *config.Network, batch *database.Batch, transaction 
 	}
 }
 
-func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// UpdateKey transactions are always M=1 and always require a signature from
 	// the initiator
 	txnObj := batch.Transaction(transaction.GetHash())
@@ -144,9 +144,16 @@ func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transac
 		return true, nil
 	}
 
-	// Anyone can write to a lite data account
-	if isWriteToLiteDataAccount(batch, transaction) {
-		return true, nil
+	// Delegate to the transaction executor?
+	val, ok := x.sigValidators[transaction.Body.Type()]
+	if ok {
+		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if !fallback {
+			return ready, nil
+		}
 	}
 
 	// Load the principal

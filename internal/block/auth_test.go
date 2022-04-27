@@ -22,6 +22,9 @@ func TestTransactionIsReady(tt *testing.T) {
 	t := NewBatchTest(tt, db)
 	defer t.Discard()
 
+	exec, err := block.NewNodeExecutor(block.ExecutorOptions{}, nil)
+	require.NoError(t, err)
+
 	// Foo's first authority and signer
 	authority := new(FakeAuthority)
 	authority.Url = url.MustParse("foo/authority")
@@ -89,7 +92,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	// Singlesig unsigned
 	t.Run("Unsigned", func(t BatchTest) {
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -99,7 +102,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -112,7 +115,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -129,7 +132,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -142,7 +145,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -160,7 +163,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -172,7 +175,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		entry.Disabled = true
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -188,7 +191,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -204,7 +207,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -228,7 +231,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -258,7 +261,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 		// Transaction is not ready
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -293,7 +296,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), sig2_2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := block.TransactionIsReady(network, t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(network, t.Batch, txn, status)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})

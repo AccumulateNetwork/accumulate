@@ -11,6 +11,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+var _ SignatureValidator = (*WriteData)(nil)
+
 // NewNodeExecutor creates a new Executor for a node.
 func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
 	switch opts.Network.Type {
@@ -106,4 +108,16 @@ type TransactionExecutor interface {
 
 	// Execute fully validates and executes the transaction.
 	Execute(*StateManager, *Delivery) (protocol.TransactionResult, error)
+}
+
+// SignatureValidator validates signatures for a specific type of transaction.
+type SignatureValidator interface {
+	TransactionExecutor
+
+	// SignerIsAuthorized checks if the signature is authorized for the
+	// transaction.
+	SignerIsAuthorized(*database.Batch, *protocol.Transaction, protocol.Signer) (fallback bool, err error)
+
+	// TransactionIsReady checks if the transaction is ready to be executed.
+	TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error)
 }
