@@ -82,7 +82,9 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		return nil, err
 	}
 
-	st.Create(accounts...)
+	sci := new(protocol.SyntheticCreateIdentity)
+	sci.Accounts = accounts
+	st.Submit(body.Url, sci)
 	return nil, nil
 }
 
