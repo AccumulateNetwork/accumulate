@@ -119,7 +119,7 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --do-not-encrypt-wallet
 echo
 
 section "Generate a Lite Token Account"
