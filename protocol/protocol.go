@@ -69,8 +69,8 @@ const (
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
-	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
-	ValidatorMofNFactor = 2.0 / 3.0
+	// FallbackValidatorThreshold is the factor of how many of the validator signatures are required respective of their total number
+	FallbackValidatorThreshold = 2.0 / 3.0
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
@@ -419,12 +419,12 @@ func IndexChain(name string, major bool) string {
 
 func GetValidatorsMOfN(nrOfValidators int, entry *DataEntry) uint64 {
 	var threshold float64
-	threshold = float64(nrOfValidators) * ValidatorMofNFactor
+	threshold = float64(nrOfValidators) * FallbackValidatorThreshold
 	if entry != nil {
 		th := new(NetworkGlobals)
 		err := th.UnmarshalBinary(entry.Data[0])
 		if err == nil {
-			threshold = float64(nrOfValidators) * (float64(th.ValidatorThreshold.Numerator) / float64(th.ValidatorThreshold.Denominator))
+			threshold = float64(nrOfValidators) * float64(th.ValidatorThreshold.Numerator) / float64(th.ValidatorThreshold.Denominator)
 		}
 	}
 	return uint64(math.Round(threshold))

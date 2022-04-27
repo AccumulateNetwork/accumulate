@@ -58,7 +58,7 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 	// Update the threshold
 	entry, err := getLatestDataEntry(st, st.nodeUrl.JoinPath(protocol.Globals))
 	if err != nil {
-		return nil, err
+		st.logger.Error("Failed to get latest globals entry", "error", err)
 	}
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
 	// Record the update
@@ -96,11 +96,9 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 
 	entry, err := getLatestDataEntry(st, st.nodeUrl.JoinPath(protocol.Globals))
 	if err != nil {
-		return nil, err
+		st.logger.Error("Failed to get latest globals entry", "error", err)
 	}
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), entry)
-
 	// Record the update
 	didUpdateKeyPage(page)
 	st.Update(page)
