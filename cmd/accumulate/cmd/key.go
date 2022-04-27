@@ -192,10 +192,10 @@ func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error
 		return sigType, hash, nil
 	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
 		hash := protocol.BTCHash(pubKey)
-		return sigType, hash, nil
+		return sigType, hash[:], nil
 	case protocol.SignatureTypeETH:
 		hash := protocol.ETHhash(pubKey)
-		return sigType, hash, nil
+		return sigType, hash[:], nil
 	default:
 		return 0, nil, fmt.Errorf("unsupported signature type %v", sigType)
 	}
