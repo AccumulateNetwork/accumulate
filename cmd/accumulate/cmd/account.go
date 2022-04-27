@@ -6,12 +6,12 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"io/ioutil"
 	"log"
 
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -338,9 +338,6 @@ func RestoreAccounts() (out string, err error) {
 			return "", nil
 		}
 	}
-
-	//note: if restore is needed in the future for encrypted databases, the values from the bucket will also be encrypted
-	//use GetWallet().Get function to decrypt the values...
 
 	anon, err := GetWallet().GetBucket(BucketAnon)
 	if err == nil {

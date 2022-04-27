@@ -20,8 +20,9 @@ func TestBoltDatabase(t *testing.T) {
 	defer os.RemoveAll(dirName)
 
 	db := BoltDB{}
-	err = db.InitDB(filepath.Join(dirName, "test.db"))
-	if err != nil {
+	err = db.InitDB(filepath.Join(dirName, "test.db"), "")
+	//we expect it to open with a database not encrypted error
+	if err != nil && err != ErrDatabaseNotEncrypted {
 		t.Fatal(err.Error())
 	}
 	defer db.Close()

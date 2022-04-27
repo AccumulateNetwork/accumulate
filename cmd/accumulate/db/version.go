@@ -12,15 +12,15 @@ func NewVersion(commit int, major int, minor int, revision int) Version {
 }
 
 func (v Version) Commit() uint32 {
-	return uint32(v >> 0x100000000)
+	return uint32(v >> 32)
 }
 
 func (v Version) Major() uint8 {
-	return uint8(v >> 0x1000000)
+	return uint8(v >> 24)
 }
 
 func (v Version) Minor() uint8 {
-	return uint8(v >> 0x10000)
+	return uint8(v >> 16)
 }
 
 func (v Version) Revision() uint16 {

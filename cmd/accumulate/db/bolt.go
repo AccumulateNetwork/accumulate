@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"math/rand"
 	"time"
 
 	"github.com/boltdb/bolt"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 var ErrNotOpen = errors.New("database not open")

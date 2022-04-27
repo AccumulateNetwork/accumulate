@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"golang.org/x/term"
 	"log"
 	"os"
 	"os/user"
@@ -15,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"golang.org/x/term"
 )
 
 func GetWallet() db.DB {
@@ -175,6 +175,12 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 	var ret db.DB
 	if memDb {
 		ret = new(db.MemoryDB)
+
+		err := ret.InitDB("", "")
+		if err != nil {
+			log.Fatal(err)
+		}
+		return ret
 	} else {
 		err := os.MkdirAll(defaultWorkDir, 0700)
 		if err != nil {

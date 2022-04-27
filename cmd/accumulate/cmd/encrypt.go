@@ -3,12 +3,13 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
+	"syscall"
+
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/os"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"golang.org/x/term"
-	"path/filepath"
-	"syscall"
 )
 
 var encryptCmd = &cobra.Command{
