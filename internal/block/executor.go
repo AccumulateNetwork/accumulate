@@ -22,10 +22,9 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors     map[protocol.TransactionType]TransactionExecutor
-	sigValidators map[protocol.TransactionType]SignatureValidator
-	dispatcher    *dispatcher
-	logger        logging.OptionalLogger
+	executors  map[protocol.TransactionType]TransactionExecutor
+	dispatcher *dispatcher
+	logger     logging.OptionalLogger
 
 	// oldBlockMeta blockMetadata
 }
@@ -43,7 +42,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
-	m.sigValidators = map[protocol.TransactionType]SignatureValidator{}
 	m.dispatcher = newDispatcher(opts)
 
 	if opts.Logger != nil {
@@ -56,10 +54,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		}
 		m.executors[x.Type()] = x
 
-		sigVal, ok := x.(SignatureValidator)
-		if ok {
-			m.sigValidators[x.Type()] = sigVal
-		}
 	}
 
 	batch := db.Begin(false)

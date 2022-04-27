@@ -314,7 +314,7 @@ func validateSignature(transaction *protocol.Transaction, signer protocol.Signer
 // verifySignerIsAuthorized verifies that the signer is allowed to sign the transaction
 func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) error {
 	// Delegate to the transaction executor?
-	val, ok := x.sigValidators[transaction.Body.Type()]
+	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
 	if ok {
 		fallback, err := val.SignerIsAuthorized(batch, transaction, signer)
 		if err != nil {

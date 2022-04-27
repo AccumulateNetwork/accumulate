@@ -34,7 +34,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	case !errors.Is(err, storage.ErrNotFound):
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return recordFailedTransaction(batch, transaction, err)
-	case !transactionAllowsMissingPrincipal(transaction):
+	case !x.transactionAllowsMissingPrincipal(transaction):
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return recordFailedTransaction(batch, transaction, err)
 	}
@@ -87,7 +87,16 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	return recordSuccessfulTransaction(batch, state, transaction, result)
 }
 
-func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
+func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
+	val, ok := getValidator[PrincipalValidator](x, transaction.Body.Type())
+	if ok {
+		allow, fallback := val.AllowMissingPrincipal(transaction)
+		if !fallback {
+			return allow
+		}
+	}
+
+	// TODO Replace with AllowMissingPrincipal
 	switch body := transaction.Body.(type) {
 	case *protocol.WriteData,
 		*protocol.SyntheticWriteData:
@@ -105,7 +114,7 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 		return true
 
 	case *protocol.SyntheticForwardTransaction:
-		return transactionAllowsMissingPrincipal(body.Transaction)
+		return x.transactionAllowsMissingPrincipal(body.Transaction)
 
 	default:
 		return false
@@ -145,7 +154,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := x.sigValidators[transaction.Body.Type()]
+	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
 	if ok {
 		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
 		if err != nil {

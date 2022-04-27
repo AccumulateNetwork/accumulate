@@ -96,7 +96,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				"pending", status.Pending,
 				"delivered", status.Delivered,
 				"remote", status.Remote,
-				"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 				"principal", delivery.Transaction.Header.Principal,
 			}
 			if status.Code != 0 {
