@@ -53,6 +53,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 			panic(fmt.Errorf("duplicate executor for %d", x.Type()))
 		}
 		m.executors[x.Type()] = x
+
 	}
 
 	batch := db.Begin(false)
