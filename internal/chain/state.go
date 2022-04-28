@@ -92,11 +92,6 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 		panic("No destination URL specified!")
 	}
 
-	swo, ok := body.(protocol.SynthTxnWithOrigin)
-	if ok {
-		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
-	}
-
 	m.state.DidProduceTxn(url, body)
 }
 
