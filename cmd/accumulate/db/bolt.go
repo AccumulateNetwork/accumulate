@@ -5,10 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"math/rand"
-	"time"
-
 	"github.com/boltdb/bolt"
+	"math/rand"
 )
 
 var ErrNotOpen = errors.New("database not open")
@@ -38,10 +36,6 @@ type BoltDB struct {
 
 	// encryptionkey is a hash of the password and salt
 	encryptionkey []byte
-
-	// Allow the wallet to be locked, by gating access based
-	// on time.
-	UnlockedUntil time.Time
 }
 
 func (b *BoltDB) Name() string {
