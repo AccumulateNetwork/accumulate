@@ -460,6 +460,12 @@ type MetricsResponse struct {
 	extraData []byte
 }
 
+type NetworkGlobals struct {
+	fieldsSet          []bool
+	ValidatorThreshold Rational `json:"validatorThreshold,omitempty" form:"validatorThreshold" query:"validatorThreshold" validate:"required"`
+	extraData          []byte
+}
+
 type Object struct {
 	fieldsSet []bool
 	// Type is the object's type.
@@ -479,6 +485,13 @@ type RCD1Signature struct {
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	extraData       []byte
+}
+
+type Rational struct {
+	fieldsSet   []bool
+	Numerator   uint64 `json:"numerator,omitempty" form:"numerator" query:"numerator" validate:"required"`
+	Denominator uint64 `json:"denominator,omitempty" form:"denominator" query:"denominator" validate:"required"`
+	extraData   []byte
 }
 
 type Receipt struct {
@@ -1753,6 +1766,16 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *NetworkGlobals) Copy() *NetworkGlobals {
+	u := new(NetworkGlobals)
+
+	u.ValidatorThreshold = *(&v.ValidatorThreshold).Copy()
+
+	return u
+}
+
+func (v *NetworkGlobals) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Object) Copy() *Object {
 	u := new(Object)
 
@@ -1784,6 +1807,17 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 }
 
 func (v *RCD1Signature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Rational) Copy() *Rational {
+	u := new(Rational)
+
+	u.Numerator = v.Numerator
+	u.Denominator = v.Denominator
+
+	return u
+}
+
+func (v *Rational) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Receipt) Copy() *Receipt {
 	u := new(Receipt)
@@ -3406,6 +3440,14 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	return true
 }
 
+func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
+	if !((&v.ValidatorThreshold).Equal(&u.ValidatorThreshold)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *Object) Equal(u *Object) bool {
 	if !(v.Type == u.Type) {
 		return false
@@ -3447,6 +3489,17 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *Rational) Equal(u *Rational) bool {
+	if !(v.Numerator == u.Numerator) {
+		return false
+	}
+	if !(v.Denominator == u.Denominator) {
 		return false
 	}
 
@@ -7155,6 +7208,45 @@ func (v *MetricsRequest) IsValid() error {
 	}
 }
 
+var fieldNames_NetworkGlobals = []string{
+	1: "ValidatorThreshold",
+}
+
+func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !((v.ValidatorThreshold).Equal(new(Rational))) {
+		writer.WriteValue(1, &v.ValidatorThreshold)
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *NetworkGlobals) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ValidatorThreshold is missing")
+	} else if (v.ValidatorThreshold).Equal(new(Rational)) {
+		errs = append(errs, "field ValidatorThreshold is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_Object = []string{
 	1: "Type",
 	2: "Chains",
@@ -7276,6 +7368,54 @@ func (v *RCD1Signature) IsValid() error {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_Rational = []string{
+	1: "Numerator",
+	2: "Denominator",
+}
+
+func (v *Rational) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Numerator == 0) {
+		writer.WriteUint(1, v.Numerator)
+	}
+	if !(v.Denominator == 0) {
+		writer.WriteUint(2, v.Denominator)
+	}
+
+	_, _, err := writer.Reset(fieldNames_Rational)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *Rational) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Numerator is missing")
+	} else if v.Numerator == 0 {
+		errs = append(errs, "field Numerator is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Denominator is missing")
+	} else if v.Denominator == 0 {
+		errs = append(errs, "field Denominator is not set")
 	}
 
 	switch len(errs) {
@@ -11259,6 +11399,26 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *NetworkGlobals) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
+		v.ValidatorThreshold = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_NetworkGlobals)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *Object) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11323,6 +11483,29 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *Rational) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *Rational) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Numerator = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Denominator = x
+	}
+
+	seen, err := reader.Reset(fieldNames_Rational)
 	if err != nil {
 		return err
 	}
