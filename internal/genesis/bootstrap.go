@@ -56,6 +56,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		book := new(protocol.KeyBook)
 		book.Url = uBook
+		book.BookType = protocol.BookTypeValidator
 		book.AddAuthority(uBook)
 		book.PageCount = 1
 		records = append(records, book)

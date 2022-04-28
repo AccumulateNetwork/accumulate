@@ -291,3 +291,11 @@ VoteType:
   Suggest:
     value: 0x3
     description: put forth a proposal
+
+BookType:
+  Normal:
+    value: 0
+    description: Plain vanilla key book
+  Validator:
+    value: 0x01
+    description: Validator key book

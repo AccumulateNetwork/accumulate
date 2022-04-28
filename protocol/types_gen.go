@@ -375,6 +375,7 @@ type IssueTokens struct {
 type KeyBook struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	BookType  BookType `json:"bookType,omitempty" form:"bookType" query:"bookType" validate:"required"`
 	AccountAuth
 	PageCount uint64 `json:"pageCount,omitempty" form:"pageCount" query:"pageCount" validate:"required"`
 	extraData []byte
@@ -1618,6 +1619,7 @@ func (v *KeyBook) Copy() *KeyBook {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
+	u.BookType = v.BookType
 	u.AccountAuth = *v.AccountAuth.Copy()
 	u.PageCount = v.PageCount
 
@@ -3211,6 +3213,9 @@ func (v *KeyBook) Equal(u *KeyBook) bool {
 	case v.Url == nil || u.Url == nil:
 		return false
 	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.BookType == u.BookType) {
 		return false
 	}
 	if !v.AccountAuth.Equal(&u.AccountAuth) {
@@ -6574,8 +6579,9 @@ func (v *IssueTokens) IsValid() error {
 var fieldNames_KeyBook = []string{
 	1: "Type",
 	2: "Url",
-	3: "AccountAuth",
-	4: "PageCount",
+	3: "BookType",
+	4: "AccountAuth",
+	5: "PageCount",
 }
 
 func (v *KeyBook) MarshalBinary() ([]byte, error) {
@@ -6586,9 +6592,12 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	writer.WriteValue(3, &v.AccountAuth)
+	if !(v.BookType == 0) {
+		writer.WriteEnum(3, v.BookType)
+	}
+	writer.WriteValue(4, &v.AccountAuth)
 	if !(v.PageCount == 0) {
-		writer.WriteUint(4, v.PageCount)
+		writer.WriteUint(5, v.PageCount)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyBook)
@@ -6610,10 +6619,15 @@ func (v *KeyBook) IsValid() error {
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field BookType is missing")
+	} else if v.BookType == 0 {
+		errs = append(errs, "field BookType is not set")
+	}
 	if err := v.AccountAuth.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field PageCount is missing")
 	} else if v.PageCount == 0 {
 		errs = append(errs, "field PageCount is not set")
@@ -10977,8 +10991,11 @@ func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
-	if x, ok := reader.ReadUint(4); ok {
+	if x := new(BookType); reader.ReadEnum(3, x) {
+		v.BookType = *x
+	}
+	reader.ReadValue(4, v.AccountAuth.UnmarshalBinary)
+	if x, ok := reader.ReadUint(5); ok {
 		v.PageCount = x
 	}
 
@@ -13190,6 +13207,7 @@ func (v *KeyBook) MarshalJSON() ([]byte, error) {
 		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
 		Url            *url.URL                          `json:"url,omitempty"`
+		BookType       BookType                          `json:"bookType,omitempty"`
 		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 		PageCount      uint64                            `json:"pageCount,omitempty"`
 	}{}
@@ -13197,6 +13215,7 @@ func (v *KeyBook) MarshalJSON() ([]byte, error) {
 	u.KeyBook = v.KeyBook()
 	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
+	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
 	u.PageCount = v.PageCount
 	return json.Marshal(&u)
@@ -14938,6 +14957,7 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
 		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
 		Url            *url.URL                          `json:"url,omitempty"`
+		BookType       BookType                          `json:"bookType,omitempty"`
 		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 		PageCount      uint64                            `json:"pageCount,omitempty"`
 	}{}
@@ -14945,6 +14965,7 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	u.KeyBook = v.KeyBook()
 	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
+	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
 	u.PageCount = v.PageCount
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -14954,6 +14975,7 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	v.BookType = u.BookType
 	v.AccountAuth.Authorities = u.Authorities
 	v.PageCount = u.PageCount
 	return nil
