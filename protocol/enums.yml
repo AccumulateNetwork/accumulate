@@ -215,15 +215,6 @@ TransactionType:
   InternalGenesis:
     value: 0x60
     description: initializes system chains
-  InternalSendTransactions:
-    value: 0x61
-    description: reserved for internal send
-  InternalTransactionsSigned:
-    description: notifies the executor of synthetic transactions that have been signed
-    value: 0x62
-  InternalTransactionsSent:
-    value: 0x63
-    description: notifies the executor of synthetic transactions that have been sent
 
 AccountType:
   Unknown:
