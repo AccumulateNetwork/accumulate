@@ -88,11 +88,11 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Type().IsInternal() && delivery.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if !delivery.Transaction.Body.Type().IsInternal() && delivery.Transaction.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
 			kv := []interface{}{
 				"module", "block-executor",
 				"block", block.Index,
-				"type", delivery.Transaction.Type(),
+				"type", delivery.Transaction.Body.Type(),
 				"pending", status.Pending,
 				"delivered", status.Delivered,
 				"remote", status.Remote,

@@ -198,7 +198,7 @@ func (x *Executor) signatureIsWellFormed(delivery *chain.Delivery, signature pro
 		return nil
 	}
 
-	if delivery.Transaction.Type().IsUser() {
+	if delivery.Transaction.Body.Type().IsUser() {
 		subnet, err := x.Router.RouteAccount(signature.RoutingLocation())
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)

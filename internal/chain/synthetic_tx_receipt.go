@@ -32,7 +32,7 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.Trans
 			return nil, err
 		}
 
-		if txn.Transaction.Type() == protocol.TransactionTypeSendTokens {
+		if txn.Transaction.Body.Type() == protocol.TransactionTypeSendTokens {
 			var signer protocol.Signer
 			obj := st.batch.Account(body.Status.Initiator)
 			err = obj.GetStateAs(&signer)
