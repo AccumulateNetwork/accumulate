@@ -11,6 +11,7 @@ import (
 
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -269,10 +270,10 @@ func GenerateAccount() (string, error) {
 }
 
 func ListAccounts() (string, error) {
-	b, err := Db.GetBucket(BucketLite)
+	b, err := GetWallet().GetBucket(BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
-		return "", fmt.Errorf("no lite accounts found, try again after executing \"accumulate account restore\"\n")
+		return "", fmt.Errorf("no lite accounts have been generated\n")
 	}
 	var out string
 
@@ -280,12 +281,12 @@ func ListAccounts() (string, error) {
 		out += "{\"liteAccounts\":["
 	}
 	for i, v := range b.KeyValueList {
-		pubKey, err := Db.Get(BucketLabel, v.Value)
+		pubKey, err := GetWallet().Get(BucketLabel, v.Value)
 		if err != nil {
 			return "", err
 		}
 
-		st, err := Db.Get(BucketSigType, pubKey)
+		st, err := GetWallet().Get(BucketSigType, pubKey)
 		if err != nil {
 			return "", err
 		}
@@ -329,7 +330,21 @@ func ListAccounts() (string, error) {
 }
 
 func RestoreAccounts() (out string, err error) {
-	anon, err := Db.GetBucket(BucketAnon)
+	walletVersion, err := GetWallet().GetRaw(db.BucketConfig, []byte("version"))
+	if err == nil {
+		var v db.Version
+		v.FromBytes(walletVersion)
+		//if there is no error getting version, check to see if it is the right version
+		if db.WalletVersion.Compare(v) == 0 {
+			//no need to update
+			return "", nil
+		}
+		if db.WalletVersion.Compare(v) < 0 {
+			return "", fmt.Errorf("cannot update wallet to an older version, wallet database version is %v, cli version is %v", v.String(), db.WalletVersion.String())
+		}
+	}
+
+	anon, err := GetWallet().GetBucket(BucketAnon)
 	if err == nil {
 		for _, v := range anon.KeyValueList {
 			u, err := url2.Parse(string(v.Key))
@@ -352,15 +367,15 @@ func RestoreAccounts() (out string, err error) {
 			pubKey := privKey.Public().(ed25519.PublicKey)
 			out += fmt.Sprintf("Converting %s : %x\n", v.Key, pubKey)
 
-			err = Db.Put(BucketLabel, v.Key, pubKey)
+			err = GetWallet().Put(BucketLabel, v.Key, pubKey)
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = Db.Put(BucketKeys, pubKey, privKey)
+			err = GetWallet().Put(BucketKeys, pubKey, privKey)
 			if err != nil {
 				return "", err
 			}
-			err = Db.DeleteBucket(BucketAnon)
+			err = GetWallet().DeleteBucket(BucketAnon)
 			if err != nil {
 				return "", err
 			}
@@ -369,7 +384,7 @@ func RestoreAccounts() (out string, err error) {
 
 	//fix the labels... there can be only one key one label.
 	//should not have multiple labels to the same public key
-	labelz, err := Db.GetBucket(BucketLabel)
+	labelz, err := GetWallet().GetBucket(BucketLabel)
 	if err != nil {
 		//nothing to do...
 		return
@@ -380,18 +395,18 @@ func RestoreAccounts() (out string, err error) {
 			//if we get here, then that means we have a bogus label.
 			bogusLiteLabel := string(v.Key)
 			//so check to see if it is in our regular key bucket
-			otherPubKey, err := Db.Get(BucketLabel, []byte(label))
+			otherPubKey, err := GetWallet().Get(BucketLabel, []byte(label))
 			if err != nil {
 				//key isn't found, so let's add it
 				out += fmt.Sprintf("Converting %s to %s : %x\n", v.Key, label, v.Value)
 				//so it doesn't exist, map the good label to the public key
-				err = Db.Put(BucketLabel, []byte(label), v.Value)
+				err = GetWallet().Put(BucketLabel, []byte(label), v.Value)
 				if err != nil {
 					return "", err
 				}
 
 				//now delete the bogus label
-				err = Db.Delete(BucketLabel, []byte(bogusLiteLabel))
+				err = GetWallet().Delete(BucketLabel, []byte(bogusLiteLabel))
 				if err != nil {
 					return "", err
 				}
@@ -405,7 +420,7 @@ func RestoreAccounts() (out string, err error) {
 					//key isn't found, so let's add it
 					out += fmt.Sprintf("Removing duplicate %s / %s : %x\n", v.Key, label, v.Value)
 					//now delete the bogus label
-					err = Db.Delete(BucketLabel, []byte(bogusLiteLabel))
+					err = GetWallet().Delete(BucketLabel, []byte(bogusLiteLabel))
 					if err != nil {
 						return "", err
 					}
@@ -415,7 +430,7 @@ func RestoreAccounts() (out string, err error) {
 	}
 
 	//build the map of lite accounts to key labels
-	labelz, err = Db.GetBucket(BucketLabel)
+	labelz, err = GetWallet().GetBucket(BucketLabel)
 	if err != nil {
 		//nothing to do...
 		return
@@ -431,22 +446,28 @@ func RestoreAccounts() (out string, err error) {
 		}
 
 		liteLabel, _ := LabelForLiteTokenAccount(liteAccount.String())
-		_, err = Db.Get(BucketLite, []byte(liteLabel))
+		_, err = GetWallet().Get(BucketLite, []byte(liteLabel))
 		if err == nil {
 			continue
 		}
 
 		out += fmt.Sprintf("lite identity %v mapped to key name %v\n", liteLabel, string(v.Key))
 
-		err = Db.Put(BucketLite, []byte(liteLabel), v.Key)
+		err = GetWallet().Put(BucketLite, []byte(liteLabel), v.Key)
 		if err != nil {
 			return "", err
 		}
 
-		err = Db.Put(BucketSigType, v.Value, common.Uint64Bytes(signatureType.GetEnumValue()))
+		err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(signatureType.GetEnumValue()))
 		if err != nil {
 			return "", err
 		}
+	}
+
+	//update wallet version
+	err = GetWallet().PutRaw(db.BucketConfig, []byte("version"), db.WalletVersion.Bytes())
+	if err != nil {
+		return "", err
 	}
 
 	return out, nil
