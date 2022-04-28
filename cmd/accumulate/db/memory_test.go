@@ -6,7 +6,7 @@ import (
 
 func TestMemoryDatabase(t *testing.T) {
 	db := MemoryDB{}
-	err := db.InitDB("")
+	err := db.InitDB("", "")
 	if err != nil {
 		t.Fatal(err.Error())
 	}
