@@ -122,7 +122,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signerUrl, signer, nil, txn, x.logger)
+	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signerUrl, signer, nil, txn, 0, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
