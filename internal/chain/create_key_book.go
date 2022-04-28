@@ -28,9 +28,6 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
 	}
 
-	scc := new(protocol.SyntheticCreateChain)
-	st.Submit(st.OriginUrl, scc)
-
 	book := new(protocol.KeyBook)
 	book.Url = body.Url
 	book.AddAuthority(body.Url)
@@ -43,11 +40,6 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		}
 	}
 
-	err := scc.Create(book)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
-	}
-
 	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(body.Url, 0)
@@ -56,10 +48,9 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	key.PublicKeyHash = body.PublicKeyHash
 	page.Keys = []*protocol.KeySpec{key}
 
-	err = scc.Create(page)
+	err := st.Create(book, page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyPage %s: %v", page.Url, err)
+		return nil, fmt.Errorf("failed to create %v: %w", book.Url, err)
 	}
-
 	return nil, nil
 }

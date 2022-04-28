@@ -53,7 +53,10 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.Trans
 				}
 			}
 			account.CreditTokens(&refund)
-			st.Update(account)
+			err = st.Update(account)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+			}
 		}
 
 		paid, err := protocol.ComputeTransactionFee(txn.Transaction)
@@ -74,7 +77,10 @@ func (SyntheticReceipt) Validate(st *StateManager, tx *Delivery) (protocol.Trans
 			refundAmount := uint64(paid) - protocol.FeeFailedMaximum.AsUInt64()
 			if txn.Transaction.Header.Principal.LocalTo(signer.GetUrl()) {
 				signer.CreditCredits(refundAmount)
-				st.Update(signer)
+				err := st.Update(signer)
+				if err != nil {
+					return nil, fmt.Errorf("failed to update %v: %v", signer.GetUrl(), err)
+				}
 			} else {
 				deposit := new(protocol.SyntheticDepositCredits)
 				deposit.Amount = refundAmount

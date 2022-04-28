@@ -29,6 +29,9 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Tr
 
 	account.Issued.Sub(&account.Issued, &body.Amount)
 
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
 }
