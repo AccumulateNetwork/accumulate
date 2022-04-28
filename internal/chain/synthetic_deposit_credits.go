@@ -35,6 +35,9 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 	}
 
 	account.CreditCredits(body.Amount)
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
 }

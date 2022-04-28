@@ -202,7 +202,10 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			}
 		}
 
-		st.Update(records...)
+		err = st.Create(records...)
+		if err != nil {
+			return fmt.Errorf("failed to create records: %w", err)
+		}
 
 		for _, wd := range dataRecords {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
