@@ -36,7 +36,10 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	deposit.Amount = body.Amount
 	st.Submit(body.Recipient, deposit)
 
-	st.Update(issuer)
+	err := st.Update(issuer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", issuer.Url, err)
+	}
 
 	return nil, nil
 }

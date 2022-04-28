@@ -329,8 +329,8 @@ const TransactionTypeUpdateKey TransactionType = 22
 // TransactionTypeRemote is used to sign a remote transaction.
 const TransactionTypeRemote TransactionType = 48
 
-// TransactionTypeSyntheticCreateChain creates or updates chains.
-const TransactionTypeSyntheticCreateChain TransactionType = 49
+// TransactionTypeSyntheticCreateIdentity creates an identity.
+const TransactionTypeSyntheticCreateIdentity TransactionType = 49
 
 // TransactionTypeSyntheticWriteData writes data to a data account.
 const TransactionTypeSyntheticWriteData TransactionType = 50
@@ -1204,7 +1204,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
 		*v = u
 		return true
 	default:
@@ -1257,8 +1257,8 @@ func (v TransactionType) String() string {
 		return "updateKey"
 	case TransactionTypeRemote:
 		return "remote"
-	case TransactionTypeSyntheticCreateChain:
-		return "syntheticCreateChain"
+	case TransactionTypeSyntheticCreateIdentity:
+		return "syntheticCreateIdentity"
 	case TransactionTypeSyntheticWriteData:
 		return "syntheticWriteData"
 	case TransactionTypeSyntheticDepositTokens:
@@ -1337,8 +1337,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeRemote, true
 	case "signPending":
 		return TransactionTypeRemote, true
-	case "syntheticcreatechain":
-		return TransactionTypeSyntheticCreateChain, true
+	case "syntheticcreateidentity":
+		return TransactionTypeSyntheticCreateIdentity, true
 	case "syntheticwritedata":
 		return TransactionTypeSyntheticWriteData, true
 	case "syntheticdeposittokens":

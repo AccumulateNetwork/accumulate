@@ -102,8 +102,6 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
 	}
 
-	st.Update(account)
-
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
 	sdc.Amount = credits.Uint64()
@@ -112,11 +110,16 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	// Add the burnt acme to the internal ledger and send it with the anchor
 	// transaction
 	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
-	st.Update(ledgerState)
 
 	res := new(protocol.AddCreditsResult)
 	res.Oracle = ledgerState.ActiveOracle
 	res.Credits = credits.Uint64()
 	res.Amount = body.Amount
+
+	err = st.Update(account, ledgerState)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update accounts: %v", err)
+	}
+
 	return res, nil
 }

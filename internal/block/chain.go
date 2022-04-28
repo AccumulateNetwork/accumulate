@@ -64,7 +64,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
-			SyntheticCreateChain{},
+			SyntheticCreateIdentity{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
