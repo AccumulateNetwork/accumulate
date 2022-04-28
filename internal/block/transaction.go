@@ -34,13 +34,13 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	case !errors.Is(err, storage.ErrNotFound):
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return recordFailedTransaction(batch, transaction, err)
-	case !transactionAllowsMissingPrincipal(transaction):
+	case !x.transactionAllowsMissingPrincipal(transaction):
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return recordFailedTransaction(batch, transaction, err)
 	}
 
 	// Check if the transaction is ready to be executed
-	ready, err := TransactionIsReady(&x.Network, batch, transaction, status)
+	ready, err := x.TransactionIsReady(batch, transaction, status)
 	if err != nil {
 		return recordFailedTransaction(batch, transaction, err)
 	}
@@ -87,7 +87,16 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	return recordSuccessfulTransaction(batch, state, transaction, result)
 }
 
-func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
+func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
+	val, ok := getValidator[PrincipalValidator](x, transaction.Body.Type())
+	if ok {
+		allow, fallback := val.AllowMissingPrincipal(transaction)
+		if !fallback {
+			return allow
+		}
+	}
+
+	// TODO Replace with AllowMissingPrincipal
 	switch body := transaction.Body.(type) {
 	case *protocol.WriteData,
 		*protocol.SyntheticWriteData:
@@ -105,25 +114,25 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 		return true
 
 	case *protocol.SyntheticForwardTransaction:
-		return transactionAllowsMissingPrincipal(body.Transaction)
+		return x.transactionAllowsMissingPrincipal(body.Transaction)
 
 	default:
 		return false
 	}
 }
 
-func TransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	switch {
 	case transaction.Body.Type().IsUser():
-		return userTransactionIsReady(batch, transaction, status)
+		return x.userTransactionIsReady(batch, transaction, status)
 	case transaction.Body.Type().IsSynthetic():
-		return synthTransactionIsReady(net, batch, transaction, status)
+		return synthTransactionIsReady(&x.Network, batch, transaction, status)
 	default:
 		return true, nil
 	}
 }
 
-func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// UpdateKey transactions are always M=1 and always require a signature from
 	// the initiator
 	txnObj := batch.Transaction(transaction.GetHash())
@@ -144,9 +153,16 @@ func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transac
 		return true, nil
 	}
 
-	// Anyone can write to a lite data account
-	if isWriteToLiteDataAccount(batch, transaction) {
-		return true, nil
+	// Delegate to the transaction executor?
+	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
+	if ok {
+		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if !fallback {
+			return ready, nil
+		}
 	}
 
 	// Load the principal

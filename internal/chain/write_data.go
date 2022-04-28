@@ -1,8 +1,10 @@
 package chain
 
 import (
+	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -10,6 +12,61 @@ import (
 type WriteData struct{}
 
 func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
+
+func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
+	body, ok := transaction.Body.(*protocol.WriteData)
+	if !ok {
+		return false, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteData), transaction.Body)
+	}
+
+	chainId, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
+	if err != nil {
+		return false, nil // Not a lite data address
+	}
+
+	account, err := batch.Account(transaction.Header.Principal).GetState()
+	switch {
+	case err == nil:
+		// Found the account, is it a lite data account?
+		_, ok := account.(*protocol.LiteDataAccount)
+		return ok, nil
+
+	case errors.Is(err, errors.StatusNotFound):
+		// Are we creating a lite data account?
+		computedChainId := protocol.ComputeLiteDataAccountId(&body.Entry)
+		return bytes.HasPrefix(computedChainId, chainId), nil
+
+	default:
+		// Unknown error
+		return false, errors.Wrap(errors.StatusUnknown, err)
+	}
+}
+
+// SignerIsAuthorized returns nil if the transaction is writing to a lite data
+// account.
+func (WriteData) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	lite, err := isWriteToLiteDataAccount(batch, transaction)
+	if err != nil {
+		return false, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	return !lite, nil
+}
+
+// TransactionIsReady returns true if the transaction is writing to a lite data
+// account.
+func (WriteData) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, _ *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	lite, err := isWriteToLiteDataAccount(batch, transaction)
+	if err != nil {
+		return false, false, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	if !lite {
+		return false, true, nil
+	}
+
+	return true, false, nil
+}
 
 func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (WriteData{}).Validate(st, tx)
