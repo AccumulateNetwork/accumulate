@@ -197,3 +197,15 @@ func getAccountAuth(batch *database.Batch, account protocol.Account) (*protocol.
 		return &protocol.AccountAuth{}, nil
 	}
 }
+
+func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {
+	var zero T
+
+	txn, ok := x.executors[typ]
+	if !ok {
+		return zero, false
+	}
+
+	val, ok := txn.(T)
+	return val, ok
+}
