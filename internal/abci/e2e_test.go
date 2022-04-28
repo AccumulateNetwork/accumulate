@@ -1423,10 +1423,10 @@ func TestUpdateValidators(t *testing.T) {
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
 
-	//Update NetworkGlobals
+	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
+	// for 4
 	ng := new(protocol.NetworkGlobals)
-	ng.ValidatorThreshold.Numerator = 1
-	ng.ValidatorThreshold.Denominator = 3
+	ng.ValidatorThreshold.Set(5, 12)
 	wd := new(protocol.WriteData)
 	d, err := ng.MarshalBinary()
 	require.NoError(t, err)
@@ -1486,6 +1486,9 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was added
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
 
+	// Verify the Validator threshold
+	require.Equal(t, uint64(1), n.GetKeyPage(validators.String()).AcceptThreshold)
+
 	// Add a fourth validator, so the page threshold will become 2
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
@@ -1501,10 +1504,11 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was added
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
 
-	//Verify the Validator threshold
+	// Verify the Validator threshold
+	require.Equal(t, uint64(2), n.GetKeyPage(validators.String()).AcceptThreshold)
 
 	// Remove a validator
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	txns := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.RemoveValidator)
 		body.PubKey = nodeKeyUpd.PubKey().Bytes()
 
@@ -1514,6 +1518,15 @@ func TestUpdateValidators(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
+
+	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithSigner(validators, 5).
+			WithTxnHash(txns[0][:]).
+			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
+			Build())
+	})
+	n.MustWaitForTxns(convertIds32(envHashes...)...)
 
 	// Verify the validator was removed
 	pubKeys := n.client.Validators()
