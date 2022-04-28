@@ -48,7 +48,10 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	if !account.DebitTokens(&total.Int) {
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
 	}
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update account %v: %v", account.GetUrl(), err)
+	}
 
 	m := make(map[[32]byte]bool)
 	for i, u := range recipients {

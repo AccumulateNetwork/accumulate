@@ -220,8 +220,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticAnchor), nil
 	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
-	case TransactionTypeSyntheticCreateChain:
-		return new(SyntheticCreateChain), nil
+	case TransactionTypeSyntheticCreateIdentity:
+		return new(SyntheticCreateIdentity), nil
 	case TransactionTypeSyntheticDepositCredits:
 		return new(SyntheticDepositCredits), nil
 	case TransactionTypeSyntheticDepositTokens:
@@ -317,8 +317,8 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *SyntheticBurnTokens:
 		b, ok := b.(*SyntheticBurnTokens)
 		return ok && a.Equal(b)
-	case *SyntheticCreateChain:
-		b, ok := b.(*SyntheticCreateChain)
+	case *SyntheticCreateIdentity:
+		b, ok := b.(*SyntheticCreateIdentity)
 		return ok && a.Equal(b)
 	case *SyntheticDepositCredits:
 		b, ok := b.(*SyntheticDepositCredits)

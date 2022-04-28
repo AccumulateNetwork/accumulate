@@ -180,9 +180,9 @@ TransactionType:
     description: is used to sign a remote transaction
 
   ##### SYNTHETIC TRANSACTIONS #####
-  SyntheticCreateChain:
+  SyntheticCreateIdentity:
     value: 0x31
-    description: creates or updates chains
+    description: creates an identity
   SyntheticWriteData:
     value: 0x32
     description: writes data to a data account

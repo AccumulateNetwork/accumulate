@@ -74,6 +74,9 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *Delivery) (prot
 			"module", "governor")
 	}
 
-	st.Update(ledger)
+	err := st.Update(ledger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", ledger.GetUrl(), err)
+	}
 	return nil, nil
 }
