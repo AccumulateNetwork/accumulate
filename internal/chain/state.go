@@ -15,7 +15,6 @@ import (
 
 type StateManager struct {
 	stateCache
-	feeRefund protocol.Fee
 
 	Origin    protocol.Account
 	OriginUrl *url.URL
@@ -25,17 +24,12 @@ type StateManager struct {
 }
 
 func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
-	fee, err := protocol.ComputeTransactionFee(transaction)
-	if err != nil {
-		return nil, fmt.Errorf("calculate fee: %w", err)
-	}
-
 	var signer protocol.Signer
-	err = batch.Account(status.Initiator).GetStateAs(&signer)
+	err := batch.Account(status.Initiator).GetStateAs(&signer)
 	switch {
 	case err == nil:
 		// Found it
-		return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, fee, logger), nil
+		return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
@@ -52,20 +46,19 @@ func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protoco
 		return nil, fmt.Errorf("transaction signer set does not include the initiator")
 	}
 
-	return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, fee, logger), nil
+	return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.Signer, principal protocol.Account, transaction *protocol.Transaction, fee protocol.Fee, logger log.Logger) *StateManager {
+func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.Signer, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.SignatorUrl = signerUrl
 	m.Signator = signer
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
-	m.feeRefund = fee
 	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
 	m.logger.L = logger
 	return m
@@ -101,7 +94,7 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 
 	swo, ok := body.(protocol.SynthTxnWithOrigin)
 	if ok {
-		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl, m.feeRefund)
+		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
 	}
 
 	m.state.DidProduceTxn(url, body)

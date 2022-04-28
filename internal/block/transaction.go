@@ -84,7 +84,49 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return x.recordFailedTransaction(batch, transaction, err)
 	}
 
+	err = setRefund(transaction, state)
+	if err != nil {
+		err = errors.Wrap(0, err)
+		return x.recordFailedTransaction(batch, transaction, err)
+	}
+
 	return recordSuccessfulTransaction(batch, state, transaction, result)
+}
+
+// setRefund sets the refund amount for each synthetic transaction, spreading
+// the potential refund across all produced synthetic transactions.
+func setRefund(transaction *protocol.Transaction, state *chain.ProcessTransactionState) error {
+	if len(state.ProducedTxns) == 0 {
+		return nil
+	}
+
+	// Get the fee
+	paid, err := protocol.ComputeTransactionFee(transaction)
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "compute fee: %w", err)
+	}
+	if paid <= protocol.FeeFailedMaximum {
+		return nil
+	}
+
+	// Find all the synthetic transactions that implement the interface
+	var swos []protocol.SynthTxnWithOrigin
+	for _, txn := range state.ProducedTxns {
+		swo, ok := txn.Body.(protocol.SynthTxnWithOrigin)
+		if ok {
+			swos = append(swos, swo)
+		}
+	}
+	if len(swos) == 0 {
+		return nil
+	}
+
+	// Set the refund amount
+	refund := (paid - protocol.FeeFailedMaximum) / protocol.Fee(len(swos))
+	for _, swo := range swos {
+		swo.SetFeeRefund(refund)
+	}
+	return nil
 }
 
 func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
@@ -415,15 +457,12 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *p
 
 	// If this transaction is a synthetic transaction, send a refund
 	state := new(chain.ProcessTransactionState)
-	if swo, ok := transaction.Body.(protocol.SynthTxnWithOrigin); ok {
-		_, source, fee := swo.GetSyntheticOrigin()
-		if fee > protocol.FeeFailedMaximum {
-			fee -= protocol.FeeFailedMaximum
-			refund := new(protocol.SyntheticDepositCredits)
-			refund.SetSyntheticOrigin(transaction.GetHash(), transaction.Header.Principal, 0)
-			refund.Amount = fee.AsUInt64()
-			state.DidProduceTxn(source, refund)
-		}
+	if swo, ok := transaction.Body.(protocol.SynthTxnWithOrigin); ok && swo.GetFeeRefund() > 0 {
+		refund := new(protocol.SyntheticDepositCredits)
+		refund.SetSyntheticOrigin(transaction.GetHash(), transaction.Header.Principal)
+		refund.Amount = swo.GetFeeRefund().AsUInt64()
+		_, source := swo.GetSyntheticOrigin()
+		state.DidProduceTxn(source, refund)
 	}
 
 	// Execute the post-failure hook if the transaction executor defines one

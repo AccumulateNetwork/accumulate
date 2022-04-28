@@ -38,7 +38,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			continue
 		}
 
-		cause, _, _ := swo.GetSyntheticOrigin()
+		cause, _ := swo.GetSyntheticOrigin()
 		err = batch.Transaction(cause).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
 		if err != nil {
 			return err

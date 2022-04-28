@@ -8,7 +8,7 @@ SyntheticOrigin:
       pointer: true
     - name: Cause
       type: chain
-    - name: Fee
+    - name: FeeRefund
       type: uint
 
 SyntheticCreateIdentity:

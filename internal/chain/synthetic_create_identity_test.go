@@ -32,7 +32,7 @@ func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 	body := new(protocol.SyntheticCreateIdentity)
 	body.Accounts = []protocol.Account{account}
 	cause := [32]byte{1}
-	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn, 0)
+	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
@@ -70,7 +70,7 @@ func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
 	body := new(protocol.SyntheticCreateIdentity)
 	body.Accounts = []protocol.Account{account}
 	cause := [32]byte{1}
-	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn, 0)
+	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
