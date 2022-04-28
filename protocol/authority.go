@@ -109,7 +109,7 @@ func (li *LiteIdentity) EntryByKey(key []byte) (int, KeyEntry, bool) {
 func (li *LiteIdentity) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
 	myKey, _, _ := ParseLiteIdentity(li.Url)
 	if myKey == nil {
-		panic("lite identity URL is not a valid")
+		panic("lite identity URL is not valid")
 	}
 
 	if !bytes.Equal(myKey, keyHash[:20]) {
