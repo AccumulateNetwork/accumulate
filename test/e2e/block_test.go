@@ -11,6 +11,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -82,7 +83,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(t.Name(), alice)
 	keyHash := sha256.Sum256(aliceKey[32:])
 
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
 			WithTimestampVar(&timestamp).
@@ -95,6 +96,10 @@ func TestCreateRootIdentity(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, lite).
 			Build(),
 	)...)
+
+	// There should be a synthetic transaction
+	require.Len(t, txn, 2)
+	require.IsType(t, (*SyntheticCreateIdentity)(nil), txn[1].Body)
 
 	// Verify the account is created
 	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
@@ -213,4 +218,77 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry *Data
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashes[0]), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
+}
+
+func TestCreateSubIdentityWithLite(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
+	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
+	keyHash := sha256.Sum256(aliceKey[32:])
+	sim.CreateIdentity(alice, aliceKey[32:])
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
+
+	_, err := sim.SubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(liteUrl).
+			WithTimestampVar(&timestamp).
+			WithSigner(liteUrl, 1).
+			WithBody(&protocol.CreateIdentity{
+				Url:        alice.JoinPath("sub"),
+				KeyHash:    keyHash[:],
+				KeyBookUrl: alice.JoinPath("sub", "book"),
+			}).
+			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
+			Build(),
+	)
+	var err2 *errors.Error
+	require.Error(t, err)
+	require.ErrorAs(t, err, &err2)
+	require.Equal(t, errors.StatusUnauthorized, err2.Code)
+}
+
+func TestCreateIdentityWithRemoteLite(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
+	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
+	keyHash := sha256.Sum256(aliceKey[32:])
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
+
+	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithTimestampVar(&timestamp).
+			WithSigner(liteUrl, 1).
+			WithBody(&protocol.CreateIdentity{
+				Url:        alice,
+				KeyHash:    keyHash[:],
+				KeyBookUrl: alice.JoinPath("book"),
+			}).
+			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
+			Build(),
+	)...)
+
+	// There should not be a synthetic transaction
+	require.Len(t, txn, 1)
+
+	// Verify the account is created
+	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+		var identity *protocol.ADI
+		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
+		return nil
+	})
 }
