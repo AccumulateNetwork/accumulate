@@ -13,6 +13,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -222,7 +223,9 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
 	s.Helper()
 
-	ch := make(chan *protocol.TransactionStatus)
+	status, err := s.SubmitAndExecuteBlock(envelopes...)
+	require.NoError(tb{s}, err)
+
 	ids := map[[32]byte]bool{}
 	for _, env := range envelopes {
 		for _, d := range NormalizeEnvelope(s, env) {
@@ -230,13 +233,8 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 		}
 	}
 
-	_, err := s.Submit(envelopes...)
-	require.NoError(s, err)
-
-	go s.ExecuteBlock(ch)
-
 	var didFail bool
-	for status := range ch {
+	for _, status := range status {
 		if status.Code == 0 || !ids[status.For] {
 			continue
 		}
@@ -247,8 +245,28 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	if didFail {
 		s.FailNow()
 	}
-
 	return envelopes
+}
+
+// SubmitAndExecuteBlock executes a block with the envelopes and fails the test if
+// any envelope fails.
+func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
+	s.Helper()
+
+	_, err := s.Submit(envelopes...)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	ch := make(chan *protocol.TransactionStatus)
+	go s.ExecuteBlock(ch)
+
+	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
+	for s := range ch {
+		status = append(status, s)
+	}
+
+	return status, nil
 }
 
 func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash []byte) *ExecEntry {
