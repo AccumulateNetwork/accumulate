@@ -51,7 +51,7 @@ func (b *BoltDB) Close() error {
 	return b.db.Close()
 }
 
-func (b *BoltDB) loadAndVerifyMagicIfNecessary(password string) error {
+func (b *BoltDB) loadAndVerify(password string) error {
 	//make sure the salt is clear
 	b.salt = nil
 
@@ -139,7 +139,7 @@ func (b *BoltDB) InitDB(filename string, password string) (err error) {
 		}
 	}
 
-	return b.loadAndVerifyMagicIfNecessary(password)
+	return b.loadAndVerify(password)
 }
 
 func (b *BoltDB) decryptIfNecessary(value []byte) ([]byte, error) {
