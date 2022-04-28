@@ -25,8 +25,9 @@ var cmdRunDevnet = &cobra.Command{
 }
 
 var flagRunDevnet = struct {
-	Except []string
-	Debug  bool
+	Except           []string
+	Debug            bool
+	DisableDiskCheck bool
 }{}
 
 func init() {
@@ -34,6 +35,7 @@ func init() {
 
 	cmdRunDevnet.Flags().StringArrayVarP(&flagRunDevnet.Except, "except", "x", nil, "Nodes that should not be launched, e.g. bvn0.0")
 	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.Debug, "debug", false, "Enable debugging features")
+	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.DisableDiskCheck, "disable-disk-check", false, "Disable the disk space check")
 
 	if os.Getenv("FORCE_COLOR") != "" {
 		color.NoColor = false
@@ -115,6 +117,7 @@ func runDevNet(*cobra.Command, []string) {
 
 		// Prometheus cannot be enabled when running multiple nodes in one process
 		daemon.Config.Instrumentation.Prometheus = false
+		daemon.DisableDiskCheck = flagRunDevnet.DisableDiskCheck
 
 		// Start it
 		check(daemon.Start())

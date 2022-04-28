@@ -43,7 +43,8 @@ type Daemon struct {
 
 	// knobs for tests
 	// IsTest   bool
-	UseMemDB bool
+	UseMemDB         bool
+	DisableDiskCheck bool
 }
 
 func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error) {
@@ -236,7 +237,9 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	// Shut down the node if the disk space gets too low
-	go d.ensureSufficientDiskSpace(d.Config.RootDir)
+	if !d.DisableDiskCheck {
+		go d.ensureSufficientDiskSpace(d.Config.RootDir)
+	}
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
