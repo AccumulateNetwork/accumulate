@@ -5,8 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/boltdb/bolt"
 	"math/rand"
+
+	"github.com/boltdb/bolt"
 )
 
 var ErrNotOpen = errors.New("database not open")
