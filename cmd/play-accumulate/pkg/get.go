@@ -30,6 +30,14 @@ func (s *Session) Get(query interface{}, subquery ...interface{}) interface{} {
 	return s.GetAccount(query)
 }
 
+func (s *Session) GetAs(u interface{}, query interface{}, subquery ...interface{}) {
+	v := s.Get(query, subquery...)
+	err := encoding.SetPtr(v, &u)
+	if err != nil {
+		s.Abortf("Get %v(%v): %v", query, subquery, err)
+	}
+}
+
 func (s *Session) GetAccount(query Urlish) protocol.Account {
 	url := s.url(query)
 	acct, err := s.Engine.GetAccount(url)
