@@ -424,7 +424,7 @@ func GenerateKey(label string) (string, error) {
 		return "", err
 	}
 
-	err = Db.Put(BucketSigType, privKey[32:], common.Uint64Bytes(sigtype.GetEnumValue()))
+	err = Db.Put(BucketSigType, pubKey, common.Uint64Bytes(sigtype.GetEnumValue()))
 	if err != nil {
 		return "", err
 	}
