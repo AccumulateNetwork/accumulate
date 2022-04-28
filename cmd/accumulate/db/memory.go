@@ -10,6 +10,10 @@ type MemoryDB struct {
 	buckets map[[32]byte]*Bucket
 }
 
+func (b *MemoryDB) Name() string {
+	return "memory"
+}
+
 //Close clears out the data and uninitializes the MemoryDB
 func (b *MemoryDB) Close() error {
 	if b.buckets == nil {
@@ -20,13 +24,13 @@ func (b *MemoryDB) Close() error {
 }
 
 //InitDB initializes the MemoryDB and must be called prior to use of the object
-func (b *MemoryDB) InitDB(string) (err error) {
+func (b *MemoryDB) InitDB(string, string) (err error) {
 	b.buckets = make(map[[32]byte]*Bucket)
 	return err
 }
 
 //Get will get an entry in the database given a bucket and key
-func (b *MemoryDB) Get(bucket []byte, key []byte) (value []byte, err error) {
+func (b *MemoryDB) GetRaw(bucket []byte, key []byte) (value []byte, err error) {
 	if b.buckets == nil {
 		return nil, fmt.Errorf("memory database not initialized")
 	}
@@ -41,9 +45,12 @@ func (b *MemoryDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	}
 	return value, err
 }
+func (b *MemoryDB) Get(bucket []byte, key []byte) (value []byte, err error) {
+	return b.GetRaw(bucket, key)
+}
 
-//Put will write data to a given bucket using the key
-func (b *MemoryDB) Put(bucket []byte, key []byte, value []byte) error {
+//PutRaw will write data to a given bucket using the key
+func (b *MemoryDB) PutRaw(bucket []byte, key []byte, value []byte) error {
 	if b.buckets == nil {
 		return fmt.Errorf("memory database not initialized")
 	}
@@ -58,6 +65,11 @@ func (b *MemoryDB) Put(bucket []byte, key []byte, value []byte) error {
 
 	v.Put(key, value)
 	return nil
+}
+
+//Put will write data to a given bucket using the key
+func (b *MemoryDB) Put(bucket []byte, key []byte, value []byte) error {
+	return b.PutRaw(bucket, key, value)
 }
 
 //GetBucket will return the contents of a bucket
