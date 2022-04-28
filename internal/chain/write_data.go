@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -20,15 +21,28 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
-	if st.Origin.Type() != protocol.AccountTypeDataAccount {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
-			protocol.AccountTypeDataAccount, st.Origin.Type())
-	}
-
 	//check will return error if there is too much data or no data for the entry
 	_, err := body.Entry.CheckSize()
 	if err != nil {
 		return nil, err
+	}
+
+	cause := *(*[32]byte)(tx.Transaction.GetHash())
+	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
+	if err == nil {
+		return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, cause)
+	}
+
+	return executeWriteFullDataAccount(st, tx.Transaction, &body.Entry, cause)
+}
+
+func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte) (protocol.TransactionResult, error) {
+	if st.Origin == nil {
+		return nil, errors.NotFound("%v not found", txn.Header.Principal)
+	}
+	if st.Origin.Type() != protocol.AccountTypeDataAccount {
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
+			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
 	// now replace the transaction payload with a segregated witness to the data.
@@ -42,19 +56,19 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 	// produced the data entry
 
 	sw := protocol.SegWitDataEntry{}
-	sw.Cause = *(*[32]byte)(tx.Transaction.GetHash())
-	sw.EntryHash = *(*[32]byte)(body.Entry.Hash())
-	sw.EntryUrl = tx.Transaction.Header.Principal
+	sw.Cause = cause
+	sw.EntryHash = *(*[32]byte)(entry.Hash())
+	sw.EntryUrl = st.OriginUrl
 
 	//now replace the original data entry payload with the new segwit payload
-	tx.Transaction.Body = &sw
+	txn.Body = &sw
 
 	//store the entry
-	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
+	st.UpdateData(st.Origin, sw.EntryHash[:], entry)
 
 	result := new(protocol.WriteDataResult)
-	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
-	result.AccountID = tx.Transaction.Header.Principal.AccountID()
-	result.AccountUrl = tx.Transaction.Header.Principal
+	result.EntryHash = *(*[32]byte)(entry.Hash())
+	result.AccountID = st.OriginUrl.AccountID()
+	result.AccountUrl = st.OriginUrl
 	return result, nil
 }
