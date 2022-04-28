@@ -200,12 +200,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateTokenAccount), nil
 	case TransactionTypeInternalGenesis:
 		return new(InternalGenesis), nil
-	case TransactionTypeInternalSendTransactions:
-		return new(InternalSendTransactions), nil
-	case TransactionTypeInternalTransactionsSent:
-		return new(InternalTransactionsSent), nil
-	case TransactionTypeInternalTransactionsSigned:
-		return new(InternalTransactionsSigned), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
 	case TransactionTypeRemote:
@@ -286,15 +280,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *InternalGenesis:
 		b, ok := b.(*InternalGenesis)
-		return ok && a.Equal(b)
-	case *InternalSendTransactions:
-		b, ok := b.(*InternalSendTransactions)
-		return ok && a.Equal(b)
-	case *InternalTransactionsSent:
-		b, ok := b.(*InternalTransactionsSent)
-		return ok && a.Equal(b)
-	case *InternalTransactionsSigned:
-		b, ok := b.(*InternalTransactionsSigned)
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
