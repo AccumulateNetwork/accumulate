@@ -100,7 +100,7 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 		key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
 		return key != nil
 
-	case *protocol.SyntheticCreateChain:
+	case *protocol.SyntheticCreateIdentity:
 		// SyntheticCreateChain can create accounts
 		return true
 

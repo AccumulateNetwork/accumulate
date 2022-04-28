@@ -59,7 +59,10 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 
 	// Attach this TX to the faucet (don't bother debiting)
-	st.Update(faucet)
+	err = st.Update(faucet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update faucet: %v", err)
+	}
 
 	// Submit a synthetic deposit token TX
 	amount := new(big.Int).SetUint64(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
@@ -67,8 +70,6 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *amount
 	st.Submit(u, deposit)
-	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
-	// err = deposit.SetDeposit(protocol.ACME, amount)
 
 	return nil, nil
 }

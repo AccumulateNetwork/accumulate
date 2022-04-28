@@ -9,15 +9,15 @@ SyntheticOrigin:
     - name: Cause
       type: chain
 
-SyntheticCreateChain:
+SyntheticCreateIdentity:
   union: { type: transaction }
   embeddings:
     - SyntheticOrigin
   fields:
-    - name: Chains
+    - name: Accounts
+      type: Account
+      marshal-as: union
       repeatable: true
-      type: ChainParams
-      marshal-as: reference
 
 SyntheticWriteData:
   union: { type: transaction }
