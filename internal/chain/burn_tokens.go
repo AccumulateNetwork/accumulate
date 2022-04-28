@@ -43,6 +43,9 @@ func (BurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	burn.Amount = body.Amount
 	st.Submit(account.GetTokenUrl(), burn)
 
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
 }

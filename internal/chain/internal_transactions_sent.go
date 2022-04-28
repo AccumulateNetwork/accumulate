@@ -45,7 +45,10 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *Delivery) (protoc
 		st.logger.Debug("Did send transaction", "txid", logging.AsHex(id).Slice(0, 4), "module", "governor")
 	}
 
-	st.Update(ledger)
+	err := st.Update(ledger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", ledger.GetUrl(), err)
+	}
 
 	return nil, nil
 }

@@ -57,7 +57,10 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		case errors.Is(err, storage.ErrNotFound):
 			liteIdentity = new(protocol.LiteIdentity)
 			liteIdentity.Url = originIdentity
-			st.Update(liteIdentity)
+			err := st.Update(liteIdentity)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update %v: %v", liteIdentity.GetUrl(), err)
+			}
 		default:
 			return nil, err
 		}
@@ -75,6 +78,9 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 	if !account.CreditTokens(&body.Amount) {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
 }
