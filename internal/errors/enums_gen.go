@@ -41,6 +41,12 @@ const StatusUnauthorized Status = 403
 // StatusNotFound means a record could not be found.
 const StatusNotFound Status = 404
 
+// StatusBadSignerVersion means the signer version does not match.
+const StatusBadSignerVersion Status = 411
+
+// StatusBadTimestamp means the timestamp is invalid.
+const StatusBadTimestamp Status = 412
+
 // StatusInternalError means an internal error occured.
 const StatusInternalError Status = 500
 
@@ -51,7 +57,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusUnknown, StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusInternalError:
+	case StatusUnknown, StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError:
 		*v = u
 		return true
 	default:
@@ -84,6 +90,10 @@ func (v Status) String() string {
 		return "unauthorized"
 	case StatusNotFound:
 		return "notFound"
+	case StatusBadSignerVersion:
+		return "badSignerVersion"
+	case StatusBadTimestamp:
+		return "badTimestamp"
 	case StatusInternalError:
 		return "internalError"
 	default:
@@ -116,6 +126,10 @@ func StatusByName(name string) (Status, bool) {
 		return StatusUnauthorized, true
 	case "notfound":
 		return StatusNotFound, true
+	case "badsignerversion":
+		return StatusBadSignerVersion, true
+	case "badtimestamp":
+		return StatusBadTimestamp, true
 	case "internalerror":
 		return StatusInternalError, true
 	default:
