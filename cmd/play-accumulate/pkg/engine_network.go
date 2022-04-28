@@ -85,9 +85,14 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 }
 
 func (e NetEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
+	return e.waitFor(hash, false)
+}
+
+func (e NetEngine) waitFor(hash [32]byte, ignorePending bool) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
 	req := new(api.TxnQuery)
 	req.Txid = hash[:]
 	req.Wait = 10 * time.Second
+	req.IgnorePending = ignorePending
 	resp, err := e.QueryTx(context.Background(), req)
 	if err != nil {
 		return nil, nil, err
@@ -97,7 +102,7 @@ func (e NetEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*pro
 	statuses := []*protocol.TransactionStatus{resp.Status}
 	transactions := []*protocol.Transaction{resp.Transaction}
 	for _, hash := range resp.SyntheticTxids {
-		st, txn, err := e.WaitFor(hash)
+		st, txn, err := e.waitFor(hash, true)
 		if err != nil {
 			return nil, nil, err
 		}

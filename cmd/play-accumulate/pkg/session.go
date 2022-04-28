@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -18,8 +19,8 @@ type Urlish = interface{}
 // Keyish indicates that the parameter must be convertable to a key.
 type Keyish = interface{}
 
-// Intish indicates that the parameter must be convertable to an integer.
-type Intish = interface{}
+// Numish indicates that the parameter must be convertable to a number.
+type Numish = interface{}
 
 type Output struct {
 	Mime  string
@@ -53,6 +54,12 @@ func (s *Session) Abort(value interface{}) {
 
 func (s *Session) Abortf(format string, args ...interface{}) {
 	s.Abort(fmt.Errorf(format, args...))
+}
+
+func (s *Session) Assert(condition bool, format string, args ...interface{}) {
+	if !condition {
+		s.Abortf(format, args...)
+	}
 }
 
 func (s *Session) url(v Urlish) *URL {
@@ -108,35 +115,75 @@ func (s *Session) privkey(key Keyish) []byte {
 	}
 }
 
-func (s *Session) bigint(v Intish) *big.Int {
+func intexp(x *big.Int, precision int) *big.Int {
+	y := big.NewInt(10)
+	y.Exp(y, big.NewInt(int64(precision)), nil)
+	return x.Mul(x, y)
+}
+
+func bigfloat(v float64, precision int) *big.Int {
+	e := intexp(big.NewInt(1), precision)
+	x := new(big.Float)
+	x.SetInt(e)
+	x.Mul(x, big.NewFloat(v))
+	x.Int(e)
+	return e
+}
+
+func (s *Session) bigint(v Numish, precision int) *big.Int {
 	switch v := v.(type) {
 	case int:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case int8:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case int16:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case int32:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case int64:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case uint:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case uint8:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case uint16:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case uint32:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
 	case uint64:
-		return big.NewInt(int64(v))
+		return intexp(big.NewInt(int64(v)), precision)
+
+	case float32:
+		return bigfloat(float64(v), precision)
+	case float64:
+		return bigfloat(float64(v), precision)
+
 	case string:
-		u := new(big.Int)
-		_, ok := u.SetString(v, 10)
-		if !ok {
-			s.Abortf("Invalid number: %q", v)
+		parts := strings.Split(v, ".")
+		if len(parts) > 2 {
+			s.Abortf("Invalid number: %q\n", v)
 		}
-		return u
+		x := new(big.Int)
+		if _, ok := x.SetString(parts[0], 10); !ok {
+			s.Abortf("Invalid number: %q\n", v)
+		}
+		intexp(x, precision)
+		if len(parts) == 1 {
+			return x
+		}
+
+		fpart := parts[1]
+		if len(fpart) > precision {
+			fpart = fpart[:precision]
+		} else {
+			fpart += strings.Repeat("0", precision-len(fpart))
+		}
+		y := new(big.Int)
+		if _, ok := y.SetString(fpart, 10); !ok {
+			s.Abortf("Invalid number: %q\n", v)
+		}
+		return x.Add(x, y)
+
 	default:
 		s.Abortf("Cannot convert %T to an integer", v)
 		panic("unreachable")
