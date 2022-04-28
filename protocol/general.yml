@@ -151,3 +151,18 @@ KeySpec:
     - name: Owner
       type: url
       pointer: true
+
+NetworkGlobals:
+  fields:
+    - name: ValidatorThreshold
+      type: Rational
+      marshal-as: reference
+    
+Rational:
+  fields:
+    - name: Numerator
+      type: uint
+    - name: Denominator
+      type: uint
+
+
