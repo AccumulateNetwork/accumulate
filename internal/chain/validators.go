@@ -60,7 +60,10 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Add the validator
 	st.AddValidator(body.PubKey)
@@ -95,7 +98,10 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Remove the validator
 	st.DisableValidator(body.PubKey)
@@ -129,7 +135,10 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.Tr
 
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Update the validator
 	st.DisableValidator(body.PubKey)

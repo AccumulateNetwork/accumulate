@@ -329,8 +329,8 @@ const TransactionTypeUpdateKey TransactionType = 22
 // TransactionTypeRemote is used to sign a remote transaction.
 const TransactionTypeRemote TransactionType = 48
 
-// TransactionTypeSyntheticCreateChain creates or updates chains.
-const TransactionTypeSyntheticCreateChain TransactionType = 49
+// TransactionTypeSyntheticCreateIdentity creates an identity.
+const TransactionTypeSyntheticCreateIdentity TransactionType = 49
 
 // TransactionTypeSyntheticWriteData writes data to a data account.
 const TransactionTypeSyntheticWriteData TransactionType = 50
@@ -361,15 +361,6 @@ const TransactionTypeSyntheticReceipt TransactionType = 64
 
 // TransactionTypeInternalGenesis initializes system chains.
 const TransactionTypeInternalGenesis TransactionType = 96
-
-// TransactionTypeInternalSendTransactions reserved for internal send.
-const TransactionTypeInternalSendTransactions TransactionType = 97
-
-// TransactionTypeInternalTransactionsSigned notifies the executor of synthetic transactions that have been signed.
-const TransactionTypeInternalTransactionsSigned TransactionType = 98
-
-// TransactionTypeInternalTransactionsSent notifies the executor of synthetic transactions that have been sent.
-const TransactionTypeInternalTransactionsSent TransactionType = 99
 
 // VoteTypeAccept vote yea in favor of proposal.
 const VoteTypeAccept VoteType = 0
@@ -1204,7 +1195,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateChain, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis, TransactionTypeInternalSendTransactions, TransactionTypeInternalTransactionsSigned, TransactionTypeInternalTransactionsSent:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeSyntheticReceipt, TransactionTypeInternalGenesis:
 		*v = u
 		return true
 	default:
@@ -1257,8 +1248,8 @@ func (v TransactionType) String() string {
 		return "updateKey"
 	case TransactionTypeRemote:
 		return "remote"
-	case TransactionTypeSyntheticCreateChain:
-		return "syntheticCreateChain"
+	case TransactionTypeSyntheticCreateIdentity:
+		return "syntheticCreateIdentity"
 	case TransactionTypeSyntheticWriteData:
 		return "syntheticWriteData"
 	case TransactionTypeSyntheticDepositTokens:
@@ -1279,12 +1270,6 @@ func (v TransactionType) String() string {
 		return "syntheticReceipt"
 	case TransactionTypeInternalGenesis:
 		return "internalGenesis"
-	case TransactionTypeInternalSendTransactions:
-		return "internalSendTransactions"
-	case TransactionTypeInternalTransactionsSigned:
-		return "internalTransactionsSigned"
-	case TransactionTypeInternalTransactionsSent:
-		return "internalTransactionsSent"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1337,8 +1322,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeRemote, true
 	case "signPending":
 		return TransactionTypeRemote, true
-	case "syntheticcreatechain":
-		return TransactionTypeSyntheticCreateChain, true
+	case "syntheticcreateidentity":
+		return TransactionTypeSyntheticCreateIdentity, true
 	case "syntheticwritedata":
 		return TransactionTypeSyntheticWriteData, true
 	case "syntheticdeposittokens":
@@ -1359,12 +1344,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticReceipt, true
 	case "internalgenesis":
 		return TransactionTypeInternalGenesis, true
-	case "internalsendtransactions":
-		return TransactionTypeInternalSendTransactions, true
-	case "internaltransactionssigned":
-		return TransactionTypeInternalTransactionsSigned, true
-	case "internaltransactionssent":
-		return TransactionTypeInternalTransactionsSent, true
 	default:
 		return 0, false
 	}

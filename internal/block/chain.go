@@ -21,10 +21,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticReceipt{},
 			SyntheticForwardTransaction{},
 
-			InternalSendTransactions{},
-			InternalTransactionsSigned{},
-			InternalTransactionsSent{},
-
 			// for data accounts
 			WriteData{},
 
@@ -64,17 +60,13 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			// Synthetics...
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticBurnTokens{},
-			SyntheticCreateChain{},
+			SyntheticCreateIdentity{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
 			SyntheticWriteData{},
 			SyntheticReceipt{},
 			SyntheticForwardTransaction{},
-
-			InternalSendTransactions{},
-			InternalTransactionsSigned{},
-			InternalTransactionsSent{},
 
 			// TODO Only for TestNet
 			AcmeFaucet{},

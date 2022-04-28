@@ -449,20 +449,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case *protocol.SyntheticCreateChain:
-		scc := txn
+	case *protocol.SyntheticCreateIdentity:
+		sci := txn
 		var out string
-		for _, cp := range scc.Chains {
-			c, err := protocol.UnmarshalAccount(cp.Data)
-			if err != nil {
-				return "", err
-			}
-			// unmarshal
-			verb := "Created"
-			if cp.IsUpdate {
-				verb = "Updated"
-			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.GetUrl(), c.Type())
+		for _, account := range sci.Accounts {
+			out += fmt.Sprintf("Created %v (%v)\n", account.GetUrl(), account.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:
