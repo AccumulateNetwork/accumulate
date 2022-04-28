@@ -83,7 +83,6 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, book := range res.SignatureBooks {
 		for _, page := range book.Pages {
 			out += fmt.Sprintf("  - Signatures            :\n")
@@ -92,7 +91,8 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 				if sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
 				} else {
-					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
+					out += fmt.Sprintf("      -                   : %x (sig)\n", sig.GetSignature())
+					out += fmt.Sprintf("      -                   : %x (key hash)\n", sig.GetPublicKeyHash())
 				}
 			}
 		}
@@ -399,7 +399,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 }
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
-	typStr := res.Data.(map[string]interface{})["type"].(string)
+	typStr := res.Type
 	typ, ok := protocol.TransactionTypeByName(typStr)
 	if !ok {
 		return "", fmt.Errorf("Unknown transaction type %s", typStr)
