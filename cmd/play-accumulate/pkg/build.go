@@ -1,7 +1,6 @@
 package pkg
 
 import (
-	"math"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -19,14 +18,14 @@ func (s *Session) Amount(v float64, precision uint64) *big.Int {
 	return a
 }
 
-func (b bldTxn) precisionFromPrincipal() uint64 {
+func (b bldTxn) precisionFromPrincipal() int {
 	switch principal := b.s.GetAccount(b.transaction.Header.Principal).(type) {
 	case protocol.AccountWithTokens:
 		var issuer *protocol.TokenIssuer
 		b.s.GetAccountAs(principal.GetTokenUrl(), &issuer)
-		return uint64(math.Pow10(int(issuer.Precision)))
+		return int(issuer.Precision)
 	case *protocol.TokenIssuer:
-		return uint64(math.Pow10(int(principal.Precision)))
+		return int(principal.Precision)
 	default:
 		b.s.Abortf("Cannot get precision from account type %v", principal.Type())
 		panic("unreachable")
@@ -161,7 +160,7 @@ func (b bldTxn) CreateIdentity(url Urlish) bldCreateIdentity {
 }
 
 func (b bldCreateIdentity) WithKey(key Keyish) bldCreateIdentity {
-	return b.WithKeyHash(b.s.pubkey(key))
+	return b.WithKeyHash(b.s.pubkeyhash(key))
 }
 
 func (b bldCreateIdentity) WithKeyHash(hash []byte) bldCreateIdentity {
@@ -210,15 +209,15 @@ func (b bldTxn) SendTokens() bldSendTokens {
 	return c
 }
 
-func (b bldSendTokens) To(recipient Urlish, amount float64) bldSendTokens {
+func (b bldSendTokens) To(recipient Urlish, amount Numish) bldSendTokens {
 	b.body.To = append(b.body.To, &protocol.TokenRecipient{
 		Url:    b.s.url(recipient),
-		Amount: *b.s.Amount(amount, b.precisionFromPrincipal()),
+		Amount: *b.s.bigint(amount, b.precisionFromPrincipal()),
 	})
 	return b
 }
 
-func (b bldSendTokens) AndTo(recipient Urlish, amount float64) bldSendTokens {
+func (b bldSendTokens) AndTo(recipient Urlish, amount Numish) bldSendTokens {
 	return b.To(recipient, amount)
 }
 
@@ -281,25 +280,25 @@ func (b bldCreateToken) WithManager(book Urlish) bldCreateToken {
 	return b
 }
 
-func (b bldCreateToken) WithSupplyLimit(limit Intish) bldCreateToken {
-	b.body.SupplyLimit = b.s.bigint(limit)
+func (b bldCreateToken) WithSupplyLimit(limit Numish) bldCreateToken {
+	b.body.SupplyLimit = b.s.bigint(limit, int(b.body.Precision))
 	return b
 }
 
-func (b bldTxn) IssueTokens(recipient Urlish, amount float64) bldIssueTokens {
+func (b bldTxn) IssueTokens(recipient Urlish, amount Numish) bldIssueTokens {
 	var c bldIssueTokens
 	c.body = new(protocol.IssueTokens)
 	c.bldTxn = b.WithBody(c.body)
 	c.body.Recipient = b.s.url(recipient)
-	c.body.Amount = *b.s.Amount(amount, b.precisionFromPrincipal())
+	c.body.Amount = *b.s.bigint(amount, b.precisionFromPrincipal())
 	return c
 }
 
-func (b bldTxn) BurnTokens(amount float64) bldBurnTokens {
+func (b bldTxn) BurnTokens(amount Numish) bldBurnTokens {
 	var c bldBurnTokens
 	c.body = new(protocol.BurnTokens)
 	c.bldTxn = b.WithBody(c.body)
-	c.body.Amount = *b.s.Amount(amount, b.precisionFromPrincipal())
+	c.body.Amount = *b.s.bigint(amount, b.precisionFromPrincipal())
 	return c
 }
 

@@ -38,6 +38,12 @@ Status:
   NotFound:
     value: 404
     description: means a record could not be found
+  BadSignerVersion:
+    value: 411
+    description: means the signer version does not match
+  BadTimestamp:
+    value: 412
+    description: means the timestamp is invalid
 
   # Server errors
   InternalError:

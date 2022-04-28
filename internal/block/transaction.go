@@ -32,10 +32,10 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	case err == nil:
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
-		err = fmt.Errorf("load principal: %w", err)
+		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return recordFailedTransaction(batch, transaction, err)
 	case !transactionAllowsMissingPrincipal(transaction):
-		err = fmt.Errorf("load principal: %w", err)
+		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return recordFailedTransaction(batch, transaction, err)
 	}
 
@@ -88,12 +88,25 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 }
 
 func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
-	switch transaction.Body.Type() {
-	case protocol.TransactionTypeSyntheticCreateChain,
-		protocol.TransactionTypeSyntheticDepositTokens,
-		protocol.TransactionTypeSyntheticWriteData:
-		// These transactions allow for a missing origin
+	switch body := transaction.Body.(type) {
+	case *protocol.WriteData,
+		*protocol.SyntheticWriteData:
+		// WriteData and SyntheticWriteData can create a lite data account
+		_, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
+		return err == nil
+
+	case *protocol.SyntheticDepositTokens:
+		// SyntheticDepositTokens can create a lite token account
+		key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
+		return key != nil
+
+	case *protocol.SyntheticCreateChain:
+		// SyntheticCreateChain can create accounts
 		return true
+
+	case *protocol.SyntheticForwardTransaction:
+		return transactionAllowsMissingPrincipal(body.Transaction)
+
 	default:
 		return false
 	}
@@ -131,10 +144,15 @@ func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transac
 		return true, nil
 	}
 
+	// Anyone can write to a lite data account
+	if isWriteToLiteDataAccount(batch, transaction) {
+		return true, nil
+	}
+
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	if err != nil {
-		return false, fmt.Errorf("load principal: %w", err)
+		return false, errors.Format(errors.StatusUnknown, "load principal: %w", err)
 	}
 
 	// Get the principal's account auth

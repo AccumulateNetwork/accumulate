@@ -582,10 +582,14 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qset.Account = signer
 		for _, entryHash := range sigset.EntryHashes() {
 			state, err := batch.Transaction(entryHash[:]).GetState()
-			if err != nil {
+			switch {
+			case err == nil:
+				qset.Signatures = append(qset.Signatures, state.Signature)
+			case errors.Is(err, storage.ErrNotFound):
+				// Leave it nil
+			default:
 				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
 			}
-			qset.Signatures = append(qset.Signatures, state.Signature)
 		}
 
 		qr.Signers = append(qr.Signers, qset)
