@@ -1,0 +1,102 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+---
+
+# Token Issuer
+
+### Setup
+
+```go{ id: 1 }
+liteKey := GenerateKey()
+liteAcmeAddr := LiteAddress(liteKey, ACME)
+Faucet(liteAcmeAddr).
+	Wait().Ok()
+Transaction(liteAcmeAddr).
+	WithSigner(liteAcmeAddr).
+	AddCredits(liteAcmeAddr, 200).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+
+charlieKey := GenerateKey("charlie")
+Transaction(liteAcmeAddr).
+	WithSigner(liteAcmeAddr).
+	CreateIdentity("charlie").
+		WithKey(charlieKey).
+		WithKeyBook("charlie/book").
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+
+Transaction(liteAcmeAddr).
+	WithSigner(liteAcmeAddr).
+	AddCredits("charlie/book/1", 2000).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+
+Show("Done")
+```
+
+```{ result_of: 1, id: 1, mime: "text/plain" }
+Done
+
+```
+
+```{ result_of: 1, id: 1, mime: "application/json" }
+"Done"
+```
+
+### Create token issuer
+
+```go
+Show(Transaction("charlie").
+	WithSigner("charlie/book/1", 1).
+	CreateToken("charlie/token-issuer", "TOK", 5).
+	Initiate(charlieKey).
+	Submit().Wait().Ok())
+Show(Get("charlie/token-issuer"))
+```
+
+### Issue tokens
+
+```go
+liteTokAddr := LiteAddress(liteKey, "charlie/token-issuer")
+Show(Transaction("charlie/token-issuer").
+	WithSigner("charlie/book/1", 1).
+	IssueTokens(liteTokAddr, "1.23").
+	Initiate(charlieKey).
+	Submit().Wait().Ok())
+Show(Get(liteTokAddr))
+```
+
+### Lite Identity
+
+```go
+liteIdentity := LiteAddress(liteKey)
+Show(Get(liteIdentity))
+dir := GetDirectory(liteIdentity)
+Assert(len(dir) == 2, "Expected 2 entries, got %d", len(dir))
+```
+
+### Burn tokens
+
+```go
+Transaction(liteAcmeAddr).
+	WithSigner(liteAcmeAddr).
+	AddCredits(liteTokAddr, 200).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+
+Show(Transaction(liteTokAddr).
+	WithSigner(liteTokAddr).
+	BurnTokens("0.23").
+	Initiate(liteKey).
+	Submit().Wait().Ok())
+Show(Get(liteTokAddr))
+Show(Get("charlie/token-issuer"))
+```
