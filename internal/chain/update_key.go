@@ -88,6 +88,9 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 	}
 	keySpec.PublicKeyHash = body.NewKeyHash
 
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 	return nil, nil
 }

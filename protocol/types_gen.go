@@ -588,10 +588,10 @@ type SyntheticBurnTokens struct {
 	extraData []byte
 }
 
-type SyntheticCreateChain struct {
+type SyntheticCreateIdentity struct {
 	fieldsSet []bool
 	SyntheticOrigin
-	Chains    []ChainParams `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Accounts  []Account `json:"accounts,omitempty" form:"accounts" query:"accounts" validate:"required"`
 	extraData []byte
 }
 
@@ -931,7 +931,7 @@ func (*SyntheticAnchor) Type() TransactionType { return TransactionTypeSynthetic
 
 func (*SyntheticBurnTokens) Type() TransactionType { return TransactionTypeSyntheticBurnTokens }
 
-func (*SyntheticCreateChain) Type() TransactionType { return TransactionTypeSyntheticCreateChain }
+func (*SyntheticCreateIdentity) Type() TransactionType { return TransactionTypeSyntheticCreateIdentity }
 
 func (*SyntheticDepositCredits) Type() TransactionType { return TransactionTypeSyntheticDepositCredits }
 
@@ -1959,19 +1959,21 @@ func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
 
 func (v *SyntheticBurnTokens) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SyntheticCreateChain) Copy() *SyntheticCreateChain {
-	u := new(SyntheticCreateChain)
+func (v *SyntheticCreateIdentity) Copy() *SyntheticCreateIdentity {
+	u := new(SyntheticCreateIdentity)
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
-	u.Chains = make([]ChainParams, len(v.Chains))
-	for i, v := range v.Chains {
-		u.Chains[i] = *(&v).Copy()
+	u.Accounts = make([]Account, len(v.Accounts))
+	for i, v := range v.Accounts {
+		if v != nil {
+			u.Accounts[i] = (v).CopyAsInterface().(Account)
+		}
 	}
 
 	return u
 }
 
-func (v *SyntheticCreateChain) CopyAsInterface() interface{} { return v.Copy() }
+func (v *SyntheticCreateIdentity) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticDepositCredits) Copy() *SyntheticDepositCredits {
 	u := new(SyntheticDepositCredits)
@@ -3659,15 +3661,15 @@ func (v *SyntheticBurnTokens) Equal(u *SyntheticBurnTokens) bool {
 	return true
 }
 
-func (v *SyntheticCreateChain) Equal(u *SyntheticCreateChain) bool {
+func (v *SyntheticCreateIdentity) Equal(u *SyntheticCreateIdentity) bool {
 	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
 		return false
 	}
-	if len(v.Chains) != len(u.Chains) {
+	if len(v.Accounts) != len(u.Accounts) {
 		return false
 	}
-	for i := range v.Chains {
-		if !((&v.Chains[i]).Equal(&u.Chains[i])) {
+	for i := range v.Accounts {
+		if !(EqualAccount(v.Accounts[i], u.Accounts[i])) {
 			return false
 		}
 	}
@@ -7985,25 +7987,25 @@ func (v *SyntheticBurnTokens) IsValid() error {
 	}
 }
 
-var fieldNames_SyntheticCreateChain = []string{
+var fieldNames_SyntheticCreateIdentity = []string{
 	1: "Type",
 	2: "SyntheticOrigin",
-	3: "Chains",
+	3: "Accounts",
 }
 
-func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
+func (v *SyntheticCreateIdentity) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
-	if !(len(v.Chains) == 0) {
-		for _, v := range v.Chains {
-			writer.WriteValue(3, &v)
+	if !(len(v.Accounts) == 0) {
+		for _, v := range v.Accounts {
+			writer.WriteValue(3, v)
 		}
 	}
 
-	_, _, err := writer.Reset(fieldNames_SyntheticCreateChain)
+	_, _, err := writer.Reset(fieldNames_SyntheticCreateIdentity)
 	if err != nil {
 		return nil, err
 	}
@@ -8011,7 +8013,7 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), err
 }
 
-func (v *SyntheticCreateChain) IsValid() error {
+func (v *SyntheticCreateIdentity) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -8021,9 +8023,9 @@ func (v *SyntheticCreateChain) IsValid() error {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Chains is missing")
-	} else if len(v.Chains) == 0 {
-		errs = append(errs, "field Chains is not set")
+		errs = append(errs, "field Accounts is missing")
+	} else if len(v.Accounts) == 0 {
+		errs = append(errs, "field Accounts is not set")
 	}
 
 	switch len(errs) {
@@ -11728,11 +11730,11 @@ func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
+func (v *SyntheticCreateIdentity) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *SyntheticCreateChain) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *SyntheticCreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType TransactionType
@@ -11744,14 +11746,19 @@ func (v *SyntheticCreateChain) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
 	for {
-		if x := new(ChainParams); reader.ReadValue(3, x.UnmarshalBinary) {
-			v.Chains = append(v.Chains, *x)
-		} else {
+		ok := reader.ReadValue(3, func(b []byte) error {
+			x, err := UnmarshalAccount(b)
+			if err == nil {
+				v.Accounts = append(v.Accounts, x)
+			}
+			return err
+		})
+		if !ok {
 			break
 		}
 	}
 
-	seen, err := reader.Reset(fieldNames_SyntheticCreateChain)
+	seen, err := reader.Reset(fieldNames_SyntheticCreateIdentity)
 	if err != nil {
 		return err
 	}
@@ -13544,17 +13551,17 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
+func (v *SyntheticCreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   TransactionType                `json:"type"`
-		Source *url.URL                       `json:"source,omitempty"`
-		Cause  string                         `json:"cause,omitempty"`
-		Chains encoding.JsonList[ChainParams] `json:"chains,omitempty"`
+		Type     TransactionType                         `json:"type"`
+		Source   *url.URL                                `json:"source,omitempty"`
+		Cause    string                                  `json:"cause,omitempty"`
+		Accounts encoding.JsonUnmarshalListWith[Account] `json:"accounts,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SyntheticOrigin.Source
 	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Chains = v.Chains
+	u.Accounts = encoding.JsonUnmarshalListWith[Account]{Value: v.Accounts, Func: UnmarshalAccountJSON}
 	return json.Marshal(&u)
 }
 
@@ -15631,17 +15638,17 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
+func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   TransactionType                `json:"type"`
-		Source *url.URL                       `json:"source,omitempty"`
-		Cause  string                         `json:"cause,omitempty"`
-		Chains encoding.JsonList[ChainParams] `json:"chains,omitempty"`
+		Type     TransactionType                         `json:"type"`
+		Source   *url.URL                                `json:"source,omitempty"`
+		Cause    string                                  `json:"cause,omitempty"`
+		Accounts encoding.JsonUnmarshalListWith[Account] `json:"accounts,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SyntheticOrigin.Source
 	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Chains = v.Chains
+	u.Accounts = encoding.JsonUnmarshalListWith[Account]{Value: v.Accounts, Func: UnmarshalAccountJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15654,7 +15661,10 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 	} else {
 		v.SyntheticOrigin.Cause = x
 	}
-	v.Chains = u.Chains
+	v.Accounts = make([]Account, len(u.Accounts.Value))
+	for i, x := range u.Accounts.Value {
+		v.Accounts[i] = x
+	}
 	return nil
 }
 

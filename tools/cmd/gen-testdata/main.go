@@ -110,9 +110,9 @@ var txnTests = []*TCG{
 	{Name: "SignPending", Cases: []*TC{
 		txnTest("adi", &RemoteTransaction{}),
 	}},
-	{Name: "SyntheticCreateChain", Cases: []*TC{
-		txnTest("adi", &SyntheticCreateChain{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
-			Chains: []ChainParams{{Data: []byte{1, 2, 3}}}}),
+	{Name: "SyntheticCreateIdentity", Cases: []*TC{
+		txnTest("adi", &SyntheticCreateIdentity{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
+			Accounts: []Account{&UnknownAccount{Url: parseUrl("foo")}}}),
 	}},
 	{Name: "SyntheticWriteData", Cases: []*TC{
 		txnTest("adi", &SyntheticWriteData{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},

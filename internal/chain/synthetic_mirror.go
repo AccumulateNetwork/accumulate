@@ -33,7 +33,10 @@ func (SyntheticMirror) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 
 		// TODO Save the merkle state somewhere?
 		st.logger.Debug("Mirroring", "url", record.GetUrl())
-		st.Update(record)
+		err = st.Update(record)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update %v: %v", record.GetUrl(), err)
+		}
 	}
 
 	return nil, nil
