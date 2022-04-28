@@ -102,8 +102,8 @@ func (li *LiteIdentity) GetSignatureThreshold() uint64 {
 }
 
 func (li *LiteIdentity) EntryByKey(key []byte) (int, KeyEntry, bool) {
-	//TODO implement me
-	panic("implement me")
+	keyHash := sha256.Sum256(key)
+	return li.EntryByKeyHash(keyHash[:])
 }
 
 func (li *LiteIdentity) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
