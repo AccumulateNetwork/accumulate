@@ -17,7 +17,7 @@ var faucetSeed = sha256.Sum256([]byte("faucet"))
 var faucetKey = ed25519.NewKeyFromSeed(faucetSeed[:])
 
 var Faucet faucet
-var FaucetUrl = liteTokenAddress(Faucet.PublicKey(), AcmeUrl(), SignatureTypeED25519)
+var FaucetUrl = LiteAuthorityForKey(Faucet.PublicKey(), SignatureTypeED25519).JoinPath("/ACME")
 
 // TODO Set the balance to 0 and/or use a bogus URL for the faucet. Otherwise, a
 // bad actor could generate the faucet private key using the same method we do,

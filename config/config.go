@@ -96,6 +96,8 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("statesync", "info").
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "info").
+	// SetModule("storage", "debug").
+	// SetModule("database", "debug").
 	// SetModule("disk-monitor", "info").
 	// SetModule("init", "info").
 	String()
