@@ -69,11 +69,14 @@ const (
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
-	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
-	ValidatorMofNFactor = 2.0 / 3.0
+	// FallbackValidatorThreshold is the factor of how many of the validator signatures are required respective of their total number
+	FallbackValidatorThreshold = 2.0 / 3.0
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
+
+	//Globals is the path to the Directory network's Mutable Protocol costants data account
+	Globals = "globals"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
@@ -416,9 +419,8 @@ func IndexChain(name string, major bool) string {
 	return "minor-" + name + "-index"
 }
 
-func GetValidatorsMOfN(nrOfValidators int) uint64 {
-	threshold := float64(nrOfValidators) * ValidatorMofNFactor
-	return uint64(math.Round(threshold))
+func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
+	return uint64(math.Round(ratio * float64(validatorCount)))
 }
 
 // AnchorChain returns the name of the intermediate anchor chain for the given
