@@ -338,12 +338,6 @@ type InternalLedger struct {
 	extraData     []byte
 }
 
-type InternalSendTransactions struct {
-	fieldsSet    []bool
-	Transactions []SendTransaction `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
-	extraData    []byte
-}
-
 // InternalSignature is used when executing transactions internally.
 type InternalSignature struct {
 	fieldsSet []bool
@@ -351,18 +345,6 @@ type InternalSignature struct {
 	Network         *url.URL `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	extraData       []byte
-}
-
-type InternalTransactionsSent struct {
-	fieldsSet    []bool
-	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
-	extraData    []byte
-}
-
-type InternalTransactionsSigned struct {
-	fieldsSet    []bool
-	Transactions []TransactionSignature `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
-	extraData    []byte
 }
 
 type IssueTokens struct {
@@ -632,9 +614,7 @@ type SyntheticForwardTransaction struct {
 
 type SyntheticLedger struct {
 	fieldsSet []bool
-	Nonce     uint64     `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Unsigned  [][32]byte `json:"unsigned,omitempty" form:"unsigned" query:"unsigned" validate:"required"`
-	Unsent    [][32]byte `json:"unsent,omitempty" form:"unsent" query:"unsent" validate:"required"`
+	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
 	extraData []byte
 }
 
@@ -890,19 +870,7 @@ func (*InternalGenesis) Type() TransactionType { return TransactionTypeInternalG
 
 func (*InternalLedger) Type() AccountType { return AccountTypeInternalLedger }
 
-func (*InternalSendTransactions) Type() TransactionType {
-	return TransactionTypeInternalSendTransactions
-}
-
 func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
-
-func (*InternalTransactionsSent) Type() TransactionType {
-	return TransactionTypeInternalTransactionsSent
-}
-
-func (*InternalTransactionsSigned) Type() TransactionType {
-	return TransactionTypeInternalTransactionsSigned
-}
 
 func (*IssueTokens) Type() TransactionType { return TransactionTypeIssueTokens }
 
@@ -1560,19 +1528,6 @@ func (v *InternalLedger) Copy() *InternalLedger {
 
 func (v *InternalLedger) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *InternalSendTransactions) Copy() *InternalSendTransactions {
-	u := new(InternalSendTransactions)
-
-	u.Transactions = make([]SendTransaction, len(v.Transactions))
-	for i, v := range v.Transactions {
-		u.Transactions[i] = *(&v).Copy()
-	}
-
-	return u
-}
-
-func (v *InternalSendTransactions) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *InternalSignature) Copy() *InternalSignature {
 	u := new(InternalSignature)
 
@@ -1585,32 +1540,6 @@ func (v *InternalSignature) Copy() *InternalSignature {
 }
 
 func (v *InternalSignature) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *InternalTransactionsSent) Copy() *InternalTransactionsSent {
-	u := new(InternalTransactionsSent)
-
-	u.Transactions = make([][32]byte, len(v.Transactions))
-	for i, v := range v.Transactions {
-		u.Transactions[i] = v
-	}
-
-	return u
-}
-
-func (v *InternalTransactionsSent) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *InternalTransactionsSigned) Copy() *InternalTransactionsSigned {
-	u := new(InternalTransactionsSigned)
-
-	u.Transactions = make([]TransactionSignature, len(v.Transactions))
-	for i, v := range v.Transactions {
-		u.Transactions[i] = *(&v).Copy()
-	}
-
-	return u
-}
-
-func (v *InternalTransactionsSigned) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IssueTokens) Copy() *IssueTokens {
 	u := new(IssueTokens)
@@ -2054,14 +1983,6 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	u := new(SyntheticLedger)
 
 	u.Nonce = v.Nonce
-	u.Unsigned = make([][32]byte, len(v.Unsigned))
-	for i, v := range v.Unsigned {
-		u.Unsigned[i] = v
-	}
-	u.Unsent = make([][32]byte, len(v.Unsent))
-	for i, v := range v.Unsent {
-		u.Unsent[i] = v
-	}
 
 	return u
 }
@@ -3169,19 +3090,6 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 	return true
 }
 
-func (v *InternalSendTransactions) Equal(u *InternalSendTransactions) bool {
-	if len(v.Transactions) != len(u.Transactions) {
-		return false
-	}
-	for i := range v.Transactions {
-		if !((&v.Transactions[i]).Equal(&u.Transactions[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *InternalSignature) Equal(u *InternalSignature) bool {
 	switch {
 	case v.Network == u.Network:
@@ -3193,32 +3101,6 @@ func (v *InternalSignature) Equal(u *InternalSignature) bool {
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
 		return false
-	}
-
-	return true
-}
-
-func (v *InternalTransactionsSent) Equal(u *InternalTransactionsSent) bool {
-	if len(v.Transactions) != len(u.Transactions) {
-		return false
-	}
-	for i := range v.Transactions {
-		if !(v.Transactions[i] == u.Transactions[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (v *InternalTransactionsSigned) Equal(u *InternalTransactionsSigned) bool {
-	if len(v.Transactions) != len(u.Transactions) {
-		return false
-	}
-	for i := range v.Transactions {
-		if !((&v.Transactions[i]).Equal(&u.Transactions[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -3784,22 +3666,6 @@ func (v *SyntheticForwardTransaction) Equal(u *SyntheticForwardTransaction) bool
 func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 	if !(v.Nonce == u.Nonce) {
 		return false
-	}
-	if len(v.Unsigned) != len(u.Unsigned) {
-		return false
-	}
-	for i := range v.Unsigned {
-		if !(v.Unsigned[i] == u.Unsigned[i]) {
-			return false
-		}
-	}
-	if len(v.Unsent) != len(u.Unsent) {
-		return false
-	}
-	for i := range v.Unsent {
-		if !(v.Unsent[i] == u.Unsent[i]) {
-			return false
-		}
 	}
 
 	return true
@@ -6387,52 +6253,6 @@ func (v *InternalLedger) IsValid() error {
 	}
 }
 
-var fieldNames_InternalSendTransactions = []string{
-	1: "Type",
-	2: "Transactions",
-}
-
-func (v *InternalSendTransactions) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.Transactions) == 0) {
-		for _, v := range v.Transactions {
-			writer.WriteValue(2, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_InternalSendTransactions)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *InternalSendTransactions) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Transactions is missing")
-	} else if len(v.Transactions) == 0 {
-		errs = append(errs, "field Transactions is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_InternalSignature = []string{
 	1: "Type",
 	2: "Network",
@@ -6469,98 +6289,6 @@ func (v *InternalSignature) IsValid() error {
 		errs = append(errs, "field Network is missing")
 	} else if v.Network == nil {
 		errs = append(errs, "field Network is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_InternalTransactionsSent = []string{
-	1: "Type",
-	2: "Transactions",
-}
-
-func (v *InternalTransactionsSent) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.Transactions) == 0) {
-		for _, v := range v.Transactions {
-			writer.WriteHash(2, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_InternalTransactionsSent)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *InternalTransactionsSent) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Transactions is missing")
-	} else if len(v.Transactions) == 0 {
-		errs = append(errs, "field Transactions is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_InternalTransactionsSigned = []string{
-	1: "Type",
-	2: "Transactions",
-}
-
-func (v *InternalTransactionsSigned) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.Transactions) == 0) {
-		for _, v := range v.Transactions {
-			writer.WriteValue(2, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_InternalTransactionsSigned)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *InternalTransactionsSigned) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Transactions is missing")
-	} else if len(v.Transactions) == 0 {
-		errs = append(errs, "field Transactions is not set")
 	}
 
 	switch len(errs) {
@@ -8337,8 +8065,6 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 
 var fieldNames_SyntheticLedger = []string{
 	1: "Nonce",
-	2: "Unsigned",
-	3: "Unsent",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -8347,16 +8073,6 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 
 	if !(v.Nonce == 0) {
 		writer.WriteUint(1, v.Nonce)
-	}
-	if !(len(v.Unsigned) == 0) {
-		for _, v := range v.Unsigned {
-			writer.WriteHash(2, &v)
-		}
-	}
-	if !(len(v.Unsent) == 0) {
-		for _, v := range v.Unsent {
-			writer.WriteHash(3, &v)
-		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticLedger)
@@ -8374,16 +8090,6 @@ func (v *SyntheticLedger) IsValid() error {
 		errs = append(errs, "field Nonce is missing")
 	} else if v.Nonce == 0 {
 		errs = append(errs, "field Nonce is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Unsigned is missing")
-	} else if len(v.Unsigned) == 0 {
-		errs = append(errs, "field Unsigned is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Unsent is missing")
-	} else if len(v.Unsent) == 0 {
-		errs = append(errs, "field Unsent is not set")
 	}
 
 	switch len(errs) {
@@ -10949,37 +10655,6 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *InternalSendTransactions) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *InternalSendTransactions) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	for {
-		if x := new(SendTransaction); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Transactions = append(v.Transactions, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_InternalSendTransactions)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *InternalSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11002,68 +10677,6 @@ func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_InternalSignature)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *InternalTransactionsSent) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *InternalTransactionsSent) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	for {
-		if x, ok := reader.ReadHash(2); ok {
-			v.Transactions = append(v.Transactions, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_InternalTransactionsSent)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *InternalTransactionsSigned) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *InternalTransactionsSigned) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	for {
-		if x := new(TransactionSignature); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Transactions = append(v.Transactions, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_InternalTransactionsSigned)
 	if err != nil {
 		return err
 	}
@@ -12052,20 +11665,6 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadUint(1); ok {
 		v.Nonce = x
-	}
-	for {
-		if x, ok := reader.ReadHash(2); ok {
-			v.Unsigned = append(v.Unsigned, *x)
-		} else {
-			break
-		}
-	}
-	for {
-		if x, ok := reader.ReadHash(3); ok {
-			v.Unsent = append(v.Unsent, *x)
-		} else {
-			break
-		}
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticLedger)
@@ -13317,16 +12916,6 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *InternalSendTransactions) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type         TransactionType                    `json:"type"`
-		Transactions encoding.JsonList[SendTransaction] `json:"transactions,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Transactions = v.Transactions
-	return json.Marshal(&u)
-}
-
 func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -13336,29 +12925,6 @@ func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Network = v.Network
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
-	return json.Marshal(&u)
-}
-
-func (v *InternalTransactionsSent) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type         TransactionType           `json:"type"`
-		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
-	for i, x := range v.Transactions {
-		u.Transactions[i] = encoding.ChainToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
-func (v *InternalTransactionsSigned) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type         TransactionType                         `json:"type"`
-		Transactions encoding.JsonList[TransactionSignature] `json:"transactions,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -13787,24 +13353,6 @@ func (v *SyntheticForwardTransaction) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Signatures = v.Signatures
 	u.Transaction = v.Transaction
-	return json.Marshal(&u)
-}
-
-func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Nonce    uint64                    `json:"nonce,omitempty"`
-		Unsigned encoding.JsonList[string] `json:"unsigned,omitempty"`
-		Unsent   encoding.JsonList[string] `json:"unsent,omitempty"`
-	}{}
-	u.Nonce = v.Nonce
-	u.Unsigned = make(encoding.JsonList[string], len(v.Unsigned))
-	for i, x := range v.Unsigned {
-		u.Unsigned[i] = encoding.ChainToJSON(x)
-	}
-	u.Unsent = make(encoding.JsonList[string], len(v.Unsent))
-	for i, x := range v.Unsent {
-		u.Unsent[i] = encoding.ChainToJSON(x)
-	}
 	return json.Marshal(&u)
 }
 
@@ -15013,23 +14561,6 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *InternalSendTransactions) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type         TransactionType                    `json:"type"`
-		Transactions encoding.JsonList[SendTransaction] `json:"transactions,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Transactions = v.Transactions
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.Transactions = u.Transactions
-	return nil
-}
-
 func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -15051,50 +14582,6 @@ func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = x
 	}
-	return nil
-}
-
-func (v *InternalTransactionsSent) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type         TransactionType           `json:"type"`
-		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
-	for i, x := range v.Transactions {
-		u.Transactions[i] = encoding.ChainToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.Transactions = make([][32]byte, len(u.Transactions))
-	for i, x := range u.Transactions {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Transactions: %w", err)
-		} else {
-			v.Transactions[i] = x
-		}
-	}
-	return nil
-}
-
-func (v *InternalTransactionsSigned) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type         TransactionType                         `json:"type"`
-		Transactions encoding.JsonList[TransactionSignature] `json:"transactions,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Transactions = v.Transactions
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.Transactions = u.Transactions
 	return nil
 }
 
@@ -15929,44 +15416,6 @@ func (v *SyntheticForwardTransaction) UnmarshalJSON(data []byte) error {
 	}
 	v.Signatures = u.Signatures
 	v.Transaction = u.Transaction
-	return nil
-}
-
-func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Nonce    uint64                    `json:"nonce,omitempty"`
-		Unsigned encoding.JsonList[string] `json:"unsigned,omitempty"`
-		Unsent   encoding.JsonList[string] `json:"unsent,omitempty"`
-	}{}
-	u.Nonce = v.Nonce
-	u.Unsigned = make(encoding.JsonList[string], len(v.Unsigned))
-	for i, x := range v.Unsigned {
-		u.Unsigned[i] = encoding.ChainToJSON(x)
-	}
-	u.Unsent = make(encoding.JsonList[string], len(v.Unsent))
-	for i, x := range v.Unsent {
-		u.Unsent[i] = encoding.ChainToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Nonce = u.Nonce
-	v.Unsigned = make([][32]byte, len(u.Unsigned))
-	for i, x := range u.Unsigned {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Unsigned: %w", err)
-		} else {
-			v.Unsigned[i] = x
-		}
-	}
-	v.Unsent = make([][32]byte, len(u.Unsent))
-	for i, x := range u.Unsent {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Unsent: %w", err)
-		} else {
-			v.Unsent[i] = x
-		}
-	}
 	return nil
 }
 
