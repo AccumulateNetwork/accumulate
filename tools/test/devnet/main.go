@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,44 +15,68 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
+var extraFlags []string
+var debugClient bool
+
 func main() {
-	if !run() {
-		os.Exit(1)
-	}
+	cmd.PersistentFlags().StringSliceVarP(&extraFlags, "flags", "X", nil, "Extra flags for init")
+	cmd.AddCommand(cmdPlay)
+	_ = cmd.Execute()
 }
 
-// Run the devnet and run a test against it.
-func run() bool {
-	resetColor := color.New(color.Reset)
+var cmd = &cobra.Command{
+	Use: "devnet",
+	Run: func(*cobra.Command, []string) {
+		if !runScript() {
+			os.Exit(1)
+		}
+	},
+}
 
+var cmdPlay = &cobra.Command{
+	Use:  "play [playbooks]",
+	Args: cobra.MinimumNArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		if !runPlaybooks(args) {
+			os.Exit(1)
+		}
+	},
+}
+
+var resetColor = color.New(color.Reset)
+
+func init() {
+	cmdPlay.Flags().BoolVarP(&debugClient, "debug", "d", false, "Debug JSON-RPC messages")
+}
+
+func assertInModuleRoot() {
 	cwd, err := os.Getwd()
 	checkf(err, "getwd")
 
 	_, err = os.Stat(filepath.Join(cwd, "go.mod"))
 	checkf(err, "stat go.mod failed - are we in the repo root?")
+}
 
-	// Build the CLI
-	buildCmd := exec.Command("go", "install", "./cmd/accumulate")
+func build(tool string) {
+	buildCmd := exec.Command("go", "build", tool)
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stdout
-	err = buildCmd.Run()
-	checkf(err, "build cli")
+	err := buildCmd.Run()
+	checkf(err, "build %s", tool)
+}
 
-	// Build the daemon
-	buildCmd = exec.Command("go", "build", "./cmd/accumulated")
-	buildCmd.Stdout = os.Stdout
-	buildCmd.Stderr = os.Stdout
-	err = buildCmd.Run()
-	checkf(err, "build daemon")
-
+func launch() *exec.Cmd {
 	// Initialize the devnet command
-	args := append([]string{"init", "devnet", "--work-dir", ".nodes"}, os.Args[1:]...)
+	args := append([]string{"init", "devnet", "--work-dir", ".nodes"}, extraFlags...)
 	initCmd := exec.Command("./accumulated", args...)
 	initCmd.Stdout = os.Stdout
 	initCmd.Stderr = os.Stdout
-	err = initCmd.Run()
+	err := initCmd.Run()
 	checkf(err, "init devnet")
 
 	// Configure the devnet command
@@ -88,8 +113,21 @@ func run() bool {
 	// Start the devnet
 	err = runCmd.Start()
 	checkf(err, "start devnet")
-	defer func() { _ = runCmd.Process.Kill() }()
 	<-started
+
+	return runCmd
+}
+
+// Run the devnet and runScript a test against it.
+func runScript() bool {
+	// Build tools
+	assertInModuleRoot()
+	build("./cmd/accumulate")
+	build("./cmd/accumulated")
+
+	// Launch the devnet
+	runCmd := launch()
+	defer func() { _ = runCmd.Process.Kill() }()
 
 	// Configure the validator script command
 	valCmd := exec.Command("./scripts/ci/validate.sh")
@@ -125,7 +163,7 @@ func run() bool {
 	signal.Notify(sig, os.Interrupt)
 	go func() { <-sig; print("\r"); signal.Stop(sig) }()
 
-	err = valCmd.Start()
+	err := valCmd.Start()
 	checkf(err, "start script")
 
 	// Run the validation script, but do not immediately check the return value
@@ -135,7 +173,13 @@ func run() bool {
 		fmt.Printf("Error: validation script failed: %v\n", err)
 	}
 
-	err = runCmd.Process.Signal(os.Interrupt)
+	stop(runCmd)
+
+	return ok
+}
+
+func stop(runCmd *exec.Cmd) {
+	err := runCmd.Process.Signal(os.Interrupt)
 	if err != nil {
 		fmt.Printf("Error: interrupt devnet: %v\n", err)
 	}
@@ -149,6 +193,39 @@ func run() bool {
 	if err != nil {
 		fmt.Printf("Error: wait for devnet: %v\n", err)
 	}
+}
+
+func runPlaybooks(filenames []string) bool {
+
+	// Build tools
+	assertInModuleRoot()
+	build("./cmd/accumulated")
+
+	// Launch the devnet
+	runCmd := launch()
+	defer func() { _ = runCmd.Process.Kill() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	go func() { <-sig; print("\r"); signal.Stop(sig); cancel() }()
+
+	// Run the playbooks
+	client, err := client.New("http://127.0.1.1:26660/v2")
+	checkf(err, "creating client")
+	client.DebugRequest = debugClient
+
+	ok := true
+	for _, filename := range filenames {
+		err := pkg.ExecuteFile(ctx, filename, client)
+		if err != nil {
+			ok = false
+		}
+	}
+
+	stop(runCmd)
 
 	return ok
 }
