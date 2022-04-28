@@ -117,35 +117,36 @@ type Delivery struct {
 	SourceNetwork  *url.URL
 }
 
-func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Delivery {
+func (d *Delivery) NewChild(transaction *protocol.Transaction, signatures []protocol.Signature) *Delivery {
 	e := new(Delivery)
 	e.parent = d
-	e.Signatures = make([]protocol.Signature, len(fwd.Signatures))
-	e.Transaction = fwd.Transaction
-	for i, sig := range fwd.Signatures {
-		sig := sig // See docs/developer/rangevarref.md
-		e.Signatures[i] = &sig
-	}
-
+	e.Transaction = transaction
+	e.Signatures = signatures
 	return e
 }
 
+func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Delivery {
+	signatures := make([]protocol.Signature, len(fwd.Signatures))
+	for i, sig := range fwd.Signatures {
+		sig := sig // See docs/developer/rangevarref.md
+		signatures[i] = &sig
+	}
+
+	return d.NewChild(fwd.Transaction, signatures)
+}
+
 func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *protocol.Receipt) *Delivery {
-	e := new(Delivery)
-	e.parent = d
-	e.Signatures = []protocol.Signature{
+	return d.NewChild(&protocol.Transaction{
+		Body: &protocol.RemoteTransaction{
+			Hash: hash,
+		},
+	}, []protocol.Signature{
 		&protocol.ReceiptSignature{
 			SourceNetwork:   source,
 			Proof:           *receipt,
 			TransactionHash: hash,
 		},
-	}
-	e.Transaction = &protocol.Transaction{
-		Body: &protocol.RemoteTransaction{
-			Hash: hash,
-		},
-	}
-	return e
+	})
 }
 
 func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
