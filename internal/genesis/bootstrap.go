@@ -54,26 +54,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		adi.AddAuthority(uBook)
 		records = append(records, adi)
 
-		book := new(protocol.KeyBook)
-		book.Url = uBook
-		book.BookType = protocol.BookTypeValidator
-		book.AddAuthority(uBook)
-		book.PageCount = 1
-		records = append(records, book)
-
-		page := new(protocol.KeyPage)
-		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
-		page.AcceptThreshold = protocol.GetValidatorsMOfN(len(opts.Validators))
-		page.Version = 1
-		records = append(records, page)
-
-		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
-		for i, val := range opts.Validators {
-			spec := new(protocol.KeySpec)
-			kh := sha256.Sum256(val.PubKey.Bytes())
-			spec.PublicKeyHash = kh[:]
-			page.Keys[i] = spec
-		}
+		valBook, valPage := createValidatorBook(uBook, opts.Validators)
+		records = append(records, valBook, valPage)
 
 		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
 		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
@@ -136,6 +118,9 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		switch opts.Network.Type {
 		case config.Directory:
+			operBook, page1 := createDNOperatorBook(opts.Network.NodeUrl(), uBook, opts.Validators)
+			records = append(records, operBook, page1)
+
 			oracle := new(protocol.AcmeOracle)
 			oracle.Price = oraclePrice
 			wd := new(protocol.WriteData)
@@ -175,6 +160,9 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
+			operBook, _, _ := createBVNOperatorBook(opts.Network.NodeUrl(), uBook, opts.Validators)
+			records = append(records, operBook)
+
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
 				lite := new(protocol.LiteTokenAccount)
@@ -205,4 +193,76 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	return batch.GetMinorRootChainAnchor(&opts.Network)
+}
+
+func createValidatorBook(uBook *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
+	book := new(protocol.KeyBook)
+	book.Url = uBook
+	book.BookType = protocol.BookTypeValidator
+	book.AddAuthority(uBook)
+	book.PageCount = 1
+
+	return book, createOperatorPage(uBook, 0, operators, true)
+}
+
+func createDNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
+	book := new(protocol.KeyBook)
+	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.AddAuthority(authUrl)
+	book.PageCount = 2
+
+	return book, createOperatorPage(book.Url, 0, operators, false)
+}
+
+func createBVNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage, *protocol.KeyPage) {
+	book := new(protocol.KeyBook)
+	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.AddAuthority(authUrl)
+	book.PageCount = 2
+
+	page1 := new(protocol.KeyPage)
+	page1.Url = protocol.FormatKeyPageUrl(authUrl, 0)
+	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators))
+	page1.Version = 1
+	page1.Keys = make([]*protocol.KeySpec, 1)
+	spec := new(protocol.KeySpec)
+	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
+	kh := sha256.Sum256(spec.Owner.AccountID())
+	spec.PublicKeyHash = kh[:]
+	page1.Keys[0] = spec
+
+	page2 := createOperatorPage(book.Url, 1, operators, false)
+	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+
+	return book, page1, page2
+}
+
+func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
+	page := new(protocol.KeyPage)
+	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators))
+	page.Version = 1
+
+	page.Keys = make([]*protocol.KeySpec, len(operators))
+	keyIndex := 0
+	for _, operator := range operators {
+		if !validatorsOnly || operator.Power > 0 { // Validators are operators with voting power
+			spec := new(protocol.KeySpec)
+			kh := sha256.Sum256(operator.PubKey.Bytes())
+			spec.PublicKeyHash = kh[:]
+			page.Keys[keyIndex] = spec
+			keyIndex++
+		}
+	}
+	return page
+}
+
+func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.TransactionType) {
+	page.TransactionBlacklist = new(protocol.AllowedTransactions)
+	for _, txType := range txTypes {
+		bit, ok := txType.AllowedTransactionBit()
+		if ok {
+			page.TransactionBlacklist.Set(bit)
+		}
+	}
 }

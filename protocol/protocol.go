@@ -27,6 +27,9 @@ const (
 	// ValidatorBook is the path to a node's validator key book.
 	ValidatorBook = "validators"
 
+	// OperatorBook is the path to a node's operator key book.
+	OperatorBook = "operators"
+
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
 

@@ -7,67 +7,83 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type UpdateKeyPage struct{}
+type UpdateKeyPage struct {
+}
 
 func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
 func (UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (UpdateKeyPage{}).Validate(st, tx)
+	return nil, updateKeyPage(st, tx, true)
 }
 
 func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	return nil, updateKeyPage(st, tx, false)
+}
+
+func updateKeyPage(st *StateManager, tx *Delivery, execute bool) error {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
+		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
+		return fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
 	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
+		return fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
 	}
 
 	var book *protocol.KeyBook
 	err := st.LoadUrlAs(bookUrl, &book)
 	if err != nil {
-		return nil, fmt.Errorf("invalid key book: %v", err)
+		return fmt.Errorf("invalid key book: %v", err)
 	}
 
 	if book.BookType == protocol.BookTypeValidator {
-		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
+		return fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
 	}
 
 	pagePri, ok := getKeyPageIndex(page.Url)
 	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", page.Url)
+		return fmt.Errorf("cannot parse key page URL: %v", page.Url)
 	}
 
 	signerPri, ok := getKeyPageIndex(st.SignatorUrl)
 	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
+		return fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
 	}
 
 	// 0 is the highest priority, followed by 1, etc
 	if signerPri > pagePri {
-		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
+		return fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
 	}
 
 	for _, op := range body.Operation {
 		err = UpdateKeyPage{}.executeOperation(page, pagePri, signerPri, op)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
 	didUpdateKeyPage(page)
 	st.Update(page)
-	return nil, nil
+
+	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
+	if execute && protocol.IsDnUrl(st.nodeUrl) && page.KeyBook().Equal(st.nodeUrl.JoinPath(protocol.OperatorBook)) {
+		for _, bvn := range st.network.GetBvnNames() {
+			bvnUrl, err := url.Parse(bvn)
+			if err != nil {
+				return fmt.Errorf("%s is not a valid BVN URL", bvn)
+			}
+			st.Submit(bvnUrl.JoinPath(st.OriginUrl.Path), body)
+		}
+	}
+	return nil
 }
 
 func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri uint64, op protocol.KeyPageOperation) error {

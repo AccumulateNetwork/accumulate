@@ -16,7 +16,7 @@ func (AddValidator) Type() protocol.TransactionType {
 }
 
 func (AddValidator) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (AddValidator{}).Validate(st, tx)
+	return nil, addValidator(st, tx, true)
 }
 
 func (RemoveValidator) Type() protocol.TransactionType {
@@ -24,7 +24,7 @@ func (RemoveValidator) Type() protocol.TransactionType {
 }
 
 func (RemoveValidator) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (RemoveValidator{}).Validate(st, tx)
+	return nil, removeValidator(st, tx, true)
 }
 
 func (UpdateValidatorKey) Type() protocol.TransactionType {
@@ -36,18 +36,22 @@ func (UpdateValidatorKey) Execute(st *StateManager, tx *Delivery) (protocol.Tran
 }
 
 func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
+	return nil, addValidator(st, env, false)
+}
+
+func addValidator(st *StateManager, env *Delivery, execute bool) error {
 	body := env.Transaction.Body.(*protocol.AddValidator)
 
 	page, err := checkValidatorTransaction(st, env)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Ensure the key does not already exist
 	keyHash := sha256.Sum256(body.PubKey)
 	_, _, found := page.EntryByKeyHash(keyHash[:])
 	if found {
-		return nil, fmt.Errorf("key is already a validator")
+		return fmt.Errorf("key is already a validator")
 	}
 
 	// Add the key hash to the key page
@@ -63,27 +67,31 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 
 	// Add the validator
 	st.AddValidator(body.PubKey)
-	return nil, nil
+	return nil
 }
 
 func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
+	return nil, removeValidator(st, env, false)
+}
+
+func removeValidator(st *StateManager, env *Delivery, execute bool) error {
 	body := env.Transaction.Body.(*protocol.RemoveValidator)
 
 	page, err := checkValidatorTransaction(st, env)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Find the key
 	keyHash := sha256.Sum256(body.PubKey)
 	index, _, found := page.EntryByKeyHash(keyHash[:])
 	if !found {
-		return nil, fmt.Errorf("key is not a validator")
+		return fmt.Errorf("key is not a validator")
 	}
 
 	// Make sure it's not the last key
 	if len(page.Keys) == 1 {
-		return nil, fmt.Errorf("cannot remove the last validator!")
+		return fmt.Errorf("cannot remove the last validator!")
 	}
 
 	// Remove the key hash from the key page
@@ -98,29 +106,33 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 
 	// Remove the validator
 	st.DisableValidator(body.PubKey)
-	return nil, nil
+	return nil
 }
 
 func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
+	return nil, updateValidator(st, env, false)
+}
+
+func updateValidator(st *StateManager, env *Delivery, execute bool) error {
 	body := env.Transaction.Body.(*protocol.UpdateValidatorKey)
 
 	page, err := checkValidatorTransaction(st, env)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Find the old key
 	oldKeyHash := sha256.Sum256(body.PubKey)
 	_, entry, found := page.EntryByKeyHash(oldKeyHash[:])
 	if !found {
-		return nil, fmt.Errorf("old key is not a validator")
+		return fmt.Errorf("old key is not a validator")
 	}
 
 	// Ensure the new key does not already exist
 	newKeyHash := sha256.Sum256(body.NewPubKey)
 	_, _, found = page.EntryByKeyHash(newKeyHash[:])
 	if found {
-		return nil, fmt.Errorf("new key is already a validator")
+		return fmt.Errorf("new key is already a validator")
 	}
 
 	// Update the key hash
@@ -133,7 +145,7 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.Tr
 	// Update the validator
 	st.DisableValidator(body.PubKey)
 	st.AddValidator(body.NewPubKey)
-	return nil, nil
+	return nil
 }
 
 // checkValidatorTransaction implements common checks for validator
