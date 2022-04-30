@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -267,6 +268,10 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction: %w", err)
 		}
 		txn := state.Transaction
+
+		if !bytes.Equal(hash, txn.GetHash()) {
+			return errors.Format(errors.StatusInternalError, "%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
+		}
 
 		// TODO Can we make this less hacky?
 		status, err := record.GetStatus()
