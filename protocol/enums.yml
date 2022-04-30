@@ -207,9 +207,6 @@ TransactionType:
   SegWitDataEntry:
     value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
-  SyntheticReceipt:
-    value: 0x40
-    description: notifies the sender of synthetic transactions when a transaction has failed.
 
   ##### INTERNAL TRANSACTIONS #####
   InternalGenesis:
