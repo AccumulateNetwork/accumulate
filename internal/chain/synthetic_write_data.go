@@ -22,10 +22,14 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
-	return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, body.Cause)
+	return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, body.Cause, false)
 }
 
-func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte) (protocol.TransactionResult, error) {
+func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
+	if scratch {
+		return nil, fmt.Errorf("cannot write scratch data to a lite data account")
+	}
+
 	var account protocol.Account
 	result := new(protocol.WriteDataResult)
 	if st.Origin != nil {

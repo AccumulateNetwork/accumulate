@@ -32,7 +32,7 @@ func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 	body := new(protocol.SyntheticCreateIdentity)
 	body.Accounts = []protocol.Account{account}
 	cause := [32]byte{1}
-	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
+	body.SetCause(cause[:], acctesting.FakeBvn)
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
@@ -46,25 +46,8 @@ func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 	defer st.Discard()
 
 	scc := SyntheticCreateIdentity{}
-	result, err := scc.Validate(st, d)
+	_, err = scc.Validate(st, d)
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
-
-	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	_, receiptBody := CreateSynthReceipt(d.Transaction, status)
-	principalUrl := d.Transaction.Header.Principal
-	env = acctesting.NewTransaction().
-		WithPrincipal(principalUrl).
-		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithCurrentTimestamp().
-		WithBody(receiptBody).
-		Initiate(protocol.SignatureTypeED25519, fooKey).
-		Build()
-
-	st, d = NewStateManagerForTest(t, db, env)
-	defer st.Discard()
-	_, err = SyntheticReceipt{}.Validate(st, d)
-	require.NoError(t, err)
-
 }
 
 func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
@@ -87,7 +70,7 @@ func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
 	body := new(protocol.SyntheticCreateIdentity)
 	body.Accounts = []protocol.Account{account}
 	cause := [32]byte{1}
-	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
+	body.SetCause(cause[:], acctesting.FakeBvn)
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).

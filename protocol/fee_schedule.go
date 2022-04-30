@@ -13,11 +13,26 @@ func (n Fee) AsUInt64() uint64 {
 	return uint64(n)
 }
 
-// Fee Schedule
+// General fees
 const (
 	// FeeFailedMaximum $0.01
 	FeeFailedMaximum Fee = 100
 
+	// FeeSignature $0.001
+	FeeSignature Fee = 10
+
+	// FeeData $0.001 / 256 bytes
+	FeeData Fee = 10
+
+	// FeeScratchData $0.0001 / 256 bytes
+	FeeScratchData Fee = 1
+
+	// FeeUpdateAuth $0.03
+	FeeUpdateAuth Fee = 300
+)
+
+// Transaction-specific fees
+const (
 	// FeeCreateIdentity $5.00 = 50000 credits @ 0.0001 / credit.
 	FeeCreateIdentity Fee = 50000
 
@@ -30,20 +45,11 @@ const (
 	// FeeCreateDataAccount $.25
 	FeeCreateDataAccount Fee = 2500
 
-	// FeeWriteData $0.001 / 256 bytes
-	FeeWriteData Fee = 10
-
-	// FeeWriteDataTo $0.001 / 256 bytes
-	FeeWriteDataTo Fee = 10
-
 	// FeeCreateToken $50.00
 	FeeCreateToken Fee = 500000
 
 	// FeeIssueTokens equiv. to token send @ $0.03
 	FeeIssueTokens Fee = 300
-
-	// FeeAcmeFaucet free
-	FeeAcmeFaucet Fee = 0
 
 	// FeeBurnTokens equiv. to token send
 	FeeBurnTokens Fee = 300
@@ -54,26 +60,8 @@ const (
 	// FeeCreateKeyBook $1.00
 	FeeCreateKeyBook Fee = 10000
 
-	// FeeAddCredits conversion of ACME tokens to credits a "free" transaction
-	FeeAddCredits Fee = 0
-
-	// FeeUpdateAuth $0.03
-	FeeUpdateAuth Fee = 300
-
-	// // FeeUpdateAccountAuth $0.03
-	// FeeUpdateAccountAuth Fee = 300
-
-	// // FeeUpdateKeyPage $0.03
-	// FeeUpdateKey Fee = 300
-
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
-
-	// FeeWriteScratchData $0.0001 / 256 bytes
-	FeeWriteScratchData Fee = 1
-
-	// FeeSignature $0.001
-	FeeSignature Fee = 10
 )
 
 func BaseTransactionFee(typ TransactionType) (Fee, error) {
@@ -87,12 +75,6 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeSendTokens, nil
 	case TransactionTypeCreateDataAccount:
 		return FeeCreateDataAccount, nil
-	case TransactionTypeWriteData:
-		return FeeWriteData, nil
-	case TransactionTypeWriteDataTo:
-		return FeeWriteDataTo, nil
-	case TransactionTypeAcmeFaucet:
-		return FeeAcmeFaucet, nil
 	case TransactionTypeCreateToken:
 		return FeeCreateToken, nil
 	case TransactionTypeIssueTokens:
@@ -103,8 +85,6 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeCreateKeyPage, nil
 	case TransactionTypeCreateKeyBook:
 		return FeeCreateKeyBook, nil
-	case TransactionTypeAddCredits:
-		return FeeAddCredits, nil
 	case TransactionTypeUpdateKeyPage:
 		return FeeUpdateAuth, nil
 	case TransactionTypeUpdateAccountAuth:
@@ -113,6 +93,11 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeUpdateAuth, nil
 	case TransactionTypeRemote:
 		return FeeSignature, nil
+	case TransactionTypeAcmeFaucet,
+		TransactionTypeAddCredits,
+		TransactionTypeWriteData,
+		TransactionTypeWriteDataTo:
+		return 0, nil
 	default:
 		// All user transactions must have a defined fee amount, even if it's zero
 		return 0, errors.Format(errors.StatusInternalError, "unknown transaction type: %v", typ)
@@ -178,6 +163,22 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 		return 0, errors.Format(errors.StatusBadRequest, "transaction size exceeds %v byte entry limit", TransactionSizeMax)
 	}
 
+	// Write data transactions have a base fee equal to the network fee
+	switch tx.Body.Type() {
+	case TransactionTypeWriteData,
+		TransactionTypeWriteDataTo:
+		// Charge the network fee per 256 B
+	default:
+		// Charge the network fee per 256 B past the initia 256 B
+		count--
+	}
+
+	// Charge 1/10 the data fee for scratch accounts
+	dataRate := FeeData
+	if body, ok := tx.Body.(*WriteData); ok && body.Scratch {
+		dataRate = FeeScratchData
+	}
+
 	// Charge an extra data fee per 256 B past the initial 256 B
-	return fee + FeeWriteData*Fee(count-1), nil
+	return fee + dataRate*Fee(count), nil
 }
