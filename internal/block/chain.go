@@ -14,6 +14,7 @@ import (
 var _ SignatureValidator = (*CreateIdentity)(nil)
 var _ PrincipalValidator = (*CreateIdentity)(nil)
 var _ SignatureValidator = (*WriteData)(nil)
+var _ TransactionExecutorCleanup = (*SyntheticDepositTokens)(nil)
 
 // NewNodeExecutor creates a new Executor for a node.
 func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
@@ -22,7 +23,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		return newExecutor(opts, db,
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
-			SyntheticReceipt{},
 			SyntheticForwardTransaction{},
 
 			// for data accounts
@@ -69,7 +69,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
 			SyntheticWriteData{},
-			SyntheticReceipt{},
 			SyntheticForwardTransaction{},
 
 			// TODO Only for TestNet
@@ -121,4 +120,10 @@ type PrincipalValidator interface {
 	TransactionExecutor
 
 	AllowMissingPrincipal(*protocol.Transaction) (allow, fallback bool)
+}
+
+// TransactionExecutorCleanup cleans up after a failed transaction.
+type TransactionExecutorCleanup interface {
+	// DidFail is called if the transaction failed.
+	DidFail(*ProcessTransactionState, *protocol.Transaction) error
 }

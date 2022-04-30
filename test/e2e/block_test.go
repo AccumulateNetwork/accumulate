@@ -66,6 +66,54 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	assert.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), status.Code)
 }
 
+func TestSendTokensToBadRecipient2(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey("Bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+	batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), protocol.AcmeFaucetAmount, 1e9))
+	require.NoError(t, batch.Commit())
+
+	var creditsBefore uint64
+	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
+		var account *protocol.LiteTokenAccount
+		require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+		creditsBefore = account.CreditBalance
+		return nil
+	})
+
+	exch := new(protocol.SendTokens)
+	exch.AddRecipient(acctesting.MustParseUrl("foo"), big.NewInt(int64(1000)))
+	exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
+	env := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithTimestampVar(&timestamp).
+		WithSigner(aliceUrl, 1).
+		WithBody(exch).
+		Initiate(protocol.SignatureTypeLegacyED25519, alice).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+
+	var creditsAfter uint64
+	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
+		var account *protocol.LiteTokenAccount
+		require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+		creditsAfter = account.CreditBalance
+		return nil
+	})
+
+	expectedFee := FeeSendTokens - (FeeSendTokens-FeeFailedMaximum)/2
+	require.Equal(t, creditsBefore-expectedFee.AsUInt64(), creditsAfter)
+}
+
 func TestCreateRootIdentity(t *testing.T) {
 	var timestamp uint64
 

@@ -87,19 +87,24 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 	cause := *(*[32]byte)(tx.Transaction.GetHash())
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
 	if err == nil {
-		return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, cause)
+		return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, cause, body.Scratch)
 	}
 
-	return executeWriteFullDataAccount(st, tx.Transaction, &body.Entry, cause)
+	return executeWriteFullDataAccount(st, tx.Transaction, &body.Entry, cause, body.Scratch)
 }
 
-func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", txn.Header.Principal)
 	}
-	if st.Origin.Type() != protocol.AccountTypeDataAccount {
+	account, ok := st.Origin.(*protocol.DataAccount)
+	if !ok {
 		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
 			protocol.AccountTypeDataAccount, st.Origin.Type())
+	}
+
+	if scratch && !account.Scratch {
+		return nil, fmt.Errorf("cannot write scratch data to a non-scratch account")
 	}
 
 	// now replace the transaction payload with a segregated witness to the data.

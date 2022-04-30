@@ -224,8 +224,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticForwardTransaction), nil
 	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
-	case TransactionTypeSyntheticReceipt:
-		return new(SyntheticReceipt), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
 	case TransactionTypeUpdateAccountAuth:
@@ -316,9 +314,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SyntheticMirror:
 		b, ok := b.(*SyntheticMirror)
-		return ok && a.Equal(b)
-	case *SyntheticReceipt:
-		b, ok := b.(*SyntheticReceipt)
 		return ok && a.Equal(b)
 	case *SyntheticWriteData:
 		b, ok := b.(*SyntheticWriteData)

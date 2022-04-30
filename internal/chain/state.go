@@ -85,16 +85,11 @@ func (m *StateManager) Discard() {
 
 // Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
-	if m.txType.IsSynthetic() && m.txType != protocol.TransactionTypeSyntheticReceipt {
+	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	if url == nil {
 		panic("No destination URL specified!")
-	}
-
-	swo, ok := body.(protocol.SynthTxnWithOrigin)
-	if ok {
-		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
 	}
 
 	m.state.DidProduceTxn(url, body)
