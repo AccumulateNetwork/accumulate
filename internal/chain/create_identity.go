@@ -1,9 +1,10 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -12,6 +13,31 @@ import (
 type CreateIdentity struct{}
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
+
+func (CreateIdentity) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	// Anyone is allowed to sign for a root identity
+	if transaction.Header.Principal.IsRootIdentity() {
+		return false, nil
+	}
+
+	// Fallback to general authorization
+	return true, nil
+}
+
+func (CreateIdentity) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, _ *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	// Anyone is allowed to sign for a root identity
+	if transaction.Header.Principal.IsRootIdentity() {
+		return true, false, nil
+	}
+
+	// Fallback to general authorization
+	return true, false, nil
+}
+
+func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
+	// The principal can be missing if it is a root identity
+	return transaction.Header.Principal.IsRootIdentity(), false
+}
 
 func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateIdentity{}).Validate(st, tx)
@@ -23,9 +49,16 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
 	}
 
-	err := validateAdiUrl(body, st.Origin)
+	// TODO Require the principal to be the ADI when creating a root identity?
+	if !body.Url.IsRootIdentity() {
+		if !body.Url.Identity().Equal(tx.Transaction.Header.Principal) {
+			return nil, errors.Format(errors.StatusUnauthorized, "cannot use %v to create %v", tx.Transaction.Header.Principal, body.Url)
+		}
+	}
+
+	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
 
 	bookUrl := body.KeyBookUrl
@@ -82,31 +115,17 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		return nil, err
 	}
 
-	st.Create(accounts...)
-	return nil, nil
-}
+	if !tx.Transaction.Header.Principal.LocalTo(body.Url) {
+		st.Submit(body.Url, &protocol.SyntheticCreateIdentity{Accounts: accounts})
+		return nil, nil
+	}
 
-func validateAdiUrl(body *protocol.CreateIdentity, origin protocol.Account) error {
-	err := protocol.IsValidAdiUrl(body.Url)
+	err = st.Create(accounts...)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
+		return nil, fmt.Errorf("failed to create %v: %v", body.Url, err)
 	}
 
-	switch v := origin.(type) {
-	case *protocol.LiteIdentity:
-		// OK
-	case *protocol.ADI:
-		if len(body.Url.Path) > 0 {
-			parent, _ := body.Url.Parent()
-			if !parent.Equal(v.Url) {
-				return fmt.Errorf("a sub ADI %s must be a direct child of its origin ADI %s", body.Url.String(), v.Url.String())
-			}
-		}
-	default:
-		return fmt.Errorf("account type %d cannot be the origininator of ADIs", origin.Type())
-	}
-
-	return nil
+	return nil, nil
 }
 
 func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {

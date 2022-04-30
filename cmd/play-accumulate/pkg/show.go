@@ -81,7 +81,7 @@ func (s *Session) Show(v interface{}) {
 			v.Url,
 			protocol.FormatAmount(v.CreditBalance, protocol.CreditPrecisionPower))
 		for i, url := range dir {
-			str += fmt.Sprintf("    Entry %d:   %s\n", i, url)
+			str += fmt.Sprintf("    Entry %d:   %s\n", i+1, url)
 		}
 	case *protocol.LiteTokenAccount:
 		str = fmt.Sprintf(
@@ -101,7 +101,7 @@ func (s *Session) Show(v interface{}) {
 			v.Url,
 		)
 		for i, url := range dir {
-			str += fmt.Sprintf("    Entry %d:   %s\n", i, url)
+			str += fmt.Sprintf("    Entry %d:   %s\n", i+1, url)
 		}
 	case *protocol.TokenAccount:
 		str = fmt.Sprintf(
@@ -122,7 +122,7 @@ func (s *Session) Show(v interface{}) {
 			v.Url,
 		)
 		for i := uint64(0); i < v.PageCount; i++ {
-			str += fmt.Sprintf("    Page %d:   %s\n", i, protocol.FormatKeyPageUrl(v.Url, i))
+			str += fmt.Sprintf("    Page %d:   %s\n", i+1, protocol.FormatKeyPageUrl(v.Url, i))
 		}
 	case *protocol.KeyPage:
 		str = fmt.Sprintf(
@@ -139,11 +139,11 @@ func (s *Session) Show(v interface{}) {
 		for i, key := range v.Keys {
 			switch {
 			case key.Owner == nil:
-				str += fmt.Sprintf("    Key %d:        %X\n", i, key.PublicKeyHash)
+				str += fmt.Sprintf("    Key %d:        %X\n", i+1, key.PublicKeyHash)
 			case key.PublicKeyHash == nil:
-				str += fmt.Sprintf("    Key %d:        %v\n", i, key.Owner)
+				str += fmt.Sprintf("    Key %d:        %v\n", i+1, key.Owner)
 			default:
-				str += fmt.Sprintf("    Key %d:        %X (%v)\n", i, key.PublicKeyHash, key.Owner)
+				str += fmt.Sprintf("    Key %d:        %X (%v)\n", i+1, key.PublicKeyHash, key.Owner)
 			}
 		}
 	case *protocol.TokenIssuer:

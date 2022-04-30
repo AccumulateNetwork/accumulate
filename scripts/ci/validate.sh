@@ -59,15 +59,24 @@ function wait-for-tx {
     done
 }
 
+function cli-run {
+    if ! JSON=`accumulate -j "$@" 2>&1`; then
+        echo "$JSON" | jq -C --indent 0 >&2
+        >&2 echo -e '\033[1;31m'"$@"'\033[0m'
+        return 1
+    fi
+    echo "$JSON"
+}
+
 # cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
 function cli-tx {
-    JSON=`accumulate -j "$@"` || return 1
+    JSON=`cli-run "$@"` || return 1
     echo "$JSON" | jq -re .transactionHash
 }
 
 # cli-tx-sig <args...> - Execute a CLI command and extract the first signature hash from the result
 function cli-tx-sig {
-    JSON=`accumulate -j "$@"` || return 1
+    JSON=`cli-run "$@"` || return 1
     echo "$JSON" | jq -re .signatureHashes[0]
 }
 
@@ -84,7 +93,7 @@ function api-tx {
 
 # die <message> - Print an error message and exit
 function die {
-    echo -e '\033[1;31m'"$@"'\033[0m'
+    >&2 echo -e '\033[1;31m'"$@"'\033[0m'
     exit 1
 }
 
@@ -119,7 +128,7 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
 echo
 
 section "Generate a Lite Token Account"

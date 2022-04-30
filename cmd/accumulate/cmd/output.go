@@ -42,16 +42,31 @@ func PrintJsonRpcError(err error) (string, error) {
 }
 
 func printOutput(cmd *cobra.Command, out string, err error) {
-	if err != nil {
-		if WantJsonOutput {
-			cmd.PrintErrf("{\"error\":%v}", err)
-		} else {
-			cmd.PrintErrf("Error: %v\n", err)
-		}
-		DidError = err
-	} else {
+	if err == nil {
 		cmd.Println(out)
+		return
 	}
+
+	DidError = err
+	if !WantJsonOutput {
+		cmd.PrintErrf("Error: %v\n", err)
+		return
+	}
+
+	// Check if the error is an action response error
+	var v interface{}
+	ar, ok := err.(*ActionResponseError)
+	if ok {
+		v = ar
+	} else {
+		v = err.Error()
+	}
+
+	// JSON marshal the error
+	b, _ := json.Marshal(map[string]interface{}{"error": v})
+
+	// If the caller wants JSON, they probably want it on stdout
+	cmd.Printf("%s\n", b)
 }
 
 func printError(cmd *cobra.Command, err error) {
@@ -68,7 +83,6 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, book := range res.SignatureBooks {
 		for _, page := range book.Pages {
 			out += fmt.Sprintf("  - Signatures            :\n")
@@ -77,7 +91,8 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 				if sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
 				} else {
-					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
+					out += fmt.Sprintf("      -                   : %x (sig)\n", sig.GetSignature())
+					out += fmt.Sprintf("      -                   : %x (key hash)\n", sig.GetPublicKeyHash())
 				}
 			}
 		}
@@ -394,7 +409,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 }
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
-	typStr := res.Data.(map[string]interface{})["type"].(string)
+	typStr := res.Type
 	typ, ok := protocol.TransactionTypeByName(typStr)
 	if !ok {
 		return "", fmt.Errorf("Unknown transaction type %s", typStr)
@@ -444,20 +459,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case *protocol.SyntheticCreateChain:
-		scc := txn
+	case *protocol.SyntheticCreateIdentity:
+		sci := txn
 		var out string
-		for _, cp := range scc.Chains {
-			c, err := protocol.UnmarshalAccount(cp.Data)
-			if err != nil {
-				return "", err
-			}
-			// unmarshal
-			verb := "Created"
-			if cp.IsUpdate {
-				verb = "Updated"
-			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.GetUrl(), c.Type())
+		for _, account := range sci.Accounts {
+			out += fmt.Sprintf("Created %v (%v)\n", account.GetUrl(), account.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:
@@ -633,19 +639,33 @@ func (a *ActionDataResponse) Print() (string, error) {
 	return out, nil
 }
 
+type ActionResponseError struct {
+	ActionResponse
+}
+
+func (a *ActionResponseError) Error() string {
+	b, err := json.Marshal(a)
+	if err != nil {
+		return err.Error()
+	}
+	return string(b)
+}
+
 func (a *ActionResponse) Print() (string, error) {
 	ok := a.Code == "0" || a.Code == ""
 
 	var out string
 	if WantJsonOutput {
-		if ok {
-			a.Code = "ok"
+		if !ok {
+			return "", &ActionResponseError{*a}
 		}
+
+		a.Code = "ok"
 		b, err := json.Marshal(a)
 		if err != nil {
 			return "", err
 		}
-		out = string(b)
+		return string(b), nil
 	} else {
 		out += fmt.Sprintf("\n\tTransaction Hash\t: %x\n", a.TransactionHash)
 		for i, hash := range a.SignatureHashes {

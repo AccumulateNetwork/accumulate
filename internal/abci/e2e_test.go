@@ -1425,16 +1425,30 @@ func TestUpdateValidators(t *testing.T) {
 
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
-	nodeKeyAdd1, nodeKeyAdd2, nodeKeyUpd := generateKey(), generateKey(), generateKey()
+	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
+
+	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
+	// for 4
+	ng := new(protocol.NetworkGlobals)
+	ng.ValidatorThreshold.Set(5, 12)
+	wd := new(protocol.WriteData)
+	d, err := ng.MarshalBinary()
+	require.NoError(t, err)
+	wd.Entry.Data = append(wd.Entry.Data, d)
+	n.MustExecuteAndWait(func(send func(*Tx)) {
+		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
+			WithSigner(validators, 1).
+			WithBody(wd).
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
+	})
 
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
-
 	// Add a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
-
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 1).
 			WithBody(body).
@@ -1462,11 +1476,10 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was updated
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey()})
 
-	// Add a third validator, so the page threshold will become 2
+	// Add a third validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
-
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 3).
 			WithBody(body).
@@ -1477,10 +1490,13 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was added
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
 
-	// Remove a validator
-	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.RemoveValidator)
-		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+	// Verify the Validator threshold
+	require.Equal(t, uint64(1), n.GetKeyPage(validators.String()).AcceptThreshold)
+
+	// Add a fourth validator, so the page threshold will become 2
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
+		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
 
 		send(newTxn(netUrl.String()).
 			WithSigner(validators, 4).
@@ -1489,13 +1505,28 @@ func TestUpdateValidators(t *testing.T) {
 			Build())
 	})
 
-	// Should not be removed yet, the tx is pending
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+	// Verify the validator was added
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
+
+	// Verify the Validator threshold
+	require.Equal(t, uint64(2), n.GetKeyPage(validators.String()).AcceptThreshold)
+
+	// Remove a validator
+	txns := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
+		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+
+		send(newTxn(netUrl.String()).
+			WithSigner(validators, 5).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
+	})
 
 	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
-			WithSigner(validators, 4).
-			WithTxnHash(ids[0][:]).
+			WithSigner(validators, 5).
+			WithTxnHash(txns[0][:]).
 			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
 			Build())
 	})
@@ -1503,7 +1534,7 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Verify the validator was removed
 	pubKeys := n.client.Validators()
-	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey()})
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
 
 }
 
