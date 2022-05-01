@@ -556,7 +556,7 @@ func (x *Executor) processNormalSignature(batch *database.Batch, delivery *chain
 	}
 
 	// Store changes to the signer
-	err = batch.Account(signature.GetSigner()).PutState(signers[0])
+	err = batch.Account(signers[0].GetUrl()).PutState(signers[0])
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "store signer: %w", err)
 	}
