@@ -208,6 +208,8 @@ type CreateTokenAccount struct {
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	Scratch    bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	Manager    *url.URL `json:"manager,omitempty" form:"manager" query:"manager"`
+	Proof      []byte   `json:"proof,omitempty" form:"proof" query:"proof"`
+	AccState   []byte   `json:"accState,omitempty" form:"accState" query:"accState"`
 	extraData  []byte
 }
 
@@ -760,6 +762,8 @@ type UnknownSigner struct {
 type UpdateAccountAuth struct {
 	fieldsSet  []bool
 	Operations []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	Proof      []byte                 `json:"proof,omitempty" form:"proof" query:"proof"`
+	AccState   []byte                 `json:"accState,omitempty" form:"accState" query:"accState"`
 	extraData  []byte
 }
 
@@ -1322,6 +1326,8 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	if v.Manager != nil {
 		u.Manager = (v.Manager).Copy()
 	}
+	u.Proof = encoding.BytesCopy(v.Proof)
+	u.AccState = encoding.BytesCopy(v.AccState)
 
 	return u
 }
@@ -2272,6 +2278,8 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
 		}
 	}
+	u.Proof = encoding.BytesCopy(v.Proof)
+	u.AccState = encoding.BytesCopy(v.AccState)
 
 	return u
 }
@@ -2856,6 +2864,12 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	case v.Manager == nil || u.Manager == nil:
 		return false
 	case !((v.Manager).Equal(u.Manager)):
+		return false
+	}
+	if !(bytes.Equal(v.Proof, u.Proof)) {
+		return false
+	}
+	if !(bytes.Equal(v.AccState, u.AccState)) {
 		return false
 	}
 
@@ -4064,6 +4078,12 @@ func (v *UpdateAccountAuth) Equal(u *UpdateAccountAuth) bool {
 		if !(EqualAccountAuthOperation(v.Operations[i], u.Operations[i])) {
 			return false
 		}
+	}
+	if !(bytes.Equal(v.Proof, u.Proof)) {
+		return false
+	}
+	if !(bytes.Equal(v.AccState, u.AccState)) {
+		return false
 	}
 
 	return true
@@ -5439,6 +5459,8 @@ var fieldNames_CreateTokenAccount = []string{
 	4: "KeyBookUrl",
 	5: "Scratch",
 	6: "Manager",
+	7: "Proof",
+	8: "AccState",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5460,6 +5482,12 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Manager == nil) {
 		writer.WriteUrl(6, v.Manager)
+	}
+	if !(len(v.Proof) == 0) {
+		writer.WriteBytes(7, v.Proof)
+	}
+	if !(len(v.AccState) == 0) {
+		writer.WriteBytes(8, v.AccState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
@@ -9135,6 +9163,8 @@ func (v *UnknownSigner) IsValid() error {
 var fieldNames_UpdateAccountAuth = []string{
 	1: "Type",
 	2: "Operations",
+	3: "Proof",
+	4: "AccState",
 }
 
 func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
@@ -9146,6 +9176,12 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Operations {
 			writer.WriteValue(2, v)
 		}
+	}
+	if !(len(v.Proof) == 0) {
+		writer.WriteBytes(3, v.Proof)
+	}
+	if !(len(v.AccState) == 0) {
+		writer.WriteBytes(4, v.AccState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
@@ -10311,6 +10347,12 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUrl(6); ok {
 		v.Manager = x
+	}
+	if x, ok := reader.ReadBytes(7); ok {
+		v.Proof = x
+	}
+	if x, ok := reader.ReadBytes(8); ok {
+		v.AccState = x
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
@@ -12386,6 +12428,12 @@ func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Proof = x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.AccState = x
+	}
 
 	seen, err := reader.Reset(fieldNames_UpdateAccountAuth)
 	if err != nil {
@@ -12935,6 +12983,8 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Scratch    bool            `json:"scratch,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
+		Proof      *string         `json:"proof,omitempty"`
+		AccState   *string         `json:"accState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -12942,6 +12992,8 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Scratch = v.Scratch
 	u.Manager = v.Manager
+	u.Proof = encoding.BytesToJSON(v.Proof)
+	u.AccState = encoding.BytesToJSON(v.AccState)
 	return json.Marshal(&u)
 }
 
@@ -13836,9 +13888,13 @@ func (v *UpdateAccountAuth) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type       TransactionType                                      `json:"type"`
 		Operations encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
+		Proof      *string                                              `json:"proof,omitempty"`
+		AccState   *string                                              `json:"accState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Operations = encoding.JsonUnmarshalListWith[AccountAuthOperation]{Value: v.Operations, Func: UnmarshalAccountAuthOperationJSON}
+	u.Proof = encoding.BytesToJSON(v.Proof)
+	u.AccState = encoding.BytesToJSON(v.AccState)
 	return json.Marshal(&u)
 }
 
@@ -14460,6 +14516,8 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 		KeyBookUrl *url.URL        `json:"keyBookUrl,omitempty"`
 		Scratch    bool            `json:"scratch,omitempty"`
 		Manager    *url.URL        `json:"manager,omitempty"`
+		Proof      *string         `json:"proof,omitempty"`
+		AccState   *string         `json:"accState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14467,6 +14525,8 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Scratch = v.Scratch
 	u.Manager = v.Manager
+	u.Proof = encoding.BytesToJSON(v.Proof)
+	u.AccState = encoding.BytesToJSON(v.AccState)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14478,6 +14538,16 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	v.KeyBookUrl = u.KeyBookUrl
 	v.Scratch = u.Scratch
 	v.Manager = u.Manager
+	if x, err := encoding.BytesFromJSON(u.Proof); err != nil {
+		return fmt.Errorf("error decoding Proof: %w", err)
+	} else {
+		v.Proof = x
+	}
+	if x, err := encoding.BytesFromJSON(u.AccState); err != nil {
+		return fmt.Errorf("error decoding AccState: %w", err)
+	} else {
+		v.AccState = x
+	}
 	return nil
 }
 
@@ -16171,9 +16241,13 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type       TransactionType                                      `json:"type"`
 		Operations encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
+		Proof      *string                                              `json:"proof,omitempty"`
+		AccState   *string                                              `json:"accState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Operations = encoding.JsonUnmarshalListWith[AccountAuthOperation]{Value: v.Operations, Func: UnmarshalAccountAuthOperationJSON}
+	u.Proof = encoding.BytesToJSON(v.Proof)
+	u.AccState = encoding.BytesToJSON(v.AccState)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16183,6 +16257,16 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	v.Operations = make([]AccountAuthOperation, len(u.Operations.Value))
 	for i, x := range u.Operations.Value {
 		v.Operations[i] = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Proof); err != nil {
+		return fmt.Errorf("error decoding Proof: %w", err)
+	} else {
+		v.Proof = x
+	}
+	if x, err := encoding.BytesFromJSON(u.AccState); err != nil {
+		return fmt.Errorf("error decoding AccState: %w", err)
+	} else {
+		v.AccState = x
 	}
 	return nil
 }

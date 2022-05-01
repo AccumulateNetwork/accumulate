@@ -38,6 +38,12 @@ CreateTokenAccount:
       type: url
       pointer: true
       optional: true
+    - name: Proof
+      type: bytes
+      optional: true
+    - name: AccState
+      type: bytes
+      optional: true
 
 SendTokens:
   union: { type: transaction }
@@ -191,6 +197,12 @@ UpdateAccountAuth:
       type: AccountAuthOperation
       marshal-as: union
       repeatable: true
+    - name: Proof
+      type: bytes
+      optional: true
+    - name: AccState
+      type: bytes
+      optional: true
 
 AddValidator:
   union: { type: transaction }

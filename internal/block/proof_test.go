@@ -38,6 +38,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req.Url = types.String(aliceUrl.String())
 	acctResp := sim.Query(aliceUrl, req, true).(*query.ResponseAccount)
 	localReceipt := acctResp.Receipt.Receipt
+	//	fmt.Println(hex.EncodeToString(localReceipt.Start))
 
 	// Execute enough blocks to ensure the block is anchored
 	sim.ExecuteBlocks(10)
@@ -47,8 +48,10 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
 	dirReceipt := chainResp.Receipt.Receipt
+	//	fmt.Println(hex.EncodeToString(dirReceipt.Result))
 
 	fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
+	//	fmt.Println(fullReceipt)
 	require.NoError(t, err)
 	t.Log(fullReceipt)
 }

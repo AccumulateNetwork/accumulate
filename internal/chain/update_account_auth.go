@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 
@@ -28,7 +29,14 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("account type %v does not support advanced auth", st.Origin.Type())
 	}
 	auth := account.GetAuth()
-
+	acc := st.batch.Account(st.OriginUrl)
+	mReceipt, err := acc.StateReceipt()
+	if err != nil {
+		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
+	}
+	if !bytes.Equal(mReceipt.Element, body.AccState) || !bytes.Equal(mReceipt.MDRoot, body.Proof) {
+		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
+	}
 	for _, op := range body.Operations {
 		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:

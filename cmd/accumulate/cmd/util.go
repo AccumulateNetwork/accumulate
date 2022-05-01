@@ -587,3 +587,47 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 	}
 	return sigtype, nil
 }
+
+func GetAccountStateProof(turl *url2.URL) (accstate []byte, anchor []byte) {
+	// Get a proof of the account state
+	req := new(api.GeneralQuery)
+	req.Url = turl
+	resp := new(api.ChainQueryResponse)
+	token := protocol.TokenIssuer{}
+	resp.Data = &token
+	err := Client.RequestAPIv2(context.Background(), "query", req, resp)
+	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
+		return nil, nil
+	}
+
+	localReceipt := resp.Receipt.Receipt
+	// ensure the block is anchored
+	timeout := time.After(10 * time.Second)
+	ticker := time.Tick(1 * time.Second)
+	// Keep trying until we're timed out or get a result/error
+	for {
+		select {
+		// Got a timeout! fail with a timeout error
+		case <-timeout:
+			return nil, nil
+		// Got a tick, we should check on checkSomething()
+		case <-ticker:
+			// Get a proof of the BVN anchor
+			req = new(api.GeneralQuery)
+			req.Url = url2.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
+			resp = new(api.ChainQueryResponse)
+			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
+				return nil, nil
+			}
+			dirReceipt := resp.Receipt.Receipt
+			accstate = localReceipt.Start
+			anchor = dirReceipt.Result
+			if anchor != nil {
+				return accstate, anchor
+			} else {
+				break
+			}
+		}
+	}
+}
