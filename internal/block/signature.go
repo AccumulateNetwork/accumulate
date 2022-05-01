@@ -63,7 +63,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 		err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
 
 	default:
-		signers, err = processNormalSignature(batch, delivery, signature, !initiated)
+		signers, err = x.processNormalSignature(batch, delivery, signature, !initiated)
 	}
 	if err != nil {
 		return nil, err
@@ -179,7 +179,7 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 }
 
 // validateSigners verifies that the signer is valid and authorized.
-func validateSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
+func (x *Executor) validateSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
 	location := signature.RoutingLocation()
 	fwdsig, ok := signature.(*protocol.ForwardedSignature)
 	if ok {
@@ -198,7 +198,7 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 			signerUrl = signature.GetSigner()
 		}
 
-		signer, err := validateSigner(batch, transaction, location, signerUrl, fwdsig)
+		signer, err := loadSigner(batch, location, signerUrl, fwdsig)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -229,23 +229,16 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 		}
 	}
 
-	if !location.LocalTo(transaction.Header.Principal) {
-		return signers, nil
-	}
-
-	page, ok := signers[len(signers)-1].(*protocol.KeyPage)
-	if !ok {
-		return signers, nil
-	}
-
-	err := verifyPageIsAuthorized(batch, transaction, page)
+	// Verify that the final signer is authorized
+	err := x.verifySignerIsAuthorized(batch, transaction, location, signers[len(signers)-1])
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
+
 	return signers, nil
 }
 
-func validateSigner(batch *database.Batch, transaction *protocol.Transaction, location, signerUrl *url.URL, fwdsig *protocol.ForwardedSignature) (protocol.Signer, error) {
+func loadSigner(batch *database.Batch, location, signerUrl *url.URL, fwdsig *protocol.ForwardedSignature) (protocol.Signer, error) {
 	var signer protocol.Signer
 	var err error
 	local := location.LocalTo(signerUrl)
@@ -263,11 +256,6 @@ func validateSigner(batch *database.Batch, transaction *protocol.Transaction, lo
 		return nil, errors.Format(errors.StatusUnknown, "load signer: %w", err)
 	default:
 		return &protocol.UnknownSigner{Url: signerUrl}, nil
-	}
-
-	err = verifySignerCanSign(transaction, signer)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return signer, nil
@@ -304,30 +292,42 @@ func loadSignerLocally(batch *database.Batch, signerUrl *url.URL) (protocol.Sign
 func validateSignature(transaction *protocol.Transaction, signer protocol.Signer, signature protocol.Signature) (protocol.KeyEntry, error) {
 	// Check the height
 	if signature.GetSignerVersion() != signer.GetVersion() {
-		return nil, protocol.Errorf(protocol.ErrorCodeBadVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
+		return nil, errors.Format(errors.StatusBadSignerVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
 	}
 
 	// Find the key entry
 	_, entry, ok := signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
-		return nil, fmt.Errorf("key does not belong to signer")
+		return nil, errors.New(errors.StatusUnauthorized, "key does not belong to signer")
 	}
 
 	// Check the timestamp, except for faucet transactions
 	if transaction.Body.Type() != protocol.TransactionTypeAcmeFaucet &&
 		signature.GetTimestamp() != 0 &&
 		entry.GetLastUsedOn() >= signature.GetTimestamp() {
-		return nil, protocol.Errorf(protocol.ErrorCodeBadNonce, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
+		return nil, errors.Format(errors.StatusBadTimestamp, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
 	}
 
 	return entry, nil
 }
 
-// verifySignerCanSign verifies that the signer is allowed to sign the transaction
-func verifySignerCanSign(transaction *protocol.Transaction, signer protocol.Signer) error {
+// verifySignerIsAuthorized verifies that the signer is allowed to sign the transaction
+func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) error {
+	// Delegate to the transaction executor?
+	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
+	if ok {
+		fallback, err := val.SignerIsAuthorized(batch, transaction, signer)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+		if !fallback {
+			return nil
+		}
+	}
+
 	switch signer := signer.(type) {
 	case *protocol.LiteTokenAccount:
-		// A lite token account is only allowed to sign for itself
+		// Otherwise a lite token account is only allowed to sign for itself
 		if !signer.Url.Equal(transaction.Header.Principal) {
 			return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
 		}
@@ -338,6 +338,22 @@ func verifySignerCanSign(transaction *protocol.Transaction, signer protocol.Sign
 		if ok && signer.TransactionBlacklist.IsSet(bit) {
 			return errors.Format(errors.StatusUnauthorized, "page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
 		}
+
+		if !location.LocalTo(transaction.Header.Principal) {
+			break
+		}
+
+		err := verifyPageIsAuthorized(batch, transaction, signer)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+
+	case *protocol.UnknownSigner:
+		if !location.LocalTo(transaction.Header.Principal) {
+			break
+		}
+
+		return errors.Format(errors.StatusInternalError, "unknown signer %v", signer.Url)
 
 	default:
 		// This should never happen
@@ -403,7 +419,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.Sign
 	// Compute the signature fee
 	fee, err := protocol.ComputeSignatureFee(signature)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 	if !isInitiator {
 		return fee, nil
@@ -412,7 +428,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.Sign
 	// Add the transaction fee for the initial signature
 	txnFee, err := protocol.ComputeTransactionFee(transaction)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Subtract the base signature fee, but not the oversize surcharge if there is one
@@ -421,14 +437,14 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.Sign
 }
 
 // validateNormalSignature validates a private key signature.
-func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) error {
+func (x *Executor) validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) error {
 	if !delivery.Transaction.Body.Type().IsUser() {
 		// TODO Check the key
 		return nil
 	}
 
 	// Validate the signer
-	signers, err := validateSigners(batch, delivery.Transaction, signature)
+	signers, err := x.validateSigners(batch, delivery.Transaction, signature)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -441,13 +457,13 @@ func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, si
 	// Load the signer and validate the signature against it
 	_, err = validateSignature(delivery.Transaction, signers[0], signature)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Ensure the signer has sufficient credits for the fee
 	fee, err := computeSignerFee(delivery.Transaction, signature, isInitiator)
 	if err != nil {
-		return fmt.Errorf("calculating fee: %w", err)
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	if !signers[0].CanDebitCredits(fee.AsUInt64()) {
 		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
@@ -458,8 +474,8 @@ func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, si
 	return nil
 }
 
-func processSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
-	signers, err := validateSigners(batch, transaction, signature)
+func (x *Executor) processSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
+	signers, err := x.validateSigners(batch, transaction, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -488,7 +504,7 @@ func processSigners(batch *database.Batch, transaction *protocol.Transaction, si
 
 // processNormalSignature validates a private key signature and updates the
 // signer.
-func processNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) ([]protocol.Signer, error) {
+func (x *Executor) processNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) ([]protocol.Signer, error) {
 	// Skip for non-user transactions
 	if !delivery.Transaction.Body.Type().IsUser() {
 		// TODO Check the key
@@ -498,7 +514,7 @@ func processNormalSignature(batch *database.Batch, delivery *chain.Delivery, sig
 	// Validate the signer. This should not fail, because this signature has
 	// presumably already passed ValidateEnvelope. But defensive programming is
 	// always a good idea.
-	signers, err := processSigners(batch, delivery.Transaction, signature)
+	signers, err := x.processSigners(batch, delivery.Transaction, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}

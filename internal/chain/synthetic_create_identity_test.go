@@ -13,7 +13,7 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
+func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 	db := database.OpenInMemory(nil)
 
 	fooKey := generateKey()
@@ -29,10 +29,10 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
 	account.AddAuthority(book)
-	body := new(protocol.SyntheticCreateChain)
+	body := new(protocol.SyntheticCreateIdentity)
+	body.Accounts = []protocol.Account{account}
 	cause := [32]byte{1}
-	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
-	require.NoError(t, body.Create(account))
+	body.SetCause(cause[:], acctesting.FakeBvn)
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
@@ -45,29 +45,12 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	st, d := NewStateManagerForTest(t, db, env)
 	defer st.Discard()
 
-	scc := SyntheticCreateChain{}
-	result, err := scc.Validate(st, d)
+	scc := SyntheticCreateIdentity{}
+	_, err = scc.Validate(st, d)
 	require.EqualError(t, err, `missing identity for acc://foo/bar/baz`) // We created ADI acc://foo not acc://foo/bar
-
-	status := &protocol.TransactionStatus{Delivered: true, Result: result}
-	_, receiptBody := CreateSynthReceipt(d.Transaction, status)
-	principalUrl := d.Transaction.Header.Principal
-	env = acctesting.NewTransaction().
-		WithPrincipal(principalUrl).
-		WithSigner(protocol.FormatKeyPageUrl(book, 0), 1).
-		WithCurrentTimestamp().
-		WithBody(receiptBody).
-		Initiate(protocol.SignatureTypeED25519, fooKey).
-		Build()
-
-	st, d = NewStateManagerForTest(t, db, env)
-	defer st.Discard()
-	_, err = SyntheticReceipt{}.Validate(st, d)
-	require.NoError(t, err)
-
 }
 
-func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
+func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
 	db := database.OpenInMemory(nil)
 
 	fooKey := generateKey()
@@ -84,10 +67,10 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	require.NoError(t, err)
 	account.TokenUrl = protocol.AcmeUrl()
 	account.AddAuthority(book)
-	body := new(protocol.SyntheticCreateChain)
+	body := new(protocol.SyntheticCreateIdentity)
+	body.Accounts = []protocol.Account{account}
 	cause := [32]byte{1}
-	body.SetSyntheticOrigin(cause[:], acctesting.FakeBvn)
-	require.NoError(t, body.Create(account))
+	body.SetCause(cause[:], acctesting.FakeBvn)
 
 	env := acctesting.NewTransaction().
 		WithPrincipal(url.MustParse("foo")).
@@ -101,6 +84,6 @@ func TestSyntheticChainCreate_MultiSlash_SubADI(t *testing.T) {
 	defer st.Discard()
 
 	require.NoError(t, err)
-	_, err = SyntheticCreateChain{}.Validate(st, d)
+	_, err = SyntheticCreateIdentity{}.Validate(st, d)
 	require.NoError(t, err) // We created ADI acc://foo not acc://foo/bar
 }

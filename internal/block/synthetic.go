@@ -19,8 +19,12 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		return nil
 	}
 
-	state := new(chain.ChainUpdates)
+	err := setSyntheticOrigin(batch, from, produced)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
 
+	state := new(chain.ChainUpdates)
 	for _, sub := range produced {
 		tx, err := x.buildSynthTxn(state, batch, sub.Header.Principal, sub.Body)
 		if err != nil {
@@ -33,27 +37,63 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			continue
 		}
 
-		swo, ok := sub.Body.(protocol.SynthTxnWithOrigin)
+		_, ok := sub.Body.(protocol.SynthTxnWithOrigin)
 		if !ok {
 			continue
 		}
 
-		cause, _ := swo.GetSyntheticOrigin()
-		if receipt, ok := sub.Body.(*protocol.SyntheticReceipt); ok {
-			cause = receipt.SynthTxHash[:]
-
-			// If the transaction was successful, skip recording the receipt
-			if receipt.Status.Code == 0 {
-				continue
-			}
-		}
-
-		err = batch.Transaction(cause).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
+		err = batch.Transaction(from.GetHash()).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
 		if err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// setSyntheticOrigin sets the synthetic origin data of the synthetic
+// transaction. setSyntheticOrigin sets the refund amount for each synthetic
+// transaction, spreading the potential refund across all produced synthetic
+// transactions.
+func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+	if len(produced) == 0 {
+		return nil
+	}
+
+	// Find all the synthetic transactions that implement the interface
+	var swos []protocol.SynthTxnWithOrigin
+	for _, txn := range produced {
+		swo, ok := txn.Body.(protocol.SynthTxnWithOrigin)
+		if !ok {
+			continue
+		}
+
+		swos = append(swos, swo)
+		swo.SetCause(from.GetHash(), from.Header.Principal)
+	}
+	if len(swos) == 0 {
+		return nil
+	}
+
+	// Get the fee
+	paid, err := protocol.ComputeTransactionFee(from)
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "compute fee: %w", err)
+	}
+	if paid <= protocol.FeeFailedMaximum {
+		return nil
+	}
+
+	status, err := batch.Transaction(from.GetHash()).GetStatus()
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load status: %w", err)
+	}
+
+	// Set the refund amount
+	refund := (paid - protocol.FeeFailedMaximum) / protocol.Fee(len(swos))
+	for _, swo := range swos {
+		swo.SetRefund(status.Initiator, refund)
+	}
 	return nil
 }
 
@@ -80,9 +120,6 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	if err != nil {
 		return nil, err
 	}
-
-	// Append the ID
-	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, *(*[32]byte)(txn.GetHash()))
 
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++

@@ -69,7 +69,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 			err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
 
 		default:
-			err = validateNormalSignature(batch, delivery, signature, isInitiator)
+			err = x.validateNormalSignature(batch, delivery, signature, isInitiator)
 		}
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnauthenticated, "signature %d: %w", i, err)
@@ -135,13 +135,14 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
-	case !transactionAllowsMissingPrincipal(delivery.Transaction):
+	case !x.transactionAllowsMissingPrincipal(delivery.Transaction):
 		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
 	}
 
 	// Set up the state manager
 	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), signer.GetUrl(), signer, principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
+	st.Pretend = true
 
 	// Execute the transaction
 	executor, ok := x.executors[delivery.Transaction.Body.Type()]
