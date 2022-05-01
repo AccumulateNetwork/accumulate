@@ -84,7 +84,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
-	err := st.Update(st.Origin)
+	err = st.Update(st.Origin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %w", st.OriginUrl, err)
 	}
