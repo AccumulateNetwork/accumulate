@@ -298,7 +298,7 @@ func LookupByLiteIdentityUrl(lite string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid lite identity %s", liteKey)
 	}
 
-	label, err := Db.Get(BucketLite, []byte(liteKey))
+	label, err := GetWallet().Get(BucketLite, []byte(liteKey))
 	if err != nil {
 		return nil, fmt.Errorf("lite identity account not found %s", lite)
 	}

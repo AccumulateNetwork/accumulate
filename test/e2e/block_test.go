@@ -83,8 +83,8 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 
 	var creditsBefore uint64
 	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
-		var account *protocol.LiteTokenAccount
-		require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+		var account *protocol.LiteIdentity
+		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
 		creditsBefore = account.CreditBalance
 		return nil
 	})
@@ -104,8 +104,8 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 
 	var creditsAfter uint64
 	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
-		var account *protocol.LiteTokenAccount
-		require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+		var account *protocol.LiteIdentity
+		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
 		creditsAfter = account.CreditBalance
 		return nil
 	})
@@ -281,7 +281,8 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateIdentity(alice, aliceKey[32:])
-	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	_, err := sim.SubmitAndExecuteBlock(
 		acctesting.NewTransaction().
@@ -314,7 +315,8 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
-	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
