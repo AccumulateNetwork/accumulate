@@ -34,8 +34,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	if err != nil {
 		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
 	}
-	if !bytes.Equal(mReceipt.Element, body.AccState) || !bytes.Equal(mReceipt.MDRoot, body.Proof) {
-		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
+	if body.AccState != nil && body.Proof != nil {
+		if !bytes.Equal(mReceipt.Element, body.AccState) || !bytes.Equal(mReceipt.MDRoot, body.Proof) {
+			return nil, fmt.Errorf("invalid accounturl state cannot be verified")
+		}
 	}
 	for _, op := range body.Operations {
 		switch op := op.(type) {

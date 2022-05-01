@@ -33,8 +33,13 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account.Scratch = body.Scratch
 	acc := st.batch.Account(account.Url)
 	mReceipt, err := acc.StateReceipt()
-	if !bytes.Equal(mReceipt.Element, body.AccState) || !bytes.Equal(mReceipt.MDRoot, body.Proof) {
-		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
+	if err != nil {
+		return nil, err
+	}
+	if body.AccState != nil && body.Proof != nil {
+		if !bytes.Equal(mReceipt.Element, body.AccState) || !bytes.Equal(mReceipt.MDRoot, body.Proof) {
+			return nil, fmt.Errorf("invalid accounturl state cannot be verified")
+		}
 	}
 	/*accst, err := acc.GetState()
 	if err != nil {
