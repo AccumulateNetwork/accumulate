@@ -103,7 +103,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.InternalGenesis)
 
-	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), m.Network.NodeUrl(), nil, nil, txn, m.logger.With("operation", "Genesis"))
+	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = putSyntheticTransaction(

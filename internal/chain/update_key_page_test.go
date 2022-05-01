@@ -56,14 +56,17 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 				Initiate(protocol.SignatureTypeED25519, testKey).
 				Build()
 
-			st, d := NewStateManagerForTest(t, db, env)
-			defer st.Discard()
+			batch := db.Begin(true)
+			defer batch.Discard()
 
-			_, err := UpdateKeyPage{}.Validate(st, d)
+			var signer protocol.Signer
+			require.NoError(t, batch.Account(env.Signatures[0].GetSigner()).GetStateAs(&signer))
+
+			_, err := UpdateKeyPage{}.SignerIsAuthorized(batch, env.Transaction[0], signer)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, `cannot modify "acc://foo/book/2" with a lower priority key page`)
+				require.EqualError(t, err, fmt.Sprintf(`signer acc://foo/book/%d is lower priority than the principal acc://foo/book/2`, idx+1))
 			}
 
 			// Do not store state changes
