@@ -72,7 +72,7 @@ func updateKeyPage(st *StateManager, tx *Delivery, execute bool) error {
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 
 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs

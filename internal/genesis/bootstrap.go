@@ -147,6 +147,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				return err
 			}
 			wd.Entry.Data = append(wd.Entry.Data, d)
+
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
 			da.AddAuthority(uBook)
@@ -245,7 +246,7 @@ func createBVNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtyp
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(authUrl, 0)
-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators))
+	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
@@ -263,7 +264,7 @@ func createBVNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtyp
 func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
 	page.Keys = make([]*protocol.KeySpec, len(operators))
