@@ -80,7 +80,7 @@ func updateKeyPage(st *StateManager, tx *Delivery, execute bool) error {
 			if err != nil {
 				return fmt.Errorf("%s is not a valid BVN URL", bvn)
 			}
-			st.Submit(bvnUrl.JoinPath(st.OriginUrl.Path), body)
+			st.Submit(bvnUrl.JoinPath(protocol.OperatorBook, "/2"), body)
 		}
 	}
 	return nil
