@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -35,10 +36,14 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	//faucet the lite account to make sure there are tokens available
 	testCase5_1(t, tc)
 
-	_, err := tc.executeTx(t, "credits %s %s 1000 100 0.0", liteAccounts[0], liteAccounts[0])
+	u, err := url.Parse(liteAccounts[0])
+	require.NoError(t, err)
+	liteId := u.RootIdentity().String()
+
+	_, err = tc.executeTx(t, "credits %s %s 1000 100 0.0", liteAccounts[0], liteId)
 	require.NoError(t, err)
 
-	_, err = tc.executeTx(t, "adi create %s acc://RedWagon red1", liteAccounts[0])
+	_, err = tc.executeTx(t, "adi create %s acc://RedWagon red1", liteId)
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
