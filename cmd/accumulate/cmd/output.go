@@ -288,6 +288,16 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 
+		return out, nil
+	case protocol.AccountTypeLiteIdentity.String():
+		ata := protocol.LiteIdentity{}
+		err := Remarshal(res.Data, &ata)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tCredits\t\t:\t%v\n", protocol.FormatAmount(ata.CreditBalance, protocol.CreditPrecisionPower))
 		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(ata.LastUsedOn*uint64(time.Microsecond))))
 		return out, nil

@@ -24,7 +24,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 
 	var account protocol.Signer
 	switch origin := st.Origin.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		account = origin
 
 	case *protocol.KeyPage:
