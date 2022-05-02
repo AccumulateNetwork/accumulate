@@ -342,3 +342,43 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 		return nil
 	})
 }
+
+func TestAddCreditsToNewLiteIdentity(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	alice := acctesting.GenerateKey("alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey("bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob).RootIdentity()
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
+
+	// Execute
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(aliceUrl).
+			WithSigner(aliceUrl.RootIdentity(), 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&AddCredits{
+				Recipient: bobUrl,
+				Amount:    *big.NewInt(AcmePrecision * 1e3),
+				Oracle:    InitialAcmeOracleValue,
+			}).
+			Initiate(SignatureTypeED25519, alice).
+			Build(),
+	)...)
+
+	// Verify
+	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+		var account *LiteIdentity
+		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
+		require.Equal(t,
+			protocol.FormatAmount(1e3*InitialAcmeOracleValue, protocol.CreditPrecisionPower),
+			protocol.FormatAmount(account.CreditBalance, protocol.CreditPrecisionPower))
+		return nil
+	})
+}
