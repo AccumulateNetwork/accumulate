@@ -83,7 +83,6 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, book := range res.SignatureBooks {
 		for _, page := range book.Pages {
 			out += fmt.Sprintf("  - Signatures            :\n")
@@ -92,7 +91,8 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 				if sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
 				} else {
-					out += fmt.Sprintf("      -                   : %x (sig) / %x (key)\n", sig.GetSignature(), sig.GetPublicKeyHash())
+					out += fmt.Sprintf("      -                   : %x (sig)\n", sig.GetSignature())
+					out += fmt.Sprintf("      -                   : %x (key hash)\n", sig.GetPublicKeyHash())
 				}
 			}
 		}
@@ -288,6 +288,16 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 
+		return out, nil
+	case protocol.AccountTypeLiteIdentity.String():
+		ata := protocol.LiteIdentity{}
+		err := Remarshal(res.Data, &ata)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tCredits\t\t:\t%v\n", protocol.FormatAmount(ata.CreditBalance, protocol.CreditPrecisionPower))
 		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(ata.LastUsedOn*uint64(time.Microsecond))))
 		return out, nil
@@ -399,7 +409,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 }
 
 func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
-	typStr := res.Data.(map[string]interface{})["type"].(string)
+	typStr := res.Type
 	typ, ok := protocol.TransactionTypeByName(typStr)
 	if !ok {
 		return "", fmt.Errorf("Unknown transaction type %s", typStr)
@@ -449,20 +459,11 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
-	case *protocol.SyntheticCreateChain:
-		scc := txn
+	case *protocol.SyntheticCreateIdentity:
+		sci := txn
 		var out string
-		for _, cp := range scc.Chains {
-			c, err := protocol.UnmarshalAccount(cp.Data)
-			if err != nil {
-				return "", err
-			}
-			// unmarshal
-			verb := "Created"
-			if cp.IsUpdate {
-				verb = "Updated"
-			}
-			out += fmt.Sprintf("%s %v (%v)\n", verb, c.GetUrl(), c.Type())
+		for _, account := range sci.Accounts {
+			out += fmt.Sprintf("Created %v (%v)\n", account.GetUrl(), account.Type())
 		}
 		return out, nil
 	case *protocol.CreateIdentity:

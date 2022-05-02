@@ -36,6 +36,9 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, err
 	}
 
-	st.Create(account)
+	err = st.Create(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %v: %w", account.Url, err)
+	}
 	return nil, nil
 }

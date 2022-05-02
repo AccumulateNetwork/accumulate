@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -10,7 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func hasBeenInitiated(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
@@ -65,7 +63,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 		err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
 
 	default:
-		signers, err = processNormalSignature(batch, delivery, signature, !initiated)
+		signers, err = x.processNormalSignature(batch, delivery, signature, !initiated)
 	}
 	if err != nil {
 		return nil, err
@@ -181,7 +179,7 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 }
 
 // validateSigners verifies that the signer is valid and authorized.
-func validateSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
+func (x *Executor) validateSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
 	location := signature.RoutingLocation()
 	fwdsig, ok := signature.(*protocol.ForwardedSignature)
 	if ok {
@@ -200,7 +198,13 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 			signerUrl = signature.GetSigner()
 		}
 
-		signer, err := validateSigner(batch, transaction, location, signerUrl, fwdsig)
+		// If the user specifies a lite token address, convert it to a lite
+		// identity
+		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+			signerUrl = signerUrl.RootIdentity()
+		}
+
+		signer, err := loadSigner(batch, location, signerUrl, fwdsig)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -231,23 +235,16 @@ func validateSigners(batch *database.Batch, transaction *protocol.Transaction, s
 		}
 	}
 
-	if !location.LocalTo(transaction.Header.Principal) {
-		return signers, nil
-	}
-
-	page, ok := signers[len(signers)-1].(*protocol.KeyPage)
-	if !ok {
-		return signers, nil
-	}
-
-	err := verifyPageIsAuthorized(batch, transaction, page)
+	// Verify that the final signer is authorized
+	err := x.verifySignerIsAuthorized(batch, transaction, location, signers[len(signers)-1])
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
+
 	return signers, nil
 }
 
-func validateSigner(batch *database.Batch, transaction *protocol.Transaction, location, signerUrl *url.URL, fwdsig *protocol.ForwardedSignature) (protocol.Signer, error) {
+func loadSigner(batch *database.Batch, location, signerUrl *url.URL, fwdsig *protocol.ForwardedSignature) (protocol.Signer, error) {
 	var signer protocol.Signer
 	var err error
 	local := location.LocalTo(signerUrl)
@@ -265,11 +262,6 @@ func validateSigner(batch *database.Batch, transaction *protocol.Transaction, lo
 		return nil, errors.Format(errors.StatusUnknown, "load signer: %w", err)
 	default:
 		return &protocol.UnknownSigner{Url: signerUrl}, nil
-	}
-
-	err = verifySignerCanSign(batch, transaction, signer)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return signer, nil
@@ -325,17 +317,24 @@ func validateSignature(transaction *protocol.Transaction, signer protocol.Signer
 	return entry, nil
 }
 
-// verifySignerCanSign verifies that the signer is allowed to sign the transaction
-func verifySignerCanSign(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) error {
-	switch signer := signer.(type) {
-	case *protocol.LiteTokenAccount:
-		// A lite token account is allowed to write to a lite data account
-		if isWriteToLiteDataAccount(batch, transaction) {
+// verifySignerIsAuthorized verifies that the signer is allowed to sign the transaction
+func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) error {
+	// Delegate to the transaction executor?
+	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
+	if ok {
+		fallback, err := val.SignerIsAuthorized(batch, transaction, signer)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+		if !fallback {
 			return nil
 		}
+	}
 
+	switch signer := signer.(type) {
+	case *protocol.LiteIdentity:
 		// Otherwise a lite token account is only allowed to sign for itself
-		if !signer.Url.Equal(transaction.Header.Principal) {
+		if !signer.Url.Equal(transaction.Header.Principal.RootIdentity()) {
 			return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
 		}
 
@@ -346,6 +345,22 @@ func verifySignerCanSign(batch *database.Batch, transaction *protocol.Transactio
 			return errors.Format(errors.StatusUnauthorized, "page %s is not authorized to sign %v", signer.Url, transaction.Body.Type())
 		}
 
+		if !location.LocalTo(transaction.Header.Principal) {
+			break
+		}
+
+		err := verifyPageIsAuthorized(batch, transaction, signer)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+
+	case *protocol.UnknownSigner:
+		if !location.LocalTo(transaction.Header.Principal) {
+			break
+		}
+
+		return errors.Format(errors.StatusInternalError, "unknown signer %v", signer.Url)
+
 	default:
 		// This should never happen
 		return errors.Format(errors.StatusInternalError, "unknown signer type %v", signer.Type())
@@ -354,39 +369,9 @@ func verifySignerCanSign(batch *database.Batch, transaction *protocol.Transactio
 	return nil
 }
 
-func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Transaction) bool {
-	body, ok := transaction.Body.(*protocol.WriteData)
-	if !ok {
-		return false // Not WriteData
-	}
-
-	chainId, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
-	if err != nil {
-		return false // Not a lite data address
-	}
-
-	var account *protocol.LiteDataAccount
-	err = batch.Account(transaction.Header.Principal).GetStateAs(&account)
-	switch {
-	case err == nil:
-		return true // Found the account
-	case !errors.Is(err, storage.ErrNotFound):
-		return false // Unknown error, could be a different account type
-	}
-
-	// Are we creating a lite data account?
-	computedChainId := protocol.ComputeLiteDataAccountId(&body.Entry)
-	return bytes.HasPrefix(computedChainId, chainId)
-}
-
 // verifyPageIsAuthorized verifies that the key page is authorized to sign for
 // the principal.
 func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
-	// Anyone is allowed to write to a lite data account
-	if isWriteToLiteDataAccount(batch, transaction) {
-		return nil
-	}
-
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	if err != nil {
@@ -458,14 +443,14 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.Sign
 }
 
 // validateNormalSignature validates a private key signature.
-func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) error {
+func (x *Executor) validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) error {
 	if !delivery.Transaction.Body.Type().IsUser() {
 		// TODO Check the key
 		return nil
 	}
 
 	// Validate the signer
-	signers, err := validateSigners(batch, delivery.Transaction, signature)
+	signers, err := x.validateSigners(batch, delivery.Transaction, signature)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -495,8 +480,8 @@ func validateNormalSignature(batch *database.Batch, delivery *chain.Delivery, si
 	return nil
 }
 
-func processSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
-	signers, err := validateSigners(batch, transaction, signature)
+func (x *Executor) processSigners(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature) ([]protocol.Signer, error) {
+	signers, err := x.validateSigners(batch, transaction, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -525,7 +510,7 @@ func processSigners(batch *database.Batch, transaction *protocol.Transaction, si
 
 // processNormalSignature validates a private key signature and updates the
 // signer.
-func processNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) ([]protocol.Signer, error) {
+func (x *Executor) processNormalSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, isInitiator bool) ([]protocol.Signer, error) {
 	// Skip for non-user transactions
 	if !delivery.Transaction.Body.Type().IsUser() {
 		// TODO Check the key
@@ -535,7 +520,7 @@ func processNormalSignature(batch *database.Batch, delivery *chain.Delivery, sig
 	// Validate the signer. This should not fail, because this signature has
 	// presumably already passed ValidateEnvelope. But defensive programming is
 	// always a good idea.
-	signers, err := processSigners(batch, delivery.Transaction, signature)
+	signers, err := x.processSigners(batch, delivery.Transaction, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -571,7 +556,7 @@ func processNormalSignature(batch *database.Batch, delivery *chain.Delivery, sig
 	}
 
 	// Store changes to the signer
-	err = batch.Account(signature.GetSigner()).PutState(signers[0])
+	err = batch.Account(signers[0].GetUrl()).PutState(signers[0])
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "store signer: %w", err)
 	}

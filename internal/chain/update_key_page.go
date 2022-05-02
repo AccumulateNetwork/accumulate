@@ -66,7 +66,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 	return nil, nil
 }
 

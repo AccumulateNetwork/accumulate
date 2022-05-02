@@ -33,16 +33,16 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
-		return recordFailedTransaction(batch, transaction, err)
-	case !transactionAllowsMissingPrincipal(transaction):
+		return x.recordFailedTransaction(batch, transaction, err)
+	case !x.transactionAllowsMissingPrincipal(transaction):
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
-		return recordFailedTransaction(batch, transaction, err)
+		return x.recordFailedTransaction(batch, transaction, err)
 	}
 
 	// Check if the transaction is ready to be executed
-	ready, err := TransactionIsReady(&x.Network, batch, transaction, status)
+	ready, err := x.TransactionIsReady(batch, transaction, status)
 	if err != nil {
-		return recordFailedTransaction(batch, transaction, err)
+		return x.recordFailedTransaction(batch, transaction, err)
 	}
 	if !ready {
 		return recordPendingTransaction(&x.Network, batch, transaction)
@@ -52,14 +52,14 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		// Verify that the synthetic transaction has all the right signatures
 		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
 		if err != nil {
-			return recordFailedTransaction(batch, transaction, err)
+			return x.recordFailedTransaction(batch, transaction, err)
 		}
 	}
 
 	// Set up the state manager
 	st, err := chain.LoadStateManager(batch.Begin(true), x.Network.NodeUrl(), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
 	if err != nil {
-		return recordFailedTransaction(batch, transaction, err)
+		return x.recordFailedTransaction(batch, transaction, err)
 	}
 	defer st.Discard()
 
@@ -68,26 +68,35 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	if !ok {
 		// An invalid transaction should not make it to this point
 		err = protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", transaction.Body.Type())
-		return recordFailedTransaction(batch, transaction, err)
+		return x.recordFailedTransaction(batch, transaction, err)
 	}
 
 	result, err := executor.Execute(st, &chain.Delivery{Transaction: transaction})
 	if err != nil {
 		err = errors.Wrap(0, err)
-		return recordFailedTransaction(batch, transaction, err)
+		return x.recordFailedTransaction(batch, transaction, err)
 	}
 
 	// Commit changes, queue state creates for synthetic transactions
 	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
-		return recordFailedTransaction(batch, transaction, err)
+		return x.recordFailedTransaction(batch, transaction, err)
 	}
 
 	return recordSuccessfulTransaction(batch, state, transaction, result)
 }
 
-func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
+func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
+	val, ok := getValidator[PrincipalValidator](x, transaction.Body.Type())
+	if ok {
+		allow, fallback := val.AllowMissingPrincipal(transaction)
+		if !fallback {
+			return allow
+		}
+	}
+
+	// TODO Replace with AllowMissingPrincipal
 	switch body := transaction.Body.(type) {
 	case *protocol.WriteData,
 		*protocol.SyntheticWriteData:
@@ -100,30 +109,30 @@ func transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
 		key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
 		return key != nil
 
-	case *protocol.SyntheticCreateChain:
+	case *protocol.SyntheticCreateIdentity:
 		// SyntheticCreateChain can create accounts
 		return true
 
 	case *protocol.SyntheticForwardTransaction:
-		return transactionAllowsMissingPrincipal(body.Transaction)
+		return x.transactionAllowsMissingPrincipal(body.Transaction)
 
 	default:
 		return false
 	}
 }
 
-func TransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	switch {
 	case transaction.Body.Type().IsUser():
-		return userTransactionIsReady(batch, transaction, status)
+		return x.userTransactionIsReady(batch, transaction, status)
 	case transaction.Body.Type().IsSynthetic():
-		return synthTransactionIsReady(net, batch, transaction, status)
+		return synthTransactionIsReady(&x.Network, batch, transaction, status)
 	default:
 		return true, nil
 	}
 }
 
-func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// UpdateKey transactions are always M=1 and always require a signature from
 	// the initiator
 	txnObj := batch.Transaction(transaction.GetHash())
@@ -144,9 +153,16 @@ func userTransactionIsReady(batch *database.Batch, transaction *protocol.Transac
 		return true, nil
 	}
 
-	// Anyone can write to a lite data account
-	if isWriteToLiteDataAccount(batch, transaction) {
-		return true, nil
+	// Delegate to the transaction executor?
+	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
+	if ok {
+		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if !fallback {
+			return ready, nil
+		}
 	}
 
 	// Load the principal
@@ -352,11 +368,6 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 		return nil, nil, err
 	}
 
-	// Create receipt
-	if chain.NeedsReceipt(transaction.Body.Type()) {
-		state.DidProduceTxn(chain.CreateSynthReceipt(transaction, status))
-	}
-
 	// Don't add internal transactions to chains
 	if transaction.Body.Type().IsInternal() {
 		return status, state, nil
@@ -378,7 +389,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 	return status, state, nil
 }
 
-func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *protocol.Transaction, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := recordTransaction(batch, transaction, func(status *protocol.TransactionStatus) {
 		status.Remote = false
@@ -402,10 +413,23 @@ func recordFailedTransaction(batch *database.Batch, transaction *protocol.Transa
 		return nil, nil, err
 	}
 
-	// Create receipt
+	// If this transaction is a synthetic transaction, send a refund
 	state := new(chain.ProcessTransactionState)
-	if chain.NeedsReceipt(transaction.Body.Type()) {
-		state.DidProduceTxn(chain.CreateSynthReceipt(transaction, status))
+	if swo, ok := transaction.Body.(protocol.SynthTxnWithOrigin); ok {
+		init, refundAmount := swo.GetRefund()
+		if refundAmount > 0 {
+			refund := new(protocol.SyntheticDepositCredits)
+			refund.Amount = refundAmount.AsUInt64()
+			state.DidProduceTxn(init, refund)
+		}
+	}
+
+	// Execute the post-failure hook if the transaction executor defines one
+	if val, ok := getValidator[TransactionExecutorCleanup](x, transaction.Body.Type()); ok {
+		err = val.DidFail(state, transaction)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Remove the transaction from the principal's list of pending transactions

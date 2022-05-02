@@ -2,7 +2,6 @@ package chain
 
 import (
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -10,84 +9,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type stateOperation interface {
 	// Execute executes the operation and returns any chains that should be
 	// created via a synthetic transaction.
 	Execute(*stateCache) ([]protocol.Account, error)
-}
-
-type createRecords struct {
-	records []protocol.Account
-}
-
-// Create queues a record for a synthetic chain create transaction. Will panic
-// if called by a synthetic transaction. Will panic if the record is a
-// transaction.
-func (m *stateCache) Create(record ...protocol.Account) {
-	if m.txType.IsSynthetic() {
-		panic("Called StateManager.Create from a synthetic transaction!")
-	}
-	for _, r := range record {
-		m.chains[r.GetUrl().AccountID32()] = r
-	}
-
-	m.operations = append(m.operations, &createRecords{record})
-}
-
-func (op *createRecords) Execute(st *stateCache) ([]protocol.Account, error) {
-	return op.records, nil
-}
-
-type updateRecord struct {
-	url    *url.URL
-	record protocol.Account
-}
-
-// Update queues a record for storage in the database. The queued update will
-// fail if the record does not already exist, unless it is created by a
-// synthetic transaction, or the record is a transaction.
-func (m *stateCache) Update(record ...protocol.Account) {
-	for _, r := range record {
-		m.chains[r.GetUrl().AccountID32()] = r
-		m.operations = append(m.operations, &updateRecord{r.GetUrl(), r})
-	}
-}
-
-func (op *updateRecord) Execute(st *stateCache) ([]protocol.Account, error) {
-	// Update: update an existing record. Non-synthetic transactions are
-	// not allowed to create accounts, so we must check if the record
-	// already exists. The record may have been added to the DB
-	// transaction already, so in order to actually know if the record
-	// exists on disk, we have to use GetPersistentEntry.
-
-	rec := st.batch.Account(op.url)
-	_, err := rec.GetState()
-	switch {
-	case err == nil:
-		// If the record already exists, update it
-
-	case !errors.Is(err, storage.ErrNotFound):
-		// Handle unexpected errors
-		return nil, fmt.Errorf("failed to check for an existing record: %v", err)
-
-	case st.txType.IsSynthetic() || st.txType.IsInternal():
-		// Synthetic and internal transactions are allowed to create accounts
-
-	default:
-		// Non-synthetic transactions are NOT allowed to create accounts
-		return nil, fmt.Errorf("cannot create an account in a non-synthetic transaction")
-	}
-
-	record := st.batch.Account(op.url)
-	err = record.PutState(op.record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
-	}
-
-	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type updateTxStatus struct {
@@ -134,8 +61,8 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 
 	// Check that the nonce is the only thing that changed
 	switch record.Type() {
-	case protocol.AccountTypeLiteTokenAccount:
-		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
+	case protocol.AccountTypeLiteIdentity:
+		old, new := old.(*protocol.LiteIdentity), record.(*protocol.LiteIdentity)
 		old.LastUsedOn = new.LastUsedOn
 		old.CreditBalance = new.CreditBalance
 		if !old.Equal(new) {

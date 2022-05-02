@@ -77,17 +77,28 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
-	if IsLiteAccount(origin.String()) {
-		privKey, err := LookupByLite(origin.String())
+	var privKey []byte
+	var err error
+	if IsLiteTokenAccount(origin.String()) {
+		privKey, err = LookupByLiteTokenUrl(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
+
+	} else if IsLiteIdentity(origin.String()) {
+		privKey, err = LookupByLiteIdentityUrl(origin.String())
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
+		}
+	}
+
+	if privKey != nil {
 		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
 		if err != nil {
 			return nil, nil, err
 		}
 		signer.Type = sigType
-		signer.Url = origin
+		signer.Url = origin.RootIdentity()
 		signer.Version = 1
 		signer.SetPrivateKey(privKey)
 		return args, signer, nil
@@ -103,7 +114,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		keyName = args[0]
 	}
 
-	privKey, err := resolvePrivateKey(keyName)
+	privKey, err = resolvePrivateKey(keyName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,12 +165,21 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Bui
 	return args, principal, signer, nil
 }
 
-func IsLiteAccount(url string) bool {
+func IsLiteTokenAccount(url string) bool {
 	u, err := url2.Parse(url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	key, _, _ := protocol.ParseLiteTokenAddress(u)
+	return key != nil
+}
+
+func IsLiteIdentity(url string) bool {
+	u, err := url2.Parse(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	key, _, _ := protocol.ParseLiteIdentity(u)
 	return key != nil
 }
 
@@ -472,7 +492,7 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
 	var err error
 	var tokenUrl *url2.URL
-	if IsLiteAccount(u.String()) {
+	if IsLiteTokenAccount(u.String()) {
 		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)

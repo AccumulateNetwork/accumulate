@@ -32,19 +32,11 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
-	scc := new(protocol.SyntheticCreateChain)
-	st.Submit(st.OriginUrl, scc)
-
 	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
 	page.AcceptThreshold = 1 // Require one signature from the Key Page
 	book.PageCount++
-
-	err := scc.Update(book)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyBook %s: %v", book.Url, err)
-	}
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
@@ -52,9 +44,14 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		page.Keys = append(page.Keys, ss)
 	}
 
-	err = scc.Create(page)
+	err := st.Update(book)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state for KeyPage` %s: %v", page.Url, err)
+		return nil, fmt.Errorf("failed to update %v: %w", book.Url, err)
+	}
+
+	err = st.Create(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %v: %w", page.Url, err)
 	}
 
 	return nil, nil

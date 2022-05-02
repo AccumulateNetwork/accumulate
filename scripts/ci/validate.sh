@@ -128,16 +128,17 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
 echo
 
 section "Generate a Lite Token Account"
 accumulate account list 2>&1 | grep -q ACME || accumulate account generate
-LITE=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
+LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
+LITE_ID=$(sed 's/.\{5\}$//' <<< "$LITE_ACME")
 TXS=()
 for i in {1..1}
 do
-	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
+	TXS=(${TXS[@]} $(cli-tx faucet ${LITE_ACME}))
 done
 for tx in "${TXS[@]}"
 do
@@ -145,13 +146,13 @@ do
 	wait-for-tx $tx
 done
 
-accumulate account get ${LITE} 1> /dev/null && success || die "Cannot find ${LITE}"
+accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE} ${LITE} 2700)
+TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 2700)
 wait-for-tx $TXID
-BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 2700 ] || die "${LITE} should have at least 2700 credits but only has ${BALANCE}"
+BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 2700 ] || die "${LITE_ID} should have at least 2700 credits but only has ${BALANCE}"
 success
 
 section "Generate keys"
@@ -167,15 +168,15 @@ ensure-key manager
 echo
 
 section "Create an ADI"
-wait-for cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book
+wait-for cli-tx adi create ${LITE_ID} keytest keytest-1-0 keytest/book
 accumulate adi get keytest 1> /dev/null && success || die "Cannot find keytest"
 
 section "Verify fee charge"
-BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
+BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 100 ] && success || die "${LITE_ID} should have at least 100 credits but only has ${BALANCE}"
 
 section "Recreating an ADI fails and the synthetic transaction is recorded"
-TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book` || return 1
+TXID=`cli-tx adi create ${LITE_ID} keytest keytest-1-0 keytest/book` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
@@ -185,7 +186,7 @@ echo $STATUS | jq -re .message 1> /dev/null || die "Synthetic transaction does n
 success
 
 section "Add credits to the ADI's key page 1"
-wait-for cli-tx credits ${LITE} keytest/book/1 60000
+wait-for cli-tx credits ${LITE_ACME} keytest/book/1 60000
 BALANCE=$(accumulate -j page get keytest/book/1 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 6000000 ] && success || die "keytest/book/1 should have 6000000 credits but has ${BALANCE}"
 
@@ -197,7 +198,7 @@ accumulate page get keytest/book/3 1> /dev/null || die "Cannot find page keytest
 success
 
 section "Add credits to the ADI's key page 2"
-wait-for cli-tx credits ${LITE} keytest/book/2 1000
+wait-for cli-tx credits ${LITE_ACME} keytest/book/2 1000
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1000 ] && success || die "keytest/book/2 should have 1000 credits but has ${BALANCE}"
 
@@ -220,7 +221,7 @@ cli-tx page key add keytest/book/3 keytest-2-0 keytest-3-1
 success
 
 section "Add credits to the ADI's key page 2"
-wait-for cli-tx credits ${LITE} keytest/book/2 100
+wait-for cli-tx credits ${LITE_ACME} keytest/book/2 100
 BALANCE=$(accumulate -j page get keytest/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "keytest/book/2 should have 100 credits but has ${BALANCE}"
 
@@ -248,12 +249,12 @@ accumulate -j account get keytest/tokens | jq -re .data.scratch 1> /dev/null || 
 success
 
 section "Send tokens from the lite token account to the ADI token account"
-wait-for cli-tx tx create ${LITE} keytest/tokens 5
+wait-for cli-tx tx create ${LITE_ACME} keytest/tokens 5
 BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
-[ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
+[ "$BALANCE" -eq 500000000 ] && success || die "${LITE_ACME} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
 
 section "Send tokens from the ADI token account to the lite token account using the multisig page"
-TXID=$(cli-tx tx create keytest/tokens keytest-2-0 ${LITE} 1)
+TXID=$(cli-tx tx create keytest/tokens keytest-2-0 ${LITE_ACME} 1)
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
@@ -303,9 +304,9 @@ cli-tx-sig tx sign keytest/tokens keytest-2-2 $TXID && die "Signed the transacti
 # success
 
 section "API v2 faucet (AC-570)"
-BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
-wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
-AFTER=$(accumulate -j account get ${LITE} | jq -r .data.balance)
+BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
+wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE_ACME}'"}}'
+AFTER=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
 [ $DIFF -eq 200000000000000 ] && success || die "Faucet did not work, want +200000000000000, got ${DIFF}"
 
@@ -337,20 +338,20 @@ accumulate get keytest/token-issuer 1> /dev/null || die "Cannot find keytest/tok
 success
 
 section "Issue tokens"
-LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
+LITE_TOK=$(echo $LITE_ACME | cut -d/ -f-3)/keytest/token-issuer
 wait-for cli-tx token issue keytest/token-issuer keytest-1-0 ${LITE_TOK} 123.0123456789
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 keytest tokens but has ${BALANCE}"
 
-section "Add credits to lite account (TOK)"
-wait-for cli-tx credits ${LITE} ${LITE_TOK} 100
-BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 100 ] && success || die "${LITE_TOK} should have at least 100 credits but only has ${BALANCE}"
+section "Send tokens to the lite account (TOK)"
+wait-for cli-tx tx create ${LITE_ACME} ${LITE_TOK} 10000 # 10000 ACME is 100 TOK
+BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
+[ "$BALANCE" -ge 2230123456789 ] && success || die "${LITE_TOK} should have at least 2230123456789 tokens but only has ${BALANCE}"
 
 section "Burn tokens"
 wait-for cli-tx token burn ${LITE_TOK} 100
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 230123456789 keytest tokens but has ${BALANCE}"
+[ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 keytest tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite keytest keytest-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
@@ -382,7 +383,7 @@ wait-for cli-tx adi create keytest keytest-1-0 keytest/sub1 keytest-2-0 keytest/
 accumulate adi get keytest/sub1 1> /dev/null && success || die "Cannot find keytest/sub1"
 
 section "Add credits to the sub ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/sub1/book/1 60000
+wait-for cli-tx credits ${LITE_ACME} keytest/sub1/book/1 60000
 BALANCE=$(accumulate -j page get keytest/sub1/book/1 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 60000 ] && success || die "keytest/sub1/book/1 should have 60000 credits but has ${BALANCE}"
 
@@ -432,11 +433,11 @@ RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "Create another ADI (manager)"
-wait-for cli-tx adi create ${LITE} manager manager manager/book
+wait-for cli-tx adi create ${LITE_ID} manager manager manager/book
 accumulate adi get manager 1> /dev/null && success || die "Cannot find manager"
 
 section "Add credits to manager's key page 1"
-wait-for cli-tx credits ${LITE} manager/book/1 1000
+wait-for cli-tx credits ${LITE_ACME} manager/book/1 1000
 BALANCE=$(accumulate -j page get manager/book/1 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100000 ] && success || die "manager/book/1 should have 100000 credits but has ${BALANCE}"
 
@@ -462,14 +463,14 @@ RESULT=$(accumulate -j get keytest/managed-tokens -j | jq -re '.data.authorities
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
 
+## For an unknown reason this fails in validate docker
 # section "Query the lite identity"
-# accumulate -s local get $(dirname $LITE) -j -d
-# accumulate -s local get $(dirname $LITE) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE)"
+# accumulate -s local get $(dirname $LITE_ACME) -j | jq -e -C --indent 0 .data && success || die "Failed to get $(dirname $LITE_ACME)"
 
 # section "Query the lite identity directory"
-# accumulate adi directory $(dirname $LITE) 0 10 1> /dev/null || die "Failed to get directory for $(dirname $LITE)"
-# TOTAL=$(accumulate -j adi directory $(dirname $LITE) 0 10 | jq -re .total)
-# [ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE), got $TOTAL"
+# accumulate adi directory $(dirname $LITE_ACME) 0 10 1> /dev/null || die "Failed to get directory for $(dirname $LITE_ACME)"
+# TOTAL=$(accumulate -j adi directory $(dirname $LITE_ACME) 0 10 | jq -re .total)
+# [ "$TOTAL" -eq 2 ] && success || die "Expected directory 2 entries for $(dirname $LITE_ACME), got $TOTAL"
 
 section "Create ADI Data Account with wait"
 accumulate account create data --wait 1m keytest keytest-1-0 keytest/data1 1> /dev/null || die "Failed to create account"
@@ -480,18 +481,18 @@ RESULT=$(accumulate -j oracle  | jq -re .price)
 [ "$RESULT" -ge 0 ] && success || die "Expected 500, got $RESULT"
 
 section "Transaction with Memo"
-TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1 --memo memo)
+TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE_ACME} 1 --memo memo)
 wait-for-tx $TXID
 MEMO=$(accumulate -j tx get $TXID | jq -re .transaction.header.memo) || die "Failed to query memo"
 [ "$MEMO" == "memo" ] && success || die "Expected memo, got $MEMO"
 
 section "Refund on expensive synthetic txn failure"
-BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-wait-for --no-check cli-tx adi create ${LITE} keytest keytest-1-0 keytest/book
+BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
+wait-for --no-check cli-tx adi create ${LITE_ID} keytest keytest-1-0 keytest/book
 echo "sleeping for 10 sec"
 sleep 10 &
 wait
-BALANCE1=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
+BALANCE1=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
 BALANCE=$((BALANCE-100))
 [ "$BALANCE" -eq "$BALANCE1" ] && success || die "Expected $BALANCE, got $BALANCE1"
 
