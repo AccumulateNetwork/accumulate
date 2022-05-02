@@ -51,7 +51,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 
 	return NewTransaction().
 		WithPrincipal(from).
-		WithSigner(from, 1).
+		WithSigner(from.RootIdentity(), 1).
 		WithTimestamp(1).
 		WithBody(&send).
 		Initiate(protocol.SignatureTypeLegacyED25519, sponsor).
@@ -59,14 +59,24 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
-	url := AcmeLiteAddressTmPriv(key).String()
-	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
+	url := AcmeLiteAddressTmPriv(key)
+	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
+	if err != nil {
+		return err
+	}
+	liteIdUrl := url.RootIdentity()
+	return CreateLiteIdentity(db, liteIdUrl.String(), 0)
 }
 
 func AddCredits(db DB, account *url.URL, credits float64) error {
 	state, err := db.Account(account).GetState()
 	if err != nil {
 		return err
+	}
+	switch state.Type() {
+	case protocol.AccountTypeLiteIdentity, protocol.AccountTypeKeyPage:
+	default:
+		return fmt.Errorf("%s does not refer to a lite identity", account.String())
 	}
 
 	state.(protocol.AccountWithCredits).CreditCredits(uint64(credits * protocol.CreditPrecision))
@@ -79,8 +89,8 @@ func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, cre
 	if err != nil {
 		return err
 	}
-
-	return AddCredits(db, url, credits)
+	liteIdUrl := url.RootIdentity()
+	return CreateLiteIdentity(db, liteIdUrl.String(), credits)
 }
 
 func WriteStates(db DB, chains ...protocol.Account) error {
@@ -172,6 +182,20 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, cre
 	}
 
 	return AddCredits(db, u.JoinPath("book0/1"), credits)
+}
+
+func CreateLiteIdentity(db DB, accUrl string, credits float64) error {
+	u, err := url.Parse(accUrl)
+	if err != nil {
+		return err
+	}
+
+	var chain protocol.Account
+	account := new(protocol.LiteIdentity)
+	account.Url = u
+	account.CreditBalance = uint64(credits * protocol.CreditPrecision)
+	chain = account
+	return db.Account(u).PutState(chain)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
