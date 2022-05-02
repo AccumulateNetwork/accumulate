@@ -7,8 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type UpdateKeyPage struct {
-}
+type UpdateKeyPage struct{}
 
 func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
@@ -71,7 +70,10 @@ func updateKeyPage(st *StateManager, tx *Delivery, execute bool) error {
 	}
 
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
 	if execute && protocol.IsDnUrl(st.nodeUrl) && page.KeyBook().Equal(st.nodeUrl.JoinPath(protocol.OperatorBook)) {

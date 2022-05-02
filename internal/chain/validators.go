@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -59,11 +60,14 @@ func addValidator(st *StateManager, env *Delivery, execute bool) error {
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
-
+	ratio := loadValidatorsThresholdRatio(st, st.nodeUrl.JoinPath(protocol.Globals))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Add the validator
 	st.AddValidator(body.PubKey)
@@ -81,7 +85,6 @@ func removeValidator(st *StateManager, env *Delivery, execute bool) error {
 	if err != nil {
 		return err
 	}
-
 	// Find the key
 	keyHash := sha256.Sum256(body.PubKey)
 	index, _, found := page.EntryByKeyHash(keyHash[:])
@@ -98,11 +101,15 @@ func removeValidator(st *StateManager, env *Delivery, execute bool) error {
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
 
+	ratio := loadValidatorsThresholdRatio(st, st.nodeUrl.JoinPath(protocol.Globals))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Remove the validator
 	st.DisableValidator(body.PubKey)
@@ -140,7 +147,10 @@ func updateValidator(st *StateManager, env *Delivery, execute bool) error {
 
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Update the validator
 	st.DisableValidator(body.PubKey)
@@ -183,4 +193,29 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 	}
 
 	return page, nil
+}
+
+func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
+	acc := st.stateCache.batch.Account(url)
+
+	data, err := acc.Data()
+	if err != nil {
+		st.logger.Error("Failed to get globals data chain", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	_, entry, err := data.GetLatest()
+	if err != nil {
+		st.logger.Error("Failed to get latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	globals := new(protocol.NetworkGlobals)
+	err = globals.UnmarshalBinary(entry.Data[0])
+	if err != nil {
+		st.logger.Error("Failed to decode latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	return globals.ValidatorThreshold.GetFloat()
 }

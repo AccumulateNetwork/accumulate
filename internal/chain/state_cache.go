@@ -26,6 +26,8 @@ type stateCache struct {
 	chains     map[[32]byte]protocol.Account
 	indices    map[[32]byte]*writeIndex
 	network    config.Network
+
+	Pretend bool
 }
 
 func newStateCache(network config.Network, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
@@ -153,4 +155,71 @@ func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory 
 	}
 
 	return mdi.Put(data)
+}
+
+func (st *stateCache) Create(accounts ...protocol.Account) error {
+	return st.createOrUpdate(false, accounts)
+}
+
+// Update queues a record for storage in the database. The queued update will
+// fail if the record does not already exist, unless it is created by a
+// synthetic transaction, or the record is a transaction.
+func (st *stateCache) Update(accounts ...protocol.Account) error {
+	// Update: update an existing record. Non-synthetic transactions are
+	// not allowed to create accounts, so we must check if the record
+	// already exists. The record may have been added to the DB
+	// transaction already, so in order to actually know if the record
+	// exists on disk, we have to use GetPersistentEntry.
+	return st.createOrUpdate(true, accounts)
+}
+
+func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account) error {
+	isCreate := !isUpdate
+	for _, account := range accounts {
+		rec := st.batch.Account(account.GetUrl())
+		_, err := rec.GetState()
+		switch {
+		case err != nil && !errors.Is(err, storage.ErrNotFound):
+			return fmt.Errorf("failed to check for an existing record: %v", err)
+
+		case err == nil && isCreate:
+			return fmt.Errorf("account %v already exists", account.GetUrl())
+
+		case st.txType.IsSynthetic() || st.txType.IsInternal():
+			// Synthetic and internal transactions are allowed to create accounts
+
+			// TODO Make synthetic transactions call Create
+
+		case err != nil && isUpdate:
+			return fmt.Errorf("account %v does not exist", account.GetUrl())
+		}
+
+		if st.Pretend {
+			continue
+		}
+
+		// Update/Create the state
+		err = rec.PutState(account)
+		if err != nil {
+			return fmt.Errorf("failed to update state of %q: %v", account.GetUrl(), err)
+		}
+
+		// Add to the account's main chain
+		err = st.state.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+		if err != nil {
+			return fmt.Errorf("failed to update main chain of %q: %v", account.GetUrl(), err)
+		}
+
+		// Add it to the directory
+		if isCreate {
+			u := account.GetUrl()
+			err = st.AddDirectoryEntry(u.Identity(), u)
+			if err != nil {
+				return fmt.Errorf("failed to add a directory entry for %q: %v", u, err)
+			}
+		}
+
+	}
+
+	return nil
 }

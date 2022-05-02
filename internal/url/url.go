@@ -204,6 +204,11 @@ func (u *URL) Identity() *URL {
 	return v
 }
 
+// IsRootIdentity returns true if the URL is a root identity.
+func (u *URL) IsRootIdentity() bool {
+	return u.Path == "" || u.Path == "/"
+}
+
 // Parent gets the URL's parent path, or returns the original URL and false.
 func (u *URL) Parent() (*URL, bool) {
 	v := new(URL)

@@ -2,22 +2,30 @@
 
 SyntheticOrigin:
   fields:
+    - name: Cause
+      description: is the hash of the transaction that produced this transaction
+      type: chain
     - name: Source
-      description: is the principal of the transaction that produced this transaction
+      description: is the principal of the cause
       type: url
       pointer: true
-    - name: Cause
-      type: chain
+    - name: Initiator
+      description: is the initiator of the cause
+      type: url
+      pointer: true
+    - name: FeeRefund
+      description: is portion of the cause's fee that will be refunded if this transaction fails
+      type: uint
 
-SyntheticCreateChain:
+SyntheticCreateIdentity:
   union: { type: transaction }
   embeddings:
     - SyntheticOrigin
   fields:
-    - name: Chains
+    - name: Accounts
+      type: Account
+      marshal-as: union
       repeatable: true
-      type: ChainParams
-      marshal-as: reference
 
 SyntheticWriteData:
   union: { type: transaction }
@@ -93,18 +101,6 @@ SyntheticMirror:
       repeatable: true
       type: AnchoredRecord
       marshal-as: reference
-
-SyntheticReceipt:
-  union: { type: transaction }
-  embeddings:
-    - SyntheticOrigin
-  fields:
-    - name: SynthTxHash
-      type: chain
-    - name: Status
-      type: TransactionStatus
-      marshal-as: reference
-      pointer: true
 
 SyntheticForwardTransaction:
   union: { type: transaction, value: SyntheticForwardTransaction }

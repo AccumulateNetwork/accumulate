@@ -67,36 +67,9 @@ func NewStateManager(batch *database.Batch, network config.Network, signerUrl *u
 
 // commit writes pending records to the database.
 func (m *StateManager) Commit() (*ProcessTransactionState, error) {
-	records, err := m.stateCache.Commit()
+	_, err := m.stateCache.Commit()
 	if err != nil {
 		return nil, err
-	}
-
-	// Group synthetic create chain transactions per identity. All of the
-	// records created by a given synthetic create chain MUST belong to the same
-	// routing location, so grouping by ID is safe. Since routing locations will
-	// change as the network grows, we cannot guarantee that two different
-	// identities will route the same, so grouping by route is not safe.
-
-	create := map[string]*protocol.SyntheticCreateChain{}
-	for _, record := range records {
-		data, err := record.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-
-		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := record.GetUrl().RootIdentity()
-		scc, ok := create[id.String()]
-		if ok {
-			scc.Chains = append(scc.Chains, params)
-			continue
-		}
-
-		scc = new(protocol.SyntheticCreateChain)
-		scc.Chains = []protocol.ChainParams{params}
-		create[id.String()] = scc
-		m.Submit(id, scc)
 	}
 
 	err = m.batch.Commit()
@@ -113,17 +86,13 @@ func (m *StateManager) Discard() {
 
 // Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
-	if m.txType.IsSynthetic() && m.txType != protocol.TransactionTypeSyntheticReceipt {
+	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	if url == nil {
 		panic("No destination URL specified!")
 	}
 
-	swo, ok := body.(protocol.SynthTxnWithOrigin)
-	if ok {
-		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
-	}
 	m.state.DidProduceTxn(url, body)
 }
 

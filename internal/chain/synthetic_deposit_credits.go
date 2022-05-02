@@ -24,7 +24,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 
 	var account protocol.Signer
 	switch origin := st.Origin.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		account = origin
 
 	case *protocol.KeyPage:
@@ -35,6 +35,9 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 	}
 
 	account.CreditCredits(body.Amount)
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
 }
