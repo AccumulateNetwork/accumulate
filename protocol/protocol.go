@@ -258,24 +258,29 @@ func LiteAuthorityForKey(pubKey []byte, signatureType SignatureType) *url.URL {
 }
 
 // ParseLiteIdentity extracts the key hash and token URL from a lite identity
-// account URL. Returns `nil, nil, nil` if the URL is not a lite identity
-// URL. Returns an error if the checksum is invalid.
-func ParseLiteIdentity(u *url.URL) ([]byte, *url.URL, error) {
-	b, err := hex.DecodeString(u.Hostname())
+// account URL. Returns `nil, nil` if the URL is not a lite identity URL.
+// Returns an error if the checksum is invalid.
+func ParseLiteIdentity(u *url.URL) ([]byte, error) {
+	if u.Path != "" && u.Path != "/" {
+		// A URL with a non-empty path cannot be a lite identity
+		return nil, nil
+	}
+
+	authority := u.Authority
+	b, err := hex.DecodeString(authority)
 	if err != nil || len(b) != 24 {
-		// Hostname is not hex or is the wrong length, therefore the URL is not lite
-		return nil, nil, nil
+		// Hostname is not hex or is the wrong length, therefore the URL is not
+		// lite
+		return nil, nil
 	}
 
-	v := *u
-	v.Authority = u.Authority[:40]
-	checkSum := sha256.Sum256([]byte(v.Authority))
+	authority = authority[:40]
+	checkSum := sha256.Sum256([]byte(authority))
 	if !bytes.Equal(b[20:], checkSum[28:]) {
-		return nil, nil, errors.New("invalid checksum")
+		return nil, errors.New("invalid checksum")
 	}
 
-	v.Path = ""
-	return b[:20], &v, nil
+	return b[:20], nil
 }
 
 // ParseLiteTokenAddress extracts the key hash and token URL from an lite token
