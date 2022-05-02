@@ -12,10 +12,10 @@ type KeyEntry interface {
 }
 
 // GetLastUsedOn returns LastUsedOn.
-func (l *LiteTokenAccount) GetLastUsedOn() uint64 { return l.LastUsedOn }
+func (li *LiteIdentity) GetLastUsedOn() uint64 { return li.LastUsedOn }
 
 // SetLastUsedOn sets LastUsedOn.
-func (l *LiteTokenAccount) SetLastUsedOn(timestamp uint64) { l.LastUsedOn = timestamp }
+func (li *LiteIdentity) SetLastUsedOn(timestamp uint64) { li.LastUsedOn = timestamp }
 
 // GetLastUsedOn returns LastUsedOn.
 func (k *KeySpec) GetLastUsedOn() uint64 { return k.LastUsedOn }
