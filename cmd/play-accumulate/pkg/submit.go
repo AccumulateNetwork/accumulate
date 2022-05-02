@@ -78,7 +78,7 @@ func (b bldTxn) WithSigner(url Urlish, version ...uint64) bldTxn {
 
 	signerUrl := b.b.Url
 	if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
-		signerUrl = signerUrl.Identity()
+		signerUrl = signerUrl.RootIdentity()
 	}
 
 	var signer protocol.Signer

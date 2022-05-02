@@ -201,7 +201,7 @@ func (x *Executor) validateSigners(batch *database.Batch, transaction *protocol.
 		// If the user specifies a lite token address, convert it to a lite
 		// identity
 		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
-			signerUrl = signerUrl.Identity()
+			signerUrl = signerUrl.RootIdentity()
 		}
 
 		signer, err := loadSigner(batch, location, signerUrl, fwdsig)

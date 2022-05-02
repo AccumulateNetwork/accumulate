@@ -71,7 +71,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		case *protocol.LiteIdentity, *protocol.KeyPage:
 			// OK
 		case *protocol.LiteTokenAccount:
-			recipient = recv.Url.Identity()
+			recipient = recv.Url.RootIdentity()
 		default:
 			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteIdentity, protocol.AccountTypeKeyPage, recv.Type())
 		}
