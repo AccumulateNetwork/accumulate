@@ -109,7 +109,7 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	_, err = tc.execute(t, "get "+kr.LiteAccount.String())
 	require.NoError(t, err)
 
-	_, err = tc.executeTx(t, "credits "+kr.LiteAccount.String()+" "+kr.LiteAccount.String()+" 100")
+	_, err = tc.executeTx(t, "credits "+kr.LiteAccount.String()+" "+kr.LiteAccount.RootIdentity().String()+" 100")
 	require.NoError(t, err)
 
 	legacyAccount := KeyResponse{}
