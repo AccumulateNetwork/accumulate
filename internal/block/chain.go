@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+var _ PrincipalValidator = (*SyntheticDepositCredits)(nil)
 var _ SignatureValidator = (*CreateIdentity)(nil)
 var _ PrincipalValidator = (*CreateIdentity)(nil)
 var _ SignatureValidator = (*WriteData)(nil)

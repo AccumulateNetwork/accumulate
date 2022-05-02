@@ -342,7 +342,7 @@ func LabelForLiteIdentity(label string) (string, bool) {
 		return label, false
 	}
 
-	key, _, err := protocol.ParseLiteIdentity(u)
+	key, err := protocol.ParseLiteIdentity(u)
 	if key == nil || err != nil {
 		return label, false
 	}
