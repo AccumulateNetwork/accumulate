@@ -198,6 +198,12 @@ func (x *Executor) validateSigners(batch *database.Batch, transaction *protocol.
 			signerUrl = signature.GetSigner()
 		}
 
+		// If the user specifies a lite token address, convert it to a lite
+		// identity
+		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+			signerUrl = signerUrl.RootIdentity()
+		}
+
 		signer, err := loadSigner(batch, location, signerUrl, fwdsig)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
@@ -326,9 +332,9 @@ func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *
 	}
 
 	switch signer := signer.(type) {
-	case *protocol.LiteTokenAccount:
+	case *protocol.LiteIdentity:
 		// Otherwise a lite token account is only allowed to sign for itself
-		if !signer.Url.Equal(transaction.Header.Principal) {
+		if !signer.Url.Equal(transaction.Header.Principal.RootIdentity()) {
 			return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.Url, transaction.Header.Principal)
 		}
 
@@ -550,7 +556,7 @@ func (x *Executor) processNormalSignature(batch *database.Batch, delivery *chain
 	}
 
 	// Store changes to the signer
-	err = batch.Account(signature.GetSigner()).PutState(signers[0])
+	err = batch.Account(signers[0].GetUrl()).PutState(signers[0])
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "store signer: %w", err)
 	}
