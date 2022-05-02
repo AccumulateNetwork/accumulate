@@ -168,6 +168,7 @@ func GetTokenAccount(url string) (string, error) {
 	}
 
 	if res.Type != protocol.AccountTypeTokenAccount.String() && res.Type != protocol.AccountTypeLiteTokenAccount.String() &&
+		res.Type != protocol.AccountTypeLiteIdentity.String() &&
 		res.Type != protocol.AccountTypeDataAccount.String() && res.Type != protocol.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}

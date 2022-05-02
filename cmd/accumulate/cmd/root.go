@@ -112,7 +112,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
 
-	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.PersistentPreRunE = func(*cobra.Command, []string) error {
 		switch serverAddr {
 		case "local":
 			serverAddr = "http://127.0.1.1:26660/v2"

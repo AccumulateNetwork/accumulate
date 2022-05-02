@@ -76,9 +76,10 @@ func (s *Session) Show(v interface{}) {
 		dir, _ := s.TryGetDirectory(v.Url)
 		str = fmt.Sprintf(
 			"Lite Identity\n"+
-				"    Url:       %v\n",
+				"    Url:       %v\n"+
+				"    Credits:    %v\n",
 			v.Url,
-		)
+			protocol.FormatAmount(v.CreditBalance, protocol.CreditPrecisionPower))
 		for i, url := range dir {
 			str += fmt.Sprintf("    Entry %d:   %s\n", i+1, url)
 		}
@@ -87,12 +88,10 @@ func (s *Session) Show(v interface{}) {
 			"Lite Token Account\n"+
 				"    Identity:   %v\n"+
 				"    Issuer:     %v\n"+
-				"    Balance:    %v\n"+
-				"    Credits:    %v\n",
+				"    Balance:    %v\n",
 			v.Url.Authority,
 			v.TokenUrl.ShortString(),
 			s.formatBalanceForIssuer(v.TokenUrl, &v.Balance),
-			protocol.FormatAmount(v.CreditBalance, protocol.CreditPrecisionPower),
 		)
 	case *protocol.ADI:
 		dir, _ := s.TryGetDirectory(v.Url)
