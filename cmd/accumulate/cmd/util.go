@@ -179,7 +179,7 @@ func IsLiteIdentity(url string) bool {
 	if err != nil {
 		log.Fatal(err)
 	}
-	key, _, _ := protocol.ParseLiteIdentity(u)
+	key, _ := protocol.ParseLiteIdentity(u)
 	return key != nil
 }
 
