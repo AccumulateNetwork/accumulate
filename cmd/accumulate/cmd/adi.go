@@ -180,7 +180,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	idc.KeyHash = kh[:]
 	idc.KeyBookUrl = bookUrl
 
-	res, err := dispatchTxAndWait("create-adi", &idc, nil, origin, signer)
+	res, err := dispatchTxAndWait(&idc, nil, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}

@@ -157,7 +157,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 	params.SupplyLimit = supplyLimit
-	return dispatchTxAndPrintResponse("create-token", &params, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
 }
 
 func IssueTokenToRecipient(origin string, args []string) (string, error) {
@@ -189,7 +189,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Recipient = recipient
 	params.Amount.Set(amt)
 
-	return dispatchTxAndPrintResponse("issue-tokens", &params, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
 }
 
 func BurnTokens(origin string, args []string) (string, error) {
@@ -221,5 +221,5 @@ func BurnTokens(origin string, args []string) (string, error) {
 	params := protocol.BurnTokens{}
 	params.Amount.Set(amt)
 
-	return dispatchTxAndPrintResponse("burn-tokens", &params, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
 }
