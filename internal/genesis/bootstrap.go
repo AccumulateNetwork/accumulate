@@ -11,6 +11,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/factom"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -21,10 +22,11 @@ import (
 )
 
 type InitOpts struct {
-	Network     config.Network
-	Validators  []tmtypes.GenesisValidator
-	GenesisTime time.Time
-	Logger      log.Logger
+	Network             config.Network
+	Validators          []tmtypes.GenesisValidator
+	GenesisTime         time.Time
+	FactomAddressesFile string
+	Logger              log.Logger
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
@@ -180,6 +182,22 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				lite.TokenUrl = protocol.AcmeUrl()
 				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
 				records = append(records, lite)
+			}
+			if opts.FactomAddressesFile != "" {
+				factomAddresses, err := factom.LoadFactomAddressesAndBalances(opts.FactomAddressesFile)
+				if err != nil {
+					return err
+				}
+				for _, factomAddress := range factomAddresses {
+					subnet, err := routing.RouteAccount(&opts.Network, factomAddress.Address)
+					if err == nil && subnet == opts.Network.LocalSubnetID {
+						lite := new(protocol.LiteTokenAccount)
+						lite.Url = factomAddress.Address
+						lite.TokenUrl = protocol.AcmeUrl()
+						lite.Balance = *big.NewInt(5 * factomAddress.Balance)
+						records = append(records, lite)
+					}
+				}
 			}
 		}
 
