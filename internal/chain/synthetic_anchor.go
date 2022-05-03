@@ -2,6 +2,7 @@ package chain
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -45,23 +46,10 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// When on a BVN, process OperatorUpdates when present
-	if protocol.IsBvnUrl(st.nodeUrl) {
-		for _, opUpd := range body.OperatorUpdates {
-			var page *protocol.KeyPage
-			err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.OperatorBook, "/2"), &page)
-			if err != nil {
-				return nil, fmt.Errorf("invalid key page: %v", err)
-			}
-
-			updateKeyPage := &UpdateKeyPage{}
-			err = updateKeyPage.executeOperation(page, 1, 0, opUpd)
-			if err != nil {
-				return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
-			}
-			err = st.Update(page)
-			if err != nil {
-				return nil, fmt.Errorf("unable to update main ledger: %w", err)
-			}
+	if len(body.OperatorUpdates) > 0 && protocol.IsBvnUrl(st.nodeUrl) {
+		result, err := executeOperatorUpdates(st, body)
+		if err != nil {
+			return result, err
 		}
 	}
 
@@ -134,5 +122,44 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
+	return nil, nil
+}
+
+func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (protocol.TransactionResult, error) {
+	for _, opUpd := range body.OperatorUpdates {
+		bookUrl := st.nodeUrl.JoinPath(protocol.OperatorBook)
+
+		var page1 *protocol.KeyPage
+		err := st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 0), &page1)
+		if err != nil {
+			return nil, fmt.Errorf("invalid key page: %v", err)
+		}
+
+		// Validate source
+		dnSpec := new(protocol.KeySpec)
+		dnSpec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
+		kh := sha256.Sum256(dnSpec.Owner.AccountID())
+		dnSpec.PublicKeyHash = kh[:]
+		srcSpec := page1.Keys[0]
+		if !dnSpec.Equal(srcSpec) {
+			return nil, fmt.Errorf("source is not from DN but from %q", srcSpec.Owner)
+		}
+
+		var page2 *protocol.KeyPage
+		err = st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 1), &page2)
+		if err != nil {
+			return nil, fmt.Errorf("invalid key page: %v", err)
+		}
+
+		updateKeyPage := &UpdateKeyPage{}
+		err = updateKeyPage.executeOperation(page2, 1, 0, opUpd)
+		if err != nil {
+			return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
+		}
+		err = st.Update(page2)
+		if err != nil {
+			return nil, fmt.Errorf("unable to update main ledger: %w", err)
+		}
+	}
 	return nil, nil
 }
