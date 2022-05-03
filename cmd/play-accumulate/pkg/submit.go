@@ -135,9 +135,6 @@ func (b bldTxn) Submit() *submittedTxn {
 		b.s.Abortf("Failed to submit transaction: %v", err)
 	}
 
-	// data, _ := json.Marshal(env)
-	// fmt.Printf("Submitting %s\n", data)
-
 	hash := *(*[32]byte)(b.transaction.GetHash())
 	sub := new(submittedTxn)
 	sub.s = b.s
