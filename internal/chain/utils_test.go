@@ -22,11 +22,9 @@ func NewStateManagerForTest(t *testing.T, db *database.Database, envelope *proto
 
 	txid := types.Bytes(delivery[0].Transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
-	m.SignatorUrl = delivery[0].Signatures[0].GetSigner()
 	m.OriginUrl = delivery[0].Transaction.Header.Principal
 	m.stateCache = *newStateCache(protocol.SubnetUrl(t.Name()), delivery[0].Transaction.Body.Type(), txid, db.Begin(true))
 
-	require.NoError(t, m.LoadUrlAs(m.SignatorUrl, &m.Signator))
 	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
 	return m, delivery[0]
 }
