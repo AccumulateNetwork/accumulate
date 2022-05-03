@@ -45,6 +45,19 @@ func TestFee(t *testing.T) {
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, protocol.FeeSendTokens+protocol.FeeWriteData*4, fee)
+		require.Equal(t, protocol.FeeSendTokens+protocol.FeeData*4, fee)
+	})
+
+	t.Run("Scratch data", func(t *testing.T) {
+		env := acctesting.NewTransaction().
+			WithPrincipal(protocol.AcmeUrl()).
+			WithSigner(url.MustParse("foo/book/1"), 1).
+			WithCurrentTimestamp().
+			WithBody(&protocol.WriteData{Scratch: true}).
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		env.Transaction[0].Header.Metadata = make([]byte, 1024)
+		fee, err := ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+		require.Equal(t, protocol.FeeScratchData*5, fee)
 	})
 }

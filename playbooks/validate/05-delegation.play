@@ -1,0 +1,96 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+---
+
+# Identity (ADI)
+
+## Setup
+
+```go
+liteKey := GenerateKey()
+liteAddr := LiteAddress(liteKey, ACME)
+Faucet(liteAddr).
+	Wait().Ok()
+Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits(liteAddr, 10000).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+Show("Create lite account ✔")
+
+ethanKey := GenerateKey("ethan")
+paulKey := GenerateKey("paul")
+txn1 := Transaction(liteAddr).
+	WithSigner(liteAddr).
+	CreateIdentity("ethan").
+		WithKey(ethanKey).
+		WithKeyBook("ethan/book").
+	Initiate(liteKey).
+	Submit()
+txn2 := Transaction(liteAddr).
+	WithSigner(liteAddr).
+	CreateIdentity("paul").
+		WithKey(paulKey).
+		WithKeyBook("paul/book").
+	Initiate(liteKey).
+	Submit()
+txn1.Wait().Ok()
+txn2.Wait().Ok()
+Show("Create ADIs ✔")
+
+txn1 = Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits("ethan/book/1", 10000).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit()
+txn2 = Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits("paul/book/1", 10000).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit()
+txn1.Wait().Ok()
+txn2.Wait().Ok()
+Show("Add credits to key pages ✔")
+
+txn1 = Transaction("ethan").
+	WithSigner("ethan/book/1", 1).
+	CreateTokenAccount("ethan/tokens", "ACME").
+	Initiate(ethanKey).
+	Submit()
+txn2 = Transaction("ethan/book/1").
+	WithSigner("ethan/book/1", 1).
+	UpdateKeyPage().
+		Add(KeyEntry().WithOwner("paul/book")).
+	Initiate(ethanKey).
+	Submit()
+txn1.Wait().Ok()
+txn2.Wait().Ok()
+Show("Create token account and delegated key page entry ✔")
+
+Transaction(liteAddr).
+	WithSigner(liteAddr).
+	SendTokens().
+		To("ethan/tokens", 10).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+Show("Fund token account ✔")
+```
+## Send tokens using a delegated signature
+
+```go{ id: 2 }
+Show(Transaction("ethan/tokens").
+	WithSigner("paul/book/1", 1).
+	WithDelegator("ethan/book/1").
+	SendTokens().
+		To(liteAddr, 1).
+	Initiate(paulKey).
+	Submit().Wait().Ok())
+Show(Get("ethan/tokens"))
+```

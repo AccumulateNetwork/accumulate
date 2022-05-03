@@ -78,6 +78,9 @@ WriteData:
     - name: Entry
       type: DataEntry
       marshal-as: reference
+    - name: Scratch
+      type: bool
+      optional: true
 
 WriteDataTo:
   union: { type: transaction }

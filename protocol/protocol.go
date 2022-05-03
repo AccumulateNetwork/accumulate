@@ -69,11 +69,14 @@ const (
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
-	// ValidatorMofNFactor is the factor of how many of the validator signatures are required respective of their total number
-	ValidatorMofNFactor = 2.0 / 3.0
+	// FallbackValidatorThreshold is the factor of how many of the validator signatures are required respective of their total number
+	FallbackValidatorThreshold = 2.0 / 3.0
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
+
+	//Globals is the path to the Directory network's Mutable Protocol costants data account
+	Globals = "globals"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
@@ -124,7 +127,7 @@ const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
-	u := liteAuthorityFromHash(chainId)
+	u := LiteAuthorityForHash(chainId)
 	if u == nil {
 		return nil, fmt.Errorf("cannot create lite authority")
 	}
@@ -132,8 +135,8 @@ func LiteDataAddress(chainId []byte) (*url.URL, error) {
 }
 
 // ParseLiteDataAddress extracts the partial chain id from a lite chain URL.
-// Returns `nil, err if the URL does not appear to be a lite token chain
-// URL. Returns an error if the checksum is invalid.
+// Returns `nil, err` if the URL does not appear to be a lite token chain URL.
+// Returns an error if the checksum is invalid.
 func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 	if u.Path != "" {
 		// A chain URL can have no path
@@ -198,8 +201,9 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string, signatureType Signature
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	return liteTokenAddress(pubKey, tokenUrl, signatureType), nil
+	return LiteAuthorityForKey(pubKey, signatureType).JoinPath(tokenUrl.ShortString()), nil
 }
+
 func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
@@ -227,13 +231,13 @@ func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, 
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	liteUrl := liteAuthorityFromHash(pubKeyHash)
+	liteUrl := LiteAuthorityForHash(pubKeyHash)
 	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
 
 	return liteUrl, nil
 }
 
-func liteAuthorityFromHash(pubKeyHash []byte) *url.URL {
+func LiteAuthorityForHash(pubKeyHash []byte) *url.URL {
 	liteUrl := new(url.URL)
 	keyStr := fmt.Sprintf("%x", pubKeyHash[:20])
 	checkSum := sha256.Sum256([]byte(keyStr))
@@ -242,7 +246,7 @@ func liteAuthorityFromHash(pubKeyHash []byte) *url.URL {
 	return liteUrl
 }
 
-func liteTokenAddress(pubKey []byte, tokenUrl *url.URL, signatureType SignatureType) *url.URL {
+func LiteAuthorityForKey(pubKey []byte, signatureType SignatureType) *url.URL {
 	var keyHash []byte
 	if signatureType == SignatureTypeRCD1 {
 		keyHash = GetRCDHashFromPublicKey(pubKey, 1)
@@ -250,16 +254,40 @@ func liteTokenAddress(pubKey []byte, tokenUrl *url.URL, signatureType SignatureT
 		h := sha256.Sum256(pubKey)
 		keyHash = h[:]
 	}
-	liteUrl := liteAuthorityFromHash(keyHash[:])
-	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
-	return liteUrl
+	return LiteAuthorityForHash(keyHash[:])
+}
+
+// ParseLiteIdentity extracts the key hash and token URL from a lite identity
+// account URL. Returns `nil, nil` if the URL is not a lite identity URL.
+// Returns an error if the checksum is invalid.
+func ParseLiteIdentity(u *url.URL) ([]byte, error) {
+	if u.Path != "" && u.Path != "/" {
+		// A URL with a non-empty path cannot be a lite identity
+		return nil, nil
+	}
+
+	authority := u.Authority
+	b, err := hex.DecodeString(authority)
+	if err != nil || len(b) != 24 {
+		// Hostname is not hex or is the wrong length, therefore the URL is not
+		// lite
+		return nil, nil
+	}
+
+	authority = authority[:40]
+	checkSum := sha256.Sum256([]byte(authority))
+	if !bytes.Equal(b[20:], checkSum[28:]) {
+		return nil, errors.New("invalid checksum")
+	}
+
+	return b[:20], nil
 }
 
 // ParseLiteTokenAddress extracts the key hash and token URL from an lite token
 // account URL. Returns `nil, nil, nil` if the URL is not an lite token account
 // URL. Returns an error if the checksum is invalid.
 func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
-	if u.Path == "" || u.Path[0] != '/' || len(u.Path) == 1 {
+	if u.Path == "" || len(u.Path) == 1 {
 		// A URL with an empty or invalid path cannot be lite
 		return nil, nil, nil
 	}
@@ -279,13 +307,16 @@ func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 
 	// Reuse V as the token URL
 	i := strings.IndexRune(u.Path[1:], '/')
-	if i < 0 {
-		v.Authority = u.Path[1:]
-		v.Path = ""
-	} else {
+	if i >= 0 {
 		i++
 		v.Authority = u.Path[1:i]
 		v.Path = u.Path[i:]
+	} else if u.Path[0] == '/' {
+		v.Authority = u.Path[1:]
+		v.Path = ""
+	} else {
+		v.Authority = u.Path
+		v.Path = ""
 	}
 	return b[:20], &v, nil
 }
@@ -414,9 +445,8 @@ func IndexChain(name string, major bool) string {
 	return "minor-" + name + "-index"
 }
 
-func GetValidatorsMOfN(nrOfValidators int) uint64 {
-	threshold := float64(nrOfValidators) * ValidatorMofNFactor
-	return uint64(math.Round(threshold))
+func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
+	return uint64(math.Round(ratio * float64(validatorCount)))
 }
 
 // AnchorChain returns the name of the intermediate anchor chain for the given

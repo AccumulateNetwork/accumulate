@@ -36,6 +36,9 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, err
 	}
 
-	st.Create(token)
+	err = st.Create(token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %v: %w", token.Url, err)
+	}
 	return nil, nil
 }

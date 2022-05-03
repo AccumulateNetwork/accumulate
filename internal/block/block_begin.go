@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -122,7 +123,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signerUrl, signer, nil, txn, x.logger)
+	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -267,6 +268,10 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction: %w", err)
 		}
 		txn := state.Transaction
+
+		if !bytes.Equal(hash, txn.GetHash()) {
+			return errors.Format(errors.StatusInternalError, "%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
+		}
 
 		// TODO Can we make this less hacky?
 		status, err := record.GetStatus()
