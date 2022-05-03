@@ -271,11 +271,9 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 			return nil, err
 		}
 		sig, err = signer.Initiate(env.Transaction[0])
-		txHash = env.Transaction[0].GetHash()
 	case payload == nil && txHash != nil:
 		body := new(protocol.RemoteTransaction)
 		body.Hash = *(*[32]byte)(txHash)
-		payload = body
 		txn := new(protocol.Transaction)
 		txn.Body = body
 		txn.Header.Principal = origin
