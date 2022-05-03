@@ -154,7 +154,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := getValidator[SignatureValidator](x, transaction.Body.Type())
+	val, ok := getValidator[SignerValidator](x, transaction.Body.Type())
 	if ok {
 		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
 		if err != nil {
