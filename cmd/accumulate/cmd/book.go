@@ -107,5 +107,5 @@ func CreateKeyBook(args []string) (string, error) {
 	ph := sha256.Sum256(pbkey)
 	publicKeyHash := ph[:]
 	keyBook.PublicKeyHash = publicKeyHash
-	return dispatchTxAndPrintResponse("create-key-book", &keyBook, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&keyBook, nil, originUrl, signer)
 }
