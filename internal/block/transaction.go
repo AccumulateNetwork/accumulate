@@ -57,7 +57,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Set up the state manager
-	st, err := chain.LoadStateManager(batch.Begin(true), x.Network, principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
+	st, err := chain.LoadStateManager(batch.Begin(true), x.Network.NodeUrl(), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
 	if err != nil {
 		return x.recordFailedTransaction(batch, transaction, err)
 	}

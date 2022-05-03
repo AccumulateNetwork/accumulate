@@ -14,80 +14,88 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 }
 
 func (UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return nil, updateKeyPage(st, tx, true)
+	return (UpdateKeyPage{}).Validate(st, tx)
 }
 
 func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return nil, updateKeyPage(st, tx, false)
-}
-
-func updateKeyPage(st *StateManager, tx *Delivery, execute bool) error {
 	body, ok := tx.Transaction.Body.(*protocol.UpdateKeyPage)
 	if !ok {
-		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), tx.Transaction.Body)
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
 	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
 	if !ok {
-		return fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
+		return nil, fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
 	}
 
 	var book *protocol.KeyBook
 	err := st.LoadUrlAs(bookUrl, &book)
 	if err != nil {
-		return fmt.Errorf("invalid key book: %v", err)
+		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
 
 	if book.BookType == protocol.BookTypeValidator {
-		return fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
+		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
 	}
 
 	pagePri, ok := getKeyPageIndex(page.Url)
 	if !ok {
-		return fmt.Errorf("cannot parse key page URL: %v", page.Url)
+		return nil, fmt.Errorf("cannot parse key page URL: %v", page.Url)
 	}
 
 	signerPri, ok := getKeyPageIndex(st.SignatorUrl)
 	if !ok {
-		return fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
+		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
 	}
 
 	// 0 is the highest priority, followed by 1, etc
 	if signerPri > pagePri {
-		return fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
+		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
 	}
 
 	for _, op := range body.Operation {
 		err = UpdateKeyPage{}.executeOperation(page, pagePri, signerPri, op)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
-		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 
 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
-	if execute && protocol.IsDnUrl(st.nodeUrl) && page.KeyBook().Equal(st.nodeUrl.JoinPath(protocol.OperatorBook)) {
-		var ledgerState *protocol.InternalLedger
-		err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+	if protocol.IsDnUrl(st.nodeUrl) && page.KeyBook().Equal(st.nodeUrl.JoinPath(protocol.OperatorBook)) {
+		err = operatorUpdatesToLedger(st, err, body)
 		if err != nil {
-			return fmt.Errorf("unable to load main ledger: %w", err)
+			return nil, err
 		}
-
-		for _, op := range body.Operation {
-			ledgerState.OperatorUpdates = append(ledgerState.OperatorUpdates, op)
-		}
-		st.Update(ledgerState)
 	}
+	return nil, nil
+}
+
+func operatorUpdatesToLedger(st *StateManager, err error, body *protocol.UpdateKeyPage) error {
+	var ledgerState *protocol.InternalLedger
+	err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+	if err != nil {
+		return fmt.Errorf("unable to load main ledger: %w", err)
+	}
+
+	for _, op := range body.Operation {
+		ledgerState.OperatorUpdates = append(ledgerState.OperatorUpdates, op)
+	}
+	err = st.Update(ledgerState)
+	if err != nil {
+		return fmt.Errorf("unable to update main ledger: %w", err)
+	}
+
 	return nil
 }
 

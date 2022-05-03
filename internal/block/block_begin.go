@@ -123,7 +123,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := chain.NewStateManager(batch.Begin(true), x.Network, signerUrl, signer, nil, txn, x.logger)
+	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), signerUrl, signer, nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -369,7 +369,7 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 
 	if len(ledgerState.OperatorUpdates) > 0 {
 		anchor.OperatorUpdates = ledgerState.OperatorUpdates
-		ledgerState.OperatorUpdates = nil // TODO mutex?
+		ledgerState.OperatorUpdates = nil // TODO Is this safe enough, no need for a mutex?
 		err = ledger.PutState(ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("cannot write ledger: %w", err)

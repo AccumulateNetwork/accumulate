@@ -54,8 +54,14 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 
 			updateKeyPage := &UpdateKeyPage{}
-			updateKeyPage.executeOperation(page, 1, 0, opUpd)
-			st.Update(page)
+			err = updateKeyPage.executeOperation(page, 1, 0, opUpd)
+			if err != nil {
+				return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
+			}
+			err = st.Update(page)
+			if err != nil {
+				return nil, fmt.Errorf("unable to update main ledger: %w", err)
+			}
 		}
 	}
 

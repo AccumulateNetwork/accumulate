@@ -6,7 +6,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -24,13 +23,13 @@ type StateManager struct {
 	SignatorUrl *url.URL
 }
 
-func LoadStateManager(batch *database.Batch, network config.Network, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
 	var signer protocol.Signer
 	err := batch.Account(status.Initiator).GetStateAs(&signer)
 	switch {
 	case err == nil:
 		// Found it
-		return NewStateManager(batch, network, status.Initiator, signer, principal, transaction, logger), nil
+		return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
@@ -47,20 +46,20 @@ func LoadStateManager(batch *database.Batch, network config.Network, principal p
 		return nil, fmt.Errorf("transaction signer set does not include the initiator")
 	}
 
-	return NewStateManager(batch, network, status.Initiator, signer, principal, transaction, logger), nil
+	return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, network config.Network, signerUrl *url.URL, signer protocol.Signer, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.Signer, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.SignatorUrl = signerUrl
 	m.Signator = signer
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
-	m.stateCache = *newStateCache(network, transaction.Body.Type(), txid, batch)
+	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
 	m.logger.L = logger
 	return m
 }
