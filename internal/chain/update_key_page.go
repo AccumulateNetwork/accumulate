@@ -77,13 +77,16 @@ func updateKeyPage(st *StateManager, tx *Delivery, execute bool) error {
 
 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
 	if execute && protocol.IsDnUrl(st.nodeUrl) && page.KeyBook().Equal(st.nodeUrl.JoinPath(protocol.OperatorBook)) {
-		for _, bvn := range st.network.GetBvnNames() {
-			bvnUrl, err := url.Parse(bvn)
-			if err != nil {
-				return fmt.Errorf("%s is not a valid BVN URL", bvn)
-			}
-			st.Submit(bvnUrl.JoinPath(protocol.OperatorBook, "/2"), body)
+		var ledgerState *protocol.InternalLedger
+		err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		if err != nil {
+			return fmt.Errorf("unable to load main ledger: %w", err)
 		}
+
+		for _, op := range body.Operation {
+			ledgerState.OperatorUpdates = append(ledgerState.OperatorUpdates, op)
+		}
+		st.Update(ledgerState)
 	}
 	return nil
 }

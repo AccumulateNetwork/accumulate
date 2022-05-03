@@ -24,6 +24,10 @@ InternalLedger:
       type: uvarint
     - name: AcmeBurnt
       type: bigint
+    - name: OperatorUpdates
+      type: KeyPageOperation
+      marshal-as: union
+      repeatable: true
 
 ##### Transactions #####
 

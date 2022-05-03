@@ -66,7 +66,7 @@ func addValidator(st *StateManager, env *Delivery, execute bool) error {
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 
 	// Add the validator
@@ -108,7 +108,7 @@ func removeValidator(st *StateManager, env *Delivery, execute bool) error {
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 
 	// Remove the validator
@@ -149,7 +149,7 @@ func updateValidator(st *StateManager, env *Delivery, execute bool) error {
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 
 	// Update the validator

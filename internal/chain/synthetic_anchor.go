@@ -44,6 +44,21 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
+	// When on a BVN, process OperatorUpdates when present
+	if protocol.IsBvnUrl(st.nodeUrl) {
+		for _, opUpd := range body.OperatorUpdates {
+			var page *protocol.KeyPage
+			err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.OperatorBook, "/2"), &page)
+			if err != nil {
+				return nil, fmt.Errorf("invalid key page: %v", err)
+			}
+
+			updateKeyPage := &UpdateKeyPage{}
+			updateKeyPage.executeOperation(page, 1, 0, opUpd)
+			st.Update(page)
+		}
+	}
+
 	// Update the oracle
 	if fromDirectory {
 		if body.AcmeOraclePrice == 0 {

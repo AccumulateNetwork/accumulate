@@ -77,6 +77,10 @@ SyntheticAnchor:
       type: Receipt
       repeatable: true
       marshal-as: reference
+    - name: OperatorUpdates
+      type: KeyPageOperation
+      marshal-as: union
+      repeatable: true
 
 SyntheticDepositCredits:
   union: { type: transaction }

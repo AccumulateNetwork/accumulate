@@ -178,8 +178,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
-			operBook, _, _ := createBVNOperatorBook(opts.Network.NodeUrl(), uBook, opts.Validators)
-			records = append(records, operBook)
+			operBook, page1, page2 := createBVNOperatorBook(opts.Network.NodeUrl(), uBook, opts.Validators)
+			records = append(records, operBook, page1, page2)
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
@@ -245,7 +245,7 @@ func createBVNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtyp
 	book.PageCount = 2
 
 	page1 := new(protocol.KeyPage)
-	page1.Url = protocol.FormatKeyPageUrl(authUrl, 0)
+	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
 	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
