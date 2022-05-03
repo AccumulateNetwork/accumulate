@@ -1,0 +1,53 @@
+# Accounts and Transactions used internally by the protocol (not available to
+# the user)
+
+##### Accounts #####
+
+InternalLedger:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: PendingOracle
+      type: uvarint
+    - name: ActiveOracle
+      type: uvarint
+    - name: AcmeBurnt
+      type: bigint
+
+SyntheticLedger:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Subnets
+      type: SubnetSyntheticLedger
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+##### Transactions #####
+
+InternalGenesis:
+  union: { type: transaction }
+
+##### Data Types #####
+
+SubnetSyntheticLedger:
+  fields:
+    - name: Url
+      description: is the URL of the subnet
+      type: url
+      pointer: true
+    - name: Produced
+      description: is the sequence number of the latest synthetic transaction produced for the subnet
+      type: uint
+    - name: Received
+      description: is the sequence number of the latest synthetic transaction received from the subnet
+      type: uint

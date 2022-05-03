@@ -49,7 +49,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	if transaction.Body.Type().IsSynthetic() {
 		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
+		err = x.processSyntheticTransaction(&x.Network, batch, transaction, status)
 		if err != nil {
 			return x.recordFailedTransaction(batch, transaction, err)
 		}

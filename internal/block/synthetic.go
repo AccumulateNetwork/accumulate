@@ -103,8 +103,8 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
-	var ledgerState *protocol.InternalLedger
-	err := batch.Account(m.Network.Ledger()).GetStateAs(&ledgerState)
+	var ledger *protocol.SyntheticLedger
+	err := batch.Account(m.Network.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -115,15 +115,13 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	txn.Body = body
 	initSig, err := new(signing.Builder).
 		SetUrl(m.Network.NodeUrl()).
-		SetVersion(ledgerState.Synthetic.Nonce).
-		InitiateSynthetic(txn, m.Router)
+		InitiateSynthetic(txn, m.Router, ledger)
 	if err != nil {
 		return nil, err
 	}
 
-	// Increment the nonce
-	ledgerState.Synthetic.Nonce++
-	err = batch.Account(m.Network.Ledger()).PutState(ledgerState)
+	// Update the ledger
+	err = batch.Account(m.Network.Synthetic()).PutState(ledger)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +161,7 @@ func validateSyntheticEnvelope(net *config.Network, batch *database.Batch, envel
 	return validateSyntheticTransactionSignatures(envelope.Transaction, envelope.Signatures)
 }
 
-func processSyntheticTransaction(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
+func (x *Executor) processSyntheticTransaction(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// TODO Get rid of this hack and actually check the nonce. But first we have
 	// to implement transaction batching.
 	v := batch.Account(net.NodeUrl()).Index("SeenSynth", transaction.GetHash())
@@ -186,7 +184,55 @@ func processSyntheticTransaction(net *config.Network, batch *database.Batch, tra
 		return err
 	}
 
-	return validateSyntheticTransactionSignatures(transaction, signatures)
+	// Validate signatures
+	err = validateSyntheticTransactionSignatures(transaction, signatures)
+	if err != nil {
+		return err
+	}
+
+	// Anchors do not use sequence numbers
+	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
+		// TODO Check the block number?
+		return nil
+	}
+
+	// Get the synthetic signature
+	synthSig, ok := signatures[0].(*protocol.SyntheticSignature)
+	if !ok {
+		return fmt.Errorf("invalid synthetic transaction: missing synthetic signature")
+	}
+
+	// Load the ledger
+	var ledger *protocol.SyntheticLedger
+	err = batch.Account(net.Synthetic()).GetStateAs(&ledger)
+	if err != nil {
+		return err
+	}
+
+	// Verify the sequence number
+	subnet := ledger.Subnet(synthSig.SourceNetwork)
+	if subnet.Received+1 != synthSig.SequenceNumber {
+		// TODO Out of sequence synthetic transactions should be marked pending
+		// and the source BVN should be queried to retrieve the missing
+		// synthetic transactions
+
+		x.logger.Error("Out of sequence synthetic transaction",
+			"seq-got", synthSig.SequenceNumber,
+			"seq-want", subnet.Received+1,
+			"source", synthSig.SourceNetwork,
+			"destination", synthSig.DestinationNetwork)
+
+		// return fmt.Errorf("out of sequence synthetic transaction: got %d, want %d", synthSig.SequenceNumber, subnet.Received+1)
+	}
+
+	// Update the received number
+	subnet.Received = synthSig.SequenceNumber
+	err = batch.Account(net.Synthetic()).PutState(ledger)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature protocol.Signature) error {

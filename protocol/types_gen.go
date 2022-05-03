@@ -326,15 +326,13 @@ type InternalGenesis struct {
 }
 
 type InternalLedger struct {
-	fieldsSet []bool
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	AccountAuth
-	Index         int64           `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Timestamp     time.Time       `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	Synthetic     SyntheticLedger `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
-	PendingOracle uint64          `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
-	ActiveOracle  uint64          `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
-	AcmeBurnt     big.Int         `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	fieldsSet     []bool
+	Url           *url.URL  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Index         int64     `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp     time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	PendingOracle uint64    `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
+	ActiveOracle  uint64    `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
+	AcmeBurnt     big.Int   `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	extraData     []byte
 }
 
@@ -546,16 +544,20 @@ type SendTokens struct {
 	extraData []byte
 }
 
-type SendTransaction struct {
-	fieldsSet []bool
-	Payload   TransactionBody `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
-	Recipient *url.URL        `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
-	extraData []byte
-}
-
 type SetThresholdKeyPageOperation struct {
 	fieldsSet []bool
 	Threshold uint64 `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
+	extraData []byte
+}
+
+type SubnetSyntheticLedger struct {
+	fieldsSet []bool
+	// Url is the URL of the subnet.
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// Produced is the sequence number of the latest synthetic transaction produced for the subnet.
+	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	// Received is the sequence number of the latest synthetic transaction received from the subnet.
+	Received  uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
 	extraData []byte
 }
 
@@ -619,7 +621,8 @@ type SyntheticForwardTransaction struct {
 
 type SyntheticLedger struct {
 	fieldsSet []bool
-	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Url       *url.URL                 `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Subnets   []*SubnetSyntheticLedger `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
 	extraData []byte
 }
 
@@ -712,13 +715,6 @@ type TransactionResultSet struct {
 	fieldsSet []bool
 	Results   []*TransactionStatus `json:"results,omitempty" form:"results" query:"results" validate:"required"`
 	extraData []byte
-}
-
-type TransactionSignature struct {
-	fieldsSet   []bool
-	Transaction [32]byte  `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Signature   Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	extraData   []byte
 }
 
 type TransactionStatus struct {
@@ -924,6 +920,8 @@ func (*SyntheticDepositTokens) Type() TransactionType { return TransactionTypeSy
 func (*SyntheticForwardTransaction) Type() TransactionType {
 	return TransactionTypeSyntheticForwardTransaction
 }
+
+func (*SyntheticLedger) Type() AccountType { return AccountTypeSyntheticLedger }
 
 func (*SyntheticMirror) Type() TransactionType { return TransactionTypeSyntheticMirror }
 
@@ -1518,10 +1516,8 @@ func (v *InternalLedger) Copy() *InternalLedger {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
-	u.AccountAuth = *v.AccountAuth.Copy()
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
-	u.Synthetic = *(&v.Synthetic).Copy()
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
@@ -1869,21 +1865,6 @@ func (v *SendTokens) Copy() *SendTokens {
 
 func (v *SendTokens) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SendTransaction) Copy() *SendTransaction {
-	u := new(SendTransaction)
-
-	if v.Payload != nil {
-		u.Payload = (v.Payload).CopyAsInterface().(TransactionBody)
-	}
-	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
-	}
-
-	return u
-}
-
-func (v *SendTransaction) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
 	u := new(SetThresholdKeyPageOperation)
 
@@ -1893,6 +1874,20 @@ func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
 }
 
 func (v *SetThresholdKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SubnetSyntheticLedger) Copy() *SubnetSyntheticLedger {
+	u := new(SubnetSyntheticLedger)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Produced = v.Produced
+	u.Received = v.Received
+
+	return u
+}
+
+func (v *SubnetSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticAnchor) Copy() *SyntheticAnchor {
 	u := new(SyntheticAnchor)
@@ -1988,7 +1983,15 @@ func (v *SyntheticForwardTransaction) CopyAsInterface() interface{} { return v.C
 func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	u := new(SyntheticLedger)
 
-	u.Nonce = v.Nonce
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Subnets = make([]*SubnetSyntheticLedger, len(v.Subnets))
+	for i, v := range v.Subnets {
+		if v != nil {
+			u.Subnets[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
@@ -2148,19 +2151,6 @@ func (v *TransactionResultSet) Copy() *TransactionResultSet {
 }
 
 func (v *TransactionResultSet) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *TransactionSignature) Copy() *TransactionSignature {
-	u := new(TransactionSignature)
-
-	u.Transaction = v.Transaction
-	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(Signature)
-	}
-
-	return u
-}
-
-func (v *TransactionSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionStatus) Copy() *TransactionStatus {
 	u := new(TransactionStatus)
@@ -3062,16 +3052,10 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !v.AccountAuth.Equal(&u.AccountAuth) {
-		return false
-	}
 	if !(v.Index == u.Index) {
 		return false
 	}
 	if !(v.Timestamp == u.Timestamp) {
-		return false
-	}
-	if !((&v.Synthetic).Equal(&u.Synthetic)) {
 		return false
 	}
 	if !(v.PendingOracle == u.PendingOracle) {
@@ -3525,24 +3509,27 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 	return true
 }
 
-func (v *SendTransaction) Equal(u *SendTransaction) bool {
-	if !(EqualTransactionBody(v.Payload, u.Payload)) {
-		return false
-	}
-	switch {
-	case v.Recipient == u.Recipient:
-		// equal
-	case v.Recipient == nil || u.Recipient == nil:
-		return false
-	case !((v.Recipient).Equal(u.Recipient)):
+func (v *SetThresholdKeyPageOperation) Equal(u *SetThresholdKeyPageOperation) bool {
+	if !(v.Threshold == u.Threshold) {
 		return false
 	}
 
 	return true
 }
 
-func (v *SetThresholdKeyPageOperation) Equal(u *SetThresholdKeyPageOperation) bool {
-	if !(v.Threshold == u.Threshold) {
+func (v *SubnetSyntheticLedger) Equal(u *SubnetSyntheticLedger) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Produced == u.Produced) {
+		return false
+	}
+	if !(v.Received == u.Received) {
 		return false
 	}
 
@@ -3670,8 +3657,21 @@ func (v *SyntheticForwardTransaction) Equal(u *SyntheticForwardTransaction) bool
 }
 
 func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
-	if !(v.Nonce == u.Nonce) {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
 		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if len(v.Subnets) != len(u.Subnets) {
+		return false
+	}
+	for i := range v.Subnets {
+		if !((v.Subnets[i]).Equal(u.Subnets[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3883,17 +3883,6 @@ func (v *TransactionResultSet) Equal(u *TransactionResultSet) bool {
 		if !((v.Results[i]).Equal(u.Results[i])) {
 			return false
 		}
-	}
-
-	return true
-}
-
-func (v *TransactionSignature) Equal(u *TransactionSignature) bool {
-	if !(v.Transaction == u.Transaction) {
-		return false
-	}
-	if !(EqualSignature(v.Signature, u.Signature)) {
-		return false
 	}
 
 	return true
@@ -6154,13 +6143,11 @@ func (v *InternalGenesis) IsValid() error {
 var fieldNames_InternalLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "AccountAuth",
-	4: "Index",
-	5: "Timestamp",
-	6: "Synthetic",
-	7: "PendingOracle",
-	8: "ActiveOracle",
-	9: "AcmeBurnt",
+	3: "Index",
+	4: "Timestamp",
+	5: "PendingOracle",
+	6: "ActiveOracle",
+	7: "AcmeBurnt",
 }
 
 func (v *InternalLedger) MarshalBinary() ([]byte, error) {
@@ -6171,24 +6158,20 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	writer.WriteValue(3, &v.AccountAuth)
 	if !(v.Index == 0) {
-		writer.WriteInt(4, v.Index)
+		writer.WriteInt(3, v.Index)
 	}
 	if !(v.Timestamp == (time.Time{})) {
-		writer.WriteTime(5, v.Timestamp)
-	}
-	if !((v.Synthetic).Equal(new(SyntheticLedger))) {
-		writer.WriteValue(6, &v.Synthetic)
+		writer.WriteTime(4, v.Timestamp)
 	}
 	if !(v.PendingOracle == 0) {
-		writer.WriteUint(7, v.PendingOracle)
+		writer.WriteUint(5, v.PendingOracle)
 	}
 	if !(v.ActiveOracle == 0) {
-		writer.WriteUint(8, v.ActiveOracle)
+		writer.WriteUint(6, v.ActiveOracle)
 	}
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(9, &v.AcmeBurnt)
+		writer.WriteBigInt(7, &v.AcmeBurnt)
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalLedger)
@@ -6210,35 +6193,27 @@ func (v *InternalLedger) IsValid() error {
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if err := v.AccountAuth.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Index is missing")
 	} else if v.Index == 0 {
 		errs = append(errs, "field Index is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Timestamp is missing")
 	} else if v.Timestamp == (time.Time{}) {
 		errs = append(errs, "field Timestamp is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field Synthetic is missing")
-	} else if (v.Synthetic).Equal(new(SyntheticLedger)) {
-		errs = append(errs, "field Synthetic is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field PendingOracle is missing")
 	} else if v.PendingOracle == 0 {
 		errs = append(errs, "field PendingOracle is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field ActiveOracle is missing")
 	} else if v.ActiveOracle == 0 {
 		errs = append(errs, "field ActiveOracle is not set")
 	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
@@ -7624,54 +7599,6 @@ func (v *SendTokens) IsValid() error {
 	}
 }
 
-var fieldNames_SendTransaction = []string{
-	1: "Payload",
-	2: "Recipient",
-}
-
-func (v *SendTransaction) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Payload == nil) {
-		writer.WriteValue(1, v.Payload)
-	}
-	if !(v.Recipient == nil) {
-		writer.WriteUrl(2, v.Recipient)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SendTransaction)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *SendTransaction) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Payload is missing")
-	} else if v.Payload == nil {
-		errs = append(errs, "field Payload is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Recipient is missing")
-	} else if v.Recipient == nil {
-		errs = append(errs, "field Recipient is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_SetThresholdKeyPageOperation = []string{
 	1: "Type",
 	2: "Threshold",
@@ -7704,6 +7631,63 @@ func (v *SetThresholdKeyPageOperation) IsValid() error {
 		errs = append(errs, "field Threshold is missing")
 	} else if v.Threshold == 0 {
 		errs = append(errs, "field Threshold is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SubnetSyntheticLedger = []string{
+	1: "Url",
+	2: "Produced",
+	3: "Received",
+}
+
+func (v *SubnetSyntheticLedger) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(v.Produced == 0) {
+		writer.WriteUint(2, v.Produced)
+	}
+	if !(v.Received == 0) {
+		writer.WriteUint(3, v.Received)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SubnetSyntheticLedger)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *SubnetSyntheticLedger) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Produced is missing")
+	} else if v.Produced == 0 {
+		errs = append(errs, "field Produced is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Received is missing")
+	} else if v.Received == 0 {
+		errs = append(errs, "field Received is not set")
 	}
 
 	switch len(errs) {
@@ -8092,15 +8076,23 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 }
 
 var fieldNames_SyntheticLedger = []string{
-	1: "Nonce",
+	1: "Type",
+	2: "Url",
+	3: "Subnets",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Nonce == 0) {
-		writer.WriteUint(1, v.Nonce)
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	if !(len(v.Subnets) == 0) {
+		for _, v := range v.Subnets {
+			writer.WriteValue(3, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticLedger)
@@ -8115,9 +8107,17 @@ func (v *SyntheticLedger) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Nonce is missing")
-	} else if v.Nonce == 0 {
-		errs = append(errs, "field Nonce is not set")
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Subnets is missing")
+	} else if len(v.Subnets) == 0 {
+		errs = append(errs, "field Subnets is not set")
 	}
 
 	switch len(errs) {
@@ -8698,54 +8698,6 @@ func (v *TransactionResultSet) IsValid() error {
 		errs = append(errs, "field Results is missing")
 	} else if len(v.Results) == 0 {
 		errs = append(errs, "field Results is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_TransactionSignature = []string{
-	1: "Transaction",
-	2: "Signature",
-}
-
-func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Transaction == ([32]byte{})) {
-		writer.WriteHash(1, &v.Transaction)
-	}
-	if !(v.Signature == nil) {
-		writer.WriteValue(2, v.Signature)
-	}
-
-	_, _, err := writer.Reset(fieldNames_TransactionSignature)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *TransactionSignature) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Transaction is missing")
-	} else if v.Transaction == ([32]byte{}) {
-		errs = append(errs, "field Transaction is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
-		errs = append(errs, "field Signature is not set")
 	}
 
 	switch len(errs) {
@@ -10622,23 +10574,19 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
-	if x, ok := reader.ReadInt(4); ok {
+	if x, ok := reader.ReadInt(3); ok {
 		v.Index = x
 	}
-	if x, ok := reader.ReadTime(5); ok {
+	if x, ok := reader.ReadTime(4); ok {
 		v.Timestamp = x
 	}
-	if x := new(SyntheticLedger); reader.ReadValue(6, x.UnmarshalBinary) {
-		v.Synthetic = *x
-	}
-	if x, ok := reader.ReadUint(7); ok {
+	if x, ok := reader.ReadUint(5); ok {
 		v.PendingOracle = x
 	}
-	if x, ok := reader.ReadUint(8); ok {
+	if x, ok := reader.ReadUint(6); ok {
 		v.ActiveOracle = x
 	}
-	if x, ok := reader.ReadBigInt(9); ok {
+	if x, ok := reader.ReadBigInt(7); ok {
 		v.AcmeBurnt = *x
 	}
 
@@ -11394,33 +11342,6 @@ func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *SendTransaction) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SendTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, func(b []byte) error {
-		x, err := UnmarshalTransactionBody(b)
-		if err == nil {
-			v.Payload = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadUrl(2); ok {
-		v.Recipient = x
-	}
-
-	seen, err := reader.Reset(fieldNames_SendTransaction)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *SetThresholdKeyPageOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11440,6 +11361,32 @@ func (v *SetThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SetThresholdKeyPageOperation)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *SubnetSyntheticLedger) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SubnetSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Produced = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Received = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SubnetSyntheticLedger)
 	if err != nil {
 		return err
 	}
@@ -11668,8 +11615,22 @@ func (v *SyntheticLedger) UnmarshalBinary(data []byte) error {
 func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUint(1); ok {
-		v.Nonce = x
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	for {
+		if x := new(SubnetSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Subnets = append(v.Subnets, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticLedger)
@@ -11980,33 +11941,6 @@ func (v *TransactionResultSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionResultSet)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *TransactionSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *TransactionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadHash(1); ok {
-		v.Transaction = *x
-	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalSignature(b)
-		if err == nil {
-			v.Signature = x
-		}
-		return err
-	})
-
-	seen, err := reader.Reset(fieldNames_TransactionSignature)
 	if err != nil {
 		return err
 	}
@@ -12877,22 +12811,18 @@ func (v *InternalGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          AccountType                       `json:"type"`
-		Url           *url.URL                          `json:"url,omitempty"`
-		Authorities   encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Index         int64                             `json:"index,omitempty"`
-		Timestamp     time.Time                         `json:"timestamp,omitempty"`
-		Synthetic     SyntheticLedger                   `json:"synthetic,omitempty"`
-		PendingOracle uint64                            `json:"pendingOracle,omitempty"`
-		ActiveOracle  uint64                            `json:"activeOracle,omitempty"`
-		AcmeBurnt     *string                           `json:"acmeBurnt,omitempty"`
+		Type          AccountType `json:"type"`
+		Url           *url.URL    `json:"url,omitempty"`
+		Index         int64       `json:"index,omitempty"`
+		Timestamp     time.Time   `json:"timestamp,omitempty"`
+		PendingOracle uint64      `json:"pendingOracle,omitempty"`
+		ActiveOracle  uint64      `json:"activeOracle,omitempty"`
+		AcmeBurnt     *string     `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Authorities = v.AccountAuth.Authorities
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
-	u.Synthetic = v.Synthetic
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
@@ -13233,16 +13163,6 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *SendTransaction) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Payload   encoding.JsonUnmarshalWith[TransactionBody] `json:"payload,omitempty"`
-		Recipient *url.URL                                    `json:"recipient,omitempty"`
-	}{}
-	u.Payload = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Payload, Func: UnmarshalTransactionBodyJSON}
-	u.Recipient = v.Recipient
-	return json.Marshal(&u)
-}
-
 func (v *SetThresholdKeyPageOperation) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      KeyPageOperationType `json:"type"`
@@ -13362,6 +13282,18 @@ func (v *SyntheticForwardTransaction) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Signatures = v.Signatures
 	u.Transaction = v.Transaction
+	return json.Marshal(&u)
+}
+
+func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    AccountType                               `json:"type"`
+		Url     *url.URL                                  `json:"url,omitempty"`
+		Subnets encoding.JsonList[*SubnetSyntheticLedger] `json:"subnets,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Subnets = v.Subnets
 	return json.Marshal(&u)
 }
 
@@ -13512,16 +13444,6 @@ func (v *TransactionResultSet) MarshalJSON() ([]byte, error) {
 		Results encoding.JsonList[*TransactionStatus] `json:"results,omitempty"`
 	}{}
 	u.Results = v.Results
-	return json.Marshal(&u)
-}
-
-func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Transaction string                                `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[Signature] `json:"signature,omitempty"`
-	}{}
-	u.Transaction = encoding.ChainToJSON(v.Transaction)
-	u.Signature = encoding.JsonUnmarshalWith[Signature]{Value: v.Signature, Func: UnmarshalSignatureJSON}
 	return json.Marshal(&u)
 }
 
@@ -14521,22 +14443,18 @@ func (v *InternalGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          AccountType                       `json:"type"`
-		Url           *url.URL                          `json:"url,omitempty"`
-		Authorities   encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Index         int64                             `json:"index,omitempty"`
-		Timestamp     time.Time                         `json:"timestamp,omitempty"`
-		Synthetic     SyntheticLedger                   `json:"synthetic,omitempty"`
-		PendingOracle uint64                            `json:"pendingOracle,omitempty"`
-		ActiveOracle  uint64                            `json:"activeOracle,omitempty"`
-		AcmeBurnt     *string                           `json:"acmeBurnt,omitempty"`
+		Type          AccountType `json:"type"`
+		Url           *url.URL    `json:"url,omitempty"`
+		Index         int64       `json:"index,omitempty"`
+		Timestamp     time.Time   `json:"timestamp,omitempty"`
+		PendingOracle uint64      `json:"pendingOracle,omitempty"`
+		ActiveOracle  uint64      `json:"activeOracle,omitempty"`
+		AcmeBurnt     *string     `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Authorities = v.AccountAuth.Authorities
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
-	u.Synthetic = v.Synthetic
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
@@ -14547,10 +14465,8 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	v.AccountAuth.Authorities = u.Authorities
 	v.Index = u.Index
 	v.Timestamp = u.Timestamp
-	v.Synthetic = u.Synthetic
 	v.PendingOracle = u.PendingOracle
 	v.ActiveOracle = u.ActiveOracle
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
@@ -15210,22 +15126,6 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *SendTransaction) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Payload   encoding.JsonUnmarshalWith[TransactionBody] `json:"payload,omitempty"`
-		Recipient *url.URL                                    `json:"recipient,omitempty"`
-	}{}
-	u.Payload = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Payload, Func: UnmarshalTransactionBodyJSON}
-	u.Recipient = v.Recipient
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Payload = u.Payload.Value
-
-	v.Recipient = u.Recipient
-	return nil
-}
-
 func (v *SetThresholdKeyPageOperation) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      KeyPageOperationType `json:"type"`
@@ -15459,6 +15359,26 @@ func (v *SyntheticForwardTransaction) UnmarshalJSON(data []byte) error {
 	}
 	v.Signatures = u.Signatures
 	v.Transaction = u.Transaction
+	return nil
+}
+
+func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    AccountType                               `json:"type"`
+		Url     *url.URL                                  `json:"url,omitempty"`
+		Subnets encoding.JsonList[*SubnetSyntheticLedger] `json:"subnets,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Subnets = v.Subnets
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Subnets = u.Subnets
 	return nil
 }
 
@@ -15730,26 +15650,6 @@ func (v *TransactionResultSet) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Results = u.Results
-	return nil
-}
-
-func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Transaction string                                `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[Signature] `json:"signature,omitempty"`
-	}{}
-	u.Transaction = encoding.ChainToJSON(v.Transaction)
-	u.Signature = encoding.JsonUnmarshalWith[Signature]{Value: v.Signature, Func: UnmarshalSignatureJSON}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.ChainFromJSON(u.Transaction); err != nil {
-		return fmt.Errorf("error decoding Transaction: %w", err)
-	} else {
-		v.Transaction = x
-	}
-	v.Signature = u.Signature.Value
-
 	return nil
 }
 

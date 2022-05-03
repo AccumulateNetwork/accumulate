@@ -144,7 +144,7 @@
         "account_auth_operations.yml",
         "accounts.yml",
         "general.yml",
-        "internal.yml",
+        "system.yml",
         "key_page_operations.yml",
         "query.yml",
         "signatures.yml",
