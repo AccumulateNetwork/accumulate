@@ -352,7 +352,7 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	send.AddRecipient(u2, amt)
 
-	return dispatchTxAndPrintResponse("send-tokens", send, nil, u, signer)
+	return dispatchTxAndPrintResponse(send, nil, u, signer)
 }
 
 func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) (*api2.TransactionQueryResponse, error) {
@@ -401,7 +401,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
 
-	return dispatchTxAndPrintResponse("execute", txn, nil, u, signer)
+	return dispatchTxAndPrintResponse(txn, nil, u, signer)
 }
 
 func SignTX(sender string, args []string) (string, error) {
@@ -425,5 +425,5 @@ func SignTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to parse transaction hash: %v", err)
 	}
 
-	return dispatchTxAndPrintResponse("execute", nil, txHash, u, signer)
+	return dispatchTxAndPrintResponse(nil, txHash, u, signer)
 }

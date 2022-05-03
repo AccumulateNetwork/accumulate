@@ -108,5 +108,5 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Amount = *estAcme
 	credits.Oracle = acmeOracle.Price
 
-	return dispatchTxAndPrintResponse("add-credits", &credits, nil, u, signer)
+	return dispatchTxAndPrintResponse(&credits, nil, u, signer)
 }

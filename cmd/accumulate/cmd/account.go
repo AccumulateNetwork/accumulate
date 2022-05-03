@@ -263,7 +263,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		tac.Manager = authUrl
 	}
 
-	return dispatchTxAndPrintResponse("create-token-account", &tac, nil, u, signer)
+	return dispatchTxAndPrintResponse(&tac, nil, u, signer)
 }
 
 func GenerateAccount() (string, error) {
