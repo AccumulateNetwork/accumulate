@@ -4,14 +4,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
@@ -144,40 +142,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	return txn, nil
 }
 
-func validateSyntheticEnvelope(net *config.Network, batch *database.Batch, envelope *chain.Delivery) error {
-	// TODO Get rid of this hack and actually check the nonce. But first we have
-	// to implement transaction batching.
-	v := batch.Account(net.NodeUrl()).Index("SeenSynth", envelope.Transaction.GetHash())
-	_, err := v.Get()
-	switch {
-	case err == nil:
-		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", envelope.Transaction.GetHash())
-	case errors.Is(err, storage.ErrNotFound):
-		// Ok
-	default:
-		return err
-	}
-
-	return validateSyntheticTransactionSignatures(envelope.Transaction, envelope.Signatures)
-}
-
-func (x *Executor) processSyntheticTransaction(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
-	// TODO Get rid of this hack and actually check the nonce. But first we have
-	// to implement transaction batching.
-	v := batch.Account(net.NodeUrl()).Index("SeenSynth", transaction.GetHash())
-	_, err := v.Get()
-	switch {
-	case err == nil:
-		return protocol.Errorf(protocol.ErrorCodeBadNonce, "duplicate synthetic transaction %X", transaction.GetHash())
-	case errors.Is(err, storage.ErrNotFound):
-		err = v.Put([]byte{1})
-		if err != nil {
-			return err
-		}
-	default:
-		return err
-	}
-
+func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Load all of the signatures
 	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
@@ -185,54 +150,7 @@ func (x *Executor) processSyntheticTransaction(net *config.Network, batch *datab
 	}
 
 	// Validate signatures
-	err = validateSyntheticTransactionSignatures(transaction, signatures)
-	if err != nil {
-		return err
-	}
-
-	// Anchors do not use sequence numbers
-	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
-		// TODO Check the block number?
-		return nil
-	}
-
-	// Get the synthetic signature
-	synthSig, ok := signatures[0].(*protocol.SyntheticSignature)
-	if !ok {
-		return fmt.Errorf("invalid synthetic transaction: missing synthetic signature")
-	}
-
-	// Load the ledger
-	var ledger *protocol.SyntheticLedger
-	err = batch.Account(net.Synthetic()).GetStateAs(&ledger)
-	if err != nil {
-		return err
-	}
-
-	// Verify the sequence number
-	subnet := ledger.Subnet(synthSig.SourceNetwork)
-	if subnet.Received+1 != synthSig.SequenceNumber {
-		// TODO Out of sequence synthetic transactions should be marked pending
-		// and the source BVN should be queried to retrieve the missing
-		// synthetic transactions
-
-		x.logger.Error("Out of sequence synthetic transaction",
-			"seq-got", synthSig.SequenceNumber,
-			"seq-want", subnet.Received+1,
-			"source", synthSig.SourceNetwork,
-			"destination", synthSig.DestinationNetwork)
-
-		// return fmt.Errorf("out of sequence synthetic transaction: got %d, want %d", synthSig.SequenceNumber, subnet.Received+1)
-	}
-
-	// Update the received number
-	subnet.Received = synthSig.SequenceNumber
-	err = batch.Account(net.Synthetic()).PutState(ledger)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return validateSyntheticTransactionSignatures(transaction, signatures)
 }
 
 func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature protocol.Signature) error {
@@ -284,33 +202,15 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 	return nil
 }
 
-func assembleSynthReceipt(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (*protocol.Receipt, *url.URL, error) {
+func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protocol.Signature) (*protocol.Receipt, *url.URL, error) {
 	// Collect receipts
 	receipts := map[[32]byte]*protocol.ReceiptSignature{}
-	for _, signer := range status.Signers {
-		// Load the signature set
-		sigset, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknown, "load signatures set %v: %w", signer.GetUrl(), err)
+	for _, signature := range signatures {
+		receipt, ok := signature.(*protocol.ReceiptSignature)
+		if !ok {
+			continue
 		}
-
-		for _, entryHash := range sigset.EntryHashes() {
-			state, err := batch.Transaction(entryHash[:]).GetState()
-			if err != nil {
-				return nil, nil, errors.Format(errors.StatusUnknown, "load signature entry %X: %w", entryHash, err)
-			}
-
-			if state.Signature == nil {
-				// This should not happen
-				continue
-			}
-
-			receipt, ok := state.Signature.(*protocol.ReceiptSignature)
-			if !ok {
-				continue
-			}
-			receipts[*(*[32]byte)(receipt.Start)] = receipt
-		}
+		receipts[*(*[32]byte)(receipt.Start)] = receipt
 	}
 
 	// Get the first
