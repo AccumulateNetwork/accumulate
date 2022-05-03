@@ -46,6 +46,7 @@ var (
 	Metadata             string
 	SigType              string
 	Authorities          []string
+	Delegators           []string
 	Password             string
 	DatabaseDir          string
 	NoWalletVersionCheck bool
@@ -90,6 +91,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.StringVarP(&Memo, "memo", "m", Memo, "Memo")
 	flags.StringVarP(&Metadata, "metadata", "a", Metadata, "Transaction Metadata")
 	flags.StringSliceVar(&Authorities, "authority", nil, "Additional authorities to add when creating an account")
+	flags.StringSliceVar(&Delegators, "delegator", nil, "Specifies the delegator when creating a delegated signature")
 
 	//add the commands
 	cmd.AddCommand(encryptCmd)
