@@ -87,6 +87,11 @@ func (b bldTxn) WithSigner(url Urlish, version ...uint64) bldTxn {
 	return b
 }
 
+func (b bldTxn) WithDelegator(url Urlish) bldTxn {
+	b.b.AddDelegator(b.s.url(url))
+	return b
+}
+
 func (b bldTxn) WithBody(body protocol.TransactionBody) bldTxn {
 	b.transaction.Body = body
 	return b

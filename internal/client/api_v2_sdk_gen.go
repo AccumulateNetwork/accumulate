@@ -154,6 +154,18 @@ func (c *Client) ExecuteCreateTokenAccount(ctx context.Context, req *api.TxReque
 	return &resp, nil
 }
 
+// ExecuteDirect submits a transaction.
+func (c *Client) ExecuteDirect(ctx context.Context, req *api.ExecuteRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "execute-direct", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ExecuteIssueTokens submits an IssueTokens transaction.
 func (c *Client) ExecuteIssueTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
