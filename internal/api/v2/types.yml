@@ -337,6 +337,18 @@ MetricsResponse:
     - name: Value
       type: any
 
+ExecuteRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - name: CheckOnly
+      type: bool
+      optional: true
+
 TxRequest:
   non-binary: true
   incomparable: true

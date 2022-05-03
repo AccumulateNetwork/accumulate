@@ -227,7 +227,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
 	}
 
-	res, err = dispatchTxAndWait("write-data-to", &wdt, nil, u, signer)
+	res, err = dispatchTxAndWait(&wdt, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -271,7 +271,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.KeyBookUrl = keybook
 	cda.Scratch = flagAccount.Scratch
 
-	return dispatchTxAndPrintResponse("create-data-account", &cda, nil, u, signer)
+	return dispatchTxAndPrintResponse(&cda, nil, u, signer)
 }
 
 func WriteData(accountUrl string, args []string) (string, error) {
@@ -292,7 +292,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteData{}
 	wd.Entry = *prepareData(args, false)
 
-	res, err := dispatchTxAndWait("write-data", &wd, nil, u, signer)
+	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -356,7 +356,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Entry = *prepareData(args[1:], false)
 
-	res, err := dispatchTxAndWait("write-data-to", &wd, nil, u, signer)
+	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return "", err
 	}

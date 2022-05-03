@@ -50,6 +50,7 @@
         "${workspaceFolder}/playbooks/validate/02-identity.play",
         "${workspaceFolder}/playbooks/validate/03-lite-data.play",
         "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
+        "${workspaceFolder}/playbooks/validate/05-delegation.play",
       ]
     },
     {
