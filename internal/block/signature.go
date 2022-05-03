@@ -472,7 +472,7 @@ func (x *Executor) validateNormalSignature(batch *database.Batch, delivery *chai
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	if !signers[0].CanDebitCredits(fee.AsUInt64()) {
-		return errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
+		return errors.Format(errors.StatusInsufficientCredits, "%v has insufficient credits: have %s, want %s", signers[0].GetUrl(),
 			protocol.FormatAmount(signers[0].GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}
@@ -545,7 +545,7 @@ func (x *Executor) processNormalSignature(batch *database.Batch, delivery *chain
 		return nil, errors.Format(errors.StatusBadRequest, "calculating fee: %w", err)
 	}
 	if !signers[0].DebitCredits(fee.AsUInt64()) {
-		return nil, errors.Format(errors.StatusInsufficientCredits, "insufficient credits: have %s, want %s",
+		return nil, errors.Format(errors.StatusInsufficientCredits, "%v has insufficient credits: have %s, want %s", signers[0].GetUrl(),
 			protocol.FormatAmount(signers[0].GetCreditBalance(), protocol.CreditPrecisionPower),
 			protocol.FormatAmount(fee.AsUInt64(), protocol.CreditPrecisionPower))
 	}

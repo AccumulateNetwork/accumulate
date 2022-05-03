@@ -87,6 +87,11 @@ func (b bldTxn) WithSigner(url Urlish, version ...uint64) bldTxn {
 	return b
 }
 
+func (b bldTxn) WithDelegator(url Urlish) bldTxn {
+	b.b.AddDelegator(b.s.url(url))
+	return b
+}
+
 func (b bldTxn) WithBody(body protocol.TransactionBody) bldTxn {
 	b.transaction.Body = body
 	return b
@@ -129,6 +134,9 @@ func (b bldTxn) Submit() *submittedTxn {
 	if err != nil {
 		b.s.Abortf("Failed to submit transaction: %v", err)
 	}
+
+	// data, _ := json.Marshal(env)
+	// fmt.Printf("Submitting %s\n", data)
 
 	hash := *(*[32]byte)(b.transaction.GetHash())
 	sub := new(submittedTxn)

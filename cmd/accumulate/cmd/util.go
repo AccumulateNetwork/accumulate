@@ -77,6 +77,14 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 
+	for _, del := range Delegators {
+		u, err := url2.Parse(del)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid delegator %q: %v", del, err)
+		}
+		signer.AddDelegator(u)
+	}
+
 	var privKey []byte
 	var err error
 	if IsLiteTokenAccount(origin.String()) {
@@ -252,7 +260,7 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
+func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
 	var env *protocol.Envelope
 	var sig protocol.Signature
 	var err error
@@ -283,48 +291,23 @@ func dispatchTxRequest(action string, payload protocol.TransactionBody, txHash [
 	}
 	env.Signatures = append(env.Signatures, sig)
 
-	keySig := sig.(protocol.KeySignature)
-
-	req := new(api2.TxRequest)
-	req.TxHash = txHash
-	req.Origin = env.Transaction[0].Header.Principal
-	req.Signer.Timestamp = sig.GetTimestamp()
-	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = keySig.GetPublicKey()
-	req.Signer.SignatureType = sig.Type()
-	req.KeyPage.Version = sig.GetSignerVersion()
-	req.Signature = sig.GetSignature()
-	req.Memo = env.Transaction[0].Header.Memo
-	req.Metadata = env.Transaction[0].Header.Metadata
-
+	req := new(api2.ExecuteRequest)
+	req.Envelope = env
 	if TxPretend {
 		req.CheckOnly = true
 	}
 
-	if action == "execute" {
-		dataBinary, err := payload.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		req.Payload = hex.EncodeToString(dataBinary)
-	} else {
-		req.Payload = payload
-	}
+	res, err := Client.ExecuteDirect(context.Background(), req)
 	if err != nil {
-		return nil, err
-	}
-
-	var res api2.TxResponse
-	if err := Client.RequestAPIv2(context.Background(), action, req, &res); err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
 	}
 
-	return &res, nil
+	return res, nil
 }
 
-func dispatchTxAndWait(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
-	res, err := dispatchTxRequest(action, payload, txHash, origin, signer)
+func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
+	res, err := dispatchTxRequest(payload, txHash, origin, signer)
 	if err != nil {
 		return nil, err
 	}
@@ -341,8 +324,8 @@ func dispatchTxAndWait(action string, payload protocol.TransactionBody, txHash [
 	return res, nil
 }
 
-func dispatchTxAndPrintResponse(action string, payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
-	res, err := dispatchTxAndWait(action, payload, txHash, origin, signer)
+func dispatchTxAndPrintResponse(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
+	res, err := dispatchTxAndWait(payload, txHash, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
