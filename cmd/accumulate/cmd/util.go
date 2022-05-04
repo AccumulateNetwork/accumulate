@@ -588,7 +588,3 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 	}
 	return sigtype, nil
 }
-
-func addAuthority(l *[]protocol.AccountReference, u *url2.URL) {
-	*l = append(*l, protocol.AccountReference{Account: &protocol.UnknownAccount{Url: u}})
-}

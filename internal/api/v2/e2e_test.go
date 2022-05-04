@@ -243,7 +243,7 @@ func TestValidate(t *testing.T) {
 			Payload: &CreateTokenAccount{
 				Url:         tokenAccountUrl,
 				TokenUrl:    protocol.AcmeUrl(),
-				Authorities: []AccountReference{{Account: &UnknownAccount{Url: keyBookUrl}}},
+				Authorities: []*url.URL{keyBookUrl},
 			},
 		})
 		tokenAccount := new(LiteTokenAccount)

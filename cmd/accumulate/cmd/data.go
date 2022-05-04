@@ -267,7 +267,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
-		addAuthority(&cda.Authorities, keybook)
+		cda.Authorities = append(cda.Authorities, keybook)
 	}
 
 	for _, authUrlStr := range Authorities {
@@ -275,7 +275,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		addAuthority(&cda.Authorities, authUrl)
+		cda.Authorities = append(cda.Authorities, authUrl)
 	}
 
 	return dispatchTxAndPrintResponse(&cda, nil, u, signer)

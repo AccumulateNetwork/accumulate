@@ -106,18 +106,18 @@ func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	})
 }
 
-func (m *StateManager) AddAuthority(account protocol.FullAccount, ref *protocol.AccountReference) error {
-	if m.OriginUrl.LocalTo(ref.Account.GetUrl()) {
+func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url.URL) error {
+	if m.OriginUrl.LocalTo(authority) {
 		var book *protocol.KeyBook
-		err := m.LoadUrlAs(ref.Account.GetUrl(), &book)
+		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return fmt.Errorf("invalid key book %q: %v", ref.Account.GetUrl(), err)
+			return fmt.Errorf("invalid key book %q: %v", authority, err)
 		}
 	}
 
 	// TODO Check the proof if the authority is remote
 
-	account.GetAuth().AddAuthority(ref.Account.GetUrl())
+	account.GetAuth().AddAuthority(authority)
 	return nil
 }
 
@@ -137,7 +137,7 @@ func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
 	return nil
 }
 
-func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []protocol.AccountReference) error {
+func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.URL) error {
 	switch {
 	case len(authorities) > 0:
 		// If the user specified a list of authorities, use them
@@ -151,8 +151,8 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []proto
 		return m.InheritAuth(account)
 	}
 
-	for _, ref := range authorities {
-		err := m.AddAuthority(account, &ref)
+	for _, authority := range authorities {
+		err := m.AddAuthority(account, authority)
 		if err != nil {
 			return err
 		}

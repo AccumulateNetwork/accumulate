@@ -30,13 +30,6 @@ type AccountAuth struct {
 	extraData   []byte
 }
 
-type AccountReference struct {
-	fieldsSet []bool
-	Account   Account  `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Proof     *Receipt `json:"proof,omitempty" form:"proof" query:"proof"`
-	extraData []byte
-}
-
 type AcmeFaucet struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -168,7 +161,7 @@ type CreateDataAccount struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []AccountReference `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
 	extraData   []byte
 }
 
@@ -179,7 +172,7 @@ type CreateIdentity struct {
 	// KeyBookUrl creates a new key book.
 	KeyBookUrl *url.URL `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
 	// Authorities is a list of authorities to add to the authority set, in addition to the new key book.
-	Authorities []AccountReference `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
 }
 
@@ -188,7 +181,7 @@ type CreateKeyBook struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	// Authorities is a list of authorities to add to the authority set, in addition to the key book itself.
-	Authorities []AccountReference `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
 	extraData   []byte
 }
 
@@ -206,7 +199,7 @@ type CreateToken struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []AccountReference `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
 	extraData   []byte
 }
 
@@ -216,7 +209,7 @@ type CreateTokenAccount struct {
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []AccountReference `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
 	extraData   []byte
 }
 
@@ -992,21 +985,6 @@ func (v *AccountAuth) Copy() *AccountAuth {
 
 func (v *AccountAuth) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *AccountReference) Copy() *AccountReference {
-	u := new(AccountReference)
-
-	if v.Account != nil {
-		u.Account = (v.Account).CopyAsInterface().(Account)
-	}
-	if v.Proof != nil {
-		u.Proof = (v.Proof).Copy()
-	}
-
-	return u
-}
-
-func (v *AccountReference) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *AcmeFaucet) Copy() *AcmeFaucet {
 	u := new(AcmeFaucet)
 
@@ -1221,9 +1199,11 @@ func (v *CreateDataAccount) Copy() *CreateDataAccount {
 		u.Url = (v.Url).Copy()
 	}
 	u.Scratch = v.Scratch
-	u.Authorities = make([]AccountReference, len(v.Authorities))
+	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
-		u.Authorities[i] = *(&v).Copy()
+		if v != nil {
+			u.Authorities[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -1241,9 +1221,11 @@ func (v *CreateIdentity) Copy() *CreateIdentity {
 	if v.KeyBookUrl != nil {
 		u.KeyBookUrl = (v.KeyBookUrl).Copy()
 	}
-	u.Authorities = make([]AccountReference, len(v.Authorities))
+	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
-		u.Authorities[i] = *(&v).Copy()
+		if v != nil {
+			u.Authorities[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -1258,9 +1240,11 @@ func (v *CreateKeyBook) Copy() *CreateKeyBook {
 		u.Url = (v.Url).Copy()
 	}
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
-	u.Authorities = make([]AccountReference, len(v.Authorities))
+	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
-		u.Authorities[i] = *(&v).Copy()
+		if v != nil {
+			u.Authorities[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -1297,9 +1281,11 @@ func (v *CreateToken) Copy() *CreateToken {
 	if v.SupplyLimit != nil {
 		u.SupplyLimit = encoding.BigintCopy(v.SupplyLimit)
 	}
-	u.Authorities = make([]AccountReference, len(v.Authorities))
+	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
-		u.Authorities[i] = *(&v).Copy()
+		if v != nil {
+			u.Authorities[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -1317,9 +1303,11 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 		u.TokenUrl = (v.TokenUrl).Copy()
 	}
 	u.Scratch = v.Scratch
-	u.Authorities = make([]AccountReference, len(v.Authorities))
+	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
-		u.Authorities[i] = *(&v).Copy()
+		if v != nil {
+			u.Authorities[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -2369,22 +2357,6 @@ func (v *AccountAuth) Equal(u *AccountAuth) bool {
 	return true
 }
 
-func (v *AccountReference) Equal(u *AccountReference) bool {
-	if !(EqualAccount(v.Account, u.Account)) {
-		return false
-	}
-	switch {
-	case v.Proof == u.Proof:
-		// equal
-	case v.Proof == nil || u.Proof == nil:
-		return false
-	case !((v.Proof).Equal(u.Proof)):
-		return false
-	}
-
-	return true
-}
-
 func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
 	switch {
 	case v.Url == u.Url:
@@ -2655,7 +2627,7 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 		return false
 	}
 	for i := range v.Authorities {
-		if !((&v.Authorities[i]).Equal(&u.Authorities[i])) {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
 	}
@@ -2687,7 +2659,7 @@ func (v *CreateIdentity) Equal(u *CreateIdentity) bool {
 		return false
 	}
 	for i := range v.Authorities {
-		if !((&v.Authorities[i]).Equal(&u.Authorities[i])) {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
 	}
@@ -2711,7 +2683,7 @@ func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
 		return false
 	}
 	for i := range v.Authorities {
-		if !((&v.Authorities[i]).Equal(&u.Authorities[i])) {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
 	}
@@ -2767,7 +2739,7 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 		return false
 	}
 	for i := range v.Authorities {
-		if !((&v.Authorities[i]).Equal(&u.Authorities[i])) {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
 	}
@@ -2799,7 +2771,7 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 		return false
 	}
 	for i := range v.Authorities {
-		if !((&v.Authorities[i]).Equal(&u.Authorities[i])) {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
 	}
@@ -4178,49 +4150,6 @@ func (v *AccountAuth) IsValid() error {
 	}
 }
 
-var fieldNames_AccountReference = []string{
-	1: "Account",
-	2: "Proof",
-}
-
-func (v *AccountReference) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Account == nil) {
-		writer.WriteValue(1, v.Account)
-	}
-	if !(v.Proof == nil) {
-		writer.WriteValue(2, v.Proof)
-	}
-
-	_, _, err := writer.Reset(fieldNames_AccountReference)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *AccountReference) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
-		errs = append(errs, "field Account is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_AcmeFaucet = []string{
 	1: "Type",
 	2: "Url",
@@ -5110,7 +5039,7 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteValue(6, &v)
+			writer.WriteUrl(6, v)
 		}
 	}
 
@@ -5173,7 +5102,7 @@ func (v *CreateIdentity) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteValue(6, &v)
+			writer.WriteUrl(6, v)
 		}
 	}
 
@@ -5227,7 +5156,7 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteValue(5, &v)
+			writer.WriteUrl(5, v)
 		}
 	}
 
@@ -5349,7 +5278,7 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteValue(9, &v)
+			writer.WriteUrl(9, v)
 		}
 	}
 
@@ -5422,7 +5351,7 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteValue(7, &v)
+			writer.WriteUrl(7, v)
 		}
 	}
 
@@ -9482,33 +9411,6 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *AccountReference) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *AccountReference) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, func(b []byte) error {
-		x, err := UnmarshalAccount(b)
-		if err == nil {
-			v.Account = x
-		}
-		return err
-	})
-	if x := new(Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Proof = x
-	}
-
-	seen, err := reader.Reset(fieldNames_AccountReference)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *AcmeFaucet) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10001,8 +9903,8 @@ func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Scratch = x
 	}
 	for {
-		if x := new(AccountReference); reader.ReadValue(6, x.UnmarshalBinary) {
-			v.Authorities = append(v.Authorities, *x)
+		if x, ok := reader.ReadUrl(6); ok {
+			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
 		}
@@ -10041,8 +9943,8 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.KeyBookUrl = x
 	}
 	for {
-		if x := new(AccountReference); reader.ReadValue(6, x.UnmarshalBinary) {
-			v.Authorities = append(v.Authorities, *x)
+		if x, ok := reader.ReadUrl(6); ok {
+			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
 		}
@@ -10078,8 +9980,8 @@ func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.PublicKeyHash = x
 	}
 	for {
-		if x := new(AccountReference); reader.ReadValue(5, x.UnmarshalBinary) {
-			v.Authorities = append(v.Authorities, *x)
+		if x, ok := reader.ReadUrl(5); ok {
+			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
 		}
@@ -10155,8 +10057,8 @@ func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.SupplyLimit = x
 	}
 	for {
-		if x := new(AccountReference); reader.ReadValue(9, x.UnmarshalBinary) {
-			v.Authorities = append(v.Authorities, *x)
+		if x, ok := reader.ReadUrl(9); ok {
+			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
 		}
@@ -10195,8 +10097,8 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Scratch = x
 	}
 	for {
-		if x := new(AccountReference); reader.ReadValue(7, x.UnmarshalBinary) {
-			v.Authorities = append(v.Authorities, *x)
+		if x, ok := reader.ReadUrl(7); ok {
+			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
 		}
@@ -12470,16 +12372,6 @@ func (v *AccountAuth) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *AccountReference) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Account encoding.JsonUnmarshalWith[Account] `json:"account,omitempty"`
-		Proof   *Receipt                            `json:"proof,omitempty"`
-	}{}
-	u.Account = encoding.JsonUnmarshalWith[Account]{Value: v.Account, Func: UnmarshalAccountJSON}
-	u.Proof = v.Proof
-	return json.Marshal(&u)
-}
-
 func (v *AcmeFaucet) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type TransactionType `json:"type"`
@@ -12658,10 +12550,10 @@ func (v *ChainParams) MarshalJSON() ([]byte, error) {
 
 func (v *CreateDataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		Scratch     bool                                `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		Scratch     bool                        `json:"scratch,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -12672,11 +12564,11 @@ func (v *CreateDataAccount) MarshalJSON() ([]byte, error) {
 
 func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		KeyHash     *string                             `json:"keyHash,omitempty"`
-		KeyBookUrl  *url.URL                            `json:"keyBookUrl,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		KeyHash     *string                     `json:"keyHash,omitempty"`
+		KeyBookUrl  *url.URL                    `json:"keyBookUrl,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -12688,10 +12580,10 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 
 func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          TransactionType                     `json:"type"`
-		Url           *url.URL                            `json:"url,omitempty"`
-		PublicKeyHash *string                             `json:"publicKeyHash,omitempty"`
-		Authorities   encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type          TransactionType             `json:"type"`
+		Url           *url.URL                    `json:"url,omitempty"`
+		PublicKeyHash *string                     `json:"publicKeyHash,omitempty"`
+		Authorities   encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -12712,13 +12604,13 @@ func (v *CreateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		Symbol      string                              `json:"symbol,omitempty"`
-		Precision   uint64                              `json:"precision,omitempty"`
-		Properties  *url.URL                            `json:"properties,omitempty"`
-		SupplyLimit *string                             `json:"supplyLimit,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		Symbol      string                      `json:"symbol,omitempty"`
+		Precision   uint64                      `json:"precision,omitempty"`
+		Properties  *url.URL                    `json:"properties,omitempty"`
+		SupplyLimit *string                     `json:"supplyLimit,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -12732,11 +12624,11 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 
 func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		TokenUrl    *url.URL                            `json:"tokenUrl,omitempty"`
-		Scratch     bool                                `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
+		Scratch     bool                        `json:"scratch,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -13728,22 +13620,6 @@ func (v *AccountAuth) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *AccountReference) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Account encoding.JsonUnmarshalWith[Account] `json:"account,omitempty"`
-		Proof   *Receipt                            `json:"proof,omitempty"`
-	}{}
-	u.Account = encoding.JsonUnmarshalWith[Account]{Value: v.Account, Func: UnmarshalAccountJSON}
-	u.Proof = v.Proof
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Account = u.Account.Value
-
-	v.Proof = u.Proof
-	return nil
-}
-
 func (v *AcmeFaucet) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type TransactionType `json:"type"`
@@ -14083,10 +13959,10 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 
 func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		Scratch     bool                                `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		Scratch     bool                        `json:"scratch,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14106,11 +13982,11 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 
 func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		KeyHash     *string                             `json:"keyHash,omitempty"`
-		KeyBookUrl  *url.URL                            `json:"keyBookUrl,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		KeyHash     *string                     `json:"keyHash,omitempty"`
+		KeyBookUrl  *url.URL                    `json:"keyBookUrl,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14136,10 +14012,10 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 
 func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          TransactionType                     `json:"type"`
-		Url           *url.URL                            `json:"url,omitempty"`
-		PublicKeyHash *string                             `json:"publicKeyHash,omitempty"`
-		Authorities   encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type          TransactionType             `json:"type"`
+		Url           *url.URL                    `json:"url,omitempty"`
+		PublicKeyHash *string                     `json:"publicKeyHash,omitempty"`
+		Authorities   encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14180,13 +14056,13 @@ func (v *CreateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		Symbol      string                              `json:"symbol,omitempty"`
-		Precision   uint64                              `json:"precision,omitempty"`
-		Properties  *url.URL                            `json:"properties,omitempty"`
-		SupplyLimit *string                             `json:"supplyLimit,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		Symbol      string                      `json:"symbol,omitempty"`
+		Precision   uint64                      `json:"precision,omitempty"`
+		Properties  *url.URL                    `json:"properties,omitempty"`
+		SupplyLimit *string                     `json:"supplyLimit,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14216,11 +14092,11 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 
 func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType                     `json:"type"`
-		Url         *url.URL                            `json:"url,omitempty"`
-		TokenUrl    *url.URL                            `json:"tokenUrl,omitempty"`
-		Scratch     bool                                `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[AccountReference] `json:"authorities,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
+		Scratch     bool                        `json:"scratch,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url

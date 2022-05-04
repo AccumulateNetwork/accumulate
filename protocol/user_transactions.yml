@@ -18,8 +18,8 @@ CreateIdentity:
     - name: Authorities
       description: is a list of authorities to add to the authority set, in addition to the new key book
       field-number: 6
-      type: AccountReference
-      marshal-as: reference
+      type: url
+      pointer: true
       repeatable: true
       optional: true
 
@@ -41,8 +41,8 @@ CreateTokenAccount:
     - name: Authorities
       description: is a list of authorities to add to the authority set
       field-number: 7
-      type: AccountReference
-      marshal-as: reference
+      type: url
+      pointer: true
       repeatable: true
 
 SendTokens:
@@ -74,8 +74,8 @@ CreateDataAccount:
       optional: true
     - name: Authorities
       description: is a list of authorities to add to the authority set
-      type: AccountReference
-      marshal-as: reference
+      type: url
+      pointer: true
       repeatable: true
 
 WriteData:
@@ -129,8 +129,8 @@ CreateToken:
     - name: Authorities
       description: is a list of authorities to add to the authority set
       field-number: 9
-      type: AccountReference
-      marshal-as: reference
+      type: url
+      pointer: true
       repeatable: true
 
 IssueTokens:
@@ -170,8 +170,8 @@ CreateKeyBook:
     - name: Authorities
       description: is a list of authorities to add to the authority set, in addition to the key book itself
       field-number: 5
-      type: AccountReference
-      marshal-as: reference
+      type: url
+      pointer: true
       repeatable: true
 
 AddCredits:

@@ -98,7 +98,7 @@ func CreateKeyBook(args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		addAuthority(&keyBook.Authorities, authUrl)
+		keyBook.Authorities = append(keyBook.Authorities, authUrl)
 	}
 
 	var keyName string

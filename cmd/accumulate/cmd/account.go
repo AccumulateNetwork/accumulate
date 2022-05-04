@@ -248,7 +248,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
-		addAuthority(&tac.Authorities, keybook)
+		tac.Authorities = append(tac.Authorities, keybook)
 	}
 
 	for _, authUrlStr := range Authorities {
@@ -256,7 +256,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		if err != nil {
 			return "", err
 		}
-		addAuthority(&tac.Authorities, authUrl)
+		tac.Authorities = append(tac.Authorities, authUrl)
 	}
 
 	return dispatchTxAndPrintResponse(&tac, nil, u, signer)

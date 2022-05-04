@@ -188,7 +188,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		addAuthority(&idc.Authorities, authUrl)
+		idc.Authorities = append(idc.Authorities, authUrl)
 	}
 
 	res, err := dispatchTxAndWait(&idc, nil, origin, signer)

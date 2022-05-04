@@ -162,7 +162,8 @@ func CreateToken(origin string, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		addAuthority(&params.Authorities, authUrl)
+		params.Authorities = append(params.Authorities, authUrl)
+		params.Authorities = append(params.Authorities, authUrl)
 	}
 
 	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)

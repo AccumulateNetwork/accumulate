@@ -169,14 +169,3 @@ Rational:
       type: uint
     - name: Denominator
       type: uint
-
-AccountReference:
-  fields:
-    - name: Account
-      type: Account
-      marshal-as: union
-    - name: Proof
-      type: Receipt
-      marshal-as: reference
-      pointer: true
-      optional: true
