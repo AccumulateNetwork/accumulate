@@ -145,16 +145,19 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
 
-	if len(args) > 1 {
+	if len(args) > 0 {
 		adiUrlStr = args[0]
 	}
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	pubKey, _, _, err := resolvePublicKey(args[1])
-	if err != nil {
-		return "", err
+	var pubKey []byte
+	if len(args) > 1 {
+		pubKey, _, _, err = resolvePublicKey(args[1])
+		if err != nil {
+			return "", err
+		}
 	}
 
 	adiUrl, err := url2.Parse(adiUrlStr)
@@ -170,7 +173,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
 		}
-	} else {
+	} else if adiUrl.IsRootIdentity() || pubKey != nil {
 		bookUrl = adiUrl.JoinPath("/book")
 	}
 
