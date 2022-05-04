@@ -1449,7 +1449,7 @@ func TestUpdateValidators(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1466,7 +1466,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
 		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
 
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 2).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1480,7 +1480,7 @@ func TestUpdateValidators(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 3).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1498,7 +1498,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
 
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 4).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1516,7 +1516,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.RemoveValidator)
 		body.PubKey = nodeKeyUpd.PubKey().Bytes()
 
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 5).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).

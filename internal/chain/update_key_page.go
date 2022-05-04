@@ -83,7 +83,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
 
-	if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
+	if book.BookType == protocol.BookTypeValidator {
 		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
 	}
 
