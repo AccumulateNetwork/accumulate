@@ -313,8 +313,8 @@ func (c *FakeTendermint) checkResultSet(data []byte) {
 	}
 
 	for _, r := range rs.Results {
-		if r.Code != 0 {
-			c.onError(fmt.Errorf("DeliverTx failed: %v", r.Message))
+		if r.Code != 0 && r.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
+			c.onError(fmt.Errorf("DeliverTx failed: %v (%v)", r.Message, r.Code))
 		}
 	}
 }
