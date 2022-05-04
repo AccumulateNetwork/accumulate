@@ -66,7 +66,7 @@ var txnTests = []*TCG{
 	}},
 	{Name: "CreateTokenAccount", Cases: []*TC{
 		txnTest("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME")}),
-		txnTest("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME"), KeyBookUrl: parseUrl("adi/book")}),
+		txnTest("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME"), Authorities: []AccountReference{{Account: &UnknownAccount{Url: parseUrl("adi/book")}}}}),
 		txnTest("adi", &CreateTokenAccount{Url: parseUrl("adi/ACME"), TokenUrl: parseUrl("ACME"), Scratch: true}),
 	}},
 	{Name: "SendTokens", Cases: []*TC{

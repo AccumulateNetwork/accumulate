@@ -93,6 +93,14 @@ func CreateKeyBook(args []string) (string, error) {
 	keyBook := protocol.CreateKeyBook{}
 	keyBook.Url = newUrl
 
+	for _, authUrlStr := range Authorities {
+		authUrl, err := url2.Parse(authUrlStr)
+		if err != nil {
+			return "", err
+		}
+		addAuthority(&keyBook.Authorities, authUrl)
+	}
+
 	var keyName string
 	if len(args) > 1 {
 		keyName = args[1]

@@ -474,8 +474,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
 			cda.Url = n.ParseUrl("FooBar/oof")
-			cda.KeyBookUrl = n.ParseUrl("acc://FooBar/foo/book1")
-			cda.ManagerKeyBookUrl = n.ParseUrl("acc://FooBar/mgr/book1")
+			cda.Authorities = []protocol.AccountReference{
+				{Account: &protocol.UnknownAccount{Url: n.ParseUrl("acc://FooBar/foo/book1")}},
+				{Account: &protocol.UnknownAccount{Url: n.ParseUrl("acc://FooBar/mgr/book1")}},
+			}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(cda).
@@ -607,7 +609,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.KeyBookUrl = n.ParseUrl("foo/book1")
+			tac.Authorities = []protocol.AccountReference{
+				{Account: &protocol.UnknownAccount{Url: n.ParseUrl("foo/book1")}},
+			}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).

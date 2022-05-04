@@ -173,8 +173,8 @@ func (b bldCreateIdentity) WithKeyBook(book Urlish) bldCreateIdentity {
 	return b
 }
 
-func (b bldCreateIdentity) WithManager(book Urlish) bldCreateIdentity {
-	b.body.Manager = b.s.url(book)
+func (b bldCreateIdentity) WithAuthority(book Urlish) bldCreateIdentity {
+	b.body.Authorities = append(b.body.Authorities, protocol.AccountReference{Account: &protocol.UnknownAccount{Url: b.s.url(book)}})
 	return b
 }
 
@@ -192,13 +192,8 @@ func (b bldCreateTokenAccount) AsScratch() bldCreateTokenAccount {
 	return b
 }
 
-func (b bldCreateTokenAccount) WithKeyBook(book Urlish) bldCreateTokenAccount {
-	b.body.KeyBookUrl = b.s.url(book)
-	return b
-}
-
-func (b bldCreateTokenAccount) WithManager(book Urlish) bldCreateTokenAccount {
-	b.body.Manager = b.s.url(book)
+func (b bldCreateTokenAccount) WithAuthority(book Urlish) bldCreateTokenAccount {
+	b.body.Authorities = append(b.body.Authorities, protocol.AccountReference{Account: &protocol.UnknownAccount{Url: b.s.url(book)}})
 	return b
 }
 
@@ -233,13 +228,8 @@ func (b bldCreateDataAccount) AsScratch() bldCreateDataAccount {
 	return b
 }
 
-func (b bldCreateDataAccount) WithKeyBook(book Urlish) bldCreateDataAccount {
-	b.body.KeyBookUrl = b.s.url(book)
-	return b
-}
-
-func (b bldCreateDataAccount) WithManager(book Urlish) bldCreateDataAccount {
-	b.body.ManagerKeyBookUrl = b.s.url(book)
+func (b bldCreateDataAccount) WithAuthority(book Urlish) bldCreateDataAccount {
+	b.body.Authorities = append(b.body.Authorities, protocol.AccountReference{Account: &protocol.UnknownAccount{Url: b.s.url(book)}})
 	return b
 }
 
@@ -270,13 +260,8 @@ func (b bldTxn) CreateToken(url Urlish, symbol string, precision uint64) bldCrea
 	return c
 }
 
-func (b bldCreateToken) WithKeyBook(book Urlish) bldCreateToken {
-	b.body.KeyBookUrl = b.s.url(book)
-	return b
-}
-
-func (b bldCreateToken) WithManager(book Urlish) bldCreateToken {
-	b.body.Manager = b.s.url(book)
+func (b bldCreateToken) WithAuthority(book Urlish) bldCreateToken {
+	b.body.Authorities = append(b.body.Authorities, protocol.AccountReference{Account: &protocol.UnknownAccount{Url: b.s.url(book)}})
 	return b
 }
 
@@ -309,11 +294,6 @@ func (b bldTxn) CreateKeyPage() bldCreateKeyPage {
 	return c
 }
 
-func (b bldCreateKeyPage) WithManager(book Urlish) bldCreateKeyPage {
-	b.body.Manager = b.s.url(book)
-	return b
-}
-
 func (b bldCreateKeyPage) WithEntry(e bldKeyEntry) bldCreateKeyPage {
 	b.body.Keys = append(b.body.Keys, e.KeySpecParams)
 	return b
@@ -331,8 +311,8 @@ func (b bldTxn) CreateKeyBook(url Urlish) bldCreateKeyBook {
 	return c
 }
 
-func (b bldCreateKeyBook) WithManager(book Urlish) bldCreateKeyBook {
-	b.body.Manager = b.s.url(book)
+func (b bldCreateKeyBook) WithAuthority(book Urlish) bldCreateKeyBook {
+	b.body.Authorities = append(b.body.Authorities, protocol.AccountReference{Account: &protocol.UnknownAccount{Url: b.s.url(book)}})
 	return b
 }
 

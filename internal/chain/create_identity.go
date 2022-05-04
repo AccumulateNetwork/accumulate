@@ -56,6 +56,10 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		}
 	}
 
+	if body.KeyBookUrl == nil && len(body.Authorities) == 0 && body.Url.IsRootIdentity() {
+		return nil, fmt.Errorf("a root identity cannot be created with an empty authority set")
+	}
+
 	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %v", err)
@@ -65,63 +69,52 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	identity.Url = body.Url
 	accounts := []protocol.Account{identity}
 
+	// Create a new key book
 	if body.KeyBookUrl != nil {
-		// If the transaction specifies a key book URL, use it
+		// Verify the user provided a first key
+		if len(body.KeyHash) == 0 {
+			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
+		}
+
+		// Verify the URL is ok
 		err = validateKeyBookUrl(body.KeyBookUrl, body.Url)
 		if err != nil {
 			return nil, err
 		}
-		identity.AddAuthority(body.KeyBookUrl)
 
-	} else if parent, ok := st.Origin.(*protocol.ADI); ok {
-		// Otherwise inherit from the parent
-		identity.Authorities = parent.Authorities
-
-	} else {
-		// Unless there is no parent
-		return nil, fmt.Errorf("key book url is required to create a root identity")
-	}
-
-	// Add the manager if specified
-	if body.Manager != nil {
-		err = st.AddAuthority(identity, body.Manager)
-		if err != nil {
+		// Check if it exists
+		_, err = st.batch.Account(body.KeyBookUrl).GetState()
+		if err == nil {
+			return nil, fmt.Errorf("%v already exists", body.KeyBookUrl)
+		} else if !errors.Is(err, storage.ErrNotFound) {
 			return nil, err
 		}
+
+		// Create the book
+		book := new(protocol.KeyBook)
+		book.Url = body.KeyBookUrl
+		book.PageCount = 1
+		book.AddAuthority(body.KeyBookUrl)
+		accounts = append(accounts, book)
+		if len(body.KeyHash) != 32 {
+			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
+		}
+
+		// Create the page
+		page := new(protocol.KeyPage)
+		page.Version = 1
+		page.Url = protocol.FormatKeyPageUrl(body.KeyBookUrl, 0)
+		page.AcceptThreshold = 1 // Require one signature from the Key Page
+		keySpec := new(protocol.KeySpec)
+		keySpec.PublicKeyHash = body.KeyHash
+		page.Keys = append(page.Keys, keySpec)
+		accounts = append(accounts, page)
 	}
 
-	// If the key book is specified and is local, create it if it does not exist
-	if body.KeyBookUrl != nil && body.KeyBookUrl.LocalTo(body.Url) {
-		var book *protocol.KeyBook
-		err = st.LoadUrlAs(body.KeyBookUrl, &book)
-		switch {
-		case err == nil:
-			// Ok
-
-		case errors.Is(err, storage.ErrNotFound):
-			if len(body.KeyHash) == 0 {
-				return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
-			}
-
-			book = new(protocol.KeyBook)
-			book.Url = body.KeyBookUrl
-			book.PageCount = 1
-			book.AddAuthority(body.KeyBookUrl)
-			accounts = append(accounts, book)
-			if len(body.KeyHash) != 32 {
-				return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
-			}
-			page := new(protocol.KeyPage)
-			page.Version = 1
-			page.Url = protocol.FormatKeyPageUrl(body.KeyBookUrl, 0)
-			page.AcceptThreshold = 1 // Require one signature from the Key Page
-			keySpec := new(protocol.KeySpec)
-			keySpec.PublicKeyHash = body.KeyHash
-			page.Keys = append(page.Keys, keySpec)
-			accounts = append(accounts, page)
-		default:
-			return nil, err
-		}
+	// Add additional authorities or inherit
+	err = st.SetAuth(identity, body.Authorities)
+	if err != nil {
+		return nil, err
 	}
 
 	// If the ADI is remote, use a synthetic transaction

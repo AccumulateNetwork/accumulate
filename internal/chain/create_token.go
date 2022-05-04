@@ -31,7 +31,7 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
 
-	err := st.SetAuth(token, body.KeyBookUrl, body.Manager)
+	err := st.SetAuth(token, body.Authorities)
 	if err != nil {
 		return nil, err
 	}
