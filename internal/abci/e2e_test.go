@@ -430,8 +430,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 }
 
 func TestCreateAdiDataAccount(t *testing.T) {
-
-	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
+	t.Run("Data Account with Default Key Book and no Manager Key Book", func(t *testing.T) {
 		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
@@ -457,7 +456,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 	})
 
-	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
+	t.Run("Data Account with Custom Key Book and Manager Key Book Url", func(t *testing.T) {
 		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
@@ -469,6 +468,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/foo/book1/1"), 1e9))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/mgr/book1/2"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -482,6 +483,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(cda).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				WithSigner(url.MustParse("FooBar/foo/book1/1"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
+				WithSigner(url.MustParse("FooBar/mgr/book1/2"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
 				Build())
 		})
 
