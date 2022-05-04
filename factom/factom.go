@@ -21,20 +21,22 @@ func LoadFactomAddressesAndBalances(factomFilePath string) ([]*GenesisAddressAnd
 	}
 	datas := strings.Split(string(factomData), "\n")
 	var genesisFactomData []*GenesisAddressAndBalances
-	for _, combinedData := range datas[1:] {
-		addressAndBalance := strings.Split(string(combinedData), ":")
-		genesisData := &GenesisAddressAndBalances{}
-		address, err := protocol.GetLiteAccountFromFactoidAddress(addressAndBalance[0])
-		if err != nil {
-			return nil, err
+	for _, combinedData := range datas {
+		if strings.Contains(combinedData, ":") {
+			addressAndBalance := strings.Split(combinedData, ":")
+			genesisData := &GenesisAddressAndBalances{}
+			address, err := protocol.GetLiteAccountFromFactoidAddress(addressAndBalance[0])
+			if err != nil {
+				return nil, err
+			}
+			genesisData.Address = address
+			balance, err := strconv.ParseInt(strings.Trim(addressAndBalance[1], " "), 10, 64)
+			if err != nil {
+				return nil, err
+			}
+			genesisData.Balance = balance
+			genesisFactomData = append(genesisFactomData, genesisData)
 		}
-		genesisData.Address = address
-		balance, err := strconv.ParseInt(strings.Trim(addressAndBalance[1], " "), 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		genesisData.Balance = balance
-		genesisFactomData = append(genesisFactomData, genesisData)
 	}
 	return genesisFactomData, nil
 }

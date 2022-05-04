@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
+	"gitlab.com/accumulatenetwork/accumulate/factom"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
@@ -46,7 +48,7 @@ func TestCli(t *testing.T) {
 	tc.initalize(t)
 
 	bootstrap(t, tc)
-
+	testFactomAddresses()
 	testMatrix.execute(t, tc)
 
 }
@@ -95,7 +97,7 @@ func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Start
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
 	acctesting.RunTestNet(t, subnets, daemons)
 
 	time.Sleep(time.Second)
@@ -159,4 +161,26 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (string, error) {
 	cmdLine = fmt.Sprintf(cmdLine, args...)
 	return c.execute(t, "--wait 10s "+cmdLine)
+}
+
+func testFactomAddresses() error {
+	factomAddresses, err := factom.LoadFactomAddressesAndBalances("test_factom_addresses.txt")
+	if err != nil {
+		return err
+	}
+	for _, address := range factomAddresses {
+		res, err := GetUrl(address.Address.String())
+		if err != nil {
+			return err
+		}
+		account := res.Data.(map[string]interface{})
+		balance, err := strconv.Atoi(account["balance"].(string))
+		if err != nil {
+			return err
+		}
+		if int64(balance) != 5*address.Balance {
+			return fmt.Errorf("accumulate balance for fatcom address doesn't match")
+		}
+	}
+	return nil
 }
