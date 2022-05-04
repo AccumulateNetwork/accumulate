@@ -87,6 +87,9 @@ KeyBook:
     - name: Url
       type: url
       pointer: true
+    - name: BookType
+      type: BookType
+      marshal-as: enum
     - type: AccountAuth
       marshal-as: reference
     - name: PageCount
