@@ -172,14 +172,24 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.Tr
 // checkValidatorTransaction implements common checks for validator
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
-	if !st.nodeUrl.Equal(env.Transaction.Header.Principal) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, env.Transaction.Header.Principal)
+	validatorBookUrl := env.Transaction.Header.Principal
+	if !st.nodeUrl.Equal(validatorBookUrl.RootIdentity()) {
+		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, validatorBookUrl)
 	}
 
-	bookUrl := st.nodeUrl.JoinPath(protocol.ValidatorBook)
-	pageUrl := protocol.FormatKeyPageUrl(bookUrl, 0)
+	var book *protocol.KeyBook
+	err := st.LoadUrlAs(validatorBookUrl, &book)
+	if err != nil {
+		return nil, fmt.Errorf("invalid key book: %v", err)
+	}
+
+	if book.BookType != protocol.BookTypeValidator {
+		return nil, fmt.Errorf("the key book is not of a validator book type")
+	}
+
+	pageUrl := protocol.FormatKeyPageUrl(validatorBookUrl, 0)
 	var page *protocol.KeyPage
-	err := st.LoadUrlAs(pageUrl, &page)
+	err = st.LoadUrlAs(pageUrl, &page)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
 	}

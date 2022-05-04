@@ -11,6 +11,9 @@ import (
 // ChainType is the type of a chain belonging to an account.
 type ChainType uint64
 
+// BookType is the type of a key book.
+type BookType uint64
+
 // ObjectType is the type of an object in the database.
 type ObjectType uint64
 
