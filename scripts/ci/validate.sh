@@ -514,6 +514,18 @@ else
     echo
 fi
 
+section "Add a key to the operator book"
+if [ -f "$NODE_PRIV_VAL" ]; then
+    wait-for cli-tx page key add acc://dn/operators/1 "$NODE_PRIV_VAL" keytest-3-1
+    sleep 5 # TODO Not sure there is a better way to wait for the anchor to be received
+    RESULT=$(accumulate page get acc://bvn-BVN0/operators/2)
+    [[ $RESULT  == *"keytest-3-1"* ]] || die "keytest-3-1 was not added to the operator book"
+else
+    echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
+    echo
+fi
+
+
 section "Query votes chain"
 if [ -f "$NODE_PRIV_VAL" ]; then
     #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
