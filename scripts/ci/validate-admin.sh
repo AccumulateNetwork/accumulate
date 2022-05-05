@@ -17,6 +17,16 @@ function nodePrivKey {
   echo $DN_NODES_DIR/Node$1/config/priv_validator_key.json
 }
 
+section "Setup"
+if which go > /dev/null || ! which accumulate > /dev/null ; then
+    echo "Installing CLI"
+    go install ./cmd/accumulate
+    export PATH="${PATH}:$(go env GOPATH)/bin"
+fi
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
+echo
+
+
 declare -r M_OF_N_FACTOR=$(bc -l <<<'2/3')
 declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
