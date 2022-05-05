@@ -267,15 +267,12 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.Ge
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
-	page.Keys = make([]*protocol.KeySpec, len(operators))
-	keyIndex := 0
 	for _, operator := range operators {
 		if !validatorsOnly || operator.Power > 0 { // Validators are operators with voting power
 			spec := new(protocol.KeySpec)
 			kh := sha256.Sum256(operator.PubKey.Bytes())
 			spec.PublicKeyHash = kh[:]
-			page.Keys[keyIndex] = spec
-			keyIndex++
+			page.Keys = append(page.Keys, spec)
 		}
 	}
 	return page
