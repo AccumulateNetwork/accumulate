@@ -79,7 +79,7 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	ratio := loadValidatorsThresholdRatio(st, st.nodeUrl.JoinPath(protocol.Globals))
+	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
@@ -117,7 +117,7 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 
 	// Update the threshold
 
-	ratio := loadValidatorsThresholdRatio(st, st.nodeUrl.JoinPath(protocol.Globals))
+	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
@@ -173,8 +173,8 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.Tr
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
 	validatorBookUrl := env.Transaction.Header.Principal
-	if !st.nodeUrl.Equal(validatorBookUrl.RootIdentity()) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, validatorBookUrl)
+	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
+		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
 	}
 
 	var book *protocol.KeyBook

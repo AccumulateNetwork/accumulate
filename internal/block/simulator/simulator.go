@@ -135,12 +135,21 @@ func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{
 	return Query(s, x.Database, x.Executor, req, prove)
 }
 
-func (s *Simulator) InitChain() {
+func (s *Simulator) InitFromGenesis() {
 	s.Helper()
 
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
-		InitChain(s, x.Database, x.Executor)
+		InitFromGenesis(s, x.Database, x.Executor)
+	}
+}
+
+func (s *Simulator) InitFromSnapshot(filename func(string) string) {
+	s.Helper()
+
+	for _, subnet := range s.Subnets {
+		x := s.Subnet(subnet.ID)
+		InitFromSnapshot(s, x.Database, x.Executor, filename(subnet.ID))
 	}
 }
 

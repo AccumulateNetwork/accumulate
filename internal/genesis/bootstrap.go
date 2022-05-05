@@ -228,5 +228,5 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	return batch.GetMinorRootChainAnchor(&opts.Network)
+	return batch.BptRoot(), nil
 }

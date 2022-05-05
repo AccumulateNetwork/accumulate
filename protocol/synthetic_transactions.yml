@@ -57,6 +57,9 @@ SyntheticAnchor:
     - name: Major
       description: indicates whether the anchor is a major block anchor
       type: bool
+    - name: StateRoot
+      description: is the root of the source's state tree (BPT)
+      type: chain
     - name: RootAnchor
       description: is the anchor of the source's root anchor chain
       type: chain
@@ -66,7 +69,6 @@ SyntheticAnchor:
     - name: AcmeBurnt
       description: is the amount of acme tokens burnt in the transaction
       type: bigint
-
     - name: Block
       description: is the index of the block
       type: uvarint
@@ -99,7 +101,7 @@ SyntheticMirror:
   fields:
     - name: Objects
       repeatable: true
-      type: AnchoredRecord
+      type: AnchoredAccount
       marshal-as: reference
 
 SyntheticForwardTransaction:
