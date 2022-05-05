@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -14,10 +15,10 @@ import (
 )
 
 type stateCache struct {
-	logger  logging.OptionalLogger
-	nodeUrl *url.URL
-	txType  protocol.TransactionType
-	txHash  types.Bytes32
+	*config.Network
+	logger logging.OptionalLogger
+	txType protocol.TransactionType
+	txHash types.Bytes32
 
 	state      ProcessTransactionState
 	batch      *database.Batch
@@ -28,9 +29,9 @@ type stateCache struct {
 	Pretend bool
 }
 
-func newStateCache(nodeUrl *url.URL, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
+func newStateCache(net *config.Network, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
 	c := new(stateCache)
-	c.nodeUrl = nodeUrl
+	c.Network = net
 	c.txType = txtype
 	c.txHash = txid
 	c.batch = batch

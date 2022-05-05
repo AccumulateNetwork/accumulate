@@ -259,7 +259,7 @@ func TestAnchorChain(t *testing.T) {
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, expected, ledgerState.ActiveOracle)
+	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
 
 	time.Sleep(2 * time.Second)
 	// Get the anchor chain manager for BVN
