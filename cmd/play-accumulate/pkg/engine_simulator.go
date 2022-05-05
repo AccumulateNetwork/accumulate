@@ -48,7 +48,7 @@ func (s *sessionTB) Helper() {
 
 func (s *Session) UseSimulator(bvnCount int) {
 	sim := simulator.New(&sessionTB{Session: s}, bvnCount)
-	sim.InitChain()
+	sim.InitFromGenesis()
 	s.Engine = &SimEngine{sim}
 }
 
