@@ -4,7 +4,7 @@
 set -e
 set -x
 
-SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}"/validate-commons.sh
 
 # Get number of signatures required using N of M factor
@@ -18,14 +18,13 @@ function nodePrivKey {
 }
 
 section "Setup"
-if which go > /dev/null || ! which accumulate > /dev/null ; then
-    echo "Installing CLI"
-    go install ./cmd/accumulate
-    export PATH="${PATH}:$(go env GOPATH)/bin"
+if which go >/dev/null || ! which accumulate >/dev/null; then
+  echo "Installing CLI"
+  go install ./cmd/accumulate
+  export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
 [ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
 echo
-
 
 declare -r M_OF_N_FACTOR=$(bc -l <<<'2/3')
 declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
@@ -43,7 +42,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   accumulated init node "$NUM_DNNS" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
 
   pubkey=$(jq -re .pub_key.value "$(nodePrivKey $NUM_DNNS)")
-  pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+  pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
 
   # Register new validator
@@ -66,7 +65,6 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   accumulate page get acc://dn/validators/1
 fi
 
-
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
 if [ -f "$(nodePrivKey 0)" ]; then
   TXID=$(cli-tx data write dn/oracle "$(nodePrivKey 0)" '{"price":501}')
@@ -83,41 +81,41 @@ if [ -f "$(nodePrivKey 0)" ]; then
   RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
   [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
-    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
-    echo
+  echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
+  echo
 fi
-
 
 section "Add a key to the operator book"
 if [ -f "$(nodePrivKey 0)" ]; then
-    wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" keytest-3-1
-    echo "sleeping for 5 seconds (wait for anchor)"
-    sleep 5
-    RESULT=$(accumulate page get acc://bvn-BVN0/operators/2)
-    [[ $RESULT  == *"keytest-3-1"* ]] || die "keytest-3-1 was not added to the operator book"
-else
-    echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
-    echo
-fi
+  ensure-key operator-2
 
+  wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" operator-2
+  echo "sleeping for 5 seconds (wait for anchor)"
+  sleep 5
+  RESULT=$(accumulate page get acc://bvn-BVN0/operators/2)
+  [[ $RESULT == *"operator-2"* ]] || die "operator-2 was not added to the operator book"
+else
+  echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
+  echo
+fi
 
 section "Query votes chain"
 if [ -f "$(nodePrivKey 0)" ]; then
-    #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
-    RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
-    #convert the node address to search for to base64
-    NODE_ADDRESS=$(jq -re .address "$(nodePrivKey 0)" | xxd -r -p | base64 )
-    VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
-    FOUND=0
-    for ((i = 0; i < $VOTE_COUNT; i++)); do
+  #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
+  RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+  #convert the node address to search for to base64
+  NODE_ADDRESS=$(jq -re .address "$(nodePrivKey 0)" | xxd -r -p | base64)
+  VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
+  FOUND=0
+  for ((i = 0; i < $VOTE_COUNT; i++)); do
     R2=$(echo "$RESULT" | jq -re .votes[$i].validator.address)
     if [ "$R2" == "$NODE_ADDRESS" ]; then
-        FOUND=1
+      FOUND=1
     fi
-    done
-    [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
+  done
+  [ "$FOUND" -eq 1 ] && success || die "No vote record found on DN"
 else
-    echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
+  echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
 fi
 
 if [ ! -z "${ACCPID}" ]; then
