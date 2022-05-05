@@ -229,6 +229,11 @@ func resolvePublicKey(s string) (pubKey, keyHash []byte, sigType protocol.Signat
 }
 
 func parseKey(s string) (pubKey, privKey []byte, err error) {
+	privKey, err = hex.DecodeString(s)
+	if err == nil && len(privKey) == 64 {
+		return privKey[32:], privKey, nil
+	}
+
 	pubKey, err = pubKeyFromString(s)
 	if err == nil {
 		return pubKey, nil, nil
@@ -278,7 +283,7 @@ func pubKeyFromString(s string) ([]byte, error) {
 	return pubKey[:], nil
 }
 
-func LookupByLite(lite string) ([]byte, error) {
+func LookupByLiteTokenUrl(lite string) ([]byte, error) {
 	liteKey, isLite := LabelForLiteTokenAccount(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite account %s", liteKey)
@@ -287,6 +292,20 @@ func LookupByLite(lite string) ([]byte, error) {
 	label, err := GetWallet().Get(BucketLite, []byte(liteKey))
 	if err != nil {
 		return nil, fmt.Errorf("lite account not found %s", lite)
+	}
+
+	return LookupByLabel(string(label))
+}
+
+func LookupByLiteIdentityUrl(lite string) ([]byte, error) {
+	liteKey, isLite := LabelForLiteIdentity(lite)
+	if !isLite {
+		return nil, fmt.Errorf("invalid lite identity %s", liteKey)
+	}
+
+	label, err := GetWallet().Get(BucketLite, []byte(liteKey))
+	if err != nil {
+		return nil, fmt.Errorf("lite identity account not found %s", lite)
 	}
 
 	return LookupByLabel(string(label))
@@ -312,6 +331,23 @@ func LabelForLiteTokenAccount(label string) (string, bool) {
 	}
 
 	key, _, err := protocol.ParseLiteTokenAddress(u)
+	if key == nil || err != nil {
+		return label, false
+	}
+
+	return u.Hostname(), true
+}
+
+// LabelForLiteIdentity returns the label of the LiteIdentity if label
+// is a valid LiteIdentity account URL. Otherwise, LabelForLiteIdentity returns the
+// original value.
+func LabelForLiteIdentity(label string) (string, bool) {
+	u, err := url.Parse(label)
+	if err != nil {
+		return label, false
+	}
+
+	key, err := protocol.ParseLiteIdentity(u)
 	if key == nil || err != nil {
 		return label, false
 	}
@@ -499,12 +535,12 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 // ImportKey will import the private key and assign it to the label
-func ImportKey(pkhex string, label string, signatureType protocol.SignatureType) (out string, err error) {
+func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
 	var pk ed25519.PrivateKey
 
-	token, err := hex.DecodeString(pkhex)
+	token, err := hex.DecodeString(pkAscii)
 	if err != nil {
 		return "", err
 	}
@@ -815,5 +851,5 @@ func UpdateKey(args []string) (string, error) {
 	newPubKeyHash := sha256.Sum256(newPubKey)
 	txn := new(protocol.UpdateKey)
 	txn.NewKeyHash = newPubKeyHash[:]
-	return dispatchTxAndPrintResponse("update-key", txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }

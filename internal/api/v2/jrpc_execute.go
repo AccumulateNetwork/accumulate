@@ -96,7 +96,7 @@ func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
 	txrq.Signer.SignatureType = sig.Type()
 	txrq.Signer.Timestamp = sig.GetTimestamp()
 	txrq.Signer.PublicKey = keySig.GetPublicKey()
-	txrq.Signer.Url = protocol.FaucetUrl
+	txrq.Signer.Url = protocol.FaucetUrl.RootIdentity()
 	txrq.Signer.Version = sig.GetSignerVersion()
 	txrq.Signer.UseSimpleHash = true
 	txrq.Signature = sig.GetSignature()
@@ -173,6 +173,20 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		return err
 	}
 
+	return m.executeDirect(ctx, env, req.CheckOnly)
+}
+
+func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
+	req := new(ExecuteRequest)
+	err := json.Unmarshal(params, req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	return m.executeDirect(ctx, req.Envelope, req.CheckOnly)
+}
+
+func (m *JrpcMethods) executeDirect(ctx context.Context, env *protocol.Envelope, checkOnly bool) interface{} {
 	// Route the request
 	subnet, err := m.Router.Route(env)
 	if err != nil {
@@ -186,7 +200,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Submit the envelope(s)
-	resp, err := m.Router.Submit(ctx, subnet, env, req.CheckOnly, false)
+	resp, err := m.Router.Submit(ctx, subnet, env, checkOnly, false)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -289,10 +303,6 @@ func processExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, 
 		return nil, validatorError(err)
 	}
 	env.Signatures = append(env.Signatures, sig)
-
-	if !sig.Verify(txn.GetHash()) {
-		return nil, validatorError(errors.New("invalid signature"))
-	}
 
 	return env, nil
 }

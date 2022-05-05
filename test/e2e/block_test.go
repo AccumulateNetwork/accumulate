@@ -42,7 +42,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(aliceUrl).
 		WithTimestampVar(&timestamp).
-		WithSigner(aliceUrl, 1).
+		WithSigner(aliceUrl.RootIdentity(), 1).
 		WithBody(exch).
 		Initiate(protocol.SignatureTypeLegacyED25519, alice).
 		Build()
@@ -83,8 +83,8 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 
 	var creditsBefore uint64
 	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
-		var account *protocol.LiteTokenAccount
-		require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+		var account *protocol.LiteIdentity
+		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
 		creditsBefore = account.CreditBalance
 		return nil
 	})
@@ -104,8 +104,8 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 
 	var creditsAfter uint64
 	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
-		var account *protocol.LiteTokenAccount
-		require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
+		var account *protocol.LiteIdentity
+		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
 		creditsAfter = account.CreditBalance
 		return nil
 	})
@@ -133,9 +133,9 @@ func TestCreateRootIdentity(t *testing.T) {
 
 	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
+			WithPrincipal(liteUrl.RootIdentity()).
 			WithTimestampVar(&timestamp).
-			WithSigner(liteUrl, 1).
+			WithSigner(liteUrl.RootIdentity(), 1).
 			WithBody(&protocol.CreateIdentity{
 				Url:        alice,
 				KeyHash:    keyHash[:],
@@ -281,7 +281,8 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateIdentity(alice, aliceKey[32:])
-	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	_, err := sim.SubmitAndExecuteBlock(
 		acctesting.NewTransaction().
@@ -314,7 +315,8 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	alice := url.MustParse("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
-	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
@@ -337,6 +339,46 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *protocol.ADI
 		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
+		return nil
+	})
+}
+
+func TestAddCreditsToNewLiteIdentity(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	alice := acctesting.GenerateKey("alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey("bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob).RootIdentity()
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
+
+	// Execute
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(aliceUrl).
+			WithSigner(aliceUrl.RootIdentity(), 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&AddCredits{
+				Recipient: bobUrl,
+				Amount:    *big.NewInt(AcmePrecision * 1e3),
+				Oracle:    InitialAcmeOracleValue,
+			}).
+			Initiate(SignatureTypeED25519, alice).
+			Build(),
+	)...)
+
+	// Verify
+	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+		var account *LiteIdentity
+		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
+		require.Equal(t,
+			protocol.FormatAmount(1e3*InitialAcmeOracleValue, protocol.CreditPrecisionPower),
+			protocol.FormatAmount(account.CreditBalance, protocol.CreditPrecisionPower))
 		return nil
 	})
 }

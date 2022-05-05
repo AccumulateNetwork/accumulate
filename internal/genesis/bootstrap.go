@@ -56,6 +56,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		book := new(protocol.KeyBook)
 		book.Url = uBook
+		book.BookType = protocol.BookTypeValidator
 		book.AddAuthority(uBook)
 		book.PageCount = 1
 		records = append(records, book)
@@ -194,11 +195,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
-				lite := new(protocol.LiteTokenAccount)
-				lite.Url = protocol.FaucetUrl
-				lite.TokenUrl = protocol.AcmeUrl()
-				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
-				records = append(records, lite)
+				liteId := new(protocol.LiteIdentity)
+				liteId.Url = protocol.FaucetUrl.RootIdentity()
+
+				liteToken := new(protocol.LiteTokenAccount)
+				liteToken.Url = protocol.FaucetUrl
+				liteToken.TokenUrl = protocol.AcmeUrl()
+				liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+				records = append(records, liteId, liteToken)
 			}
 		}
 

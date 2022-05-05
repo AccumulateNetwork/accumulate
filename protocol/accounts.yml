@@ -22,6 +22,11 @@ LiteIdentity:
     - name: Url
       type: url
       pointer: true
+    - name: CreditBalance
+      type: uvarint
+    - name: LastUsedOn
+      type: uvarint
+      alternative: Nonce
 
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }
@@ -34,11 +39,6 @@ LiteTokenAccount:
       pointer: true
     - name: Balance
       type: bigint
-    - name: LastUsedOn
-      type: uvarint
-      alternative: Nonce
-    - name: CreditBalance
-      type: uvarint
 
 LiteDataAccount:
   union: { type: account, value: LiteDataAccount }
@@ -87,6 +87,9 @@ KeyBook:
     - name: Url
       type: url
       pointer: true
+    - name: BookType
+      type: BookType
+      marshal-as: enum
     - type: AccountAuth
       marshal-as: reference
     - name: PageCount

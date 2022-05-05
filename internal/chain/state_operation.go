@@ -61,8 +61,8 @@ func (m *stateCache) UpdateSignator(record protocol.Account) error {
 
 	// Check that the nonce is the only thing that changed
 	switch record.Type() {
-	case protocol.AccountTypeLiteTokenAccount:
-		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
+	case protocol.AccountTypeLiteIdentity:
+		old, new := old.(*protocol.LiteIdentity), record.(*protocol.LiteIdentity)
 		old.LastUsedOn = new.LastUsedOn
 		old.CreditBalance = new.CreditBalance
 		if !old.Equal(new) {

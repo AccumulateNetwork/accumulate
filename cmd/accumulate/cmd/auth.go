@@ -89,7 +89,7 @@ func EnableAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	accstate, anchor := GetAccountStateProof(account)
 	txn.AccState = accstate
 	txn.Proof = anchor
-	return dispatchTxAndPrintResponse("update-account-auth", txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
 func DisableAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
@@ -103,7 +103,7 @@ func DisableAuth(account *url2.URL, signer *signing.Builder, args []string) (str
 	accstate, anchor := GetAccountStateProof(account)
 	txn.AccState = accstate
 	txn.Proof = anchor
-	return dispatchTxAndPrintResponse("update-account-auth", txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
 func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
@@ -117,7 +117,7 @@ func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string,
 	accstate, anchor := GetAccountStateProof(account)
 	txn.AccState = accstate
 	txn.Proof = anchor
-	return dispatchTxAndPrintResponse("update-account-auth", txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
 func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
@@ -131,5 +131,5 @@ func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	accstate, anchor := GetAccountStateProof(account)
 	txn.AccState = accstate
 	txn.Proof = anchor
-	return dispatchTxAndPrintResponse("update-account-auth", txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }

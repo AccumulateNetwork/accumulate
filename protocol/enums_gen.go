@@ -71,6 +71,12 @@ const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
 // AllowedTransactionBitUpdateAccountAuth is the offset of the UpdateAccountAuth bit.
 const AllowedTransactionBitUpdateAccountAuth AllowedTransactionBit = 2
 
+// BookTypeNormal Plain vanilla key book.
+const BookTypeNormal BookType = 0
+
+// BookTypeValidator Validator key book.
+const BookTypeValidator BookType = 1
+
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
 
@@ -609,6 +615,66 @@ func (v *AllowedTransactionBit) UnmarshalJSON(data []byte) error {
 	*v, ok = AllowedTransactionBitByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Allowed Transaction Bit %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Book Type
+func (v BookType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *BookType) SetEnumValue(id uint64) bool {
+	u := BookType(id)
+	switch u {
+	case BookTypeNormal, BookTypeValidator:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Book Type
+func (v BookType) String() string {
+	switch v {
+	case BookTypeNormal:
+		return "normal"
+	case BookTypeValidator:
+		return "validator"
+	default:
+		return fmt.Sprintf("BookType:%d", v)
+	}
+}
+
+// BookTypeByName returns the named Book Type.
+func BookTypeByName(name string) (BookType, bool) {
+	switch strings.ToLower(name) {
+	case "normal":
+		return BookTypeNormal, true
+	case "validator":
+		return BookTypeValidator, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Book Type to JSON as a string.
+func (v BookType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Book Type from JSON as a string.
+func (v *BookType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = BookTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Book Type %q", s)
 	}
 	return nil
 }
