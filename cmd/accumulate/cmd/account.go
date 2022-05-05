@@ -251,7 +251,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 
 	accstate, err = GetAccountStateProof(u, accountUrl)
 
-	if accstate.Receipt == nil {
+	if accstate.Receipt == nil || err != nil {
 		return "", fmt.Errorf("Unable to prove account state")
 	}
 	tac.Proof = &accstate

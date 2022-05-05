@@ -638,5 +638,4 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.A
 
 		}
 	}
-	return proof, nil
 }
