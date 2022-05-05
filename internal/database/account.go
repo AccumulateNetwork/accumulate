@@ -1,13 +1,10 @@
 package database
 
 import (
-	"bytes"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -17,26 +14,39 @@ type Account struct {
 	key   accountBucket
 }
 
-// ensureChain ensures that the account's metadata includes the given chain.
-func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
+// ensureMetadata ensures that the account's metadata is up to date.
+func (r *Account) ensureMetadata(cb func(obj *protocol.Object) error) error {
 	// Load the current metadata, if any
 	meta, err := r.GetObject()
+	var found bool
 	switch {
 	case err == nil:
-		// Already exists
+		found = true
 	case errors.Is(err, storage.ErrNotFound):
 		meta.Type = protocol.ObjectTypeAccount
 	default:
 		return err
 	}
 
-	err = meta.AddChain(newChain.Name, newChain.Type)
-	if err != nil {
-		return err
+	if cb != nil {
+		err = cb(meta)
+		if err != nil {
+			return err
+		}
+	} else if found {
+		// Already exists, nothing to do
+		return nil
 	}
 
 	r.batch.putValue(r.key.Object(), meta)
 	return nil
+}
+
+// ensureChain ensures that the account's metadata includes the given chain.
+func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
+	return r.ensureMetadata(func(obj *protocol.Object) error {
+		return obj.AddChain(newChain.Name, newChain.Type)
+	})
 }
 
 // GetObject loads the object metadata.
@@ -60,7 +70,7 @@ func (r *Account) GetStateAs(state interface{}) error {
 	return r.batch.getAccountStateAs(r.key.State(), nil, state)
 }
 
-// PutState stores the record state and adds the record to the BPT (as a hash).
+// PutState stores the record state.
 func (r *Account) PutState(state protocol.Account) error {
 	// Does the record state have a URL?
 	if state.GetUrl() == nil {
@@ -78,13 +88,53 @@ func (r *Account) PutState(state protocol.Account) error {
 		return fmt.Errorf("missing key book")
 	}
 
+	// Ensure metadata exists
+	err := r.ensureMetadata(nil)
+	if err != nil {
+		return err
+	}
+
 	// Store the state
 	r.batch.putValue(r.key.State(), state)
-	return nil
+	return r.putBpt()
+}
+
+func (r *Account) pending() (*protocol.HashSet, error) {
+	s := new(protocol.HashSet)
+	err := r.batch.getValuePtr(r.key.Index("Pending"), s, &s, true)
+	return s, err
+}
+
+func (r *Account) Pending() ([][32]byte, error) {
+	s, err := r.pending()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+	return s.Hashes, nil
+}
+
+func (r *Account) AddPending(hash [32]byte) error {
+	s, err := r.pending()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	s.Add(hash)
+	r.batch.putValue(r.key.Index("Pending"), s)
+	return r.putBpt()
+}
+
+func (r *Account) RemovePending(hash [32]byte) error {
+	s, err := r.pending()
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+	s.Remove(hash)
+	r.batch.putValue(r.key.Index("Pending"), s)
+	return r.putBpt()
 }
 
 func (r *Account) chain(name string, writable bool) (*Chain, error) {
-	return newChain(r.batch.store, r.key.Chain(name), writable)
+	return newChain(r, r.key.Chain(name), writable)
 }
 
 // Chain returns a chain manager for the given chain.
@@ -153,74 +203,4 @@ func (r *Account) SyntheticForAnchor(anchor [32]byte) ([][32]byte, error) {
 	}
 
 	return set.Hashes, nil
-}
-
-// stateHashes returns a hasher populated with hashes of all of the account's
-// states.
-func (r *Account) stateHashes() (hash.Hasher, error) {
-	obj, err := r.GetObject()
-	if err != nil {
-		return nil, fmt.Errorf("load object metadata: %w", err)
-	}
-
-	state, err := r.GetState()
-	if err != nil {
-		return nil, fmt.Errorf("load account state: %w", err)
-	}
-
-	data, err := state.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("marshal account state: %w", err)
-	}
-
-	hasher := make(hash.Hasher, 0, len(obj.Chains)+1)
-	hasher.AddBytes(data)
-
-	for _, chainMeta := range obj.Chains {
-		chain, err := r.ReadChain(chainMeta.Name)
-		if err != nil {
-			return nil, fmt.Errorf("load account chain: %w", err)
-		}
-
-		hasher.AddHash((*[32]byte)(chain.Anchor()))
-	}
-
-	return hasher, nil
-}
-
-// PutBpt writes the record's BPT entry.
-func (r *Account) PutBpt() error {
-	hasher, err := r.stateHashes()
-	if err != nil {
-		return err
-	}
-
-	hash := *(*[32]byte)(hasher.MerkleHash())
-	r.batch.putBpt(r.key.Object(), hash)
-	return nil
-}
-
-// StateReceipt returns a Merkle receipt for the account state in the BPT.
-func (r *Account) StateReceipt() (*managed.Receipt, error) {
-	hasher, err := r.stateHashes()
-	if err != nil {
-		return nil, err
-	}
-
-	rBPT, err := r.batch.BptReceipt(r.key.Object(), *(*[32]byte)(hasher.MerkleHash()))
-	if err != nil {
-		return nil, err
-	}
-
-	rState := hasher.Receipt(0, len(hasher)-1)
-	if !bytes.Equal(rState.MDRoot, rBPT.Element) {
-		return nil, errors.New(errors.StatusInternalError, "bpt entry does not match account state")
-	}
-
-	receipt, err := rState.Combine(rBPT)
-	if err != nil {
-		return nil, fmt.Errorf("combine receipt: %w", err)
-	}
-
-	return receipt, nil
 }

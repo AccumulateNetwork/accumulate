@@ -36,7 +36,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 
 	var ledgerState *protocol.InternalLedger
-	err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, err
 	}
