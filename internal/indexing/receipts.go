@@ -117,29 +117,16 @@ func getIndexedChainReceipt(account *Account, name string, chainEntry []byte, in
 
 func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account) (block uint64, receipt *managed.Receipt, err error) {
 	// Get a receipt from the BPT
-	rState, err := account.StateReceipt()
+	r, err := account.StateReceipt()
 	if err != nil {
 		return 0, nil, errors.Unknown("get account state receipt: %w", err)
 	}
 
-	// Load the latest root index entry
+	// Load the latest root index entry (just for the block index)
 	ledger := batch.Account(net.Ledger())
 	rootEntry, err := LoadIndexEntryFromEnd(ledger, protocol.MinorRootIndexChain, 1)
 	if err != nil {
 		return 0, nil, errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	// Get the receipt for the BPT - the BPT's entry is always the last entry in
-	// a block
-	rRoot, err := getRootReceipt(net, batch, int64(rootEntry.Source), int64(rootEntry.Source))
-	if err != nil {
-		return 0, nil, errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	// Create the full receipt
-	r, err := managed.CombineReceipts(rState, rRoot)
-	if err != nil {
-		return 0, nil, errors.Unknown("unable to combine state-BPT receipt with BPT-root receipt: %w", err)
 	}
 
 	return rootEntry.BlockIndex, r, nil

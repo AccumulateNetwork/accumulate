@@ -44,14 +44,9 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
-	// Update the oracle
-	if fromDirectory {
-		if body.AcmeOraclePrice == 0 {
-			return nil, fmt.Errorf("attempting to set oracle price to 0")
-		}
-
+	if fromDirectory && body.AcmeOraclePrice != 0 {
 		var ledgerState *protocol.InternalLedger
-		err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
@@ -60,15 +55,17 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		if err != nil {
 			return nil, fmt.Errorf("failed to update ledger state: %v", err)
 		}
-	} else {
-		//Add the burnt acme tokens back to the supply
+	}
+
+	// Return ACME burnt by buying credits to the supply
+	if !fromDirectory {
 		var issuerState *protocol.TokenIssuer
 		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load acme ledger")
 		}
 		var ledgerState *protocol.InternalLedger
-		err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
@@ -81,6 +78,12 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 	// Add the anchor to the chain - use the subnet name as the chain name
 	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	if err != nil {
+		return nil, err
+	}
+
+	// And the BPT root
+	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +106,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start), "to", logging.AsHex(body.RootAnchor), "block", body.Block, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.nodeUrl.JoinPath(protocol.Ledger)).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
 			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}

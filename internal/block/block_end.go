@@ -3,13 +3,11 @@ package block
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -17,14 +15,15 @@ import (
 // EndBlock implements ./Chain
 func (m *Executor) EndBlock(block *Block) error {
 	// Load the ledger
-	ledger := block.Batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
+	ledger := block.Batch.Account(ledgerUrl)
 	var ledgerState *protocol.InternalLedger
 	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return err
 	}
 
-	//set active oracle from pending
+	// Set active oracle from pending
 	ledgerState.ActiveOracle = ledgerState.PendingOracle
 
 	m.logInfo("Committing",
@@ -36,54 +35,24 @@ func (m *Executor) EndBlock(block *Block) error {
 		"submitted", len(block.State.ProducedTxns))
 	t := time.Now()
 
-	err = m.doEndBlock(block, ledgerState)
-	if err != nil {
-		return err
-	}
+	// 	err = m.doEndBlock(block, ledgerState)
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-	// Write the updated ledger
-	err = ledger.PutState(ledgerState)
-	if err != nil {
-		return err
-	}
+	// 	// Write the updated ledger
+	// 	err = ledger.PutState(ledgerState)
+	// 	if err != nil {
+	// 		return err
+	// 	}
 
-	m.logInfo("Committed", "height", block.Index, "duration", time.Since(t))
-	return nil
-}
+	// 	m.logInfo("Committed", "height", block.Index, "duration", time.Since(t))
+	// 	return nil
+	// }
 
-// updateOraclePrice reads the oracle from the oracle account and updates the
-// value on the ledger.
-func (m *Executor) updateOraclePrice(block *Block, ledgerState *protocol.InternalLedger) error {
-	data, err := block.Batch.Account(protocol.PriceOracle()).Data()
-	if err != nil {
-		return fmt.Errorf("cannot retrieve oracle data entry: %v", err)
-	}
-	_, e, err := data.GetLatest()
-	if err != nil {
-		return fmt.Errorf("cannot retrieve latest oracle data entry: data batch at height %d: %v", data.Height(), err)
-	}
+	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger) error {
 
-	o := protocol.AcmeOracle{}
-	if e.Data == nil {
-		return fmt.Errorf("no data in oracle data account")
-	}
-	err = json.Unmarshal(e.Data[0], &o)
-	if err != nil {
-		return fmt.Errorf("cannot unmarshal oracle data entry %x", e.Data)
-	}
-
-	if o.Price == 0 {
-		return fmt.Errorf("invalid oracle price, must be > 0")
-	}
-
-	ledgerState.PendingOracle = o.Price
-	return nil
-}
-
-func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger) error {
 	// Load the main chain of the minor root
-	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
-	ledger := block.Batch.Account(ledgerUrl)
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
 	if err != nil {
 		return err
@@ -99,6 +68,8 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	// Process chain updates
 	accountSeen := map[string]bool{}
 	for _, u := range block.State.ChainUpdates.Entries {
+		accountSeen[u.Account.String()] = true
+
 		// Do not create root chain or BPT entries for the ledger
 		if ledgerUrl.Equal(u.Account) {
 			continue
@@ -110,16 +81,6 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 		indexIndex, didIndex, err := addChainAnchor(rootChain, account, u.Account, u.Name, u.Type)
 		if err != nil {
 			return err
-		}
-
-		// Once for each account
-		s := strings.ToLower(u.Account.String())
-		if !accountSeen[s] {
-			accountSeen[s] = true
-			err = account.PutBpt()
-			if err != nil {
-				return err
-			}
 		}
 
 		// Add a pending transaction-chain index update
@@ -143,9 +104,11 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	// we're on the DN - mirroring can cause dn/oracle to be updated on the BVN
 	if accountSeen[protocol.PriceOracleAuthority] && m.Network.LocalSubnetID == protocol.Directory {
 		// If things go south here, don't return and error, instead, just log one
-		err := m.updateOraclePrice(block, ledgerState)
+		newOracleValue, err := m.updateOraclePrice(block)
 		if err != nil {
 			m.logError(fmt.Sprintf("%v", err))
+		} else {
+			ledgerState.PendingOracle = newOracleValue
 		}
 	}
 
@@ -154,14 +117,14 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	var synthAnchorIndex uint64
 	if len(block.State.ProducedTxns) > 0 {
 		synthAnchorIndex = uint64(rootChain.Height())
-		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, ledgerState, rootChain)
+		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, rootChain)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Add the BPT to the root chain
-	err = m.anchorBPT(block, ledgerState, rootChain)
+	// Write the updated ledger
+	err = ledger.PutState(ledgerState)
 	if err != nil {
 		return err
 	}
@@ -204,14 +167,48 @@ func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger
 	}
 
 	// Build synthetic receipts on Directory nodes
-	if m.Network.Type == config.Directory {
+	if m.Network.Type == config.Directory && len(block.State.ProducedTxns) > 0 {
 		err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 		if err != nil {
 			return err
 		}
 	}
 
+	err = block.Batch.CommitBpt()
+	if err != nil {
+		return err
+	}
+
+	m.logInfo("Committed", "height", block.Index, "duration", time.Since(t))
 	return nil
+}
+
+// updateOraclePrice reads the oracle from the oracle account and updates the
+// value on the ledger.
+func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
+	data, err := block.Batch.Account(protocol.PriceOracle()).Data()
+	if err != nil {
+		return 0, fmt.Errorf("cannot retrieve oracle data entry: %v", err)
+	}
+	_, e, err := data.GetLatest()
+	if err != nil {
+		return 0, fmt.Errorf("cannot retrieve latest oracle data entry: data batch at height %d: %v", data.Height(), err)
+	}
+
+	o := protocol.AcmeOracle{}
+	if e.Data == nil {
+		return 0, fmt.Errorf("no data in oracle data account")
+	}
+	err = json.Unmarshal(e.Data[0], &o)
+	if err != nil {
+		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.Data)
+	}
+
+	if o.Price == 0 {
+		return 0, fmt.Errorf("invalid oracle price, must be > 0")
+	}
+
+	return o.Price, nil
 }
 
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
@@ -257,7 +254,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, ledgerState *protocol.InternalLedger, rootChain *database.Chain) (indexIndex uint64, err error) {
+func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, rootChain *database.Chain) (indexIndex uint64, err error) {
 	indexIndex, _, err = addChainAnchor(rootChain, ledger, ledgerUrl, protocol.SyntheticChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return 0, err
@@ -271,21 +268,4 @@ func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledg
 	})
 
 	return indexIndex, nil
-}
-
-// anchorBPT anchors the BPT after ensuring any pending changes have been flushed.
-func (m *Executor) anchorBPT(block *Block, ledgerState *protocol.InternalLedger, rootChain *database.Chain) error {
-	root, err := block.Batch.CommitBpt()
-	if err != nil {
-		return err
-	}
-
-	m.logger.Debug("Anchoring BPT", "root", logging.AsHex(root).Slice(0, 4))
-	block.State.ChainUpdates.DidUpdateChain(indexing.ChainUpdate{
-		Name:    "bpt",
-		Account: m.Network.NodeUrl(),
-		Index:   uint64(block.Index - 1),
-	})
-
-	return rootChain.AddEntry(root, false)
 }

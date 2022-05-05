@@ -7,7 +7,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -57,7 +56,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 	}
 
 	// Set up the state manager
-	st, err := chain.LoadStateManager(batch.Begin(true), x.Network.NodeUrl(), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
+	st, err := chain.LoadStateManager(&x.Network, batch.Begin(true), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
 	if err != nil {
 		return x.recordFailedTransaction(batch, transaction, err)
 	}
@@ -328,8 +327,7 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 
 	// Add the user transaction to the principal's list of pending transactions
 	if transaction.Body.Type().IsUser() {
-		pending := indexing.PendingTransactions(batch, transaction.Header.Principal)
-		err = pending.Add(*(*[32]byte)(transaction.GetHash()))
+		err = batch.Account(transaction.Header.Principal).AddPending(*(*[32]byte)(transaction.GetHash()))
 		if err != nil {
 			return nil, nil, fmt.Errorf("store pending list: %w", err)
 		}
@@ -374,8 +372,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	pending := indexing.PendingTransactions(batch, transaction.Header.Principal)
-	err = pending.Remove(*(*[32]byte)(transaction.GetHash()))
+	err = batch.Account(transaction.Header.Principal).RemovePending(*(*[32]byte)(transaction.GetHash()))
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -433,8 +430,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *p
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	pending := indexing.PendingTransactions(batch, transaction.Header.Principal)
-	err = pending.Remove(*(*[32]byte)(transaction.GetHash()))
+	err = batch.Account(transaction.Header.Principal).RemovePending(*(*[32]byte)(transaction.GetHash()))
 	if err != nil {
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}

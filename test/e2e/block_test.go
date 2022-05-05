@@ -29,7 +29,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey("Alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
@@ -71,7 +71,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey("Alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
@@ -119,7 +119,7 @@ func TestCreateRootIdentity(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
@@ -175,7 +175,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		// Initialize
 		var timestamp uint64
 		sim := simulator.New(t, 3)
-		sim.InitChain()
+		sim.InitFromGenesis()
 
 		batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
 		defer batch.Discard()
@@ -203,7 +203,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		// Initialize
 		var timestamp uint64
 		sim := simulator.New(t, 3)
-		sim.InitChain()
+		sim.InitFromGenesis()
 
 		batch := sim.SubnetFor(aliceAdi).Database.Begin(true)
 		defer batch.Discard()
@@ -273,7 +273,7 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
@@ -308,7 +308,7 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
@@ -348,7 +348,7 @@ func TestAddCreditsToNewLiteIdentity(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey("alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
