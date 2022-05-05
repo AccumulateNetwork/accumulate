@@ -1449,7 +1449,6 @@ func TestUpdateValidators(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
-		// TODO Why changing to ValidatorBook?
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 1).
 			WithBody(body).
