@@ -22,17 +22,26 @@ type SigOrTxn struct {
 	extraData   []byte
 }
 
-type exampleFullAccountState struct {
+type accountState struct {
 	fieldsSet []bool
-	State     protocol.Account `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	Chains    []*merkleState   `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
-	extraData []byte
+	// Main is the main state of the account.
+	Main protocol.Account `json:"main,omitempty" form:"main" query:"main" validate:"required"`
+	// Chains is the state of the account's chains.
+	Chains []*merkleState `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	// Pending is the state of the account's pending transactions.
+	Pending []*transactionState `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	// Transactions is the state of other transactions related to the account.
+	Transactions []*transactionState `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 type merkleState struct {
 	fieldsSet []bool
-	Count     uint64     `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Name      string             `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type      protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Count     uint64             `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Pending   [][]byte           `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Entries   [][]byte           `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
 
@@ -49,6 +58,15 @@ type sigSetKeyData struct {
 	KeyHash   [32]byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	extraData []byte
+}
+
+type transactionState struct {
+	fieldsSet   []bool
+	Hash        [32]byte                    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Transaction *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	State       *protocol.TransactionStatus `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	Signatures  []*sigSetData               `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	extraData   []byte
 }
 
 type txSyntheticTxns struct {
@@ -73,11 +91,11 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 
 func (v *SigOrTxn) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *exampleFullAccountState) Copy() *exampleFullAccountState {
-	u := new(exampleFullAccountState)
+func (v *accountState) Copy() *accountState {
+	u := new(accountState)
 
-	if v.State != nil {
-		u.State = (v.State).CopyAsInterface().(protocol.Account)
+	if v.Main != nil {
+		u.Main = (v.Main).CopyAsInterface().(protocol.Account)
 	}
 	u.Chains = make([]*merkleState, len(v.Chains))
 	for i, v := range v.Chains {
@@ -85,19 +103,37 @@ func (v *exampleFullAccountState) Copy() *exampleFullAccountState {
 			u.Chains[i] = (v).Copy()
 		}
 	}
+	u.Pending = make([]*transactionState, len(v.Pending))
+	for i, v := range v.Pending {
+		if v != nil {
+			u.Pending[i] = (v).Copy()
+		}
+	}
+	u.Transactions = make([]*transactionState, len(v.Transactions))
+	for i, v := range v.Transactions {
+		if v != nil {
+			u.Transactions[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
 
-func (v *exampleFullAccountState) CopyAsInterface() interface{} { return v.Copy() }
+func (v *accountState) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *merkleState) Copy() *merkleState {
 	u := new(merkleState)
 
+	u.Name = v.Name
+	u.Type = v.Type
 	u.Count = v.Count
-	u.Pending = make([][32]byte, len(v.Pending))
+	u.Pending = make([][]byte, len(v.Pending))
 	for i, v := range v.Pending {
-		u.Pending[i] = v
+		u.Pending[i] = encoding.BytesCopy(v)
+	}
+	u.Entries = make([][]byte, len(v.Entries))
+	for i, v := range v.Entries {
+		u.Entries[i] = encoding.BytesCopy(v)
 	}
 
 	return u
@@ -131,6 +167,28 @@ func (v *sigSetKeyData) Copy() *sigSetKeyData {
 
 func (v *sigSetKeyData) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *transactionState) Copy() *transactionState {
+	u := new(transactionState)
+
+	u.Hash = v.Hash
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+	if v.State != nil {
+		u.State = (v.State).Copy()
+	}
+	u.Signatures = make([]*sigSetData, len(v.Signatures))
+	for i, v := range v.Signatures {
+		if v != nil {
+			u.Signatures[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
 	u := new(txSyntheticTxns)
 
@@ -163,8 +221,8 @@ func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
 	return true
 }
 
-func (v *exampleFullAccountState) Equal(u *exampleFullAccountState) bool {
-	if !(protocol.EqualAccount(v.State, u.State)) {
+func (v *accountState) Equal(u *accountState) bool {
+	if !(protocol.EqualAccount(v.Main, u.Main)) {
 		return false
 	}
 	if len(v.Chains) != len(u.Chains) {
@@ -175,11 +233,33 @@ func (v *exampleFullAccountState) Equal(u *exampleFullAccountState) bool {
 			return false
 		}
 	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !((v.Pending[i]).Equal(u.Pending[i])) {
+			return false
+		}
+	}
+	if len(v.Transactions) != len(u.Transactions) {
+		return false
+	}
+	for i := range v.Transactions {
+		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
+			return false
+		}
+	}
 
 	return true
 }
 
 func (v *merkleState) Equal(u *merkleState) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Type == u.Type) {
+		return false
+	}
 	if !(v.Count == u.Count) {
 		return false
 	}
@@ -187,7 +267,15 @@ func (v *merkleState) Equal(u *merkleState) bool {
 		return false
 	}
 	for i := range v.Pending {
-		if !(v.Pending[i] == u.Pending[i]) {
+		if !(bytes.Equal(v.Pending[i], u.Pending[i])) {
+			return false
+		}
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !(bytes.Equal(v.Entries[i], u.Entries[i])) {
 			return false
 		}
 	}
@@ -220,6 +308,38 @@ func (v *sigSetKeyData) Equal(u *sigSetKeyData) bool {
 	}
 	if !(v.EntryHash == u.EntryHash) {
 		return false
+	}
+
+	return true
+}
+
+func (v *transactionState) Equal(u *transactionState) bool {
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
+		return false
+	}
+	switch {
+	case v.State == u.State:
+		// equal
+	case v.State == nil || u.State == nil:
+		return false
+	case !((v.State).Equal(u.State)):
+		return false
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !((v.Signatures[i]).Equal(u.Signatures[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -295,25 +415,37 @@ func (v *SigOrTxn) IsValid() error {
 	}
 }
 
-var fieldNames_exampleFullAccountState = []string{
-	1: "State",
+var fieldNames_accountState = []string{
+	1: "Main",
 	2: "Chains",
+	3: "Pending",
+	4: "Transactions",
 }
 
-func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
+func (v *accountState) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.State == nil) {
-		writer.WriteValue(1, v.State)
+	if !(v.Main == nil) {
+		writer.WriteValue(1, v.Main)
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
 			writer.WriteValue(2, v)
 		}
 	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteValue(3, v)
+		}
+	}
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			writer.WriteValue(4, v)
+		}
+	}
 
-	_, _, err := writer.Reset(fieldNames_exampleFullAccountState)
+	_, _, err := writer.Reset(fieldNames_accountState)
 	if err != nil {
 		return nil, err
 	}
@@ -321,18 +453,28 @@ func (v *exampleFullAccountState) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), err
 }
 
-func (v *exampleFullAccountState) IsValid() error {
+func (v *accountState) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field State is missing")
-	} else if v.State == nil {
-		errs = append(errs, "field State is not set")
+		errs = append(errs, "field Main is missing")
+	} else if v.Main == nil {
+		errs = append(errs, "field Main is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Chains is missing")
 	} else if len(v.Chains) == 0 {
 		errs = append(errs, "field Chains is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Transactions is missing")
+	} else if len(v.Transactions) == 0 {
+		errs = append(errs, "field Transactions is not set")
 	}
 
 	switch len(errs) {
@@ -346,20 +488,34 @@ func (v *exampleFullAccountState) IsValid() error {
 }
 
 var fieldNames_merkleState = []string{
-	1: "Count",
-	2: "Pending",
+	1: "Name",
+	2: "Type",
+	3: "Count",
+	4: "Pending",
+	5: "Entries",
 }
 
 func (v *merkleState) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	if !(len(v.Name) == 0) {
+		writer.WriteString(1, v.Name)
+	}
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
+	}
 	if !(v.Count == 0) {
-		writer.WriteUint(1, v.Count)
+		writer.WriteUint(3, v.Count)
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteHash(2, &v)
+			writer.WriteBytes(4, v)
+		}
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteBytes(5, v)
 		}
 	}
 
@@ -375,14 +531,29 @@ func (v *merkleState) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Name is missing")
+	} else if len(v.Name) == 0 {
+		errs = append(errs, "field Name is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Count is missing")
 	} else if v.Count == 0 {
 		errs = append(errs, "field Count is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -502,6 +673,74 @@ func (v *sigSetKeyData) IsValid() error {
 	}
 }
 
+var fieldNames_transactionState = []string{
+	1: "Hash",
+	2: "Transaction",
+	3: "State",
+	4: "Signatures",
+}
+
+func (v *transactionState) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(1, &v.Hash)
+	}
+	if !(v.Transaction == nil) {
+		writer.WriteValue(2, v.Transaction)
+	}
+	if !(v.State == nil) {
+		writer.WriteValue(3, v.State)
+	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(4, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_transactionState)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *transactionState) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Transaction is missing")
+	} else if v.Transaction == nil {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field State is missing")
+	} else if v.State == nil {
+		errs = append(errs, "field State is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_txSyntheticTxns = []string{
 	1: "Txids",
 }
@@ -573,17 +812,17 @@ func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *exampleFullAccountState) UnmarshalBinary(data []byte) error {
+func (v *accountState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *accountState) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	reader.ReadValue(1, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
 		if err == nil {
-			v.State = x
+			v.Main = x
 		}
 		return err
 	})
@@ -594,8 +833,22 @@ func (v *exampleFullAccountState) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		if x := new(transactionState); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(transactionState); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Transactions = append(v.Transactions, x)
+		} else {
+			break
+		}
+	}
 
-	seen, err := reader.Reset(fieldNames_exampleFullAccountState)
+	seen, err := reader.Reset(fieldNames_accountState)
 	if err != nil {
 		return err
 	}
@@ -611,12 +864,25 @@ func (v *merkleState) UnmarshalBinary(data []byte) error {
 func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUint(1); ok {
+	if x, ok := reader.ReadString(1); ok {
+		v.Name = x
+	}
+	if x := new(protocol.ChainType); reader.ReadEnum(2, x) {
+		v.Type = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
 		v.Count = x
 	}
 	for {
-		if x, ok := reader.ReadHash(2); ok {
-			v.Pending = append(v.Pending, *x)
+		if x, ok := reader.ReadBytes(4); ok {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadBytes(5); ok {
+			v.Entries = append(v.Entries, x)
 		} else {
 			break
 		}
@@ -684,6 +950,39 @@ func (v *sigSetKeyData) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *transactionState) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadHash(1); ok {
+		v.Hash = *x
+	}
+	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.Transaction = x
+	}
+	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
+		v.State = x
+	}
+	for {
+		if x := new(sigSetData); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Signatures = append(v.Signatures, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_transactionState)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -720,25 +1019,38 @@ func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *exampleFullAccountState) MarshalJSON() ([]byte, error) {
+func (v *accountState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		State  encoding.JsonUnmarshalWith[protocol.Account] `json:"state,omitempty"`
-		Chains encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
+		Main         encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		Chains       encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
+		Pending      encoding.JsonList[*transactionState]         `json:"pending,omitempty"`
+		Transactions encoding.JsonList[*transactionState]         `json:"transactions,omitempty"`
 	}{}
-	u.State = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.State, Func: protocol.UnmarshalAccountJSON}
+	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
+	u.Pending = v.Pending
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
 func (v *merkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Count   uint64                    `json:"count,omitempty"`
-		Pending encoding.JsonList[string] `json:"pending,omitempty"`
+		Name    string                     `json:"name,omitempty"`
+		Type    protocol.ChainType         `json:"type,omitempty"`
+		Count   uint64                     `json:"count,omitempty"`
+		Pending encoding.JsonList[*string] `json:"pending,omitempty"`
+		Entries encoding.JsonList[*string] `json:"entries,omitempty"`
 	}{}
+	u.Name = v.Name
+	u.Type = v.Type
 	u.Count = v.Count
-	u.Pending = make(encoding.JsonList[string], len(v.Pending))
+	u.Pending = make(encoding.JsonList[*string], len(v.Pending))
 	for i, x := range v.Pending {
-		u.Pending[i] = encoding.ChainToJSON(x)
+		u.Pending[i] = encoding.BytesToJSON(x)
+	}
+	u.Entries = make(encoding.JsonList[*string], len(v.Entries))
+	for i, x := range v.Entries {
+		u.Entries[i] = encoding.BytesToJSON(x)
 	}
 	return json.Marshal(&u)
 }
@@ -762,6 +1074,20 @@ func (v *sigSetKeyData) MarshalJSON() ([]byte, error) {
 	u.System = v.System
 	u.KeyHash = encoding.ChainToJSON(v.KeyHash)
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	return json.Marshal(&u)
+}
+
+func (v *transactionState) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Hash        string                         `json:"hash,omitempty"`
+		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
+		State       *protocol.TransactionStatus    `json:"state,omitempty"`
+		Signatures  encoding.JsonList[*sigSetData] `json:"signatures,omitempty"`
+	}{}
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Transaction = v.Transaction
+	u.State = v.State
+	u.Signatures = v.Signatures
 	return json.Marshal(&u)
 }
 
@@ -799,42 +1125,67 @@ func (v *SigOrTxn) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *exampleFullAccountState) UnmarshalJSON(data []byte) error {
+func (v *accountState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		State  encoding.JsonUnmarshalWith[protocol.Account] `json:"state,omitempty"`
-		Chains encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
+		Main         encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		Chains       encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
+		Pending      encoding.JsonList[*transactionState]         `json:"pending,omitempty"`
+		Transactions encoding.JsonList[*transactionState]         `json:"transactions,omitempty"`
 	}{}
-	u.State = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.State, Func: protocol.UnmarshalAccountJSON}
+	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
+	u.Pending = v.Pending
+	u.Transactions = v.Transactions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.State = u.State.Value
+	v.Main = u.Main.Value
 
 	v.Chains = u.Chains
+	v.Pending = u.Pending
+	v.Transactions = u.Transactions
 	return nil
 }
 
 func (v *merkleState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Count   uint64                    `json:"count,omitempty"`
-		Pending encoding.JsonList[string] `json:"pending,omitempty"`
+		Name    string                     `json:"name,omitempty"`
+		Type    protocol.ChainType         `json:"type,omitempty"`
+		Count   uint64                     `json:"count,omitempty"`
+		Pending encoding.JsonList[*string] `json:"pending,omitempty"`
+		Entries encoding.JsonList[*string] `json:"entries,omitempty"`
 	}{}
+	u.Name = v.Name
+	u.Type = v.Type
 	u.Count = v.Count
-	u.Pending = make(encoding.JsonList[string], len(v.Pending))
+	u.Pending = make(encoding.JsonList[*string], len(v.Pending))
 	for i, x := range v.Pending {
-		u.Pending[i] = encoding.ChainToJSON(x)
+		u.Pending[i] = encoding.BytesToJSON(x)
+	}
+	u.Entries = make(encoding.JsonList[*string], len(v.Entries))
+	for i, x := range v.Entries {
+		u.Entries[i] = encoding.BytesToJSON(x)
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.Name = u.Name
+	v.Type = u.Type
 	v.Count = u.Count
-	v.Pending = make([][32]byte, len(u.Pending))
+	v.Pending = make([][]byte, len(u.Pending))
 	for i, x := range u.Pending {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
 			return fmt.Errorf("error decoding Pending: %w", err)
 		} else {
 			v.Pending[i] = x
+		}
+	}
+	v.Entries = make([][]byte, len(u.Entries))
+	for i, x := range u.Entries {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Entries: %w", err)
+		} else {
+			v.Entries[i] = x
 		}
 	}
 	return nil
@@ -878,6 +1229,31 @@ func (v *sigSetKeyData) UnmarshalJSON(data []byte) error {
 	} else {
 		v.EntryHash = x
 	}
+	return nil
+}
+
+func (v *transactionState) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Hash        string                         `json:"hash,omitempty"`
+		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
+		State       *protocol.TransactionStatus    `json:"state,omitempty"`
+		Signatures  encoding.JsonList[*sigSetData] `json:"signatures,omitempty"`
+	}{}
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Transaction = v.Transaction
+	u.State = v.State
+	u.Signatures = v.Signatures
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	v.Transaction = u.Transaction
+	v.State = u.State
+	v.Signatures = u.Signatures
 	return nil
 }
 

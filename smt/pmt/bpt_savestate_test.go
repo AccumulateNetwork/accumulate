@@ -2,6 +2,8 @@ package pmt
 
 import (
 	"crypto/sha256"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -44,13 +46,22 @@ func TestSaveState(t *testing.T) {
 	storeTx = BDB.Begin(true)
 	bpt.manager.DBManager = storeTx
 
-	err = bpt.SaveSnapshot(DirName+"/SnapShot", storeTx.Get)
+	err = bpt.SaveSnapshot(DirName+"/SnapShot", func(key storage.Key, hash [32]byte) ([]byte, error) {
+		return storeTx.Get(hash)
+	})
 	require.NoErrorf(t, err, "%v", err)
 
 	bptMan := NewBPTManager(nil)
-	err = bptMan.Bpt.LoadSnapshot(DirName+"/SnapShot", func(key storage.Key, value []byte) ([32]byte, error) {
-		hash := sha256.Sum256(value)
-		return hash, storeTx.Put(key, value)
+	err = bptMan.Bpt.LoadSnapshot(DirName+"/SnapShot", func(key storage.Key, hash [32]byte, reader SectionReader) error {
+		value, err := io.ReadAll(reader)
+		if err != nil {
+			return err
+		}
+		valueHash := sha256.Sum256(value)
+		if hash != valueHash {
+			return fmt.Errorf("hash does not match for key %X", key)
+		}
+		return storeTx.Put(key, hash[:])
 	})
 	require.NoErrorf(t, err, "%v", err)
 	err = bptMan.Bpt.Update()

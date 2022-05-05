@@ -11,19 +11,21 @@ import (
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
+	account  *Account
 	key      storage.Key
 	writable bool
 	merkle   *managed.MerkleManager
 }
 
 // newChain creates a new Chain.
-func newChain(db storage.KeyValueTxn, key storage.Key, writable bool) (*Chain, error) {
+func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) {
 	m := new(Chain)
+	m.account = account
 	m.key = key
 	m.writable = writable
 
 	var err error
-	m.merkle, err = managed.NewMerkleManager(db, markPower)
+	m.merkle, err = managed.NewMerkleManager(account.batch.store, markPower)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +130,12 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 		panic("attempted to add a nil entry to a chain")
 	}
 
-	return c.merkle.AddHash(entry, unique)
+	err := c.merkle.AddHash(entry, unique)
+	if err != nil {
+		return err
+	}
+
+	return c.account.putBpt()
 }
 
 // Receipt builds a receipt from one index to another
