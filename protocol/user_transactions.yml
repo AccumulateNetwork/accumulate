@@ -44,6 +44,7 @@ CreateTokenAccount:
       type: url
       pointer: true
       repeatable: true
+      optional: true
 
 SendTokens:
   union: { type: transaction }
@@ -77,6 +78,7 @@ CreateDataAccount:
       type: url
       pointer: true
       repeatable: true
+      optional: true
 
 WriteData:
   union: { type: transaction }
@@ -132,6 +134,7 @@ CreateToken:
       type: url
       pointer: true
       repeatable: true
+      optional: true
 
 IssueTokens:
   union: { type: transaction }
@@ -173,6 +176,7 @@ CreateKeyBook:
       type: url
       pointer: true
       repeatable: true
+      optional: true
 
 AddCredits:
   union: { type: transaction }
