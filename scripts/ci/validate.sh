@@ -113,22 +113,6 @@ fi
 echo
 
 
-DN0_PRIV_VAL="${DN_NODES_DIR:-~/.accumulate/dn}/Node0/config/priv_validator_key.json"
-
-#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-NUM_DNNS=$(find ${DN_NODES_DIR:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
-if [ -f "$DN0_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
-   section "Add a new DN validator"
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
-   accumulated run -n ${NUM_DNNS} -w "$DN_NODES_DIR" &
-   declare -g ACCPID=$!
-   # Get Keys
-   pubkey=$(jq -re .pub_key.value $DN_NODES_DIR/Node0/config/priv_validator_key.json)
-   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
-   # Register new validator
-   wait-for cli-tx validator add dn "$DN0_PRIV_VAL" $hexPubKey
-fi
 
 section "Generate a Lite Token Account"
 accumulate account list 2>&1 | grep -q ACME || accumulate account generate
@@ -501,52 +485,3 @@ TXID=$(cli-tx tx create keytest/tokens keytest-2-0 acc://invalid-account 1)
 wait-for-tx $TXID
 BALANCE1=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 [ $BALANCE -eq $BALANCE1 ] && success || die "Expected $BALANCE, got $BALANCE1"
-
-section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
-if [ -f "$DN0_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$DN0_PRIV_VAL" '{"price":501}'
-    RESULT=$(accumulate -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
-    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
-else
-    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
-    echo
-fi
-
-section "Add a key to the operator book"
-if [ -f "$DN0_PRIV_VAL" ]; then
-    wait-for cli-tx page key add acc://dn/operators/1 "$DN0_PRIV_VAL" keytest-3-1
-    echo "sleeping for 5 seconds (wait for anchor)"
-    sleep 5
-    RESULT=$(accumulate page get acc://bvn-BVN0/operators/2)
-    [[ $RESULT  == *"keytest-3-1"* ]] || die "keytest-3-1 was not added to the operator book"
-else
-    echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
-    echo
-fi
-
-
-section "Query votes chain"
-if [ -f "$DN0_PRIV_VAL" ]; then
-    #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
-    RESULT=$(accumulate -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
-    #convert the node address to search for to base64
-    NODE_ADDRESS=$(jq -re .address $DN0_PRIV_VAL | xxd -r -p | base64 )
-    VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
-    FOUND=0
-    for ((i = 0; i < $VOTE_COUNT; i++)); do
-    R2=$(echo "$RESULT" | jq -re .votes[$i].validator.address)
-    if [ "$R2" == "$NODE_ADDRESS" ]; then
-        FOUND=1
-    fi
-    done
-    [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
-else
-    echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
-fi
-
-if [ ! -z "${ACCPID}" ]; then
-    section "Shutdown dynamic validator"
-    wait-for cli-tx validator remove dn "$DN0_PRIV_VAL" $hexPubKey
-    kill -9 $ACCPID
-fi
