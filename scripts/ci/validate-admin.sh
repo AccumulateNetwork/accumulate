@@ -47,12 +47,12 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
 
   # Register new validator
-  TXID=$(cli-tx validator add dn "$(nodePrivKey 0)" $hexPubKey)
+  TXID=$(cli-tx validator add dn/validators "$(nodePrivKey 0)" $hexPubKey)
   wait-for-tx $TXID
 
   # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
   done
 
   # Start the new validator and increment NUM_DMNS
@@ -74,7 +74,7 @@ if [ -f "$(nodePrivKey 0)" ]; then
 
   # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
   done
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
@@ -122,12 +122,12 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
   section "Shutdown dynamic validator"
-  TXID=$(cli-tx validator remove dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
+  TXID=$(cli-tx validator remove dn/validators "$(nodePrivKey 0)" "$(nodePrivKey 3)")
   wait-for-tx $TXID
 
   # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
   done
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
