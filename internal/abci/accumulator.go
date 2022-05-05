@@ -148,17 +148,12 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
-	anchor, err := batch.GetMinorRootChainAnchor(&app.Network)
-	if err != nil {
-		sentry.CaptureException(err)
-	}
-
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: anchor,
+		LastBlockAppHash: batch.BptRoot(),
 	}
 }
 
@@ -223,6 +218,19 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
+	// Check if initialization is required
+	var root []byte
+	err := app.DB.View(func(batch *database.Batch) (err error) {
+		root, err = app.Executor.LoadStateRoot(batch)
+		return err
+	})
+	if err != nil {
+		panic(fmt.Errorf("failed to load state hash: %v", err))
+	}
+	if root != nil {
+		return abci.ResponseInitChain{AppHash: root}
+	}
+
 	app.logger.Info("Initializing")
 	block := new(block.Block)
 	block.Index = protocol.GenesisBlock
@@ -232,7 +240,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	defer block.Batch.Discard()
 
 	// Initialize the chain
-	root, err := app.Executor.InitChain(block, req.AppStateBytes)
+	err = app.Executor.InitFromGenesis(block.Batch, req.AppStateBytes)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
@@ -241,6 +249,14 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	err = block.Batch.Commit()
 	if err != nil {
 		panic(fmt.Errorf("failed to commit block: %v", err))
+	}
+
+	err = app.DB.View(func(batch *database.Batch) (err error) {
+		root, err = app.Executor.LoadStateRoot(batch)
+		return err
+	})
+	if err != nil {
+		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
 	return abci.ResponseInitChain{AppHash: root}
@@ -419,15 +435,10 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		// Get the old root
 		batch := app.DB.Begin(false)
 		defer batch.Discard()
-		root, err := batch.GetMinorRootChainAnchor(&app.Network)
-		if err != nil {
-			app.fatal(err, true)
-			return abci.ResponseCommit{}
-		}
 
 		duration := time.Since(app.timer)
 		app.logger.Debug("Committed empty block", "duration", duration.String())
-		return abci.ResponseCommit{Data: root}
+		return abci.ResponseCommit{Data: batch.BptRoot()}
 	}
 
 	// Commit the batch
@@ -437,14 +448,9 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		return abci.ResponseCommit{}
 	}
 
-	// Get the root
+	// Notify the executor that we comitted
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
-	root, err := batch.GetMinorRootChainAnchor(&app.Network)
-	if err != nil {
-		app.fatal(err, true)
-		return abci.ResponseCommit{}
-	}
 
 	//this will truncate what tendermint stores since we only care about current state
 	//todo: uncomment the next line when we have smt state syncing complete. For now, we are retaining everything for test net
@@ -454,7 +460,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
-	return abci.ResponseCommit{Data: root}
+	return abci.ResponseCommit{Data: batch.BptRoot()}
 }
 
 // ListSnapshots implements github.com/tendermint/tendermint/abci/types.Application.

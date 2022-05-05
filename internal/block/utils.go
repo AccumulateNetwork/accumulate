@@ -126,8 +126,8 @@ func loadDirectoryEntry(batch *database.Batch, account *url.URL, index uint64) (
 	return string(b), nil
 }
 
-func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, error) {
-	var arec protocol.AnchoredRecord
+func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredAccount, error) {
+	var arec protocol.AnchoredAccount
 
 	rec := batch.Account(u)
 	state, err := rec.GetState()
@@ -140,11 +140,7 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 	}
 
-	arec.Record, err = state.MarshalBinary()
-	if err != nil {
-		return arec, fmt.Errorf("failed to marshal %q: %v", u, err)
-	}
-
+	arec.Account = state
 	copy(arec.Anchor[:], chain.Anchor())
 	return arec, nil
 }

@@ -123,7 +123,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), nil, txn, x.logger)
+	st := chain.NewStateManager(&x.Network, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -357,10 +357,16 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 		return nil, errors.Format(errors.StatusUnknown, "load block chain updates index: %w", err)
 	}
 
+	stateRoot, err := x.LoadStateRoot(batch)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load state hash: %w", err)
+	}
+
 	anchor := new(protocol.SyntheticAnchor)
 	anchor.Source = x.Network.NodeUrl()
 	anchor.RootIndex = uint64(rootChain.Height()) - 1
 	anchor.RootAnchor = *(*[32]byte)(rootChain.Anchor())
+	anchor.StateRoot = *(*[32]byte)(stateRoot)
 	anchor.Block = uint64(ledgerState.Index)
 	anchor.AcmeBurnt = ledgerState.AcmeBurnt
 	if x.Network.Type == config.Directory {

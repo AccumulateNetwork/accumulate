@@ -97,9 +97,9 @@ type AnchorMetadata struct {
 	extraData   []byte
 }
 
-type AnchoredRecord struct {
+type AnchoredAccount struct {
 	fieldsSet []bool
-	Record    []byte   `json:"record,omitempty" form:"record" query:"record" validate:"required"`
+	Account   Account  `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Anchor    [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	extraData []byte
 }
@@ -453,8 +453,10 @@ type Object struct {
 	fieldsSet []bool
 	// Type is the object's type.
 	Type ObjectType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	// Chains lists the object's chains.
-	Chains    []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	// Chains lists the account's chains.
+	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	// Pending lists the account's pending transactions.
+	Pending   HashSet `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
 
@@ -563,6 +565,8 @@ type SyntheticAnchor struct {
 	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	// Major indicates whether the anchor is a major block anchor.
 	Major bool `json:"major,omitempty" form:"major" query:"major" validate:"required"`
+	// StateRoot is the root of the source's state tree (BPT).
+	StateRoot [32]byte `json:"stateRoot,omitempty" form:"stateRoot" query:"stateRoot" validate:"required"`
 	// RootAnchor is the anchor of the source's root anchor chain.
 	RootAnchor [32]byte `json:"rootAnchor,omitempty" form:"rootAnchor" query:"rootAnchor" validate:"required"`
 	// RootIndex is the index of the root anchor chain anchor.
@@ -621,7 +625,7 @@ type SyntheticLedger struct {
 
 type SyntheticMirror struct {
 	fieldsSet []bool
-	Objects   []AnchoredRecord `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
+	Objects   []AnchoredAccount `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
 	extraData []byte
 }
 
@@ -1094,16 +1098,18 @@ func (v *AnchorMetadata) Copy() *AnchorMetadata {
 
 func (v *AnchorMetadata) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *AnchoredRecord) Copy() *AnchoredRecord {
-	u := new(AnchoredRecord)
+func (v *AnchoredAccount) Copy() *AnchoredAccount {
+	u := new(AnchoredAccount)
 
-	u.Record = encoding.BytesCopy(v.Record)
+	if v.Account != nil {
+		u.Account = (v.Account).CopyAsInterface().(Account)
+	}
 	u.Anchor = v.Anchor
 
 	return u
 }
 
-func (v *AnchoredRecord) CopyAsInterface() interface{} { return v.Copy() }
+func (v *AnchoredAccount) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AuthorityEntry) Copy() *AuthorityEntry {
 	u := new(AuthorityEntry)
@@ -1711,6 +1717,7 @@ func (v *Object) Copy() *Object {
 	for i, v := range v.Chains {
 		u.Chains[i] = *(&v).Copy()
 	}
+	u.Pending = *(&v.Pending).Copy()
 
 	return u
 }
@@ -1894,6 +1901,7 @@ func (v *SyntheticAnchor) Copy() *SyntheticAnchor {
 		u.Source = (v.Source).Copy()
 	}
 	u.Major = v.Major
+	u.StateRoot = v.StateRoot
 	u.RootAnchor = v.RootAnchor
 	u.RootIndex = v.RootIndex
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
@@ -1990,7 +1998,7 @@ func (v *SyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SyntheticMirror) Copy() *SyntheticMirror {
 	u := new(SyntheticMirror)
 
-	u.Objects = make([]AnchoredRecord, len(v.Objects))
+	u.Objects = make([]AnchoredAccount, len(v.Objects))
 	for i, v := range v.Objects {
 		u.Objects[i] = *(&v).Copy()
 	}
@@ -2489,8 +2497,8 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 	return true
 }
 
-func (v *AnchoredRecord) Equal(u *AnchoredRecord) bool {
-	if !(bytes.Equal(v.Record, u.Record)) {
+func (v *AnchoredAccount) Equal(u *AnchoredAccount) bool {
+	if !(EqualAccount(v.Account, u.Account)) {
 		return false
 	}
 	if !(v.Anchor == u.Anchor) {
@@ -3336,6 +3344,9 @@ func (v *Object) Equal(u *Object) bool {
 			return false
 		}
 	}
+	if !((&v.Pending).Equal(&u.Pending)) {
+		return false
+	}
 
 	return true
 }
@@ -3548,6 +3559,9 @@ func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
 		return false
 	}
 	if !(v.Major == u.Major) {
+		return false
+	}
+	if !(v.StateRoot == u.StateRoot) {
 		return false
 	}
 	if !(v.RootAnchor == u.RootAnchor) {
@@ -4641,23 +4655,23 @@ func (v *AnchorMetadata) IsValid() error {
 	}
 }
 
-var fieldNames_AnchoredRecord = []string{
-	1: "Record",
+var fieldNames_AnchoredAccount = []string{
+	1: "Account",
 	2: "Anchor",
 }
 
-func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
+func (v *AnchoredAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Record) == 0) {
-		writer.WriteBytes(1, v.Record)
+	if !(v.Account == nil) {
+		writer.WriteValue(1, v.Account)
 	}
 	if !(v.Anchor == ([32]byte{})) {
 		writer.WriteHash(2, &v.Anchor)
 	}
 
-	_, _, err := writer.Reset(fieldNames_AnchoredRecord)
+	_, _, err := writer.Reset(fieldNames_AnchoredAccount)
 	if err != nil {
 		return nil, err
 	}
@@ -4665,13 +4679,13 @@ func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), err
 }
 
-func (v *AnchoredRecord) IsValid() error {
+func (v *AnchoredAccount) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Record is missing")
-	} else if len(v.Record) == 0 {
-		errs = append(errs, "field Record is not set")
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Anchor is missing")
@@ -6976,6 +6990,7 @@ func (v *NetworkGlobals) IsValid() error {
 var fieldNames_Object = []string{
 	1: "Type",
 	2: "Chains",
+	3: "Pending",
 }
 
 func (v *Object) MarshalBinary() ([]byte, error) {
@@ -6989,6 +7004,9 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Chains {
 			writer.WriteValue(2, &v)
 		}
+	}
+	if !((v.Pending).Equal(new(HashSet))) {
+		writer.WriteValue(3, &v.Pending)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Object)
@@ -7011,6 +7029,11 @@ func (v *Object) IsValid() error {
 		errs = append(errs, "field Chains is missing")
 	} else if len(v.Chains) == 0 {
 		errs = append(errs, "field Chains is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Pending is missing")
+	} else if (v.Pending).Equal(new(HashSet)) {
+		errs = append(errs, "field Pending is not set")
 	}
 
 	switch len(errs) {
@@ -7694,15 +7717,16 @@ func (v *SetThresholdKeyPageOperation) IsValid() error {
 }
 
 var fieldNames_SyntheticAnchor = []string{
-	1: "Type",
-	2: "Source",
-	3: "Major",
-	4: "RootAnchor",
-	5: "RootIndex",
-	6: "AcmeBurnt",
-	7: "Block",
-	8: "AcmeOraclePrice",
-	9: "Receipts",
+	1:  "Type",
+	2:  "Source",
+	3:  "Major",
+	4:  "StateRoot",
+	5:  "RootAnchor",
+	6:  "RootIndex",
+	7:  "AcmeBurnt",
+	8:  "Block",
+	9:  "AcmeOraclePrice",
+	10: "Receipts",
 }
 
 func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
@@ -7716,24 +7740,27 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	if !(!v.Major) {
 		writer.WriteBool(3, v.Major)
 	}
+	if !(v.StateRoot == ([32]byte{})) {
+		writer.WriteHash(4, &v.StateRoot)
+	}
 	if !(v.RootAnchor == ([32]byte{})) {
-		writer.WriteHash(4, &v.RootAnchor)
+		writer.WriteHash(5, &v.RootAnchor)
 	}
 	if !(v.RootIndex == 0) {
-		writer.WriteUint(5, v.RootIndex)
+		writer.WriteUint(6, v.RootIndex)
 	}
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(6, &v.AcmeBurnt)
+		writer.WriteBigInt(7, &v.AcmeBurnt)
 	}
 	if !(v.Block == 0) {
-		writer.WriteUint(7, v.Block)
+		writer.WriteUint(8, v.Block)
 	}
 	if !(v.AcmeOraclePrice == 0) {
-		writer.WriteUint(8, v.AcmeOraclePrice)
+		writer.WriteUint(9, v.AcmeOraclePrice)
 	}
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
-			writer.WriteValue(9, &v)
+			writer.WriteValue(10, &v)
 		}
 	}
 
@@ -7762,31 +7789,36 @@ func (v *SyntheticAnchor) IsValid() error {
 		errs = append(errs, "field Major is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field StateRoot is missing")
+	} else if v.StateRoot == ([32]byte{}) {
+		errs = append(errs, "field StateRoot is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field RootAnchor is missing")
 	} else if v.RootAnchor == ([32]byte{}) {
 		errs = append(errs, "field RootAnchor is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field RootIndex is missing")
 	} else if v.RootIndex == 0 {
 		errs = append(errs, "field RootIndex is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
 	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
 		errs = append(errs, "field Block is missing")
 	} else if v.Block == 0 {
 		errs = append(errs, "field Block is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field AcmeOraclePrice is missing")
 	} else if v.AcmeOraclePrice == 0 {
 		errs = append(errs, "field AcmeOraclePrice is not set")
 	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
 		errs = append(errs, "field Receipts is missing")
 	} else if len(v.Receipts) == 0 {
 		errs = append(errs, "field Receipts is not set")
@@ -9698,21 +9730,25 @@ func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *AnchoredRecord) UnmarshalBinary(data []byte) error {
+func (v *AnchoredAccount) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *AnchoredRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *AnchoredAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadBytes(1); ok {
-		v.Record = x
-	}
+	reader.ReadValue(1, func(b []byte) error {
+		x, err := UnmarshalAccount(b)
+		if err == nil {
+			v.Account = x
+		}
+		return err
+	})
 	if x, ok := reader.ReadHash(2); ok {
 		v.Anchor = *x
 	}
 
-	seen, err := reader.Reset(fieldNames_AnchoredRecord)
+	seen, err := reader.Reset(fieldNames_AnchoredAccount)
 	if err != nil {
 		return err
 	}
@@ -11014,6 +11050,9 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x := new(HashSet); reader.ReadValue(3, x.UnmarshalBinary) {
+		v.Pending = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_Object)
 	if err != nil {
@@ -11430,22 +11469,25 @@ func (v *SyntheticAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Major = x
 	}
 	if x, ok := reader.ReadHash(4); ok {
+		v.StateRoot = *x
+	}
+	if x, ok := reader.ReadHash(5); ok {
 		v.RootAnchor = *x
 	}
-	if x, ok := reader.ReadUint(5); ok {
+	if x, ok := reader.ReadUint(6); ok {
 		v.RootIndex = x
 	}
-	if x, ok := reader.ReadBigInt(6); ok {
+	if x, ok := reader.ReadBigInt(7); ok {
 		v.AcmeBurnt = *x
 	}
-	if x, ok := reader.ReadUint(7); ok {
+	if x, ok := reader.ReadUint(8); ok {
 		v.Block = x
 	}
-	if x, ok := reader.ReadUint(8); ok {
+	if x, ok := reader.ReadUint(9); ok {
 		v.AcmeOraclePrice = x
 	}
 	for {
-		if x := new(Receipt); reader.ReadValue(9, x.UnmarshalBinary) {
+		if x := new(Receipt); reader.ReadValue(10, x.UnmarshalBinary) {
 			v.Receipts = append(v.Receipts, *x)
 		} else {
 			break
@@ -11654,7 +11696,7 @@ func (v *SyntheticMirror) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 	for {
-		if x := new(AnchoredRecord); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(AnchoredAccount); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Objects = append(v.Objects, *x)
 		} else {
 			break
@@ -12503,12 +12545,12 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
+func (v *AnchoredAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Record *string `json:"record,omitempty"`
-		Anchor string  `json:"anchor,omitempty"`
+		Account encoding.JsonUnmarshalWith[Account] `json:"account,omitempty"`
+		Anchor  string                              `json:"anchor,omitempty"`
 	}{}
-	u.Record = encoding.BytesToJSON(v.Record)
+	u.Account = encoding.JsonUnmarshalWith[Account]{Value: v.Account, Func: UnmarshalAccountJSON}
 	u.Anchor = encoding.ChainToJSON(v.Anchor)
 	return json.Marshal(&u)
 }
@@ -13043,11 +13085,13 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *Object) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type   ObjectType                       `json:"type,omitempty"`
-		Chains encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
+		Type    ObjectType                       `json:"type,omitempty"`
+		Chains  encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
+		Pending HashSet                          `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Chains = v.Chains
+	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
 
@@ -13214,6 +13258,7 @@ func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 		Type            TransactionType            `json:"type"`
 		Source          *url.URL                   `json:"source,omitempty"`
 		Major           bool                       `json:"major,omitempty"`
+		StateRoot       string                     `json:"stateRoot,omitempty"`
 		RootAnchor      string                     `json:"rootAnchor,omitempty"`
 		RootIndex       uint64                     `json:"rootIndex,omitempty"`
 		AcmeBurnt       *string                    `json:"acmeBurnt,omitempty"`
@@ -13224,6 +13269,7 @@ func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Major = v.Major
+	u.StateRoot = encoding.ChainToJSON(v.StateRoot)
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
@@ -13321,8 +13367,8 @@ func (v *SyntheticForwardTransaction) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticMirror) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    TransactionType                   `json:"type"`
-		Objects encoding.JsonList[AnchoredRecord] `json:"objects,omitempty"`
+		Type    TransactionType                    `json:"type"`
+		Objects encoding.JsonList[AnchoredAccount] `json:"objects,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Objects = v.Objects
@@ -13848,21 +13894,18 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
+func (v *AnchoredAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Record *string `json:"record,omitempty"`
-		Anchor string  `json:"anchor,omitempty"`
+		Account encoding.JsonUnmarshalWith[Account] `json:"account,omitempty"`
+		Anchor  string                              `json:"anchor,omitempty"`
 	}{}
-	u.Record = encoding.BytesToJSON(v.Record)
+	u.Account = encoding.JsonUnmarshalWith[Account]{Value: v.Account, Func: UnmarshalAccountJSON}
 	u.Anchor = encoding.ChainToJSON(v.Anchor)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.Record); err != nil {
-		return fmt.Errorf("error decoding Record: %w", err)
-	} else {
-		v.Record = x
-	}
+	v.Account = u.Account.Value
+
 	if x, err := encoding.ChainFromJSON(u.Anchor); err != nil {
 		return fmt.Errorf("error decoding Anchor: %w", err)
 	} else {
@@ -14872,16 +14915,19 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *Object) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type   ObjectType                       `json:"type,omitempty"`
-		Chains encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
+		Type    ObjectType                       `json:"type,omitempty"`
+		Chains  encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
+		Pending HashSet                          `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Chains = v.Chains
+	u.Pending = v.Pending
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Type = u.Type
 	v.Chains = u.Chains
+	v.Pending = u.Pending
 	return nil
 }
 
@@ -15202,6 +15248,7 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 		Type            TransactionType            `json:"type"`
 		Source          *url.URL                   `json:"source,omitempty"`
 		Major           bool                       `json:"major,omitempty"`
+		StateRoot       string                     `json:"stateRoot,omitempty"`
 		RootAnchor      string                     `json:"rootAnchor,omitempty"`
 		RootIndex       uint64                     `json:"rootIndex,omitempty"`
 		AcmeBurnt       *string                    `json:"acmeBurnt,omitempty"`
@@ -15212,6 +15259,7 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Major = v.Major
+	u.StateRoot = encoding.ChainToJSON(v.StateRoot)
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
@@ -15226,6 +15274,11 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	}
 	v.Source = u.Source
 	v.Major = u.Major
+	if x, err := encoding.ChainFromJSON(u.StateRoot); err != nil {
+		return fmt.Errorf("error decoding StateRoot: %w", err)
+	} else {
+		v.StateRoot = x
+	}
 	if x, err := encoding.ChainFromJSON(u.RootAnchor); err != nil {
 		return fmt.Errorf("error decoding RootAnchor: %w", err)
 	} else {
@@ -15411,8 +15464,8 @@ func (v *SyntheticForwardTransaction) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticMirror) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    TransactionType                   `json:"type"`
-		Objects encoding.JsonList[AnchoredRecord] `json:"objects,omitempty"`
+		Type    TransactionType                    `json:"type"`
+		Objects encoding.JsonList[AnchoredAccount] `json:"objects,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Objects = v.Objects
