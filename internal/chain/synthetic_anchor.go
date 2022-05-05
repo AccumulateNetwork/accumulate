@@ -152,7 +152,7 @@ func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (p
 		}
 
 		updateKeyPage := &UpdateKeyPage{}
-		err = updateKeyPage.executeOperation(page2, 1, 0, opUpd)
+		err = updateKeyPage.executeOperation(page2, opUpd)
 		if err != nil {
 			return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
 		}

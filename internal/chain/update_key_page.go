@@ -128,7 +128,7 @@ func operatorUpdatesToLedger(st *StateManager, err error, body *protocol.UpdateK
 	return nil
 }
 
-func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri uint64, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
