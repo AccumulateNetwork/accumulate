@@ -15,7 +15,6 @@ func init() {
 	testMatrix.addTest(testCase4_12)
 	testMatrix.addTest(testCase4_13)
 	testMatrix.addTest(testCase4_14)
-	testMatrix.addTest(testCase4_15)
 }
 
 //testCase4_9 ED25519 test of ed25519 default signature type
@@ -110,23 +109,6 @@ func testCase4_14(t *testing.T, tc *testCmd) {
 
 	// generate protocol signature with eth
 	r, err := tc.execute(t, "key generate --sigtype eth eth")
-	require.NoError(t, err)
-	kr := KeyResponse{}
-	require.NoError(t, json.Unmarshal([]byte(r), &kr))
-
-	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
-
-	t.Log(r)
-}
-
-// testCase4_15 Unsupported signature type test, should fail
-func testCase4_15(t *testing.T, tc *testCmd) {
-
-	sig := protocol.SignatureTypeUnknown
-
-	// generate protocol signature with unsupported signature type
-	r, err := tc.execute(t, "key generate --sigtype 122132 unsupported")
 	require.NoError(t, err)
 	kr := KeyResponse{}
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
