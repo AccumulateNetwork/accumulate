@@ -103,25 +103,6 @@ function success {
     echo
 }
 
-
-DN0_PRIV_VAL="${DN_NODES_DIR:-~/.accumulate/dn}/Node0/config/priv_validator_key.json"
-
-#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-NUM_DNNS=$(find ${DN_NODES_DIR:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
-if [ -f "$DN0_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
-   section "Add a new DN validator"
-   declare -g TEST_NODE_WORK_DIR=~/node1
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
-   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
-   declare -g ACCPID=$!
-   # Get Keys
-   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
-   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
-   # Register new validator
-   wait-for cli-tx validator add dn "$DN0_PRIV_VAL" $hexPubKey
-fi
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
@@ -130,6 +111,24 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
 fi
 [ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
 echo
+
+
+DN0_PRIV_VAL="${DN_NODES_DIR:-~/.accumulate/dn}/Node0/config/priv_validator_key.json"
+
+#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
+NUM_DNNS=$(find ${DN_NODES_DIR:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
+if [ -f "$DN0_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
+   section "Add a new DN validator"
+   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
+   accumulated run -n ${NUM_DNNS -w "$DN_NODES_DIR" &
+   declare -g ACCPID=$!
+   # Get Keys
+   pubkey=$(jq -re .pub_key.value $DN_NODES_DIR/Node0/config/priv_validator_key.json)
+   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+   # Register new validator
+   wait-for cli-tx validator add dn "$DN0_PRIV_VAL" $hexPubKey
+fi
 
 section "Generate a Lite Token Account"
 accumulate account list 2>&1 | grep -q ACME || accumulate account generate
