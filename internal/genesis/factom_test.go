@@ -2,7 +2,6 @@ package genesis
 
 import (
 	"fmt"
-
 	"testing"
 )
 
