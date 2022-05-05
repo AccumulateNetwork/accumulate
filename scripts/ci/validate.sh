@@ -517,7 +517,8 @@ fi
 section "Add a key to the operator book"
 if [ -f "$NODE_PRIV_VAL" ]; then
     wait-for cli-tx page key add acc://dn/operators/1 "$NODE_PRIV_VAL" keytest-3-1
-    sleep 5 # TODO Not sure there is a better way to wait for the anchor to be received
+    echo "sleeping for 5 seconds (wait for anchor)"
+    sleep 5
     RESULT=$(accumulate page get acc://bvn-BVN0/operators/2)
     [[ $RESULT  == *"keytest-3-1"* ]] || die "keytest-3-1 was not added to the operator book"
 else
