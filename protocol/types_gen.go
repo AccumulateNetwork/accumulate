@@ -161,7 +161,7 @@ type CreateDataAccount struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
 }
 
@@ -181,7 +181,7 @@ type CreateKeyBook struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	// Authorities is a list of authorities to add to the authority set, in addition to the key book itself.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
 }
 
@@ -199,7 +199,7 @@ type CreateToken struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
 }
 
@@ -209,7 +209,7 @@ type CreateTokenAccount struct {
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
 }
 
@@ -5062,11 +5062,6 @@ func (v *CreateDataAccount) IsValid() error {
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field Authorities is missing")
-	} else if len(v.Authorities) == 0 {
-		errs = append(errs, "field Authorities is not set")
-	}
 
 	switch len(errs) {
 	case 0:
@@ -5183,11 +5178,6 @@ func (v *CreateKeyBook) IsValid() error {
 		errs = append(errs, "field PublicKeyHash is missing")
 	} else if len(v.PublicKeyHash) == 0 {
 		errs = append(errs, "field PublicKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Authorities is missing")
-	} else if len(v.Authorities) == 0 {
-		errs = append(errs, "field Authorities is not set")
 	}
 
 	switch len(errs) {
@@ -5311,11 +5301,6 @@ func (v *CreateToken) IsValid() error {
 	} else if v.Precision == 0 {
 		errs = append(errs, "field Precision is not set")
 	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
-		errs = append(errs, "field Authorities is missing")
-	} else if len(v.Authorities) == 0 {
-		errs = append(errs, "field Authorities is not set")
-	}
 
 	switch len(errs) {
 	case 0:
@@ -5378,11 +5363,6 @@ func (v *CreateTokenAccount) IsValid() error {
 		errs = append(errs, "field TokenUrl is missing")
 	} else if v.TokenUrl == nil {
 		errs = append(errs, "field TokenUrl is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field Authorities is missing")
-	} else if len(v.Authorities) == 0 {
-		errs = append(errs, "field Authorities is not set")
 	}
 
 	switch len(errs) {
