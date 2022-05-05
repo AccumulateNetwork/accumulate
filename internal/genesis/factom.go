@@ -1,4 +1,4 @@
-package factom
+package genesis
 
 import (
 	"io/ioutil"

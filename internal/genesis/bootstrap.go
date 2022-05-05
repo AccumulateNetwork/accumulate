@@ -11,7 +11,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/factom"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -184,7 +183,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				records = append(records, lite)
 			}
 			if opts.FactomAddressesFile != "" {
-				factomAddresses, err := factom.LoadFactomAddressesAndBalances(opts.FactomAddressesFile)
+				factomAddresses, err := LoadFactomAddressesAndBalances(opts.FactomAddressesFile)
 				if err != nil {
 					return err
 				}

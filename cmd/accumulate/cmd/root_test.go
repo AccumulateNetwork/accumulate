@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
-	"gitlab.com/accumulatenetwork/accumulate/factom"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
@@ -164,7 +164,7 @@ func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (
 }
 
 func testFactomAddresses() error {
-	factomAddresses, err := factom.LoadFactomAddressesAndBalances("test_factom_addresses.txt")
+	factomAddresses, err := genesis.LoadFactomAddressesAndBalances("test_factom_addresses.txt")
 	if err != nil {
 		return err
 	}
