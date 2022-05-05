@@ -7,7 +7,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type CreateIdentity struct{}
@@ -79,14 +78,6 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		// Verify the URL is ok
 		err = validateKeyBookUrl(body.KeyBookUrl, body.Url)
 		if err != nil {
-			return nil, err
-		}
-
-		// Check if it exists
-		_, err = st.batch.Account(body.KeyBookUrl).GetState()
-		if err == nil {
-			return nil, fmt.Errorf("%v already exists", body.KeyBookUrl)
-		} else if !errors.Is(err, storage.ErrNotFound) {
 			return nil, err
 		}
 

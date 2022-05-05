@@ -79,6 +79,15 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 	}
 
 	status := new(protocol.TransactionStatus)
+	data, err := json.Marshal(resp.Result)
+	if err != nil {
+		return nil, err
+	}
+	if json.Unmarshal(data, &status) == nil {
+		return status, nil
+	}
+
+	status = new(protocol.TransactionStatus)
 	status.Code = resp.Code
 	status.Message = resp.Message
 	return status, nil
