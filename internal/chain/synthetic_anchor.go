@@ -46,7 +46,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// When on a BVN, process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 && protocol.IsBvnUrl(st.nodeUrl) {
+	if len(body.OperatorUpdates) > 0 && fromDirectory {
 		result, err := executeOperatorUpdates(st, body)
 		if err != nil {
 			return result, err
