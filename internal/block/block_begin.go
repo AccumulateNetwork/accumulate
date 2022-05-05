@@ -369,7 +369,7 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 
 	if len(ledgerState.OperatorUpdates) > 0 {
 		anchor.OperatorUpdates = ledgerState.OperatorUpdates
-		ledgerState.OperatorUpdates = nil // TODO Is this safe enough, no need for a mutex?
+		ledgerState.OperatorUpdates = nil
 		err = ledger.PutState(ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("cannot write ledger: %w", err)

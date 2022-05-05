@@ -1538,6 +1538,79 @@ func TestUpdateValidators(t *testing.T) {
 
 }
 
+func TestUpdateOperators(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+	bvn := nodes[subnets[1]][0]
+
+	validators := protocol.FormatKeyPageUrl(dn.network.ValidatorBook(), 0)
+	opKeyAdd := generateKey()
+	addKeyHash := sha256.Sum256(opKeyAdd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.KeyHash = addKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(validators, 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second * 1)
+
+	page := bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, addKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	opKeyUpd := generateKey()
+	updKeyHash := sha256.Sum256(opKeyUpd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.UpdateKeyOperation)
+		op.OldEntry.KeyHash = addKeyHash[:]
+		op.NewEntry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(validators, 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, updKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.RemoveKeyOperation)
+		op.Entry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(validators, 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
+
+}
+
 func TestMultisig(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
