@@ -18,9 +18,6 @@ type StateManager struct {
 
 	Origin    protocol.Account
 	OriginUrl *url.URL
-
-	Signator    protocol.Signer
-	SignatorUrl *url.URL
 }
 
 func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
@@ -29,7 +26,7 @@ func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protoco
 	switch {
 	case err == nil:
 		// Found it
-		return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
+		return NewStateManager(batch, nodeUrl, principal, transaction, logger), nil
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
@@ -40,23 +37,21 @@ func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protoco
 		return nil, fmt.Errorf("load signer: %w", err)
 	}
 
-	signer, ok := status.GetSigner(status.Initiator)
+	_, ok := status.GetSigner(status.Initiator)
 	if !ok {
 		// This should never happen
 		return nil, fmt.Errorf("transaction signer set does not include the initiator")
 	}
 
-	return NewStateManager(batch, nodeUrl, status.Initiator, signer, principal, transaction, logger), nil
+	return NewStateManager(batch, nodeUrl, principal, transaction, logger), nil
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer protocol.Signer, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
-	m.SignatorUrl = signerUrl
-	m.Signator = signer
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
 	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
@@ -66,36 +61,9 @@ func NewStateManager(batch *database.Batch, nodeUrl, signerUrl *url.URL, signer 
 
 // commit writes pending records to the database.
 func (m *StateManager) Commit() (*ProcessTransactionState, error) {
-	records, err := m.stateCache.Commit()
+	_, err := m.stateCache.Commit()
 	if err != nil {
 		return nil, err
-	}
-
-	// Group synthetic create chain transactions per identity. All of the
-	// records created by a given synthetic create chain MUST belong to the same
-	// routing location, so grouping by ID is safe. Since routing locations will
-	// change as the network grows, we cannot guarantee that two different
-	// identities will route the same, so grouping by route is not safe.
-
-	create := map[string]*protocol.SyntheticCreateChain{}
-	for _, record := range records {
-		data, err := record.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-
-		params := protocol.ChainParams{Data: data, IsUpdate: false}
-		id := record.GetUrl().RootIdentity()
-		scc, ok := create[id.String()]
-		if ok {
-			scc.Chains = append(scc.Chains, params)
-			continue
-		}
-
-		scc = new(protocol.SyntheticCreateChain)
-		scc.Chains = []protocol.ChainParams{params}
-		create[id.String()] = scc
-		m.Submit(id, scc)
 	}
 
 	err = m.batch.Commit()
@@ -112,16 +80,11 @@ func (m *StateManager) Discard() {
 
 // Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
-	if m.txType.IsSynthetic() && m.txType != protocol.TransactionTypeSyntheticReceipt {
+	if m.txType.IsSynthetic() {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	if url == nil {
 		panic("No destination URL specified!")
-	}
-
-	swo, ok := body.(protocol.SynthTxnWithOrigin)
-	if ok {
-		swo.SetSyntheticOrigin(m.txHash[:], m.OriginUrl)
 	}
 
 	m.state.DidProduceTxn(url, body)

@@ -180,9 +180,9 @@ TransactionType:
     description: is used to sign a remote transaction
 
   ##### SYNTHETIC TRANSACTIONS #####
-  SyntheticCreateChain:
+  SyntheticCreateIdentity:
     value: 0x31
-    description: creates or updates chains
+    description: creates an identity
   SyntheticWriteData:
     value: 0x32
     description: writes data to a data account
@@ -207,23 +207,11 @@ TransactionType:
   SegWitDataEntry:
     value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
-  SyntheticReceipt:
-    value: 0x40
-    description: notifies the sender of synthetic transactions when a transaction has failed.
 
   ##### INTERNAL TRANSACTIONS #####
   InternalGenesis:
     value: 0x60
     description: initializes system chains
-  InternalSendTransactions:
-    value: 0x61
-    description: reserved for internal send
-  InternalTransactionsSigned:
-    description: notifies the executor of synthetic transactions that have been signed
-    value: 0x62
-  InternalTransactionsSent:
-    value: 0x63
-    description: notifies the executor of synthetic transactions that have been sent
 
 AccountType:
   Unknown:
@@ -291,3 +279,11 @@ VoteType:
   Suggest:
     value: 0x3
     description: put forth a proposal
+
+BookType:
+  Normal:
+    value: 0
+    description: Plain vanilla key book
+  Validator:
+    value: 0x01
+    description: Validator key book

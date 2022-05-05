@@ -3,7 +3,8 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -11,6 +12,49 @@ type UpdateKeyPage struct{}
 
 func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
+}
+
+func (UpdateKeyPage) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
+	}
+
+	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+	if !ok {
+		return true, nil // Signer is not a page
+	}
+
+	if !principalBook.Equal(signerBook) {
+		return true, nil // Signer belongs to a different book
+	}
+
+	// Lower indices are higher priority
+	if signerPageIdx > principalPageIdx {
+		return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+	}
+
+	// Operation-specific checks
+	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
+	}
+	for _, op := range body.Operation {
+		switch op.Type() {
+		case protocol.KeyPageOperationTypeUpdateAllowed:
+			if signerPageIdx == principalPageIdx {
+				return false, errors.Format(errors.StatusUnauthorized, "%v cannot modify its own allowed operations", transaction.Header.Principal)
+			}
+		}
+	}
+
+	// Run the normal checks
+	return true, nil
+}
+
+func (UpdateKeyPage) TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	// Do not override the ready check
+	return false, true, nil
 }
 
 func (UpdateKeyPage) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -39,38 +83,26 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("invalid key book: %v", err)
 	}
 
-	if st.nodeUrl.JoinPath(protocol.ValidatorBook).Equal(book.Url) {
+	if book.BookType == protocol.BookTypeValidator {
 		return nil, fmt.Errorf("UpdateKeyPage cannot be used to modify the validator key book")
 	}
 
-	pagePri, ok := getKeyPageIndex(page.Url)
-	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", page.Url)
-	}
-
-	signerPri, ok := getKeyPageIndex(st.SignatorUrl)
-	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
-	}
-
-	// 0 is the highest priority, followed by 1, etc
-	if signerPri > pagePri {
-		return nil, fmt.Errorf("cannot modify %q with a lower priority key page", page.Url)
-	}
-
 	for _, op := range body.Operation {
-		err = UpdateKeyPage{}.executeOperation(page, pagePri, signerPri, op)
+		err = UpdateKeyPage{}.executeOperation(page, op)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 	return nil, nil
 }
 
-func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri uint64, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
@@ -96,7 +128,11 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri
 
 		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
-		if len(page.Keys) == 0 && pagePri == 0 {
+		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
+		if !ok {
+			return errors.Format(errors.StatusInternalError, "principal is not a key page")
+		}
+		if len(page.Keys) == 0 && pageIndex == 0 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
@@ -128,10 +164,6 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri
 		return page.SetThreshold(op.Threshold)
 
 	case *protocol.UpdateAllowedKeyPageOperation:
-		if signerPri == pagePri {
-			return fmt.Errorf("%v cannot modify its own allowed operations", page.Url)
-		}
-
 		if page.TransactionBlacklist == nil {
 			page.TransactionBlacklist = new(protocol.AllowedTransactions)
 		}
@@ -160,11 +192,6 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, pagePri, signerPri
 	default:
 		return fmt.Errorf("invalid operation: %v", op.Type())
 	}
-}
-
-func getKeyPageIndex(page *url.URL) (uint64, bool) {
-	_, index, ok := protocol.ParseKeyPageUrl(page)
-	return index - 1, ok
 }
 
 func didUpdateKeyPage(page *protocol.KeyPage) {

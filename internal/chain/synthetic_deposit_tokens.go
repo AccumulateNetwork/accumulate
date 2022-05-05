@@ -19,7 +19,6 @@ func (SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.
 }
 
 func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	// *big.Int, tokenChain, *url.URL
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticDepositTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), tx.Transaction.Body)
@@ -48,25 +47,24 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		lite.TokenUrl = body.Token
 		account = lite
 
-		originIdentity := tx.Transaction.Header.Principal.Identity()
+		liteIdUrl := tx.Transaction.Header.Principal.RootIdentity()
 		var liteIdentity *protocol.LiteIdentity
-		err := st.LoadUrlAs(originIdentity, &liteIdentity)
+		err := st.LoadUrlAs(liteIdUrl, &liteIdentity)
 		switch {
 		case err == nil:
 			// OK
 		case errors.Is(err, storage.ErrNotFound):
 			liteIdentity = new(protocol.LiteIdentity)
-			liteIdentity.Url = originIdentity
-			st.Update(liteIdentity)
+			liteIdentity.Url = liteIdUrl
+			err := st.Update(liteIdentity)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update %v: %v", liteIdentity.GetUrl(), err)
+			}
 		default:
 			return nil, err
 		}
 
-		rootIdentity := tx.Transaction.Header.Principal.RootIdentity()
-		if rootIdentity.Equal(originIdentity) && !protocol.AcmeUrl().Equal(body.Token) {
-			return nil, fmt.Errorf("invalid origin, expecting origin format acc://lite-account/lite-identity/... but got %s", tx.Transaction.Header.Principal.String())
-		}
-		err = st.AddDirectoryEntry(rootIdentity, tx.Transaction.Header.Principal)
+		err = st.AddDirectoryEntry(liteIdUrl, tx.Transaction.Header.Principal)
 		if err != nil {
 			return nil, fmt.Errorf("failed to add directory entries in lite token account %s: %v", tx.Transaction.Header.Principal.RootIdentity(), err)
 		}
@@ -75,6 +73,23 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 	if !account.CreditTokens(&body.Amount) {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
-	st.Update(account)
+	err := st.Update(account)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
+}
+
+func (SyntheticDepositTokens) DidFail(state *ProcessTransactionState, transaction *protocol.Transaction) error {
+	body, ok := transaction.Body.(*protocol.SyntheticDepositTokens)
+	if !ok {
+		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositTokens), transaction.Body)
+	}
+
+	// Send the tokens back on failure
+	refund := new(protocol.SyntheticDepositTokens)
+	refund.Token = body.Token
+	refund.Amount = body.Amount
+	state.DidProduceTxn(body.Source, refund)
+	return nil
 }

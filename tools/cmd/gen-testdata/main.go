@@ -110,9 +110,9 @@ var txnTests = []*TCG{
 	{Name: "SignPending", Cases: []*TC{
 		txnTest("adi", &RemoteTransaction{}),
 	}},
-	{Name: "SyntheticCreateChain", Cases: []*TC{
-		txnTest("adi", &SyntheticCreateChain{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
-			Chains: []ChainParams{{Data: []byte{1, 2, 3}}}}),
+	{Name: "SyntheticCreateIdentity", Cases: []*TC{
+		txnTest("adi", &SyntheticCreateIdentity{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
+			Accounts: []Account{&UnknownAccount{Url: parseUrl("foo")}}}),
 	}},
 	{Name: "SyntheticWriteData", Cases: []*TC{
 		txnTest("adi", &SyntheticWriteData{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
@@ -146,7 +146,10 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&TokenAccount{Url: parseUrl("adi/foo"), AccountAuth: *simpleAuth, TokenUrl: parseUrl("adi/foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{Url: parseUrl("lite-token-account"), TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
+		testdata.NewAcntTest(&LiteTokenAccount{Url: parseUrl("lite-token-account"), TokenUrl: parseUrl("ACME"), Balance: *big.NewInt(12345)}),
+	}},
+	{Name: "LiteIdentity", Cases: []*TC{
+		testdata.NewAcntTest(&LiteIdentity{Url: parseUrl("lite-identity"), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
 		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),

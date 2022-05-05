@@ -30,44 +30,12 @@ InternalLedger:
 InternalGenesis:
   union: { type: transaction }
 
-InternalSendTransactions:
-  union: { type: transaction }
-  fields:
-    - name: Transactions
-      repeatable: true
-      type: SendTransaction
-      marshal-as: reference
-
-InternalTransactionsSigned:
-  union: { type: transaction }
-  fields:
-    - name: Transactions
-      repeatable: true
-      type: TransactionSignature
-      marshal-as: reference
-
-InternalTransactionsSent:
-  union: { type: transaction }
-  fields:
-    - name: Transactions
-      type: chain
-      repeatable: true
-
 ##### Data Types #####
 
 SyntheticLedger:
   fields:
     - name: Nonce
       type: uvarint
-    # - name: Produced
-    #   type: chain
-    #   repeatable: true
-    - name: Unsigned
-      type: chain
-      repeatable: true
-    - name: Unsent
-      type: chain
-      repeatable: true
 
 SendTransaction:
   fields:

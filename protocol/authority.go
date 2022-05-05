@@ -91,40 +91,35 @@ func (*UnknownSigner) CreditCredits(amount uint64)                          {}
 func (*UnknownSigner) DebitCredits(amount uint64) bool                      { return false }
 func (*UnknownSigner) CanDebitCredits(amount uint64) bool                   { return false }
 
-/* ***** Lite account auth ***** */
+/* ***** Lite identity auth ***** */
 
-// GetSigners returns the lite address.
-func (l *LiteTokenAccount) GetSigners() []*url.URL { return []*url.URL{l.Url} }
+func (li *LiteIdentity) GetVersion() uint64 {
+	return 1
+}
 
-// GetVersion returns 1.
-func (*LiteTokenAccount) GetVersion() uint64 { return 1 }
+func (li *LiteIdentity) GetSignatureThreshold() uint64 {
+	return 1
+}
 
-// GetSignatureThreshold returns 1.
-func (*LiteTokenAccount) GetSignatureThreshold() uint64 { return 1 }
+func (li *LiteIdentity) EntryByKey(key []byte) (int, KeyEntry, bool) {
+	keyHash := sha256.Sum256(key)
+	return li.EntryByKeyHash(keyHash[:])
+}
 
-// EntryByKeyHash checks if the key hash matches the lite token account URL.
-// EntryByKeyHash will panic if the lite token account URL is invalid.
-func (l *LiteTokenAccount) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
-	myKey, _, _ := ParseLiteTokenAddress(l.Url)
+func (li *LiteIdentity) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
+	myKey, _ := ParseLiteIdentity(li.Url)
 	if myKey == nil {
-		panic("lite token account URL is not a valid lite address")
+		panic("lite identity URL is not valid")
 	}
 
 	if !bytes.Equal(myKey, keyHash[:20]) {
 		return -1, nil, false
 	}
-	return 0, l, true
-}
-
-// EntryByKey checks if the key's hash matches the lite token account URL.
-// EntryByKey will panic if the lite token account URL is invalid.
-func (l *LiteTokenAccount) EntryByKey(key []byte) (int, KeyEntry, bool) {
-	keyHash := sha256.Sum256(key)
-	return l.EntryByKeyHash(keyHash[:])
+	return 0, li, true
 }
 
 // EntryByDelegate returns -1, nil, false.
-func (*LiteTokenAccount) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
+func (*LiteIdentity) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
 	return -1, nil, false
 }
 

@@ -12,7 +12,7 @@ import (
 
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
-	Use:   "credits [origin token account] [key page or lite account URL] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",
+	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",
 	Short: "Purchase credits with acme and send to recipient.",
 	Args:  cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -29,8 +29,8 @@ var creditsCmd = &cobra.Command{
 }
 
 func PrintCredits() {
-	fmt.Println("  accumulate credits [origin lite token account] [lite token account or key page url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits to send to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin lite token account] [lite identity url or key page url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits to send to another lite identity or adi key page")
 }
 
 func AddCredits(origin string, args []string) (string, error) {
@@ -108,5 +108,5 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Amount = *estAcme
 	credits.Oracle = acmeOracle.Price
 
-	return dispatchTxAndPrintResponse("add-credits", &credits, nil, u, signer)
+	return dispatchTxAndPrintResponse(&credits, nil, u, signer)
 }

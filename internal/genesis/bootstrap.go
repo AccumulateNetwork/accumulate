@@ -56,13 +56,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		book := new(protocol.KeyBook)
 		book.Url = uBook
+		book.BookType = protocol.BookTypeValidator
 		book.AddAuthority(uBook)
 		book.PageCount = 1
 		records = append(records, book)
 
 		page := new(protocol.KeyPage)
 		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
-		page.AcceptThreshold = protocol.GetValidatorsMOfN(len(opts.Validators))
+
+		page.AcceptThreshold = protocol.GetValidatorsMOfN(len(opts.Validators), protocol.FallbackValidatorThreshold)
 		page.Version = 1
 		records = append(records, page)
 
@@ -133,6 +135,24 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		records = append(records, da)
 		urls = append(urls, da.Url)
 
+		//create a new Globals account
+		global := new(protocol.DataAccount)
+		global.Url = uAdi.JoinPath(protocol.Globals)
+		wg := new(protocol.WriteData)
+		threshold := new(protocol.NetworkGlobals)
+		threshold.ValidatorThreshold.Numerator = 2
+		threshold.ValidatorThreshold.Denominator = 3
+		var dat []byte
+		dat, err = threshold.MarshalBinary()
+		if err != nil {
+			return err
+		}
+		wg.Entry.Data = append(wg.Entry.Data, dat)
+		global.AddAuthority(uBook)
+		records = append(records, global)
+		urls = append(urls, global.Url)
+		dataRecords = append(dataRecords, DataRecord{global, &wg.Entry})
+
 		switch opts.Network.Type {
 		case config.Directory:
 			oracle := new(protocol.AcmeOracle)
@@ -143,7 +163,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				return err
 			}
 			wd.Entry.Data = append(wd.Entry.Data, d)
-
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
 			da.AddAuthority(uBook)
@@ -176,15 +195,21 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
-				lite := new(protocol.LiteTokenAccount)
-				lite.Url = protocol.FaucetUrl
-				lite.TokenUrl = protocol.AcmeUrl()
-				lite.Balance.SetString(protocol.AcmeFaucetBalance, 10)
-				records = append(records, lite)
+				liteId := new(protocol.LiteIdentity)
+				liteId.Url = protocol.FaucetUrl.RootIdentity()
+
+				liteToken := new(protocol.LiteTokenAccount)
+				liteToken.Url = protocol.FaucetUrl
+				liteToken.TokenUrl = protocol.AcmeUrl()
+				liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+				records = append(records, liteId, liteToken)
 			}
 		}
 
-		st.Update(records...)
+		err = st.Create(records...)
+		if err != nil {
+			return fmt.Errorf("failed to create records: %w", err)
+		}
 
 		for _, wd := range dataRecords {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)

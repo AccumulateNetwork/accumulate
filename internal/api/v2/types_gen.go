@@ -81,6 +81,12 @@ type DirectoryQuery struct {
 	extraData []byte
 }
 
+type ExecuteRequest struct {
+	Envelope  *protocol.Envelope `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
+	CheckOnly bool               `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	extraData []byte
+}
+
 type GeneralQuery struct {
 	UrlQuery
 	QueryOptions
