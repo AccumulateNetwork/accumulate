@@ -142,7 +142,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	}
 	var factomAddressFilePath string
 	if withFactomAddress {
-		factomAddressFilePath = "test_factom_addresses.txt"
+		factomAddressFilePath = "test_factom_addresses"
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
