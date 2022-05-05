@@ -4,13 +4,36 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type AddValidator struct{}
-type RemoveValidator struct{}
-type UpdateValidatorKey struct{}
+type checkValidatorSigner struct{}
+
+type AddValidator struct{ checkValidatorSigner }
+type RemoveValidator struct{ checkValidatorSigner }
+type UpdateValidatorKey struct{ checkValidatorSigner }
+
+func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
+	}
+
+	if signerPageIdx > 1 {
+		return false, fmt.Errorf("cannot modify validators with a lower priority key page")
+	}
+
+	// Run the normal checks
+	return true, nil
+}
+
+func (checkValidatorSigner) TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	// Do not override the ready check
+	return false, true, nil
+}
 
 func (AddValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeAddValidator
@@ -181,15 +204,6 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 	err = st.LoadUrlAs(pageUrl, &page)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
-	}
-
-	signerPriority, ok := getKeyPageIndex(st.SignatorUrl)
-	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
-	}
-
-	if signerPriority > 0 {
-		return nil, fmt.Errorf("cannot modify %v with a lower priority key page", pageUrl)
 	}
 
 	return page, nil

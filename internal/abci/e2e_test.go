@@ -1499,7 +1499,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
 
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 4).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).

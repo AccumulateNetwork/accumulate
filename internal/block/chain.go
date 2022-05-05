@@ -11,10 +11,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var _ PrincipalValidator = (*SyntheticDepositCredits)(nil)
-var _ SignatureValidator = (*CreateIdentity)(nil)
+var _ SignerValidator = (*CreateIdentity)(nil)
+var _ SignerValidator = (*UpdateKeyPage)(nil)
+var _ SignerValidator = (*WriteData)(nil)
+var _ SignerValidator = (*AddValidator)(nil)
+var _ SignerValidator = (*RemoveValidator)(nil)
+var _ SignerValidator = (*UpdateValidatorKey)(nil)
+
 var _ PrincipalValidator = (*CreateIdentity)(nil)
-var _ SignatureValidator = (*WriteData)(nil)
+var _ PrincipalValidator = (*SyntheticDepositCredits)(nil)
+
 var _ TransactionExecutorCleanup = (*SyntheticDepositTokens)(nil)
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -105,8 +111,8 @@ type TransactionExecutor interface {
 	Execute(*StateManager, *Delivery) (protocol.TransactionResult, error)
 }
 
-// SignatureValidator validates signatures for a specific type of transaction.
-type SignatureValidator interface {
+// SignerValidator validates signatures for a specific type of transaction.
+type SignerValidator interface {
 	TransactionExecutor
 
 	// SignerIsAuthorized checks if the signature is authorized for the

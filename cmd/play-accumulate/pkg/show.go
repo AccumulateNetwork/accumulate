@@ -105,7 +105,7 @@ func (s *Session) Show(v interface{}) {
 		}
 	case *protocol.TokenAccount:
 		str = fmt.Sprintf(
-			"Lite Token Account\n"+
+			"Token Account\n"+
 				"    Url:        %v\n"+
 				"    Issuer:     %v\n"+
 				"    Balance:    %v\n"+

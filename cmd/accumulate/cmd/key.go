@@ -229,6 +229,11 @@ func resolvePublicKey(s string) (pubKey, keyHash []byte, sigType protocol.Signat
 }
 
 func parseKey(s string) (pubKey, privKey []byte, err error) {
+	privKey, err = hex.DecodeString(s)
+	if err == nil && len(privKey) == 64 {
+		return privKey[32:], privKey, nil
+	}
+
 	pubKey, err = pubKeyFromString(s)
 	if err == nil {
 		return pubKey, nil, nil
@@ -530,12 +535,12 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 // ImportKey will import the private key and assign it to the label
-func ImportKey(pkhex string, label string, signatureType protocol.SignatureType) (out string, err error) {
+func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
 	var pk ed25519.PrivateKey
 
-	token, err := hex.DecodeString(pkhex)
+	token, err := hex.DecodeString(pkAscii)
 	if err != nil {
 		return "", err
 	}
@@ -846,5 +851,5 @@ func UpdateKey(args []string) (string, error) {
 	newPubKeyHash := sha256.Sum256(newPubKey)
 	txn := new(protocol.UpdateKey)
 	txn.NewKeyHash = newPubKeyHash[:]
-	return dispatchTxAndPrintResponse("update-key", txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }

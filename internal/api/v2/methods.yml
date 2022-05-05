@@ -106,6 +106,13 @@ Execute:
   input: TxRequest
   output: TxResponse
 
+ExecuteDirect:
+  description: submits a transaction
+  rpc: execute-direct
+  input: ExecuteRequest
+  output: TxResponse
+  call-params: [Envelope, CheckOnly]
+
 ExecuteCreateAdi:
   description: submits a CreateIdentity transaction
   kind: execute
