@@ -107,7 +107,7 @@ function success {
 DN0_PRIV_VAL="${DN_NODES_DIR:-~/.accumulate/dn}/Node0/config/priv_validator_key.json"
 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-NUM_DNNS=$(find ${DN_NODES_DIR:-~/.accumulate/dn}/Node0/.. -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
+NUM_DNNS=$(find ${DN_NODES_DIR:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
 if [ -f "$DN0_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
    section "Add a new DN validator"
    declare -g TEST_NODE_WORK_DIR=~/node1
