@@ -268,7 +268,12 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.Ge
 	page.Version = 1
 
 	for _, operator := range operators {
-		if !validatorsOnly || operator.Power > 0 { // Validators are operators with voting power
+		/* TODO
+		Determine which operators are also validators and which not. Followers should be omitted,
+		but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
+		*/
+		isValidator := true
+		if isValidator || !validatorsOnly {
 			spec := new(protocol.KeySpec)
 			kh := sha256.Sum256(operator.PubKey.Bytes())
 			spec.PublicKeyHash = kh[:]
