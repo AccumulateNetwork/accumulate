@@ -90,6 +90,9 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 			return nil, err
 		}
 
+		// Add it to the authority set
+		identity.AddAuthority(body.KeyBookUrl)
+
 		// Create the book
 		book := new(protocol.KeyBook)
 		book.Url = body.KeyBookUrl
