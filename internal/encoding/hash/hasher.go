@@ -142,26 +142,21 @@ func (h Hasher) Receipt(element, anchor int) *managed.Receipt {
 	return r
 }
 
-func combineHashes(l, r []byte) []byte {
+func Combine(l, r []byte) []byte {
 	digest := sha256.New()
 	_, _ = digest.Write(l)
 	_, _ = digest.Write(r)
 	return digest.Sum(nil)
 }
 
-// getIntermediate returns the last two hashes that would be combined to create
-// the local Merkle root at the given index and height. The element must be odd.
-func (h Hasher) getIntermediate(element, height int64) (managed.Hash, managed.Hash, error) {
-	if element%2 != 1 {
-		return nil, nil, errors.New("element is not odd")
-	}
-
-	// Build a Merkle cascade with the hashes up to element
-	var cascade [][]byte
-	for _, h := range h[:element] {
-		for i := 0; i < int(height); i++ {
+// MerkleCascade calculates a Merkle cascade for a hash list. MerkleCascade can
+// add hashes to an existing cascade or calculate a new cascade. If maxHeight is
+// positive, MerkleCascade will stop at that height.
+func MerkleCascade(cascade, hashList [][]byte, maxHeight int64) [][]byte {
+	for _, h := range hashList {
+		for i := int64(0); maxHeight < 0 || i < maxHeight; i++ {
 			// Append at height
-			if i == len(cascade) {
+			if i == int64(len(cascade)) {
 				cascade = append(cascade, h)
 				break
 			}
@@ -174,10 +169,23 @@ func (h Hasher) getIntermediate(element, height int64) (managed.Hash, managed.Ha
 			}
 
 			// Combine hashes, carry to next height
-			h = combineHashes(*v, h)
+			h = Combine(*v, h)
 			*v = nil
 		}
 	}
+
+	return cascade
+}
+
+// getIntermediate returns the last two hashes that would be combined to create
+// the local Merkle root at the given index and height. The element must be odd.
+func (h Hasher) getIntermediate(element, height int64) (managed.Hash, managed.Hash, error) {
+	if element%2 != 1 {
+		return nil, nil, errors.New("element is not odd")
+	}
+
+	// Build a Merkle cascade with the hashes up to element
+	cascade := MerkleCascade(nil, h[:element], height)
 
 	// If height is greater than the cascade length, there is no intermediate
 	// value
@@ -197,7 +205,7 @@ func (h Hasher) getIntermediate(element, height int64) (managed.Hash, managed.Ha
 		if v == nil {
 			return nil, nil, fmt.Errorf("should not encounter a nil at height %d", height)
 		}
-		right = combineHashes(v, right)
+		right = Combine(v, right)
 	}
 
 	// Copy the left side

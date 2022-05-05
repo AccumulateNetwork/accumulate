@@ -7,9 +7,13 @@ Object:
       type: ObjectType
       marshal-as: enum
     - name: Chains
-      description: lists the object's chains
+      description: lists the account's chains
       repeatable: true
       type: ChainMetadata
+      marshal-as: reference
+    - name: Pending
+      description: lists the account's pending transactions
+      type: HashSet
       marshal-as: reference
 
 ChainMetadata:
@@ -133,12 +137,13 @@ KeySpecParams:
       pointer: true
       optional: true
 
-AnchoredRecord:
+AnchoredAccount:
   fields:
-    - name: Record
-      type: bytes
+    - name: Account
+      type: Account
+      marshal-as: union
     - name: Anchor
-      type: chain
+      type: hash
 
 KeySpec:
   fields:
@@ -157,7 +162,7 @@ NetworkGlobals:
     - name: ValidatorThreshold
       type: Rational
       marshal-as: reference
-    
+
 Rational:
   fields:
     - name: Numerator
