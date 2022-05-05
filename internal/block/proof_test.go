@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -47,7 +46,9 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
 	dirReceipt := chainResp.Receipt.Receipt
 
-	fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
-	require.NoError(t, err)
+	//fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
+	fullReceipt := localReceipt.Combine(&dirReceipt)
+	//	require.NoError(t, err)
+	fmt.Println(fullReceipt)
 	t.Log(fullReceipt)
 }

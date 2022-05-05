@@ -36,8 +36,8 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	if err != nil {
 		return nil, err
 	}
-	if body.AccState != nil && body.Proof != nil {
-		if !bytes.Equal(mReceipt.Element, body.AccState) || !bytes.Equal(mReceipt.MDRoot, body.Proof) {
+	if body.Proof != nil {
+		if !bytes.Equal(mReceipt.MDRoot, body.Proof.Receipt.Result) {
 			return nil, fmt.Errorf("invalid accounturl state cannot be verified")
 		}
 	}

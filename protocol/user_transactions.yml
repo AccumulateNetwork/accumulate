@@ -39,11 +39,11 @@ CreateTokenAccount:
       pointer: true
       optional: true
     - name: Proof
-      type: bytes
+      type: AccountStateProof
+      marshal-as: reference
+      pointer: true
       optional: true
-    - name: AccState
-      type: bytes
-      optional: true
+   
 
 SendTokens:
   union: { type: transaction }
@@ -193,6 +193,17 @@ UpdateKeyPage:
       marshal-as: union
       repeatable: true
 
+AccountStateProof:
+  fields:
+  - name: State
+    type: Account
+    marshal-as: union
+  - name: Receipt
+    type: Receipt
+    marshal-as: reference
+    pointer: true
+
+
 UpdateAccountAuth:
   union: { type: transaction }
   fields:
@@ -201,10 +212,9 @@ UpdateAccountAuth:
       marshal-as: union
       repeatable: true
     - name: Proof
-      type: bytes
-      optional: true
-    - name: AccState
-      type: bytes
+      type: AccountStateProof
+      marshal-as: reference
+      pointer: true
       optional: true
 
 AddValidator:

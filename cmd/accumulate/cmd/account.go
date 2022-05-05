@@ -247,13 +247,14 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
-	accstate, anchor := GetAccountStateProof(accountUrl)
+	var accstate protocol.AccountStateProof
 
-	if accstate == nil || anchor == nil {
+	accstate, err = GetAccountStateProof(u, accountUrl)
+
+	if accstate.Receipt == nil {
 		return "", fmt.Errorf("Unable to prove account state")
 	}
-	tac.AccState = accstate
-	tac.Proof = anchor
+	tac.Proof = &accstate
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.KeyBookUrl = keybook

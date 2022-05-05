@@ -589,16 +589,25 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 	return sigtype, nil
 }
 
-func GetAccountStateProof(turl *url2.URL) (accstate []byte, anchor []byte) {
+func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.AccountStateProof, err error) {
+	if principal.LocalTo(accountToProve) {
+		return protocol.AccountStateProof{}, nil // Don't need a proof for local accounts
+	}
+
+	if accountToProve.Equal(protocol.AcmeUrl()) {
+		return protocol.AccountStateProof{}, nil // Don't need a proof for ACME
+	}
+
 	// Get a proof of the account state
 	req := new(api.GeneralQuery)
-	req.Url = turl
+	req.Url = accountToProve
 	resp := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
 	resp.Data = &token
-	err := Client.RequestAPIv2(context.Background(), "query", req, resp)
+
+	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-		return nil, nil
+		return protocol.AccountStateProof{}, err
 	}
 
 	localReceipt := resp.Receipt.Receipt
@@ -610,8 +619,8 @@ func GetAccountStateProof(turl *url2.URL) (accstate []byte, anchor []byte) {
 		select {
 		// Got a timeout! fail with a timeout error
 		case <-timeout:
-			return nil, nil
-		// Got a tick, we should check on checkSomething()
+			return protocol.AccountStateProof{}, nil
+		// Got a tick, we should check if the anchor is complete
 		case <-ticker:
 			// Get a proof of the BVN anchor
 			req = new(api.GeneralQuery)
@@ -619,16 +628,15 @@ func GetAccountStateProof(turl *url2.URL) (accstate []byte, anchor []byte) {
 			resp = new(api.ChainQueryResponse)
 			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-				return nil, nil
+				return protocol.AccountStateProof{}, err
 			}
 			dirReceipt := resp.Receipt.Receipt
-			accstate = localReceipt.Start
-			anchor = dirReceipt.Result
-			if anchor != nil {
-				return accstate, anchor
-			} else {
-				break
+			if dirReceipt.Result != nil {
+				return proof, nil
 			}
+			proof.Receipt = localReceipt.Combine(&dirReceipt)
+
 		}
 	}
+	return proof, nil
 }
