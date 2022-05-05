@@ -48,7 +48,8 @@ func TestCli(t *testing.T) {
 	tc.initalize(t)
 
 	bootstrap(t, tc)
-	testFactomAddresses()
+	err := testFactomAddresses()
+	require.NoError(t, err)
 	testMatrix.execute(t, tc)
 
 }
@@ -164,7 +165,7 @@ func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (
 }
 
 func testFactomAddresses() error {
-	factomAddresses, err := genesis.LoadFactomAddressesAndBalances("test_factom_addresses.txt")
+	factomAddresses, err := genesis.LoadFactomAddressesAndBalances("test_factom_addresses")
 	if err != nil {
 		return err
 	}
