@@ -2,9 +2,10 @@
 
 # Stop immediately on error
 set -e
+set -x
 
 SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
-source ${SCRIPT_DIR}/validate-commons.sh
+source "${SCRIPT_DIR}"/validate-commons.sh
 
 # Get number of signatures required using N of M factor
 function sigCount {
@@ -110,7 +111,7 @@ if [ ! -z "${ACCPID}" ]; then
   TXID=$(cli-tx validator remove dn "$(nodePrivKey 0)" "$(nodePrivKey 3)")
   wait-for-tx $TXID
 
-  # Sign the required number of times (minus signature
+  # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
     wait-for cli-tx-sig tx sign dn "$(nodePrivKey $sigNr)" $TXID
   done
