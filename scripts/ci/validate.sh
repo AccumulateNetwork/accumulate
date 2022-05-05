@@ -120,7 +120,7 @@ NUM_DNNS=$(find ${DN_NODES_DIR:-~/.accumulate/dn} -mindepth 1 -maxdepth 1 -type 
 if [ -f "$DN0_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
    section "Add a new DN validator"
    accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
-   accumulated run -n ${NUM_DNNS -w "$DN_NODES_DIR" &
+   accumulated run -n ${NUM_DNNS} -w "$DN_NODES_DIR" &
    declare -g ACCPID=$!
    # Get Keys
    pubkey=$(jq -re .pub_key.value $DN_NODES_DIR/Node0/config/priv_validator_key.json)
@@ -549,5 +549,4 @@ if [ ! -z "${ACCPID}" ]; then
     section "Shutdown dynamic validator"
     wait-for cli-tx validator remove dn "$DN0_PRIV_VAL" $hexPubKey
     kill -9 $ACCPID
-    rm -rf $TEST_NODE_WORK_DIR
 fi
