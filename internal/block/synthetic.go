@@ -134,7 +134,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	err = state.AddChainEntry(batch, m.Network.Ledger(), protocol.SyntheticChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
+	err = state.AddChainEntry(batch, m.Network.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
 	if err != nil {
 		return nil, err
 	}

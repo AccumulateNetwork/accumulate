@@ -63,7 +63,7 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 
 // SaveState writes the full state of the partition out to a file.
 func (b *Batch) SaveState(filename string, network *config.Network) error {
-	ledger := object("Account", network.Ledger())
+	synthetic := object("Account", network.Synthetic())
 	subnet := network.NodeUrl()
 
 	bpt := pmt.NewBPTManager(b.store)
@@ -92,11 +92,11 @@ func (b *Batch) SaveState(filename string, network *config.Network) error {
 			return nil, fmt.Errorf("hash does not match for %v\n", state.Main.GetUrl())
 		}
 
-		if objectBucket(key) != ledger {
+		if objectBucket(key) != synthetic {
 			return state.MarshalBinary()
 		}
 
-		txns, err := account.stateOfTransactionsOnChain(protocol.SyntheticChain)
+		txns, err := account.stateOfTransactionsOnChain(protocol.MainChain)
 		if err != nil {
 			return nil, err
 		}
