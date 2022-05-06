@@ -402,7 +402,7 @@ func TestSubAdi(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)

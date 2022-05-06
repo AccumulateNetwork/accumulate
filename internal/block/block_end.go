@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -117,7 +116,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	var synthAnchorIndex uint64
 	if len(block.State.ProducedTxns) > 0 {
 		synthAnchorIndex = uint64(rootChain.Height())
-		synthIndexIndex, err = m.anchorSynthChain(block, ledger, ledgerUrl, rootChain)
+		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
 			return err
 		}
@@ -156,8 +155,8 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	for _, e := range blockState.ProducedSynthTxns {
 		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&indexing.TransactionChainEntry{
-			Account:     ledgerUrl,
-			Chain:       protocol.SyntheticChain,
+			Account:     m.Network.Synthetic(),
+			Chain:       protocol.MainChain,
 			ChainIndex:  synthIndexIndex,
 			AnchorIndex: rootIndexIndex,
 		})
@@ -217,7 +216,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		return err
 	}
 
-	synthChain, err := block.Batch.Account(m.Network.Ledger()).ReadChain(protocol.SyntheticChain)
+	synthChain, err := block.Batch.Account(m.Network.Synthetic()).ReadChain(protocol.MainChain)
 	if err != nil {
 		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
 	}
@@ -254,17 +253,17 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 }
 
 // anchorSynthChain anchors the synthetic transaction chain.
-func (m *Executor) anchorSynthChain(block *Block, ledger *database.Account, ledgerUrl *url.URL, rootChain *database.Chain) (indexIndex uint64, err error) {
-	indexIndex, _, err = addChainAnchor(rootChain, ledger, ledgerUrl, protocol.SyntheticChain, protocol.ChainTypeTransaction)
+func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, err error) {
+	url := m.Network.Synthetic()
+	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url), url, protocol.MainChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return 0, err
 	}
 
 	block.State.ChainUpdates.DidUpdateChain(indexing.ChainUpdate{
-		Name:    protocol.SyntheticChain,
+		Name:    protocol.MainChain,
 		Type:    protocol.ChainTypeTransaction,
-		Account: ledgerUrl,
-		// Index:   uint64(synthChain.Height() - 1),
+		Account: url,
 	})
 
 	return indexIndex, nil
