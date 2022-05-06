@@ -204,8 +204,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 
 func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	// Load the root chain's index chain's last two entries
-	record := batch.Account(x.Network.Ledger())
-	last, nextLast, err := indexing.LoadLastTwoIndexEntries(record, protocol.MinorRootIndexChain)
+	last, nextLast, err := indexing.LoadLastTwoIndexEntries(batch.Account(x.Network.Ledger()), protocol.MinorRootIndexChain)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load root index chain's last two entries: %w", err)
 	}
@@ -219,7 +218,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	}
 
 	// Load the synthetic transaction chain's index chain's last two entries
-	last, nextLast, err = indexing.LoadLastTwoIndexEntries(record, protocol.IndexChain(protocol.SyntheticChain, false))
+	last, nextLast, err = indexing.LoadLastTwoIndexEntries(batch.Account(x.Network.Synthetic()), protocol.IndexChain(protocol.MainChain, false))
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load synthetic transaction index chain's last two entries: %w", err)
 	}
@@ -248,7 +247,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	}
 
 	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Network.Ledger()).ReadChain(protocol.SyntheticChain)
+	chain, err = batch.Account(x.Network.Synthetic()).ReadChain(protocol.MainChain)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
 	}
