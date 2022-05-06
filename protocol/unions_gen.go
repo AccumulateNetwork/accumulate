@@ -32,6 +32,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteIdentity), nil
 	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
+	case AccountTypeSyntheticLedger:
+		return new(SyntheticLedger), nil
 	case AccountTypeTokenAccount:
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
@@ -74,6 +76,9 @@ func EqualAccount(a, b Account) bool {
 		return ok && a.Equal(b)
 	case *LiteTokenAccount:
 		b, ok := b.(*LiteTokenAccount)
+		return ok && a.Equal(b)
+	case *SyntheticLedger:
+		b, ok := b.(*SyntheticLedger)
 		return ok && a.Equal(b)
 	case *TokenAccount:
 		b, ok := b.(*TokenAccount)
