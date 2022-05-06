@@ -21,11 +21,12 @@ import (
 )
 
 type InitOpts struct {
-	Network     config.Network
-	Validators  []tmtypes.GenesisValidator
-	GenesisTime time.Time
-	Logger      log.Logger
-	Router      routing.Router
+	Network             config.Network
+	Validators          []tmtypes.GenesisValidator
+	GenesisTime         time.Time
+	Logger              log.Logger
+	Router              routing.Router
+	FactomAddressesFile string
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
@@ -206,6 +207,22 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				liteToken.TokenUrl = protocol.AcmeUrl()
 				liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
 				records = append(records, liteId, liteToken)
+			}
+			if opts.FactomAddressesFile != "" {
+				factomAddresses, err := LoadFactomAddressesAndBalances(opts.FactomAddressesFile)
+				if err != nil {
+					return err
+				}
+				for _, factomAddress := range factomAddresses {
+					subnet, err := routing.RouteAccount(&opts.Network, factomAddress.Address)
+					if err == nil && subnet == opts.Network.LocalSubnetID {
+						lite := new(protocol.LiteTokenAccount)
+						lite.Url = factomAddress.Address
+						lite.TokenUrl = protocol.AcmeUrl()
+						lite.Balance = *big.NewInt(5 * factomAddress.Balance)
+						records = append(records, lite)
+					}
+				}
 			}
 		}
 

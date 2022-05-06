@@ -70,7 +70,7 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	return cfg
 }
 
-func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]string, map[string][]*accumulated.Daemon) {
+func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	const basePort = 30000
 	dir := t.TempDir()
 
@@ -140,18 +140,23 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 		logWriter = logging.TestLogWriter(t)
 		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
+	var factomAddressFilePath string
+	if withFactomAddress {
+		factomAddressFilePath = "test_factom_addresses"
+	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
 		dir := filepath.Join(dir, subnetId)
 		require.NoError(t, node.Init(node.InitOptions{
-			WorkDir:  dir,
-			Port:     basePort,
-			Config:   allConfigs[subnetId],
-			RemoteIP: allRemotes[subnetId],
-			ListenIP: allRemotes[subnetId],
-			Logger:   initLogger.With("subnet", subnetId),
+			WorkDir:             dir,
+			Port:                basePort,
+			Config:              allConfigs[subnetId],
+			RemoteIP:            allRemotes[subnetId],
+			ListenIP:            allRemotes[subnetId],
+			Logger:              initLogger.With("subnet", subnetId),
+			FactomAddressesFile: factomAddressFilePath,
 		}))
 
 		daemons := make([]*accumulated.Daemon, count)

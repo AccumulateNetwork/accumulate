@@ -18,7 +18,7 @@ func init() { acctesting.EnableDebugFeatures() }
 func TestStateDBConsistency(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	stores := map[*accumulated.Daemon]storage.KeyValueStore{}
 	for _, netName := range subnets {
 		for _, daemon := range daemons[netName] {
