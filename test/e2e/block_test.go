@@ -11,6 +11,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -22,6 +23,19 @@ func init() { acctesting.EnableDebugFeatures() }
 
 func delivered(status *protocol.TransactionStatus) bool {
 	return status.Delivered
+}
+
+func updateAccount[T protocol.Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
+	sim.UpdateAccount(accountUrl, func(account Account) {
+		var typed T
+		err := encoding.SetPtr(account, &typed)
+		if err != nil {
+			sim.Log(err)
+			sim.FailNow()
+		}
+
+		fn(typed)
+	})
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
@@ -379,6 +393,45 @@ func TestAddCreditsToNewLiteIdentity(t *testing.T) {
 		require.Equal(t,
 			protocol.FormatAmount(1e3*InitialAcmeOracleValue, protocol.CreditPrecisionPower),
 			protocol.FormatAmount(account.CreditBalance, protocol.CreditPrecisionPower))
+		return nil
+	})
+}
+
+func TestSubAdi(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitChain()
+
+	lite := acctesting.GenerateKey(t.Name(), "Lite")
+	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(t.Name(), alice)
+	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+	sim.CreateIdentity(alice, aliceKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+
+	// Execute
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithTimestampVar(&timestamp).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithBody(&protocol.CreateIdentity{
+				Url: alice.JoinPath("sub"),
+			}).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Verify
+	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+		var identity *protocol.ADI
+		require.NoError(t, batch.Account(alice.JoinPath("sub")).GetStateAs(&identity))
+		require.Len(t, identity.Authorities, 1)
+		require.Equal(t, "alice/book", identity.Authorities[0].Url.ShortString())
 		return nil
 	})
 }
