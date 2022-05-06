@@ -1,8 +1,7 @@
 package protocol
 
 import (
-	"sort"
-
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -29,36 +28,9 @@ func (a *AccountAuth) ManagerKeyBook() *url.URL {
 	return nil
 }
 
-type listSearchResult int
-
-const (
-	listSearchFound listSearchResult = iota
-	listSearchAppend
-	listSearchInsert
-)
-
-func (a *AccountAuth) search(entry *url.URL) (int, listSearchResult) {
-	// Find the matching entry
-	i := sort.Search(len(a.Authorities), func(i int) bool {
-		return a.Authorities[i].Url.Compare(entry) >= 0
-	})
-
-	// Entry belongs past the end of the list
-	if i >= len(a.Authorities) {
-		return i, listSearchAppend
-	}
-
-	// A matching entry exists
-	if a.Authorities[i].Url.Equal(entry) {
-		return i, listSearchFound
-	}
-
-	return i, listSearchInsert
-}
-
 func (a *AccountAuth) GetAuthority(entry *url.URL) (*AuthorityEntry, bool) {
-	i, r := a.search(entry)
-	if r != listSearchFound {
+	i, found := sortutil.Search(a.Authorities, func(e AuthorityEntry) int { return e.Url.Compare(entry) })
+	if !found {
 		return nil, false
 	}
 
@@ -66,28 +38,16 @@ func (a *AccountAuth) GetAuthority(entry *url.URL) (*AuthorityEntry, bool) {
 }
 
 func (a *AccountAuth) AddAuthority(entry *url.URL) *AuthorityEntry {
-	i, r := a.search(entry)
-	switch r {
-	case listSearchFound:
-		// Ok
-
-	case listSearchAppend:
-		a.Authorities = append(a.Authorities, AuthorityEntry{Url: entry})
-
-	case listSearchInsert:
-		a.Authorities = append(a.Authorities, AuthorityEntry{})
-		copy(a.Authorities[i+1:], a.Authorities[i:])
-		a.Authorities[i] = AuthorityEntry{Url: entry}
-
-	default:
-		panic("unreachable")
+	ptr, new := sortutil.BinaryInsert(&a.Authorities, func(e AuthorityEntry) int { return e.Url.Compare(entry) })
+	if new {
+		*ptr = AuthorityEntry{Url: entry}
 	}
-	return &a.Authorities[i]
+	return ptr
 }
 
 func (a *AccountAuth) RemoveAuthority(entry *url.URL) bool {
-	i, r := a.search(entry)
-	if r != listSearchFound {
+	i, found := sortutil.Search(a.Authorities, func(e AuthorityEntry) int { return e.Url.Compare(entry) })
+	if !found {
 		return false
 	}
 
