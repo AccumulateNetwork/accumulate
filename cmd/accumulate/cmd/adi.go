@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -152,9 +151,9 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	var pubKey []byte
+	var k *Key
 	if len(args) > 1 {
-		pubKey, _, _, err = resolvePublicKey(args[1])
+		k, err = resolvePublicKey(args[1])
 		if err != nil {
 			return "", err
 		}
@@ -173,15 +172,16 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
 		}
-	} else if adiUrl.IsRootIdentity() || pubKey != nil {
+	} else if adiUrl.IsRootIdentity() || k != nil {
 		bookUrl = adiUrl.JoinPath("/book")
 	}
 
 	idc := protocol.CreateIdentity{}
 	idc.Url = adiUrl
-	kh := sha256.Sum256(pubKey)
-	idc.KeyHash = kh[:]
 	idc.KeyBookUrl = bookUrl
+	if k != nil {
+		idc.KeyHash = k.PublicKeyHash()
+	}
 
 	res, err := dispatchTxAndWait(&idc, nil, origin, signer)
 	if err != nil {
@@ -195,9 +195,11 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	//todo: turn around and query the ADI and store the results.
-	err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), pubKey)
-	if err != nil {
-		return "", fmt.Errorf("DB: %v", err)
+	if k != nil {
+		err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), k.PublicKey)
+		if err != nil {
+			return "", fmt.Errorf("DB: %v", err)
+		}
 	}
 
 	return out, nil
