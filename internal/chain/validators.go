@@ -4,12 +4,36 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type AddValidator struct{}
-type RemoveValidator struct{}
-type UpdateValidatorKey struct{}
+type checkValidatorSigner struct{}
+
+type AddValidator struct{ checkValidatorSigner }
+type RemoveValidator struct{ checkValidatorSigner }
+type UpdateValidatorKey struct{ checkValidatorSigner }
+
+func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
+	}
+
+	if signerPageIdx > 1 {
+		return false, fmt.Errorf("cannot modify validators with a lower priority key page")
+	}
+
+	// Run the normal checks
+	return true, nil
+}
+
+func (checkValidatorSigner) TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	// Do not override the ready check
+	return false, true, nil
+}
 
 func (AddValidator) Type() protocol.TransactionType {
 	return protocol.TransactionTypeAddValidator
@@ -55,11 +79,14 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
-
+	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Add the validator
 	st.AddValidator(body.PubKey)
@@ -73,7 +100,6 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 	if err != nil {
 		return nil, err
 	}
-
 	// Find the key
 	keyHash := sha256.Sum256(body.PubKey)
 	index, _, found := page.EntryByKeyHash(keyHash[:])
@@ -90,11 +116,15 @@ func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.Trans
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys))
 
+	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Remove the validator
 	st.DisableValidator(body.PubKey)
@@ -128,7 +158,10 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.Tr
 
 	// Record the update
 	didUpdateKeyPage(page)
-	st.Update(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
 
 	// Update the validator
 	st.DisableValidator(body.PubKey)
@@ -139,26 +172,52 @@ func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.Tr
 // checkValidatorTransaction implements common checks for validator
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
-	if !st.nodeUrl.Equal(env.Transaction.Header.Principal) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, env.Transaction.Header.Principal)
+	validatorBookUrl := env.Transaction.Header.Principal
+	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
+		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
 	}
 
-	bookUrl := st.nodeUrl.JoinPath(protocol.ValidatorBook)
-	pageUrl := protocol.FormatKeyPageUrl(bookUrl, 0)
+	var book *protocol.KeyBook
+	err := st.LoadUrlAs(validatorBookUrl, &book)
+	if err != nil {
+		return nil, fmt.Errorf("invalid key book: %v", err)
+	}
+
+	if book.BookType != protocol.BookTypeValidator {
+		return nil, fmt.Errorf("the key book is not of a validator book type")
+	}
+
+	pageUrl := protocol.FormatKeyPageUrl(validatorBookUrl, 0)
 	var page *protocol.KeyPage
-	err := st.LoadUrlAs(pageUrl, &page)
+	err = st.LoadUrlAs(pageUrl, &page)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
 	}
 
-	signerPriority, ok := getKeyPageIndex(st.SignatorUrl)
-	if !ok {
-		return nil, fmt.Errorf("cannot parse key page URL: %v", st.SignatorUrl)
-	}
-
-	if signerPriority > 0 {
-		return nil, fmt.Errorf("cannot modify %v with a lower priority key page", pageUrl)
-	}
-
 	return page, nil
+}
+
+func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
+	acc := st.stateCache.batch.Account(url)
+
+	data, err := acc.Data()
+	if err != nil {
+		st.logger.Error("Failed to get globals data chain", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	_, entry, err := data.GetLatest()
+	if err != nil {
+		st.logger.Error("Failed to get latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	globals := new(protocol.NetworkGlobals)
+	err = globals.UnmarshalBinary(entry.Data[0])
+	if err != nil {
+		st.logger.Error("Failed to decode latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	return globals.ValidatorThreshold.GetFloat()
 }

@@ -35,7 +35,8 @@
         "devnet",
         "-w",
         "${workspaceFolder}/.nodes",
-        "--truncate"
+        "--truncate",
+        "--debug",
       ]
     },
     {
@@ -47,6 +48,9 @@
       "args": [
         "${workspaceFolder}/playbooks/validate/01-lite-token.play",
         "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
+        "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
+        "${workspaceFolder}/playbooks/validate/05-delegation.play",
       ]
     },
     {
@@ -61,7 +65,8 @@
         "devnet",
         "-w",
         "${workspaceFolder}/.nodes",
-        "--truncate"
+        "--truncate",
+        "--debug",
       ]
     },
     {
@@ -73,6 +78,7 @@
       "args": [
         "run-dual",
         "--truncate",
+        "--debug",
         "${workspaceFolder}/.nodes/dn/Node0",
         "${workspaceFolder}/.nodes/bvn0/Node0",
       ]
@@ -89,7 +95,33 @@
         "${workspaceFolder}/.nodes/dn",
         "-n",
         "0",
-        "--truncate"
+        "--truncate",
+        "--debug",
+      ]
+    },
+    {
+      "name": "Run DevNet Test",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/test/devnet",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-X=--reset,--debug",
+      ]
+    },
+    {
+      "name": "Run DevNet Playbook",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/test/devnet",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-X", "-v=1,-b=1,--reset,--debug", "play",
+        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
       ]
     },
     {
@@ -112,7 +144,7 @@
         "account_auth_operations.yml",
         "accounts.yml",
         "general.yml",
-        "internal.yml",
+        "system.yml",
         "key_page_operations.yml",
         "query.yml",
         "signatures.yml",

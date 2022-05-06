@@ -180,7 +180,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	idc.KeyHash = kh[:]
 	idc.KeyBookUrl = bookUrl
 
-	res, err := dispatchTxAndWait("create-adi", &idc, nil, origin, signer)
+	res, err := dispatchTxAndWait(&idc, nil, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -192,7 +192,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	//todo: turn around and query the ADI and store the results.
-	err = Db.Put(BucketAdi, []byte(adiUrl.Authority), pubKey)
+	err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), pubKey)
 	if err != nil {
 		return "", fmt.Errorf("DB: %v", err)
 	}
@@ -212,7 +212,7 @@ func NewADI(origin string, params []string) (string, error) {
 }
 
 func ListADIs() (string, error) {
-	b, err := Db.GetBucket(BucketAdi)
+	b, err := GetWallet().GetBucket(BucketAdi)
 	if err != nil {
 		return "", err
 	}

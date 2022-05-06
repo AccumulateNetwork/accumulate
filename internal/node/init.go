@@ -16,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -138,6 +139,7 @@ func initV1(opts InitOptions) (err error) {
 			GenesisTime:         genTime,
 			Validators:          genVals,
 			Logger:              opts.Logger,
+			Router:              &routing.RouterInstance{Network: &config[0].Accumulate.Network},
 			FactomAddressesFile: opts.FactomAddressesFile,
 		})
 		if err != nil {

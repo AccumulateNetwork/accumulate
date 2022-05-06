@@ -13,6 +13,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -89,11 +90,6 @@ func New(t TB, bvnCount int) *Simulator {
 		}
 	}
 
-	for _, subnet := range sim.Subnets {
-		x := sim.Subnet(subnet.ID)
-		require.NoError(sim, x.Executor.Start())
-	}
-
 	return sim
 }
 
@@ -139,17 +135,21 @@ func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{
 	return Query(s, x.Database, x.Executor, req, prove)
 }
 
-func (s *Simulator) InitChain() {
+func (s *Simulator) InitFromGenesis() {
 	s.Helper()
 
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
-		InitChain(s, x.Database, x.Executor)
+		InitFromGenesis(s, x.Database, x.Executor)
 	}
+}
 
-	// Wait for the governor
+func (s *Simulator) InitFromSnapshot(filename func(string) string) {
+	s.Helper()
+
 	for _, subnet := range s.Subnets {
-		s.Subnet(subnet.ID).Executor.PingGovernor_TESTONLY()
+		x := s.Subnet(subnet.ID)
+		InitFromSnapshot(s, x.Database, x.Executor, filename(subnet.ID))
 	}
 }
 
@@ -183,11 +183,6 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 	// Wait for all subnets to complete
 	err := errg.Wait()
 	require.NoError(tb{s}, err)
-
-	// Wait for the governor
-	for _, subnet := range s.Subnets {
-		s.Subnet(subnet.ID).Executor.PingGovernor_TESTONLY()
-	}
 
 	if statusChan != nil {
 		close(statusChan)
@@ -237,7 +232,9 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) []*protocol.Envelope {
 	s.Helper()
 
-	ch := make(chan *protocol.TransactionStatus)
+	status, err := s.SubmitAndExecuteBlock(envelopes...)
+	require.NoError(tb{s}, err)
+
 	ids := map[[32]byte]bool{}
 	for _, env := range envelopes {
 		for _, d := range NormalizeEnvelope(s, env) {
@@ -245,13 +242,8 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 		}
 	}
 
-	_, err := s.Submit(envelopes...)
-	require.NoError(s, err)
-
-	go s.ExecuteBlock(ch)
-
 	var didFail bool
-	for status := range ch {
+	for _, status := range status {
 		if status.Code == 0 || !ids[status.For] {
 			continue
 		}
@@ -262,8 +254,28 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	if didFail {
 		s.FailNow()
 	}
-
 	return envelopes
+}
+
+// SubmitAndExecuteBlock executes a block with the envelopes and fails the test if
+// any envelope fails.
+func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
+	s.Helper()
+
+	_, err := s.Submit(envelopes...)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	ch := make(chan *protocol.TransactionStatus)
+	go s.ExecuteBlock(ch)
+
+	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
+	for s := range ch {
+		status = append(status, s)
+	}
+
+	return status, nil
 }
 
 func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash []byte) *ExecEntry {

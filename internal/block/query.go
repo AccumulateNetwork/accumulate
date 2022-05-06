@@ -244,7 +244,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	case "pending":
 		switch len(fragment) {
 		case 1:
-			txIds, err := indexing.PendingTransactions(batch, u).Get()
+			txIds, err := batch.Account(u).Pending()
 			if err != nil {
 				return nil, nil, err
 			}
@@ -582,10 +582,14 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		qset.Account = signer
 		for _, entryHash := range sigset.EntryHashes() {
 			state, err := batch.Transaction(entryHash[:]).GetState()
-			if err != nil {
+			switch {
+			case err == nil:
+				qset.Signatures = append(qset.Signatures, state.Signature)
+			case errors.Is(err, storage.ErrNotFound):
+				// Leave it nil
+			default:
 				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
 			}
-			qset.Signatures = append(qset.Signatures, state.Signature)
 		}
 
 		qr.Signers = append(qr.Signers, qset)
@@ -879,7 +883,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			}
 
 			// For each signer
-			for _, signerUrl := range authority.GetSigners() {
+			for index, signerUrl := range authority.GetSigners() {
 				var signer protocol.Signer
 				err = batch.Account(signerUrl).GetStateAs(&signer)
 				if err != nil {
@@ -887,9 +891,9 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 				}
 
 				// Check for a matching entry
-				index, _, ok := signer.EntryByKeyHash(chr.Key)
+				_, _, ok := signer.EntryByKeyHash(chr.Key)
 				if !ok {
-					index, _, ok = signer.EntryByKey(chr.Key)
+					_, _, ok = signer.EntryByKey(chr.Key)
 					if !ok {
 						continue
 					}

@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -21,48 +22,29 @@ func (t *Transaction) SetHash(hash []byte) error {
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
 func (s *TransactionStatus) AddSigner(signer Signer) {
-	signer = MakeLiteSigner(signer)
-
 	// Initial signer
 	if len(s.Signers) == 0 {
 		s.Initiator = signer.GetUrl()
-		s.Signers = []Signer{signer}
-		return
 	}
 
 	// Find the matching entry
-	i := sort.Search(len(s.Signers), func(i int) bool {
-		return s.Signers[i].GetUrl().Compare(signer.GetUrl()) >= 0
-	})
+	ptr, new := sortutil.BinaryInsert(&s.Signers, func(entry Signer) int { return entry.GetUrl().Compare(signer.GetUrl()) })
 
-	// Append to the list
-	if i >= len(s.Signers) {
-		s.Signers = append(s.Signers, signer)
+	// Do nothing if the entry exists and the version is not newer
+	if !new && signer.GetVersion() <= (*ptr).GetVersion() {
 		return
 	}
 
-	// Update the existing entry
-	if s.Signers[i].GetUrl().Equal(signer.GetUrl()) {
-		if signer.GetVersion() > s.Signers[i].GetVersion() {
-			s.Signers[i] = signer
-		}
-		return
-	}
-
-	// Insert within the list
-	s.Signers = append(s.Signers, nil)
-	copy(s.Signers[i+1:], s.Signers[i:])
-	s.Signers[i] = signer
+	// Update the entry
+	*ptr = MakeLiteSigner(signer)
 }
 
 func (s *TransactionStatus) GetSigner(entry *url.URL) (Signer, bool) {
 	// Find the matching entry
-	i := sort.Search(len(s.Signers), func(i int) bool {
-		return s.Signers[i].GetUrl().Compare(entry) >= 0
-	})
+	i, found := sortutil.Search(s.Signers, func(e Signer) int { return e.GetUrl().Compare(entry) })
 
 	// No match
-	if i > len(s.Signers) || !s.Signers[i].GetUrl().Equal(entry) {
+	if !found {
 		return nil, false
 	}
 
@@ -73,9 +55,7 @@ func (s *TransactionStatus) FindSigners(authority *url.URL) []Signer {
 	// Find the first signer for the given authority. This depends on the fact
 	// that signers are always children of authorities. Or in the case of lite
 	// token accounts, equal to (for now).
-	i := sort.Search(len(s.Signers), func(i int) bool {
-		return s.Signers[i].GetUrl().Compare(authority) >= 0
-	})
+	i, found := sortutil.Search(s.Signers, func(e Signer) int { return e.GetUrl().Compare(authority) })
 
 	// Past the end of the list, no match
 	if i >= len(s.Signers) {
@@ -83,7 +63,7 @@ func (s *TransactionStatus) FindSigners(authority *url.URL) []Signer {
 	}
 
 	// Entry matches (lite token account)
-	if s.Signers[i].GetUrl().Equal(authority) {
+	if found {
 		return []Signer{s.Signers[i]}
 	}
 
@@ -125,38 +105,6 @@ func (t TransactionType) IsInternal() bool {
 
 type SyntheticTransaction interface {
 	TransactionBody
-	GetCause() [32]byte
-}
-
-func (tx *SyntheticCreateChain) GetCause() [32]byte    { return tx.Cause }
-func (tx *SyntheticWriteData) GetCause() [32]byte      { return tx.Cause }
-func (tx *SyntheticDepositTokens) GetCause() [32]byte  { return tx.Cause }
-func (tx *SyntheticDepositCredits) GetCause() [32]byte { return tx.Cause }
-func (tx *SyntheticBurnTokens) GetCause() [32]byte     { return tx.Cause }
-func (tx *SegWitDataEntry) GetCause() [32]byte         { return tx.Cause }
-
-func (tx *SyntheticCreateChain) Create(chains ...Account) error {
-	for _, chain := range chains {
-		b, err := chain.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
-		tx.Chains = append(tx.Chains, ChainParams{Data: b})
-	}
-	return nil
-}
-
-func (tx *SyntheticCreateChain) Update(chains ...Account) error {
-	for _, chain := range chains {
-		b, err := chain.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
-		tx.Chains = append(tx.Chains, ChainParams{Data: b, IsUpdate: true})
-	}
-	return nil
 }
 
 func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {

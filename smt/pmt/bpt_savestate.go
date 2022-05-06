@@ -34,7 +34,7 @@ const nLen = 32 + 32 + 8    //                               Each node is a key 
 //   8  byte                  -- length of value
 //   n  [length of value]byte -- the bytes of the value
 //
-func (b *BPT) SaveSnapshot(filename string, loadState func(storage.Key) ([]byte, error)) error {
+func (b *BPT) SaveSnapshot(filename string, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
 	if b.manager == nil { //                                  Snapshot cannot be taken if we have no db
 		return fmt.Errorf("No manager found for BPT") //      return error
 	}
@@ -79,7 +79,7 @@ func (b *BPT) SaveSnapshot(filename string, loadState func(storage.Key) ([]byte,
 			_, e2 := file.Write(v.Hash[:])                        // Write the hash out
 			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e4 := loadState(v.Hash)                       // Get that next value
+			value, e4 := loadState(v.Key, v.Hash)                // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
 			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
 			_, e6 := values.Write(value)                         // write out the value
@@ -124,9 +124,16 @@ func (b *BPT) SaveSnapshot(filename string, loadState func(storage.Key) ([]byte,
 	return nil
 }
 
+type SectionReader interface {
+	io.Reader
+	io.ReaderAt
+	io.Seeker
+	Size() int64
+}
+
 // ReadSnapshot
 //
-func (b *BPT) LoadSnapshot(filename string, storeState func(storage.Key, []byte) ([32]byte, error)) error {
+func (b *BPT) LoadSnapshot(filename string, storeState func(key storage.Key, hash [32]byte, reader SectionReader) error) error {
 	if b.MaxHeight != 0 {
 		return errors.New("A snapshot can only be read into a new BPT")
 	}
@@ -175,12 +182,12 @@ func (b *BPT) LoadSnapshot(filename string, storeState func(storage.Key, []byte)
 			copy(hash[:], buff[idx+32:idx+64])                        // Copy over the hash
 			off, _ = common.BytesFixedUint64(buff[idx+64 : idx+64+8]) // And convert bytes to the offset to value
 
-			_, e1 := file.Seek(int64(fOff+off), 0)          // Seek to the value
-			_, e2 := io.ReadFull(file, vBuff[:8])           // Read length of value
-			vLen, _ := common.BytesFixedUint64(vBuff)       // Convert bytes to uint64
-			_, e3 := io.ReadFull(file, vBuff[:vLen])        // Read in the value
-			b.Insert(key, hash)                             // Insert the key/hash into the BPT
-			stateHash, e4 := storeState(hash, vBuff[:vLen]) // Insert the value into the DB
+			_, e1 := file.Seek(int64(fOff+off), 0)                               // Seek to the value
+			_, e2 := io.ReadFull(file, vBuff[:8])                                // Read length of value
+			vLen, _ := common.BytesFixedUint64(vBuff)                            // Convert bytes to uint64
+			b.Insert(key, hash)                                                  // Insert the key/hash into the BPT
+			section := io.NewSectionReader(file, int64(fOff+off+8), int64(vLen)) // Create a section reader
+			e3 := storeState(key, hash, section)                                 // Insert the value into the DB
 
 			switch { //        errors not likely
 			case e1 != nil: // but report if found
@@ -189,14 +196,8 @@ func (b *BPT) LoadSnapshot(filename string, storeState func(storage.Key, []byte)
 				return e2
 			case e3 != nil:
 				return e3
-			case e4 != nil:
-				return e4
-			}
-
-			if hash != stateHash {
-				return fmt.Errorf("hash does not match for key %X", key)
 			}
 		}
 	}
-	return nil
+	return b.Update()
 }

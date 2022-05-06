@@ -160,7 +160,7 @@ func PrintKey() {
 }
 
 func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error) {
-	sig, err := Db.Get(BucketSigType, pubKey)
+	sig, err := GetWallet().Get(BucketSigType, pubKey)
 	switch {
 	case err == nil:
 		// Ok
@@ -229,6 +229,11 @@ func resolvePublicKey(s string) (pubKey, keyHash []byte, sigType protocol.Signat
 }
 
 func parseKey(s string) (pubKey, privKey []byte, err error) {
+	privKey, err = hex.DecodeString(s)
+	if err == nil && len(privKey) == 64 {
+		return privKey[32:], privKey, nil
+	}
+
 	pubKey, err = pubKeyFromString(s)
 	if err == nil {
 		return pubKey, nil, nil
@@ -278,15 +283,29 @@ func pubKeyFromString(s string) ([]byte, error) {
 	return pubKey[:], nil
 }
 
-func LookupByLite(lite string) ([]byte, error) {
+func LookupByLiteTokenUrl(lite string) ([]byte, error) {
 	liteKey, isLite := LabelForLiteTokenAccount(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite account %s", liteKey)
 	}
 
-	label, err := Db.Get(BucketLite, []byte(liteKey))
+	label, err := GetWallet().Get(BucketLite, []byte(liteKey))
 	if err != nil {
 		return nil, fmt.Errorf("lite account not found %s", lite)
+	}
+
+	return LookupByLabel(string(label))
+}
+
+func LookupByLiteIdentityUrl(lite string) ([]byte, error) {
+	liteKey, isLite := LabelForLiteIdentity(lite)
+	if !isLite {
+		return nil, fmt.Errorf("invalid lite identity %s", liteKey)
+	}
+
+	label, err := GetWallet().Get(BucketLite, []byte(liteKey))
+	if err != nil {
+		return nil, fmt.Errorf("lite identity account not found %s", lite)
 	}
 
 	return LookupByLabel(string(label))
@@ -295,7 +314,7 @@ func LookupByLite(lite string) ([]byte, error) {
 func LookupByLabel(label string) ([]byte, error) {
 	label, _ = LabelForLiteTokenAccount(label)
 
-	pubKey, err := Db.Get(BucketLabel, []byte(label))
+	pubKey, err := GetWallet().Get(BucketLabel, []byte(label))
 	if err != nil {
 		return nil, fmt.Errorf("valid key not found for %s", label)
 	}
@@ -319,8 +338,25 @@ func LabelForLiteTokenAccount(label string) (string, bool) {
 	return u.Hostname(), true
 }
 
+// LabelForLiteIdentity returns the label of the LiteIdentity if label
+// is a valid LiteIdentity account URL. Otherwise, LabelForLiteIdentity returns the
+// original value.
+func LabelForLiteIdentity(label string) (string, bool) {
+	u, err := url.Parse(label)
+	if err != nil {
+		return label, false
+	}
+
+	key, err := protocol.ParseLiteIdentity(u)
+	if key == nil || err != nil {
+		return label, false
+	}
+
+	return u.Hostname(), true
+}
+
 func LookupByPubKey(pubKey []byte) ([]byte, error) {
-	return Db.Get(BucketKeys, pubKey)
+	return GetWallet().Get(BucketKeys, pubKey)
 }
 
 func GenerateKey(label string) (string, error) {
@@ -409,22 +445,22 @@ func GenerateKey(label string) (string, error) {
 		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
 
-	err = Db.Put(BucketKeys, pubKey, privKey)
+	err = GetWallet().Put(BucketKeys, pubKey, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	err = Db.Put(BucketLabel, []byte(label), pubKey)
+	err = GetWallet().Put(BucketLabel, []byte(label), pubKey)
 	if err != nil {
 		return "", err
 	}
 
-	err = Db.Put(BucketLite, []byte(liteLabel), []byte(label))
+	err = GetWallet().Put(BucketLite, []byte(liteLabel), []byte(label))
 	if err != nil {
 		return "", err
 	}
 
-	err = Db.Put(BucketSigType, privKey[32:], common.Uint64Bytes(sigtype.GetEnumValue()))
+	err = GetWallet().Put(BucketSigType, privKey[32:], common.Uint64Bytes(sigtype.GetEnumValue()))
 	if err != nil {
 		return "", err
 	}
@@ -448,7 +484,7 @@ func GenerateKey(label string) (string, error) {
 
 func ListKeyPublic() (out string, err error) {
 	out = "Public Key\t\t\t\t\t\t\t\tKey name\n"
-	b, err := Db.GetBucket(BucketLabel)
+	b, err := GetWallet().GetBucket(BucketLabel)
 	if err != nil {
 		return "", err
 	}
@@ -460,7 +496,7 @@ func ListKeyPublic() (out string, err error) {
 }
 
 func FindLabelFromPublicKeyHash(pubKeyHash []byte) (lab string, err error) {
-	b, err := Db.GetBucket(BucketLabel)
+	b, err := GetWallet().GetBucket(BucketLabel)
 	if err != nil {
 		return lab, err
 	}
@@ -480,7 +516,7 @@ func FindLabelFromPublicKeyHash(pubKeyHash []byte) (lab string, err error) {
 }
 
 func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
-	b, err := Db.GetBucket(BucketLabel)
+	b, err := GetWallet().GetBucket(BucketLabel)
 	if err != nil {
 		return lab, err
 	}
@@ -499,12 +535,12 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 // ImportKey will import the private key and assign it to the label
-func ImportKey(pkhex string, label string, signatureType protocol.SignatureType) (out string, err error) {
+func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
 	var pk ed25519.PrivateKey
 
-	token, err := hex.DecodeString(pkhex)
+	token, err := hex.DecodeString(pkAscii)
 	if err != nil {
 		return "", err
 	}
@@ -536,7 +572,7 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 	_, err = LookupByPubKey(pk[32:])
 	lab := "not found"
 	if err == nil {
-		b, _ := Db.GetBucket(BucketLabel)
+		b, _ := GetWallet().GetBucket(BucketLabel)
 		if b != nil {
 			for _, v := range b.KeyValueList {
 				if bytes.Equal(v.Value, pk[32:]) {
@@ -549,22 +585,22 @@ func ImportKey(pkhex string, label string, signatureType protocol.SignatureType)
 	}
 
 	publicKey := pk[32:]
-	err = Db.Put(BucketKeys, publicKey, pk)
+	err = GetWallet().Put(BucketKeys, publicKey, pk)
 	if err != nil {
 		return "", err
 	}
 
-	err = Db.Put(BucketLabel, []byte(label), pk[32:])
+	err = GetWallet().Put(BucketLabel, []byte(label), pk[32:])
 	if err != nil {
 		return "", err
 	}
 
-	err = Db.Put(BucketLite, []byte(liteLabel), []byte(label))
+	err = GetWallet().Put(BucketLite, []byte(liteLabel), []byte(label))
 	if err != nil {
 		return "", err
 	}
 
-	err = Db.Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
+	err = GetWallet().Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
 	if err != nil {
 		return "", err
 	}
@@ -653,14 +689,14 @@ func GeneratePrivateKey() ([]byte, error) {
 
 func getKeyCountAndIncrement() (count uint32, err error) {
 
-	ct, _ := Db.Get(BucketMnemonic, []byte("count"))
+	ct, _ := GetWallet().Get(BucketMnemonic, []byte("count"))
 	if ct != nil {
 		count = binary.LittleEndian.Uint32(ct)
 	}
 
 	ct = make([]byte, 8)
 	binary.LittleEndian.PutUint32(ct, count+1)
-	err = Db.Put(BucketMnemonic, []byte("count"), ct)
+	err = GetWallet().Put(BucketMnemonic, []byte("count"), ct)
 	if err != nil {
 		return 0, err
 	}
@@ -669,7 +705,7 @@ func getKeyCountAndIncrement() (count uint32, err error) {
 }
 
 func lookupSeed() (seed []byte, err error) {
-	seed, err = Db.Get(BucketMnemonic, []byte("seed"))
+	seed, err = GetWallet().Get(BucketMnemonic, []byte("seed"))
 	if err != nil {
 		return nil, fmt.Errorf("mnemonic seed doesn't exist")
 	}
@@ -687,17 +723,17 @@ func ImportMnemonic(mnemonic []string) (string, error) {
 	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
 	seed := bip39.NewSeed(mns, "")
 
-	root, _ := Db.Get(BucketMnemonic, []byte("seed"))
+	root, _ := GetWallet().Get(BucketMnemonic, []byte("seed"))
 	if len(root) != 0 {
 		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
 	}
 
-	err := Db.Put(BucketMnemonic, []byte("seed"), seed)
+	err := GetWallet().Put(BucketMnemonic, []byte("seed"), seed)
 	if err != nil {
 		return "", fmt.Errorf("DB: seed write error, %v", err)
 	}
 
-	err = Db.Put(BucketMnemonic, []byte("phrase"), []byte(mns))
+	err = GetWallet().Put(BucketMnemonic, []byte("phrase"), []byte(mns))
 	if err != nil {
 		return "", fmt.Errorf("DB: phrase write error %s", err)
 	}
@@ -706,7 +742,7 @@ func ImportMnemonic(mnemonic []string) (string, error) {
 }
 
 func ExportKeys() (out string, err error) {
-	b, err := Db.GetBucket(BucketKeys)
+	b, err := GetWallet().GetBucket(BucketKeys)
 	if err != nil {
 		return "", err
 	}
@@ -750,7 +786,7 @@ func ExportKeys() (out string, err error) {
 }
 
 func ExportSeed() (string, error) {
-	seed, err := Db.Get(BucketMnemonic, []byte("seed"))
+	seed, err := GetWallet().Get(BucketMnemonic, []byte("seed"))
 	if err != nil {
 		return "", fmt.Errorf("mnemonic seed not found")
 	}
@@ -768,7 +804,7 @@ func ExportSeed() (string, error) {
 }
 
 func ExportMnemonic() (string, error) {
-	phrase, err := Db.Get(BucketMnemonic, []byte("phrase"))
+	phrase, err := GetWallet().Get(BucketMnemonic, []byte("phrase"))
 	if err != nil {
 		return "", err
 	}
@@ -815,5 +851,5 @@ func UpdateKey(args []string) (string, error) {
 	newPubKeyHash := sha256.Sum256(newPubKey)
 	txn := new(protocol.UpdateKey)
 	txn.NewKeyHash = newPubKeyHash[:]
-	return dispatchTxAndPrintResponse("update-key", txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }

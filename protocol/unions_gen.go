@@ -32,6 +32,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteIdentity), nil
 	case AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
+	case AccountTypeSyntheticLedger:
+		return new(SyntheticLedger), nil
 	case AccountTypeTokenAccount:
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
@@ -74,6 +76,9 @@ func EqualAccount(a, b Account) bool {
 		return ok && a.Equal(b)
 	case *LiteTokenAccount:
 		b, ok := b.(*LiteTokenAccount)
+		return ok && a.Equal(b)
+	case *SyntheticLedger:
+		b, ok := b.(*SyntheticLedger)
 		return ok && a.Equal(b)
 	case *TokenAccount:
 		b, ok := b.(*TokenAccount)
@@ -200,12 +205,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateTokenAccount), nil
 	case TransactionTypeInternalGenesis:
 		return new(InternalGenesis), nil
-	case TransactionTypeInternalSendTransactions:
-		return new(InternalSendTransactions), nil
-	case TransactionTypeInternalTransactionsSent:
-		return new(InternalTransactionsSent), nil
-	case TransactionTypeInternalTransactionsSigned:
-		return new(InternalTransactionsSigned), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
 	case TransactionTypeRemote:
@@ -220,8 +219,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticAnchor), nil
 	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
-	case TransactionTypeSyntheticCreateChain:
-		return new(SyntheticCreateChain), nil
+	case TransactionTypeSyntheticCreateIdentity:
+		return new(SyntheticCreateIdentity), nil
 	case TransactionTypeSyntheticDepositCredits:
 		return new(SyntheticDepositCredits), nil
 	case TransactionTypeSyntheticDepositTokens:
@@ -230,8 +229,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticForwardTransaction), nil
 	case TransactionTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
-	case TransactionTypeSyntheticReceipt:
-		return new(SyntheticReceipt), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
 	case TransactionTypeUpdateAccountAuth:
@@ -287,15 +284,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *InternalGenesis:
 		b, ok := b.(*InternalGenesis)
 		return ok && a.Equal(b)
-	case *InternalSendTransactions:
-		b, ok := b.(*InternalSendTransactions)
-		return ok && a.Equal(b)
-	case *InternalTransactionsSent:
-		b, ok := b.(*InternalTransactionsSent)
-		return ok && a.Equal(b)
-	case *InternalTransactionsSigned:
-		b, ok := b.(*InternalTransactionsSigned)
-		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
 		return ok && a.Equal(b)
@@ -317,8 +305,8 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *SyntheticBurnTokens:
 		b, ok := b.(*SyntheticBurnTokens)
 		return ok && a.Equal(b)
-	case *SyntheticCreateChain:
-		b, ok := b.(*SyntheticCreateChain)
+	case *SyntheticCreateIdentity:
+		b, ok := b.(*SyntheticCreateIdentity)
 		return ok && a.Equal(b)
 	case *SyntheticDepositCredits:
 		b, ok := b.(*SyntheticDepositCredits)
@@ -331,9 +319,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SyntheticMirror:
 		b, ok := b.(*SyntheticMirror)
-		return ok && a.Equal(b)
-	case *SyntheticReceipt:
-		b, ok := b.(*SyntheticReceipt)
 		return ok && a.Equal(b)
 	case *SyntheticWriteData:
 		b, ok := b.(*SyntheticWriteData)

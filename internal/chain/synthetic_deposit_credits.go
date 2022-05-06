@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -10,6 +11,12 @@ type SyntheticDepositCredits struct{}
 
 func (SyntheticDepositCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositCredits
+}
+
+func (SyntheticDepositCredits) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
+	// The principal can be missing if it is a lite identity
+	key, _ := protocol.ParseLiteIdentity(transaction.Header.Principal)
+	return key != nil, false
 }
 
 func (SyntheticDepositCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -23,8 +30,18 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 	}
 
 	var account protocol.Signer
+	var create bool
 	switch origin := st.Origin.(type) {
-	case *protocol.LiteTokenAccount:
+	case nil:
+		// Create a new lite identity
+		create = true
+		key, _ := protocol.ParseLiteIdentity(tx.Transaction.Header.Principal)
+		if key == nil {
+			return nil, errors.NotFound("%v not found", tx.Transaction.Header.Principal)
+		}
+		account = &protocol.LiteIdentity{Url: tx.Transaction.Header.Principal}
+
+	case *protocol.LiteIdentity:
 		account = origin
 
 	case *protocol.KeyPage:
@@ -35,6 +52,15 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 	}
 
 	account.CreditCredits(body.Amount)
-	st.Update(account)
+
+	var err error
+	if create {
+		err = st.Create(account)
+	} else {
+		err = st.Update(account)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
+	}
 	return nil, nil
 }

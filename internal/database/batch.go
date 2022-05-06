@@ -8,8 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -152,14 +150,6 @@ func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
 		cv.dirty = true
 	}
 	b.values[key] = cv
-}
-
-func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
-	if b.done {
-		panic("attempted to use a commited or discarded batch")
-	}
-
-	b.bptEntries[key] = hash
 }
 
 func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v TypedValue, err error) {
@@ -310,38 +300,6 @@ func (b *Batch) getAccountState(key storage.Key, newValue protocol.Account) (pro
 		return nil, err
 	}
 	return v, nil
-}
-
-// CommitBpt updates the Patricia Tree hashes with the values from the updates
-// since the last update.
-func (b *Batch) CommitBpt() ([]byte, error) {
-	bpt := pmt.NewBPTManager(b.store)
-
-	for k, v := range b.bptEntries {
-		bpt.InsertKV(k, v)
-	}
-
-	err := bpt.Bpt.Update()
-	if err != nil {
-		return nil, err
-	}
-
-	b.bptEntries = nil
-	return bpt.Bpt.RootHash[:], nil
-}
-
-func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
-	if len(b.bptEntries) > 0 {
-		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted BPT entries")
-	}
-
-	bpt := pmt.NewBPTManager(b.store)
-	receipt := bpt.Bpt.GetReceipt(key)
-	if receipt == nil {
-		return nil, errors.NotFound("BPT key %v not found", key)
-	}
-
-	return receipt, nil
 }
 
 // Commit commits pending writes to the key-value store or the parent batch.

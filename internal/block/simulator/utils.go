@@ -18,22 +18,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitChain(t TB, db *database.Database, exec *Executor) {
+func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
 	t.Helper()
 
-	block := new(Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = time.Unix(0, 0)
-	block.IsLeader = true
-	block.Batch = db.Begin(true)
-	defer block.Batch.Discard()
+	batch := db.Begin(true)
+	defer batch.Discard()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
 	_, err := genesis.Init(temp, genesis.InitOpts{
 		Network:     exec.Network,
-		GenesisTime: block.Time,
+		GenesisTime: time.Unix(0, 0),
 		Logger:      exec.Logger,
+		Router:      exec.Router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
@@ -43,10 +40,17 @@ func InitChain(t TB, db *database.Database, exec *Executor) {
 	state, err := temp.MarshalJSON()
 	require.NoError(tb{t}, err)
 
-	_, err = exec.InitChain(block, state)
-	require.NoError(tb{t}, err)
+	require.NoError(tb{t}, exec.InitFromGenesis(batch, state))
+	require.NoError(tb{t}, batch.Commit())
+}
 
-	require.NoError(tb{t}, block.Batch.Commit())
+func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
+	t.Helper()
+
+	batch := db.Begin(true)
+	defer batch.Discard()
+	require.NoError(tb{t}, exec.InitFromSnapshot(batch, filename))
+	require.NoError(tb{t}, batch.Commit())
 }
 
 func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
@@ -93,11 +97,6 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 	// Commit the batch
 	require.NoError(tb{t}, block.Batch.Commit())
 
-	// Notify the executor that we comitted
-	batch := db.Begin(false)
-	defer batch.Discard()
-	require.NoError(tb{t}, exec.DidCommit(block, batch))
-
 	return results, nil
 }
 
@@ -128,25 +127,15 @@ func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 func DeliverTx(t TB, exec *Executor, block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	t.Helper()
 
-	err := delivery.LoadTransaction(block.Batch)
+	status, err := delivery.LoadTransaction(block.Batch)
 	if err != nil {
-		var perr *protocol.Error
-		if !errors.As(err, &perr) {
-			return nil, err
+		if errors.Is(err, errors.StatusDelivered) {
+			return status, nil
 		}
-
-		if perr.Code != protocol.ErrorCodeAlreadyDelivered {
-			return nil, err
-		}
-
-		return &protocol.TransactionStatus{
-			Delivered: true,
-			Code:      perr.Code.GetEnumValue(),
-			Message:   perr.Error(),
-		}, nil
+		return nil, err
 	}
 
-	status, err := exec.ExecuteEnvelope(block, delivery)
+	status, err = exec.ExecuteEnvelope(block, delivery)
 	if err != nil {
 		return nil, err
 	}

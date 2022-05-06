@@ -204,6 +204,11 @@ func (u *URL) Identity() *URL {
 	return v
 }
 
+// IsRootIdentity returns true if the URL is a root identity.
+func (u *URL) IsRootIdentity() bool {
+	return u.Path == "" || u.Path == "/"
+}
+
 // Parent gets the URL's parent path, or returns the original URL and false.
 func (u *URL) Parent() (*URL, bool) {
 	v := new(URL)
@@ -229,6 +234,27 @@ func (u *URL) Parent() (*URL, bool) {
 func (u *URL) ParentOf(v *URL) bool {
 	v, ok := v.Parent()
 	return ok && u.Equal(v)
+}
+
+// PrefixOf returns true if U is a prefix of V.
+func (u *URL) PrefixOf(v *URL) bool {
+	if !strings.EqualFold(u.Authority, v.Authority) {
+		return false
+	}
+	if len(u.Path) > len(v.Path) {
+		return false
+	}
+	for {
+		var ok bool
+		v, ok = v.Parent()
+		if !ok {
+			return false
+		}
+
+		if u.Equal(v) {
+			return true
+		}
+	}
 }
 
 // LocalTo returns true if U is local to V, that is if they have the same root

@@ -12,8 +12,9 @@ engine:
 
 ```go{ id: 1 }
 alice := GenerateKey("alice")
-aliceAddr := LiteAddress(alice, ACME)
-Show(aliceAddr)
+aliceIdentity := LiteAddress(alice)
+aliceAcme := LiteAddress(alice, ACME)
+Show(aliceAcme)
 ```
 
 ```{ result_of: 1, id: 1, mime: "text/plain" }
@@ -28,8 +29,8 @@ acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
 ### Get tokens
 
 ```go{ id: 2 }
-Show(Faucet(aliceAddr).Wait().Ok())
-Show(Get(aliceAddr))
+Show(Faucet(aliceAcme).Wait().Ok())
+Show(Get(aliceAcme))
 ```
 
 ```{ result_of: 2, id: 1, mime: "text/plain" }
@@ -68,13 +69,13 @@ Lite Token Account
 ### Make credits
 
 ```go{ id: 3 }
-Show(Transaction(aliceAddr).
-    WithSigner(aliceAddr).
-    AddCredits(aliceAddr, 10).
+Show(Transaction(aliceAcme).
+    WithSigner(aliceAcme).
+    AddCredits(aliceAcme, 10).
         Oracle(5).
     Initiate(alice).
 	Submit().Wait().Ok())
-Show(Get(aliceAddr))
+Show(Get(aliceAcme))
 ```
 
 ```{ result_of: 3, id: 1, mime: "text/plain" }
@@ -122,14 +123,14 @@ Lite Token Account
 bob, charlie := GenerateKey("bob"), GenerateKey("charlie")
 bobAddr, charlieAddr := LiteAddress(bob, ACME), LiteAddress(charlie, ACME)
 
-Show(Transaction(aliceAddr).
-    WithSigner(aliceAddr).
+Show(Transaction(aliceAcme).
+    WithSigner(aliceAcme).
     SendTokens().
         To(bobAddr, 68).
         AndTo(charlieAddr, 42).
     Initiate(alice).
 	Submit().Wait().Ok())
-Show(Get(aliceAddr))
+Show(Get(aliceAcme))
 Show(Get(bobAddr))
 Show(Get(charlieAddr))
 ```

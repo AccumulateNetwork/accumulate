@@ -46,5 +46,5 @@ func (e *DataEntry) Cost() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return FeeWriteData.AsUInt64() * uint64(size/256+1), nil
+	return FeeData.AsUInt64() * uint64(size/256+1), nil
 }

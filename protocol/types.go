@@ -11,6 +11,9 @@ import (
 // ChainType is the type of a chain belonging to an account.
 type ChainType uint64
 
+// BookType is the type of a key book.
+type BookType uint64
+
 // ObjectType is the type of an object in the database.
 type ObjectType uint64
 
@@ -20,11 +23,11 @@ type KeyPageOperationType uint8
 // AccountAuthOperationType is the operation type of an UpdateAccountAuth operation.
 type AccountAuthOperationType uint8
 
-//go:generate go run ../tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml internal.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
+//go:generate go run ../tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 //go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
 
 ///intentionally disabled for now
-///go:generate go run ../tools/cmd/gen-types --out ../export/sdk/c --language c account_auth_operations.yml accounts.yml general.yml internal.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
+///go:generate go run ../tools/cmd/gen-types --out ../export/sdk/c --language c account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 ///go:generate go run ../tools/cmd/gen-enum enums.yml --out ../export/sdk/c --language c
 
 func NewValidator() (*validator.Validate, error) {

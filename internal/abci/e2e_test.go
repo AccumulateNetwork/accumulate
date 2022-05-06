@@ -115,7 +115,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 		body.Url = senderUrl
 
 		send(acctesting.NewTransaction().
-			WithPrincipal(protocol.FaucetUrl).
+			WithPrincipal(protocol.FaucetUrl.RootIdentity()).
 			WithBody(body).
 			Faucet())
 	})
@@ -123,7 +123,8 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 	batch := n.db.Begin(true)
 	//acme to credits @ $0.05 acme price is 1:5
 
-	n.Require().NoError(acctesting.AddCredits(batch, senderUrl, credits))
+	liteTokenId := senderUrl.RootIdentity()
+	n.Require().NoError(acctesting.AddCredits(batch, liteTokenId, credits))
 	n.require.NoError(batch.Commit())
 
 	balance := map[string]int64{}
@@ -191,7 +192,7 @@ func TestAnchorChain(t *testing.T) {
 		require.NoError(t, err)
 		adi.KeyHash = keyHash[:]
 
-		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
 		send(newTxn(sponsorUrl).
 			WithBody(adi).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
@@ -258,7 +259,7 @@ func TestAnchorChain(t *testing.T) {
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, expected, ledgerState.ActiveOracle)
+	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
 
 	time.Sleep(2 * time.Second)
 	// Get the anchor chain manager for BVN
@@ -300,7 +301,7 @@ func TestCreateADI(t *testing.T) {
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
 		require.NoError(t, err)
 
-		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
 		send(newTxn(sponsorUrl).
 			WithBody(adi).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
@@ -645,7 +646,7 @@ func TestLiteAccountTx(t *testing.T) {
 		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
 		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl, 1).
+			WithSigner(aliceUrl.RootIdentity(), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, alice).
 			Build())
@@ -701,7 +702,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 		exch.AddRecipient(acctesting.MustParseUrl("foo"), big.NewInt(int64(1000)))
 
 		send(newTxn(aliceUrl.String()).
-			WithSigner(aliceUrl, 1).
+			WithSigner(aliceUrl.RootIdentity(), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, alice).
 			Build())
@@ -721,7 +722,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
 }
 
-func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
+func TestAddCreditsBurnAcme(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
@@ -735,6 +736,13 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
 
 	require.NoError(t, batch.Commit())
+
+	require.NoError(t, nodes[subnets[0]][0].db.Update(func(batch *database.Batch) error {
+		return acctesting.UpdateAccount(batch, protocol.AcmeUrl(), func(acme *protocol.TokenIssuer) {
+			// Make it easier to read the value
+			acme.Issued.SetUint64(1e3 * protocol.AcmePrecision)
+		})
+	}))
 
 	acmeIssuer := n.GetTokenIssuer("acc://ACME")
 	acmeBeforeBurn := acmeIssuer.Issued
@@ -775,7 +783,9 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	acmeAfterBurn := acmeIssuer.Issued
 	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
 	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
-	require.Equal(t, *acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), acmeAfterBurn)
+	require.Equal(t,
+		protocol.FormatBigAmount(acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), protocol.AcmePrecisionPower),
+		protocol.FormatBigAmount(&acmeAfterBurn, protocol.AcmePrecisionPower))
 }
 
 func TestCreateKeyPage(t *testing.T) {
@@ -1080,7 +1090,7 @@ func TestSignatorHeight(t *testing.T) {
 		adi.KeyHash = h[:]
 		adi.KeyBookUrl = keyBookUrl
 
-		send(newTxn(liteUrl.String()).
+		send(newTxn(liteUrl.RootIdentity().String()).
 			WithBody(adi).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build())
@@ -1184,6 +1194,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	n := nodes[subnets[1]][0]
 
 	fooKey, liteKey := generateKey(), generateKey()
+	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
 	batch := n.db.Begin(true)
 
 	fooDecimals := 10
@@ -1192,6 +1203,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	maxSupply := int64(1000000 * fooPrecision)
 	supplyLimit := big.NewInt(maxSupply)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+	require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
 	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(liteKey), 1e9))
 	require.NoError(t, batch.Commit())
 
@@ -1220,6 +1232,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	require.NoError(t, err)
 	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
+	liteId := liteAcmeAddr.RootIdentity()
 
 	underLimit := int64(1000 * fooPrecision)
 	atLimit := int64(maxSupply - underLimit)
@@ -1295,12 +1308,12 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddCredits)
 		//burn the underLimit amount to see if that gets returned to the pool
-		body.Recipient = liteAddr
+		body.Recipient = liteAddr.RootIdentity()
 		body.Amount.SetUint64(100 * protocol.AcmePrecision)
 		body.Oracle = n.GetOraclePrice()
 
 		send(newTxn(liteAcmeAddr.String()).
-			WithSigner(liteAcmeAddr, 1).
+			WithSigner(liteId.RootIdentity(), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build())
@@ -1313,7 +1326,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Amount.SetInt64(underLimit)
 
 		send(newTxn(liteAddr.String()).
-			WithSigner(liteAddr, 1).
+			WithSigner(liteAddr.RootIdentity(), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build())
@@ -1412,17 +1425,31 @@ func TestUpdateValidators(t *testing.T) {
 
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
-	nodeKeyAdd1, nodeKeyAdd2, nodeKeyUpd := generateKey(), generateKey(), generateKey()
+	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
+
+	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
+	// for 4
+	ng := new(protocol.NetworkGlobals)
+	ng.ValidatorThreshold.Set(5, 12)
+	wd := new(protocol.WriteData)
+	d, err := ng.MarshalBinary()
+	require.NoError(t, err)
+	wd.Entry.Data = append(wd.Entry.Data, d)
+	n.MustExecuteAndWait(func(send func(*Tx)) {
+		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
+			WithSigner(validators, 1).
+			WithBody(wd).
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
+	})
 
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
-
 	// Add a validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
-
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1439,7 +1466,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
 		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
 
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 2).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1449,12 +1476,11 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was updated
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey()})
 
-	// Add a third validator, so the page threshold will become 2
+	// Add a third validator
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
-
-		send(newTxn(netUrl.String()).
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 3).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
@@ -1464,25 +1490,43 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was added
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
 
-	// Remove a validator
-	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.RemoveValidator)
-		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+	// Verify the Validator threshold
+	require.Equal(t, uint64(1), n.GetKeyPage(validators.String()).AcceptThreshold)
 
-		send(newTxn(netUrl.String()).
+	// Add a fourth validator, so the page threshold will become 2
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
+		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
+
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 4).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
 
-	// Should not be removed yet, the tx is pending
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+	// Verify the validator was added
+	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
+
+	// Verify the Validator threshold
+	require.Equal(t, uint64(2), n.GetKeyPage(validators.String()).AcceptThreshold)
+
+	// Remove a validator
+	txns := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
+		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+			WithSigner(validators, 5).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Build())
+	})
 
 	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
-			WithSigner(validators, 4).
-			WithTxnHash(ids[0][:]).
+			WithSigner(validators, 5).
+			WithTxnHash(txns[0][:]).
 			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
 			Build())
 	})
@@ -1490,7 +1534,7 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Verify the validator was removed
 	pubKeys := n.client.Validators()
-	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey()})
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
 
 }
 

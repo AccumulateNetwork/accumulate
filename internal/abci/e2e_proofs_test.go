@@ -26,7 +26,7 @@ func TestProofADI(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, protocol.AcmeFaucetAmount, initialCredits))
 	require.NoError(t, batch.Commit())
-	liteAddr := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
+	liteId := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
 
 	// Create ADI
 	n.MustExecuteAndWait(func(send func(*Tx)) {
@@ -36,13 +36,14 @@ func TestProofADI(t *testing.T) {
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
 		require.NoError(t, err)
 		adi.KeyHash = keyHash[:]
-		send(newTxn(liteAddr).
+		send(newTxn(liteId.String()).
 			WithBody(adi).
 			Initiate(protocol.SignatureTypeLegacyED25519, liteKey).
 			Build())
 	})
 
-	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
+	liteIdentity := n.GetLiteIdentity(liteId.String())
+	require.Less(t, liteIdentity.CreditBalance, uint64(initialCredits*protocol.CreditPrecision))
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKeyHash)
 
 	batch = n.db.Begin(true)

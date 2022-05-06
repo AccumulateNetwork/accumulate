@@ -126,8 +126,8 @@ func loadDirectoryEntry(batch *database.Batch, account *url.URL, index uint64) (
 	return string(b), nil
 }
 
-func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, error) {
-	var arec protocol.AnchoredRecord
+func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredAccount, error) {
+	var arec protocol.AnchoredAccount
 
 	rec := batch.Account(u)
 	state, err := rec.GetState()
@@ -140,41 +140,9 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 	}
 
-	arec.Record, err = state.MarshalBinary()
-	if err != nil {
-		return arec, fmt.Errorf("failed to marshal %q: %v", u, err)
-	}
-
+	arec.Account = state
 	copy(arec.Anchor[:], chain.Anchor())
 	return arec, nil
-}
-
-func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
-	var count int
-	for _, hash := range txids {
-		txn, err := batch.Transaction(hash[:]).GetState()
-		if err != nil {
-			count++
-			continue
-		}
-
-		if txn.Transaction.Body.Type() != protocol.TransactionTypeSyntheticAnchor {
-			count++
-			continue
-		}
-	}
-	return count
-}
-
-func countExceptAnchors2(txns []*protocol.Transaction) int {
-	var count int
-	for _, txn := range txns {
-		if txn.Type() != protocol.TransactionTypeSyntheticAnchor {
-			count++
-			continue
-		}
-	}
-	return count
 }
 
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
@@ -224,4 +192,16 @@ func getAccountAuth(batch *database.Batch, account protocol.Account) (*protocol.
 	default:
 		return &protocol.AccountAuth{}, nil
 	}
+}
+
+func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {
+	var zero T
+
+	txn, ok := x.executors[typ]
+	if !ok {
+		return zero, false
+	}
+
+	val, ok := txn.(T)
+	return val, ok
 }
