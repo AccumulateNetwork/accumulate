@@ -114,12 +114,13 @@ var flagInitDevnet struct {
 }
 
 var flagInitNetwork struct {
-	GenesisDoc  string
-	Docker      bool
-	DockerImage string
-	UseVolumes  bool
-	Compose     bool
-	DnsSuffix   string
+	GenesisDoc     string
+	Docker         bool
+	DockerImage    string
+	UseVolumes     bool
+	Compose        bool
+	DnsSuffix      string
+	FactomBalances string
 }
 
 func init() {
@@ -132,6 +133,7 @@ func init() {
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
+	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")

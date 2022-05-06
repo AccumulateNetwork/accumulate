@@ -22,7 +22,7 @@ import (
 
 func TestRelaunch(t *testing.T) {
 	// Create a network
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 
 	// Start it
 	for _, netName := range subnets {
