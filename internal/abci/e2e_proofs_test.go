@@ -14,7 +14,7 @@ import (
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestProofADI(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
