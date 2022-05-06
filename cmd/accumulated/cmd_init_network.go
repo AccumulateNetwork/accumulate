@@ -238,26 +238,32 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		nodeReset()
 	}
+	var factomAddressesFile string
+	if flagInitNetwork.FactomBalances != "" {
+		factomAddressesFile = flagInitNetwork.FactomBalances
+	}
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
 		check(node.Init(node.InitOptions{
-			WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
-			Port:     directory.Port,
-			Config:   dnConfig,
-			RemoteIP: dnRemote,
-			ListenIP: dnListen,
-			Logger:   logger.With("subnet", protocol.Directory),
+			WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
+			Port:                directory.Port,
+			Config:              dnConfig,
+			RemoteIP:            dnRemote,
+			ListenIP:            dnListen,
+			Logger:              logger.With("subnet", protocol.Directory),
+			FactomAddressesFile: factomAddressesFile,
 		}))
 
 		for i := range bvnSubnet {
 			check(node.Init(node.InitOptions{
-				WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
-				Port:     bvns[i].Port,
-				Config:   bvnConfig[i],
-				RemoteIP: bvnRemote[i],
-				ListenIP: bvnListen[i],
-				Logger:   logger.With("subnet", bvns[i].Name),
+				WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
+				Port:                bvns[i].Port,
+				Config:              bvnConfig[i],
+				RemoteIP:            bvnRemote[i],
+				ListenIP:            bvnListen[i],
+				Logger:              logger.With("subnet", bvns[i].Name),
+				FactomAddressesFile: factomAddressesFile,
 			}))
 		}
 		return
