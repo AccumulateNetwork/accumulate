@@ -80,7 +80,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	case txnType.IsUser():
 		err = nil
 	case txnType.IsSynthetic():
-		err = validateSyntheticEnvelope(&x.Network, batch, delivery)
+		err = validateSyntheticTransactionSignatures(delivery.Transaction, delivery.Signatures)
 	case txnType.IsInternal():
 		// TODO Validate internal transactions
 		err = nil
