@@ -442,7 +442,7 @@ BALANCE=$(accumulate --use-unencrypted-wallet -j page get manager/book/1 | jq -r
 [ "$BALANCE" -ge 100000 ] && success || die "manager/book/1 should have 100000 credits but has ${BALANCE}"
 
 section "Create token account with manager"
-wait-for cli-tx account create token keytest keytest-1-0 --authority manager/book keytest/managed-tokens ACME || "Failed to create managed token account"
+wait-for cli-tx account create token keytest keytest-1-0 --authority keytest/book,manager/book keytest/managed-tokens ACME || "Failed to create managed token account"
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
