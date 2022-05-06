@@ -25,15 +25,16 @@ import (
 const nodeDirPerm = 0755
 
 type InitOptions struct {
-	Version    int
-	WorkDir    string
-	Port       int
-	NodeNr     *uint64
-	GenesisDoc *types.GenesisDoc
-	Config     []*cfg.Config
-	RemoteIP   []string
-	ListenIP   []string
-	Logger     log.Logger
+	Version             int
+	WorkDir             string
+	Port                int
+	NodeNr              *uint64
+	GenesisDoc          *types.GenesisDoc
+	Config              []*cfg.Config
+	RemoteIP            []string
+	ListenIP            []string
+	Logger              log.Logger
+	FactomAddressesFile string
 }
 
 // Init creates the initial configuration for a set of nodes, using
@@ -134,11 +135,12 @@ func initV1(opts InitOptions) (err error) {
 
 		db := memory.New(opts.Logger.With("module", "storage"))
 		root, err := genesis.Init(db, genesis.InitOpts{
-			Network:     config[0].Accumulate.Network,
-			GenesisTime: genTime,
-			Validators:  genVals,
-			Logger:      opts.Logger,
-			Router:      &routing.RouterInstance{Network: &config[0].Accumulate.Network},
+			Network:             config[0].Accumulate.Network,
+			GenesisTime:         genTime,
+			Validators:          genVals,
+			Logger:              opts.Logger,
+			Router:              &routing.RouterInstance{Network: &config[0].Accumulate.Network},
+			FactomAddressesFile: opts.FactomAddressesFile,
 		})
 		if err != nil {
 			return err
