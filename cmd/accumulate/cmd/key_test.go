@@ -82,35 +82,6 @@ func testCase4_12(t *testing.T, tc *testCmd) {
 	// verify signature type
 	require.Equal(t, sig, kr.KeyType)
 
-	// faucet the btc account
-	_, err = tc.executeTx(t, "faucet "+kr.LiteAccount.String())
-	require.NoError(t, err)
-
-	// make sure btc account has the funds
-	bal, err := testGetBalance(t, tc, kr.LiteAccount.String())
-	require.NoError(t, err)
-	require.Equal(t, bal, "200000000000000")
-
-	_, err = tc.execute(t, "get "+kr.LiteAccount.String())
-	require.NoError(t, err)
-
-	_, err = tc.executeTx(t, "credits "+kr.LiteAccount.String()+" "+kr.LiteAccount.String()+" 100")
-	require.NoError(t, err)
-
-	r, err = tc.execute(t, "key generate --sigtype btc btc1")
-	require.NoError(t, err)
-	kr1 := KeyResponse{}
-	require.NoError(t, json.Unmarshal([]byte(r), &kr1))
-
-	// transfer from an btc based account to an btc based account
-	_, err = tc.executeTx(t, "tx create "+kr.LiteAccount.String()+" "+kr1.LiteAccount.String()+" "+"100.00")
-	require.NoError(t, err)
-
-	// make sure it transferred
-	bal, err = testGetBalance(t, tc, kr1.LiteAccount.String())
-	require.NoError(t, err)
-	require.Equal(t, bal, "10000000000")
-
 	t.Log(r)
 }
 
