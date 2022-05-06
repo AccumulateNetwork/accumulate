@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -49,7 +50,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	if transaction.Body.Type().IsSynthetic() {
 		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
+		err = processSyntheticTransaction(batch, transaction, status)
 		if err != nil {
 			return x.recordFailedTransaction(batch, transaction, err)
 		}
@@ -125,7 +126,7 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protoc
 	case transaction.Body.Type().IsUser():
 		return x.userTransactionIsReady(batch, transaction, status)
 	case transaction.Body.Type().IsSynthetic():
-		return synthTransactionIsReady(&x.Network, batch, transaction, status)
+		return x.synthTransactionIsReady(batch, transaction, status)
 	default:
 		return true, nil
 	}
@@ -249,12 +250,20 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 	return false, nil
 }
 
-func synthTransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+	// Anchors cannot be pending
 	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
 		return true, nil
 	}
 
-	receipt, sourceNet, err := assembleSynthReceipt(batch, transaction, status)
+	// Load all of the signatures
+	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	if err != nil {
+		return false, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Build a receipt from the signatures
+	receipt, sourceNet, err := assembleSynthReceipt(transaction, signatures)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -264,7 +273,7 @@ func synthTransactionIsReady(net *config.Network, batch *database.Batch, transac
 
 	// Determine which anchor chain to load
 	var subnet string
-	if net.Type != config.Directory {
+	if x.Network.Type != config.Directory {
 		subnet = protocol.Directory
 	} else {
 		var ok bool
@@ -275,7 +284,7 @@ func synthTransactionIsReady(net *config.Network, batch *database.Batch, transac
 	}
 
 	// Load the anchor chain
-	anchorChain, err := batch.Account(net.AnchorPool()).ReadChain(protocol.AnchorChain(subnet))
+	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.AnchorChain(subnet))
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", subnet, err)
 	}
@@ -284,12 +293,51 @@ func synthTransactionIsReady(net *config.Network, batch *database.Batch, transac
 	_, err = anchorChain.HeightOf(receipt.Result)
 	switch {
 	case err == nil:
-		return true, nil
+		// Ready
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
 		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Result[:4], subnet, err)
 	}
+
+	// Get the synthetic signature
+	synthSig, ok := signatures[0].(*protocol.SyntheticSignature)
+	if !ok {
+		return false, errors.Format(errors.StatusInternalError, "missing synthetic signature")
+	}
+
+	// Load the ledger
+	var ledger *protocol.SyntheticLedger
+	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	if err != nil {
+		return false, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
+	}
+
+	// Verify the sequence number
+	subnetLedger := ledger.Subnet(synthSig.SourceNetwork)
+	if subnetLedger.Received+1 != synthSig.SequenceNumber {
+		// TODO Out of sequence synthetic transactions should be marked pending
+		// and the source BVN should be queried to retrieve the missing
+		// synthetic transactions
+
+		x.logger.Error("Out of sequence synthetic transaction",
+			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
+			"seq-got", synthSig.SequenceNumber,
+			"seq-want", subnetLedger.Received+1,
+			"source", synthSig.SourceNetwork,
+			"destination", synthSig.DestinationNetwork)
+	}
+
+	// Update the received number
+	if synthSig.SequenceNumber > subnetLedger.Received {
+		subnetLedger.Received = synthSig.SequenceNumber
+		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
+		}
+	}
+
+	return true, nil
 }
 
 func recordTransaction(batch *database.Batch, transaction *protocol.Transaction, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
@@ -335,8 +383,14 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 		return status, new(chain.ProcessTransactionState), nil
 	}
 
+	// Load all of the signatures
+	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
 	// Add the synthetic transaction to the anchor's list of pending transactions
-	receipt, _, err := assembleSynthReceipt(batch, transaction, status)
+	receipt, _, err := assembleSynthReceipt(transaction, signatures)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}

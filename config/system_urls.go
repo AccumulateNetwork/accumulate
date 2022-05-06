@@ -14,6 +14,11 @@ func (u NetworkUrl) Ledger() *url.URL {
 	return u.JoinPath(protocol.Ledger)
 }
 
+// Synthetic returns the URL of the subnet's synthetic transaction ledger account.
+func (u NetworkUrl) Synthetic() *url.URL {
+	return u.JoinPath(protocol.Synthetic)
+}
+
 // ValidatorBook returns the URL of the subnet's validator key book.
 func (u NetworkUrl) ValidatorBook() *url.URL {
 	return u.JoinPath(protocol.ValidatorBook)
@@ -37,6 +42,11 @@ func (n *Network) NodeUrl(path ...string) *url.URL {
 // Ledger returns the URL of the subnet's ledger account.
 func (n *Network) Ledger() *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.Ledger()
+}
+
+// Synthetic returns the URL of the subnet's ledger account.
+func (n *Network) Synthetic() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.Synthetic()
 }
 
 // ValidatorBook returns the URL of the subnet's validator key book.

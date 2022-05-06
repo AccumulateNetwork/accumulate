@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -88,26 +88,12 @@ func (s *sigSetData) Add(newEntry sigSetKeyData, newSignature protocol.Signature
 	}
 
 	// Find based on the key keyHash
-	i := sort.Search(len(s.Entries), func(i int) bool {
-		return bytes.Compare(s.Entries[i].KeyHash[:], newEntry.KeyHash[:]) >= 0
+	ptr, new := sortutil.BinaryInsert(&s.Entries, func(entry sigSetKeyData) int {
+		return bytes.Compare(entry.KeyHash[:], newEntry.KeyHash[:])
 	})
 
-	// Append
-	if i >= len(s.Entries) {
-		s.Entries = append(s.Entries, newEntry)
-		return true
-	}
-
-	// An entry exists for the key, so ignore this one
-	if s.Entries[i].KeyHash == newEntry.KeyHash {
-		return false
-	}
-
-	// Insert
-	s.Entries = append(s.Entries, sigSetKeyData{})
-	copy(s.Entries[i+1:], s.Entries[i:])
-	s.Entries[i] = newEntry
-	return true
+	*ptr = newEntry
+	return new
 }
 
 // Add adds a signature to the signature set. Add does nothing if the signature

@@ -254,9 +254,9 @@ AccountType:
   LiteIdentity:
     value: 15
     description: is a lite identity account
-  InternalSyntheticLedger:
+  SyntheticLedger:
     value: 16
-    description: is a ledger that tracks the status of unsent synthetic transactions
+    description: is a ledger that tracks the status of produced and received synthetic transactions
 
 AllowedTransactionBit:
   UpdateKeyPage:
