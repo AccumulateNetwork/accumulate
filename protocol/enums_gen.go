@@ -62,8 +62,8 @@ const AccountTypeInternalLedger AccountType = 14
 // AccountTypeLiteIdentity is a lite identity account.
 const AccountTypeLiteIdentity AccountType = 15
 
-// AccountTypeInternalSyntheticLedger is a ledger that tracks the status of unsent synthetic transactions.
-const AccountTypeInternalSyntheticLedger AccountType = 16
+// AccountTypeSyntheticLedger is a ledger that tracks the status of produced and received synthetic transactions.
+const AccountTypeSyntheticLedger AccountType = 16
 
 // AllowedTransactionBitUpdateKeyPage is the offset of the UpdateKeyPage bit.
 const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
@@ -456,7 +456,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeInternalSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -493,8 +493,8 @@ func (v AccountType) String() string {
 		return "internalLedger"
 	case AccountTypeLiteIdentity:
 		return "liteIdentity"
-	case AccountTypeInternalSyntheticLedger:
-		return "internalSyntheticLedger"
+	case AccountTypeSyntheticLedger:
+		return "syntheticLedger"
 	default:
 		return fmt.Sprintf("AccountType:%d", v)
 	}
@@ -531,8 +531,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeInternalLedger, true
 	case "liteidentity":
 		return AccountTypeLiteIdentity, true
-	case "internalsyntheticledger":
-		return AccountTypeInternalSyntheticLedger, true
+	case "syntheticledger":
+		return AccountTypeSyntheticLedger, true
 	default:
 		return 0, false
 	}

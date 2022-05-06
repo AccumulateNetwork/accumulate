@@ -248,13 +248,13 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.KeySignature, er
 	return sig, s.sign(sig, txn.GetHash())
 }
 
-func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router) (protocol.Signature, error) {
+func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router, ledger *protocol.SyntheticLedger) (protocol.Signature, error) {
 	var errs []string
 	if s.Url == nil {
 		errs = append(errs, "missing signer")
 	}
-	if s.Version == 0 {
-		errs = append(errs, "missing version")
+	if s.Version == 0 && ledger == nil {
+		errs = append(errs, "missing version or ledger")
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
@@ -264,11 +264,19 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 	if err != nil {
 		return nil, fmt.Errorf("routing %v: %v", txn.Header.Principal, err)
 	}
+	subnetUrl := protocol.SubnetUrl(destSubnet)
 
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = s.Url
-	initSig.DestinationNetwork = protocol.SubnetUrl(destSubnet)
-	initSig.SequenceNumber = s.Version
+	initSig.DestinationNetwork = subnetUrl
+
+	if ledger == nil {
+		initSig.SequenceNumber = s.Version
+	} else {
+		subnetLedger := ledger.Subnet(subnetUrl)
+		subnetLedger.Produced++
+		initSig.SequenceNumber = subnetLedger.Produced
+	}
 
 	if s.InitMode == InitWithSimpleHash {
 		txn.Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())

@@ -80,15 +80,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
 		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
 
-		// Create the ledger
+		// Create the main ledger
 		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
-		ledger.AddAuthority(uBook)
-		ledger.Synthetic.Nonce = 1
 		ledger.ActiveOracle = oraclePrice
 		ledger.PendingOracle = oraclePrice
 		ledger.Index = protocol.GenesisBlock
 		records = append(records, ledger)
+
+		// Create the synth ledger
+		synthLedger := new(protocol.SyntheticLedger)
+		synthLedger.Url = uAdi.JoinPath(protocol.Synthetic)
+		records = append(records, synthLedger)
 
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
