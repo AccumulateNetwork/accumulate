@@ -439,7 +439,7 @@ func (x *Executor) sendBlockAnchor(anchor *protocol.SyntheticAnchor, subnet stri
 	initSig, err := new(signing.Builder).
 		SetUrl(x.Network.NodeUrl()).
 		SetVersion(anchor.Block).
-		InitiateSynthetic(txn, x.Router)
+		InitiateSynthetic(txn, x.Router, nil)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
 	}
