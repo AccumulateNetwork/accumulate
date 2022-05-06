@@ -251,9 +251,17 @@ func LiteAuthorityForHash(pubKeyHash []byte) *url.URL {
 
 func LiteAuthorityForKey(pubKey []byte, signatureType SignatureType) *url.URL {
 	var keyHash []byte
-	if signatureType == SignatureTypeRCD1 {
+	switch signatureType {
+	case SignatureTypeRCD1:
 		keyHash = GetRCDHashFromPublicKey(pubKey, 1)
-	} else {
+	case SignatureTypeBTC, SignatureTypeBTCLegacy:
+		keyHash = BTCHash(pubKey)
+	case SignatureTypeETH:
+		keyHash = ETHhash(pubKey)
+	case SignatureTypeED25519, SignatureTypeLegacyED25519:
+		h := sha256.Sum256(pubKey)
+		keyHash = h[:]
+	default:
 		h := sha256.Sum256(pubKey)
 		keyHash = h[:]
 	}
