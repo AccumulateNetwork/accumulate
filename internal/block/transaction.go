@@ -220,41 +220,16 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 	}
 
+	// Check if the signature set includes a completed set
+	for _, e := range signatures.Entries() {
+		if e.Type == protocol.SignatureTypeSet {
+			return true, nil
+		}
+	}
+
 	// Check if the threshold has been reached
 	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
 		return true, nil
-	}
-
-	// Check if the threshold has been reached when considering delegates
-	page, ok := signer.(*protocol.KeyPage)
-	if !ok {
-		return false, nil
-	}
-	required := int64(signer.GetSignatureThreshold()) - int64(signatures.Count())
-	for _, entry := range page.Keys {
-		if entry.Owner == nil {
-			continue
-		}
-
-		// Are any of the pages of the owner satisfied?
-		var ok bool
-		for _, signer := range status.FindSigners(entry.Owner) {
-			ok, err = x.SignerIsSatisfied(batch, transaction, status, signer)
-			if err != nil {
-				return false, errors.Wrap(errors.StatusUnknown, err)
-			}
-			if ok {
-				break
-			}
-		}
-		if !ok {
-			continue
-		}
-
-		required--
-		if required == 0 {
-			return true, nil
-		}
 	}
 
 	return false, nil
@@ -267,7 +242,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Load all of the signatures
-	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -394,7 +369,7 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 	}
 
 	// Load all of the signatures
-	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}

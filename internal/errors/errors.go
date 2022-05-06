@@ -85,8 +85,10 @@ func New(code Status, v interface{}) *Error {
 	return e
 }
 
-func Wrap(code Status, err error) *Error {
+func Wrap(code Status, err error) error {
 	if err == nil {
+		// The return type must be `error` - otherwise this returns statement
+		// can cause strange errors
 		return nil
 	}
 	e := makeError(code)
