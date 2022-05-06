@@ -2,7 +2,6 @@
 
 # Stop immediately on error
 set -e
-set -x
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}"/validate-commons.sh
@@ -92,7 +91,8 @@ if [ -f "$(nodePrivKey 0)" ]; then
   wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" operator-2
   echo "sleeping for 5 seconds (wait for anchor)"
   sleep 5
-  RESULT=$(accumulate page get acc://bvn-BVN0/operators/2)
+  RESULT=$(accumulate page get -j acc://bvn-BVN0/operators/2)
+  echo Result: "$RESULT"
   [[ $RESULT == *"operator-2"* ]] || die "operator-2 was not added to the operator book"
 else
   echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
