@@ -89,11 +89,11 @@ if [ -f "$(nodePrivKey 0)" ]; then
   ensure-key operator-2
 
   wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" operator-2
+  KEY_ADDED_DN=$(accumulate page get -j dn/operators/1) | jq -re .data.keys[2].publicKey
   echo "sleeping for 5 seconds (wait for anchor)"
   sleep 5
-  RESULT=$(accumulate page get -j acc://bvn-BVN0/operators/2)
-  echo Result: "$RESULT"
-  [[ $RESULT == *"operator-2"* ]] || die "operator-2 was not added to the operator book"
+  KEY_ADDED_BVN=$(accumulate page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
+  [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
 else
   echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
   echo
