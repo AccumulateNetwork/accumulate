@@ -45,6 +45,9 @@ const (
 	// Oracle is the path to a node's anchor chain account.
 	Oracle = "oracle"
 
+	// Globals is the path to the Directory network's Mutable Protocol costants data account
+	Globals = "globals"
+
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
 
@@ -66,9 +69,6 @@ const (
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
 	MinorRootIndexChain = "minor-root-index"
 
-	// SyntheticChain is the synthetic transaction chain of a subnet.
-	SyntheticChain = "synthetic"
-
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
@@ -77,9 +77,6 @@ const (
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
-
-	//Globals is the path to the Directory network's Mutable Protocol costants data account
-	Globals = "globals"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
