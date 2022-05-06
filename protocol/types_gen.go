@@ -209,14 +209,14 @@ type CreateToken struct {
 }
 
 type CreateTokenAccount struct {
-	fieldsSet  []bool
-	Url        *url.URL           `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	TokenUrl   *url.URL           `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
-	KeyBookUrl *url.URL           `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
-	Scratch    bool               `json:"scratch,omitempty" form:"scratch" query:"scratch"`
-	Manager    *url.URL           `json:"manager,omitempty" form:"manager" query:"manager"`
-	Proof      *AccountStateProof `json:"proof,omitempty" form:"proof" query:"proof"`
-	extraData  []byte
+	fieldsSet        []bool
+	Url              *url.URL           `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	TokenUrl         *url.URL           `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	KeyBookUrl       *url.URL           `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
+	Scratch          bool               `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	Manager          *url.URL           `json:"manager,omitempty" form:"manager" query:"manager"`
+	TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
+	extraData        []byte
 }
 
 type DataAccount struct {
@@ -757,10 +757,10 @@ type UnknownSigner struct {
 }
 
 type UpdateAccountAuth struct {
-	fieldsSet  []bool
-	Operations []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
-	Proof      *AccountStateProof     `json:"proof,omitempty" form:"proof" query:"proof"`
-	extraData  []byte
+	fieldsSet        []bool
+	Operations       []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	TokenIssuerProof *AccountStateProof     `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
+	extraData        []byte
 }
 
 type UpdateAllowedKeyPageOperation struct {
@@ -1324,8 +1324,8 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	if v.Manager != nil {
 		u.Manager = (v.Manager).Copy()
 	}
-	if v.Proof != nil {
-		u.Proof = (v.Proof).Copy()
+	if v.TokenIssuerProof != nil {
+		u.TokenIssuerProof = (v.TokenIssuerProof).Copy()
 	}
 
 	return u
@@ -2244,8 +2244,8 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
 		}
 	}
-	if v.Proof != nil {
-		u.Proof = (v.Proof).Copy()
+	if v.TokenIssuerProof != nil {
+		u.TokenIssuerProof = (v.TokenIssuerProof).Copy()
 	}
 
 	return u
@@ -2851,11 +2851,11 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 		return false
 	}
 	switch {
-	case v.Proof == u.Proof:
+	case v.TokenIssuerProof == u.TokenIssuerProof:
 		// equal
-	case v.Proof == nil || u.Proof == nil:
+	case v.TokenIssuerProof == nil || u.TokenIssuerProof == nil:
 		return false
-	case !((v.Proof).Equal(u.Proof)):
+	case !((v.TokenIssuerProof).Equal(u.TokenIssuerProof)):
 		return false
 	}
 
@@ -4025,11 +4025,11 @@ func (v *UpdateAccountAuth) Equal(u *UpdateAccountAuth) bool {
 		}
 	}
 	switch {
-	case v.Proof == u.Proof:
+	case v.TokenIssuerProof == u.TokenIssuerProof:
 		// equal
-	case v.Proof == nil || u.Proof == nil:
+	case v.TokenIssuerProof == nil || u.TokenIssuerProof == nil:
 		return false
-	case !((v.Proof).Equal(u.Proof)):
+	case !((v.TokenIssuerProof).Equal(u.TokenIssuerProof)):
 		return false
 	}
 
@@ -5457,7 +5457,7 @@ var fieldNames_CreateTokenAccount = []string{
 	4: "KeyBookUrl",
 	5: "Scratch",
 	6: "Manager",
-	7: "Proof",
+	7: "TokenIssuerProof",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5480,8 +5480,8 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Manager == nil) {
 		writer.WriteUrl(6, v.Manager)
 	}
-	if !(v.Proof == nil) {
-		writer.WriteValue(7, v.Proof)
+	if !(v.TokenIssuerProof == nil) {
+		writer.WriteValue(7, v.TokenIssuerProof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
@@ -9053,7 +9053,7 @@ func (v *UnknownSigner) IsValid() error {
 var fieldNames_UpdateAccountAuth = []string{
 	1: "Type",
 	2: "Operations",
-	3: "Proof",
+	3: "TokenIssuerProof",
 }
 
 func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
@@ -9066,8 +9066,8 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, v)
 		}
 	}
-	if !(v.Proof == nil) {
-		writer.WriteValue(3, v.Proof)
+	if !(v.TokenIssuerProof == nil) {
+		writer.WriteValue(3, v.TokenIssuerProof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
@@ -10266,7 +10266,7 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Manager = x
 	}
 	if x := new(AccountStateProof); reader.ReadValue(7, x.UnmarshalBinary) {
-		v.Proof = x
+		v.TokenIssuerProof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
@@ -12262,7 +12262,7 @@ func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	if x := new(AccountStateProof); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Proof = x
+		v.TokenIssuerProof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_UpdateAccountAuth)
@@ -12820,13 +12820,13 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 
 func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       TransactionType    `json:"type"`
-		Url        *url.URL           `json:"url,omitempty"`
-		TokenUrl   *url.URL           `json:"tokenUrl,omitempty"`
-		KeyBookUrl *url.URL           `json:"keyBookUrl,omitempty"`
-		Scratch    bool               `json:"scratch,omitempty"`
-		Manager    *url.URL           `json:"manager,omitempty"`
-		Proof      *AccountStateProof `json:"proof,omitempty"`
+		Type             TransactionType    `json:"type"`
+		Url              *url.URL           `json:"url,omitempty"`
+		TokenUrl         *url.URL           `json:"tokenUrl,omitempty"`
+		KeyBookUrl       *url.URL           `json:"keyBookUrl,omitempty"`
+		Scratch          bool               `json:"scratch,omitempty"`
+		Manager          *url.URL           `json:"manager,omitempty"`
+		TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -12834,7 +12834,7 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Scratch = v.Scratch
 	u.Manager = v.Manager
-	u.Proof = v.Proof
+	u.TokenIssuerProof = v.TokenIssuerProof
 	return json.Marshal(&u)
 }
 
@@ -13690,13 +13690,13 @@ func (v *UnknownSigner) MarshalJSON() ([]byte, error) {
 
 func (v *UpdateAccountAuth) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       TransactionType                                      `json:"type"`
-		Operations encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
-		Proof      *AccountStateProof                                   `json:"proof,omitempty"`
+		Type             TransactionType                                      `json:"type"`
+		Operations       encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
+		TokenIssuerProof *AccountStateProof                                   `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Operations = encoding.JsonUnmarshalListWith[AccountAuthOperation]{Value: v.Operations, Func: UnmarshalAccountAuthOperationJSON}
-	u.Proof = v.Proof
+	u.TokenIssuerProof = v.TokenIssuerProof
 	return json.Marshal(&u)
 }
 
@@ -14330,13 +14330,13 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 
 func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       TransactionType    `json:"type"`
-		Url        *url.URL           `json:"url,omitempty"`
-		TokenUrl   *url.URL           `json:"tokenUrl,omitempty"`
-		KeyBookUrl *url.URL           `json:"keyBookUrl,omitempty"`
-		Scratch    bool               `json:"scratch,omitempty"`
-		Manager    *url.URL           `json:"manager,omitempty"`
-		Proof      *AccountStateProof `json:"proof,omitempty"`
+		Type             TransactionType    `json:"type"`
+		Url              *url.URL           `json:"url,omitempty"`
+		TokenUrl         *url.URL           `json:"tokenUrl,omitempty"`
+		KeyBookUrl       *url.URL           `json:"keyBookUrl,omitempty"`
+		Scratch          bool               `json:"scratch,omitempty"`
+		Manager          *url.URL           `json:"manager,omitempty"`
+		TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14344,7 +14344,7 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u.KeyBookUrl = v.KeyBookUrl
 	u.Scratch = v.Scratch
 	u.Manager = v.Manager
-	u.Proof = v.Proof
+	u.TokenIssuerProof = v.TokenIssuerProof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14356,7 +14356,7 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	v.KeyBookUrl = u.KeyBookUrl
 	v.Scratch = u.Scratch
 	v.Manager = u.Manager
-	v.Proof = u.Proof
+	v.TokenIssuerProof = u.TokenIssuerProof
 	return nil
 }
 
@@ -15963,13 +15963,13 @@ func (v *UnknownSigner) UnmarshalJSON(data []byte) error {
 
 func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       TransactionType                                      `json:"type"`
-		Operations encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
-		Proof      *AccountStateProof                                   `json:"proof,omitempty"`
+		Type             TransactionType                                      `json:"type"`
+		Operations       encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
+		TokenIssuerProof *AccountStateProof                                   `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Operations = encoding.JsonUnmarshalListWith[AccountAuthOperation]{Value: v.Operations, Func: UnmarshalAccountAuthOperationJSON}
-	u.Proof = v.Proof
+	u.TokenIssuerProof = v.TokenIssuerProof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15980,7 +15980,7 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Operations.Value {
 		v.Operations[i] = x
 	}
-	v.Proof = u.Proof
+	v.TokenIssuerProof = u.TokenIssuerProof
 	return nil
 }
 

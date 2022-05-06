@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -31,7 +30,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
 	account.Scratch = body.Scratch
-	acc := st.batch.Account(account.Url)
+	/*acc := st.batch.Account(account.Url)
 	mReceipt, err := acc.StateReceipt()
 	if err != nil {
 		return nil, err
@@ -55,7 +54,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
 	}
 	st.batch.BptReceipt()*/
-	err = st.SetAuth(account, body.KeyBookUrl, body.Manager)
+	err := st.SetAuth(account, body.KeyBookUrl, body.Manager)
 	if err != nil {
 		return nil, err
 	}

@@ -38,7 +38,7 @@ CreateTokenAccount:
       type: url
       pointer: true
       optional: true
-    - name: Proof
+    - name: TokenIssuerProof
       type: AccountStateProof
       marshal-as: reference
       pointer: true
@@ -211,7 +211,7 @@ UpdateAccountAuth:
       type: AccountAuthOperation
       marshal-as: union
       repeatable: true
-    - name: Proof
+    - name: TokenIssuerProof
       type: AccountStateProof
       marshal-as: reference
       pointer: true

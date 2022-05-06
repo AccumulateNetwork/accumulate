@@ -91,7 +91,7 @@ func EnableAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	if err != nil {
 		return "", err
 	}
-	txn.Proof = &accstate
+	txn.TokenIssuerProof = &accstate
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
@@ -108,7 +108,7 @@ func DisableAuth(account *url2.URL, signer *signing.Builder, args []string) (str
 	if err != nil {
 		return "", err
 	}
-	txn.Proof = &accstate
+	txn.TokenIssuerProof = &accstate
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
@@ -125,7 +125,7 @@ func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string,
 	if err != nil {
 		return "", err
 	}
-	txn.Proof = &accstate
+	txn.TokenIssuerProof = &accstate
 
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
@@ -142,6 +142,6 @@ func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	if err != nil {
 		return "", err
 	}
-	txn.Proof = &accstate
+	txn.TokenIssuerProof = &accstate
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
