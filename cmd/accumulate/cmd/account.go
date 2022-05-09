@@ -227,14 +227,6 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		return "", fmt.Errorf("invalid token url")
 	}
 
-	var keybook *url2.URL
-	if len(args) > 2 {
-		keybook, err = url2.Parse(args[2])
-		if err != nil {
-			return "", fmt.Errorf("invalid key book url")
-		}
-	}
-
 	//make sure this is a valid token account
 	req := new(api.GeneralQuery)
 	req.Url = tok
@@ -249,18 +241,22 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac := protocol.CreateTokenAccount{}
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
-	tac.KeyBookUrl = keybook
 	tac.Scratch = flagAccount.Scratch
 
-	if len(Authorities) > 1 {
-		return "", fmt.Errorf("currently adding more than one additional authority is unsupported")
+	if len(args) > 2 {
+		keybook, err := url2.Parse(args[2])
+		if err != nil {
+			return "", fmt.Errorf("invalid key book url")
+		}
+		tac.Authorities = append(tac.Authorities, keybook)
 	}
+
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url2.Parse(authUrlStr)
 		if err != nil {
 			return "", err
 		}
-		tac.Manager = authUrl
+		tac.Authorities = append(tac.Authorities, authUrl)
 	}
 
 	return dispatchTxAndPrintResponse(&tac, nil, u, signer)
