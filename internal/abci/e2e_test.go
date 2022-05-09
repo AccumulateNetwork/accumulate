@@ -1541,7 +1541,7 @@ func TestUpdateValidators(t *testing.T) {
 }
 
 func TestUpdateOperators(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	dn := nodes[subnets[0]][0]
 	bvn := nodes[subnets[1]][0]

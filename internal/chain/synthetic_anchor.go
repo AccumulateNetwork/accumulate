@@ -130,7 +130,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (protocol.TransactionResult, error) {
 	for _, opUpd := range body.OperatorUpdates {
-		bookUrl := st.nodeUrl.JoinPath(protocol.OperatorBook)
+		bookUrl := st.NodeUrl().JoinPath(protocol.OperatorBook)
 
 		var page1 *protocol.KeyPage
 		err := st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 0), &page1)

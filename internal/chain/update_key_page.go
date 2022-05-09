@@ -101,7 +101,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
-	if protocol.IsDnUrl(st.nodeUrl) && page.KeyBook().Equal(st.nodeUrl.JoinPath(protocol.OperatorBook)) {
+	if protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.NodeUrl().JoinPath(protocol.OperatorBook)) {
 		err = operatorUpdatesToLedger(st, err, body)
 		if err != nil {
 			return nil, err
@@ -112,7 +112,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 
 func operatorUpdatesToLedger(st *StateManager, err error, body *protocol.UpdateKeyPage) error {
 	var ledgerState *protocol.InternalLedger
-	err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+	err = st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return fmt.Errorf("unable to load main ledger: %w", err)
 	}
