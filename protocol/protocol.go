@@ -33,6 +33,9 @@ const (
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
 
+	// Synthetic is the path to a node's synthetic transaction ledger.
+	Synthetic = "synthetic"
+
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
 
@@ -44,6 +47,9 @@ const (
 
 	// Oracle is the path to a node's anchor chain account.
 	Oracle = "oracle"
+
+	// Globals is the path to the Directory network's Mutable Protocol costants data account
+	Globals = "globals"
 
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
@@ -66,9 +72,6 @@ const (
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
 	MinorRootIndexChain = "minor-root-index"
 
-	// SyntheticChain is the synthetic transaction chain of a subnet.
-	SyntheticChain = "synthetic"
-
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
@@ -77,9 +80,6 @@ const (
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
-
-	//Globals is the path to the Directory network's Mutable Protocol costants data account
-	Globals = "globals"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
@@ -251,9 +251,17 @@ func LiteAuthorityForHash(pubKeyHash []byte) *url.URL {
 
 func LiteAuthorityForKey(pubKey []byte, signatureType SignatureType) *url.URL {
 	var keyHash []byte
-	if signatureType == SignatureTypeRCD1 {
+	switch signatureType {
+	case SignatureTypeRCD1:
 		keyHash = GetRCDHashFromPublicKey(pubKey, 1)
-	} else {
+	case SignatureTypeBTC, SignatureTypeBTCLegacy:
+		keyHash = BTCHash(pubKey)
+	case SignatureTypeETH:
+		keyHash = ETHhash(pubKey)
+	case SignatureTypeED25519, SignatureTypeLegacyED25519:
+		h := sha256.Sum256(pubKey)
+		keyHash = h[:]
+	default:
 		h := sha256.Sum256(pubKey)
 		keyHash = h[:]
 	}

@@ -13,11 +13,12 @@ import (
 type Transaction struct {
 	batch *Batch
 	key   transactionBucket
+	id    [32]byte
 }
 
 // Transaction returns a Transaction for the given transaction ID.
 func (b *Batch) Transaction(id []byte) *Transaction {
-	return &Transaction{b, transaction(id)}
+	return &Transaction{b, transaction(id), *(*[32]byte)(id)}
 }
 
 // ensureSigner ensures that the transaction's status includes the given signer.
@@ -69,7 +70,17 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 	}
 
 	t.batch.putValue(t.key.Status(), v)
-	return nil
+
+	if !v.Pending {
+		return nil
+	}
+
+	// Ensure the principal's BPT entry is up to date
+	txn, err := t.GetState()
+	if err != nil {
+		return err
+	}
+	return t.batch.Account(txn.Transaction.Header.Principal).putBpt()
 }
 
 // Signatures returns a signature set for the given signer.

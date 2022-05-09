@@ -123,7 +123,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	sw.EntryUrl = txn.Header.Principal
 	txn.Body = &sw
 
-	st := chain.NewStateManager(batch.Begin(true), x.Network.NodeUrl(), nil, txn, x.logger)
+	st := chain.NewStateManager(&x.Network, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -204,8 +204,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 
 func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	// Load the root chain's index chain's last two entries
-	record := batch.Account(x.Network.Ledger())
-	last, nextLast, err := indexing.LoadLastTwoIndexEntries(record, protocol.MinorRootIndexChain)
+	last, nextLast, err := indexing.LoadLastTwoIndexEntries(batch.Account(x.Network.Ledger()), protocol.MinorRootIndexChain)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load root index chain's last two entries: %w", err)
 	}
@@ -219,7 +218,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	}
 
 	// Load the synthetic transaction chain's index chain's last two entries
-	last, nextLast, err = indexing.LoadLastTwoIndexEntries(record, protocol.IndexChain(protocol.SyntheticChain, false))
+	last, nextLast, err = indexing.LoadLastTwoIndexEntries(batch.Account(x.Network.Synthetic()), protocol.IndexChain(protocol.MainChain, false))
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load synthetic transaction index chain's last two entries: %w", err)
 	}
@@ -248,7 +247,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	}
 
 	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Network.Ledger()).ReadChain(protocol.SyntheticChain)
+	chain, err = batch.Account(x.Network.Synthetic()).ReadChain(protocol.MainChain)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
 	}
@@ -357,10 +356,16 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 		return nil, errors.Format(errors.StatusUnknown, "load block chain updates index: %w", err)
 	}
 
+	stateRoot, err := x.LoadStateRoot(batch)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load state hash: %w", err)
+	}
+
 	anchor := new(protocol.SyntheticAnchor)
 	anchor.Source = x.Network.NodeUrl()
 	anchor.RootIndex = uint64(rootChain.Height()) - 1
 	anchor.RootAnchor = *(*[32]byte)(rootChain.Anchor())
+	anchor.StateRoot = *(*[32]byte)(stateRoot)
 	anchor.Block = uint64(ledgerState.Index)
 	anchor.AcmeBurnt = ledgerState.AcmeBurnt
 	if x.Network.Type == config.Directory {
@@ -442,7 +447,7 @@ func (x *Executor) sendBlockAnchor(anchor *protocol.SyntheticAnchor, subnet stri
 	initSig, err := new(signing.Builder).
 		SetUrl(x.Network.NodeUrl()).
 		SetVersion(anchor.Block).
-		InitiateSynthetic(txn, x.Router)
+		InitiateSynthetic(txn, x.Router, nil)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
 	}

@@ -21,11 +21,12 @@ import (
 )
 
 type InitOpts struct {
-	Network     config.Network
-	Validators  []tmtypes.GenesisValidator
-	GenesisTime time.Time
-	Logger      log.Logger
-	Router      routing.Router
+	Network             config.Network
+	Validators          []tmtypes.GenesisValidator
+	GenesisTime         time.Time
+	Logger              log.Logger
+	Router              routing.Router
+	FactomAddressesFile string
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
@@ -61,15 +62,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
 		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
 
-		// Create the ledger
+		// Create the main ledger
 		ledger := new(protocol.InternalLedger)
 		ledger.Url = uAdi.JoinPath(protocol.Ledger)
-		ledger.AddAuthority(uBook)
-		ledger.Synthetic.Nonce = 1
 		ledger.ActiveOracle = oraclePrice
 		ledger.PendingOracle = oraclePrice
 		ledger.Index = protocol.GenesisBlock
 		records = append(records, ledger)
+
+		// Create the synth ledger
+		synthLedger := new(protocol.SyntheticLedger)
+		synthLedger.Url = uAdi.JoinPath(protocol.Synthetic)
+		records = append(records, synthLedger)
 
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
@@ -192,6 +196,22 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
 				records = append(records, liteId, liteToken)
 			}
+			if opts.FactomAddressesFile != "" {
+				factomAddresses, err := LoadFactomAddressesAndBalances(opts.FactomAddressesFile)
+				if err != nil {
+					return err
+				}
+				for _, factomAddress := range factomAddresses {
+					subnet, err := routing.RouteAccount(&opts.Network, factomAddress.Address)
+					if err == nil && subnet == opts.Network.LocalSubnetID {
+						lite := new(protocol.LiteTokenAccount)
+						lite.Url = factomAddress.Address
+						lite.TokenUrl = protocol.AcmeUrl()
+						lite.Balance = *big.NewInt(5 * factomAddress.Balance)
+						records = append(records, lite)
+					}
+				}
+			}
 		}
 
 		err = st.Create(records...)
@@ -216,7 +236,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	return batch.GetMinorRootChainAnchor(&opts.Network)
+	return batch.BptRoot(), nil
 }
 
 func createValidatorBook(uBook *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
