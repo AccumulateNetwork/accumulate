@@ -1,8 +1,6 @@
 package signing
 
 import (
-	"crypto/ed25519"
-	"errors"
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
@@ -17,10 +15,6 @@ type Signer interface {
 type PrivateKey []byte
 
 func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
-	if len(k) != ed25519.PrivateKeySize {
-		return errors.New("invalid private key")
-	}
-
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.PublicKey = k[32:]
@@ -51,10 +45,6 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 }
 
 func (k PrivateKey) Sign(sig protocol.Signature, message []byte) error {
-	if len(k) != ed25519.PrivateKeySize {
-		return errors.New("invalid private key")
-	}
-
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		protocol.SignLegacyED25519(sig, k, message)
