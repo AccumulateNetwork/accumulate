@@ -27,6 +27,9 @@ const (
 	// ValidatorBook is the path to a node's validator key book.
 	ValidatorBook = "validators"
 
+	// OperatorBook is the path to a node's operator key book.
+	OperatorBook = "operators"
+
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
 
@@ -423,6 +426,11 @@ func SubnetUrl(subnet string) *url.URL {
 func IsDnUrl(u *url.URL) bool {
 	u = u.RootIdentity()
 	return DnUrl().Equal(u)
+}
+
+// IsBvnUrl checks if the URL is the BVN ADI URL.
+func IsBvnUrl(u *url.URL) bool {
+	return strings.HasPrefix(u.Hostname(), "bvn-")
 }
 
 // ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
