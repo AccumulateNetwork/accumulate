@@ -32,7 +32,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	account.Url = body.Url
 	account.Scratch = body.Scratch
 
-	err := st.SetAuth(account, body.KeyBookUrl, body.ManagerKeyBookUrl)
+	err := st.SetAuth(account, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

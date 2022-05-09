@@ -241,9 +241,9 @@ func TestValidate(t *testing.T) {
 			Origin: adiName.String(),
 			Key:    adiKey,
 			Payload: &CreateTokenAccount{
-				Url:        tokenAccountUrl,
-				TokenUrl:   protocol.AcmeUrl(),
-				KeyBookUrl: keyBookUrl,
+				Url:         tokenAccountUrl,
+				TokenUrl:    protocol.AcmeUrl(),
+				Authorities: []*url.URL{keyBookUrl},
 			},
 		})
 		tokenAccount := new(LiteTokenAccount)
