@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"strconv"
 
@@ -160,18 +159,17 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		pk, err := LookupByLabel(keyLabels[i])
+		k, err := LookupByLabel(keyLabels[i])
 
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
-			pk, err = pubKeyFromString(keyLabels[i])
+			k, err = pubKeyFromString(keyLabels[i])
 			if err != nil {
 				return "", fmt.Errorf("key name %s, does not exist in wallet, nor is it a valid public key", keyLabels[i])
 			}
 
 		}
-		pkh := sha256.Sum256(pk[32:])
-		ksp.KeyHash = pkh[:]
+		ksp.KeyHash = k.PublicKeyHash()
 		ckp.Keys[i] = &ksp
 	}
 
@@ -196,41 +194,41 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		_, oldKeyHash, _, err := resolvePublicKey(args[0])
+		oldKey, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
 
-		_, newKeyHash, _, err := resolvePublicKey(args[1])
+		newKey, err := resolvePublicKey(args[1])
 		if err != nil {
 			return "", err
 		}
 
 		ukp.Operation = append(ukp.Operation, &protocol.UpdateKeyOperation{
-			OldEntry: protocol.KeySpecParams{KeyHash: oldKeyHash},
-			NewEntry: protocol.KeySpecParams{KeyHash: newKeyHash},
+			OldEntry: protocol.KeySpecParams{KeyHash: oldKey.PublicKeyHash()},
+			NewEntry: protocol.KeySpecParams{KeyHash: newKey.PublicKeyHash()},
 		})
 	case protocol.KeyPageOperationTypeAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		_, newKeyHash, _, err := resolvePublicKey(args[0])
+		newKey, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
 		ukp.Operation = append(ukp.Operation, &protocol.AddKeyOperation{
-			Entry: protocol.KeySpecParams{KeyHash: newKeyHash},
+			Entry: protocol.KeySpecParams{KeyHash: newKey.PublicKeyHash()},
 		})
 	case protocol.KeyPageOperationTypeRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		_, oldKeyHash, _, err := resolvePublicKey(args[0])
+		oldKey, err := resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
 		ukp.Operation = append(ukp.Operation, &protocol.RemoveKeyOperation{
-			Entry: protocol.KeySpecParams{KeyHash: oldKeyHash},
+			Entry: protocol.KeySpecParams{KeyHash: oldKey.PublicKeyHash()},
 		})
 	}
 
