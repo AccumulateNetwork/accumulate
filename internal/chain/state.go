@@ -106,16 +106,18 @@ func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	})
 }
 
-func (m *StateManager) AddAuthority(account protocol.FullAccount, u *url.URL) error {
-	if m.OriginUrl.LocalTo(u) {
+func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url.URL) error {
+	if m.OriginUrl.LocalTo(authority) {
 		var book *protocol.KeyBook
-		err := m.LoadUrlAs(u, &book)
+		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return fmt.Errorf("invalid key book %q: %v", u, err)
+			return fmt.Errorf("invalid key book %q: %v", authority, err)
 		}
 	}
 
-	account.GetAuth().AddAuthority(u)
+	// TODO Check the proof if the authority is remote
+
+	account.GetAuth().AddAuthority(authority)
 	return nil
 }
 
@@ -135,19 +137,22 @@ func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
 	return nil
 }
 
-func (m *StateManager) SetAuth(account protocol.FullAccount, mainKeyBook, managerKeyBook *url.URL) error {
-	var err error
-	if mainKeyBook == nil {
-		err = m.InheritAuth(account)
-	} else {
-		err = m.AddAuthority(account, mainKeyBook)
-	}
-	if err != nil {
-		return err
+func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.URL) error {
+	switch {
+	case len(authorities) > 0:
+		// If the user specified a list of authorities, use them
+
+	case len(account.GetAuth().Authorities) > 0:
+		// If the account already has an authority, there's nothing to do
+		return nil
+
+	default:
+		// Otherwise, inherit
+		return m.InheritAuth(account)
 	}
 
-	if managerKeyBook != nil {
-		err = m.AddAuthority(account, managerKeyBook)
+	for _, authority := range authorities {
+		err := m.AddAuthority(account, authority)
 		if err != nil {
 			return err
 		}

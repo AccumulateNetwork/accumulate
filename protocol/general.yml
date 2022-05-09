@@ -169,5 +169,3 @@ Rational:
       type: uint
     - name: Denominator
       type: uint
-
-
