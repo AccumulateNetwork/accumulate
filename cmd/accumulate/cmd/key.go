@@ -569,8 +569,8 @@ func ExportKey(label string) (string, error) {
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PrivateKey = k.PublicKey
-		a.PublicKey = k.PrivateKey
+		a.PrivateKey = k.PrivateKey
+		a.PublicKey = k.PublicKey
 		a.KeyType = k.Type
 		dump, err := json.Marshal(&a)
 		if err != nil {
