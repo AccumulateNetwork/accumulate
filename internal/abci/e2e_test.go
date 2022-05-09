@@ -607,27 +607,57 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "FooBar/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/book1/1"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.Authorities = []*url.URL{n.ParseUrl("foo/book1")}
+			tac.Authorities = []*url.URL{n.ParseUrl("FooBar/book1")}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				WithSigner(url.MustParse("FooBar/book1/1"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
+				Build())
+		})
+	})
+
+	t.Run("Remote Key Book", func(t *testing.T) {
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+		n := nodes[subnets[1]][0]
+
+		aliceKey, bobKey := generateKey(), generateKey()
+		batch := n.db.Begin(true)
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+		require.NoError(t, batch.Commit())
+
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			tac := new(protocol.CreateTokenAccount)
+			tac.Url = n.ParseUrl("alice/tokens")
+			tac.TokenUrl = protocol.AcmeUrl()
+			tac.Authorities = []*url.URL{n.ParseUrl("bob/book0")}
+			send(newTxn("alice").
+				WithSigner(url.MustParse("alice/book0/1"), 1).
+				WithBody(tac).
+				Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+				WithSigner(url.MustParse("bob/book0/1"), 1).
+				Sign(protocol.SignatureTypeED25519, bobKey).
 				Build())
 		})
 
-		u := n.ParseUrl("foo/book1")
+		// Wait for the remote signature to settle
+		time.Sleep(time.Second)
 
-		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		r := n.GetTokenAccount("alice/tokens")
+		require.Equal(t, "alice/tokens", r.Url.ShortString())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
-		require.Equal(t, u.String(), r.KeyBook().String())
+		require.Equal(t, "bob/book0", r.KeyBook().ShortString())
 	})
 }
 
