@@ -37,7 +37,14 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req := new(query.RequestByUrl)
 	req.Url = types.String(aliceUrl.String())
 	acctResp := sim.Query(aliceUrl, req, true).(*query.ResponseAccount)
+	//	var act *protocol.LiteTokenAccount
+	//	act = acctResp.Account.(*protocol.LiteTokenAccount)
+	///	fmt.Println("account is", act)
+	//	dat, err := act.MarshalBinary()
+	//	hash := sha256.Sum256(dat)
+	//fmt.Println("Hash is ", hex.EncodeToString(hash[:]))
 	localReceipt := acctResp.Receipt.Receipt
+	//	fmt.Println(hex.EncodeToString(localReceipt.Result), hex.EncodeToString(localReceipt.Start), localReceipt.Convert())
 	// Execute enough blocks to ensure the block is anchored
 	sim.ExecuteBlocks(10)
 
@@ -46,8 +53,10 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
 	dirReceipt := chainResp.Receipt.Receipt
-
+	//	fmt.Println(hex.EncodeToString(dirReceipt.Result), hex.EncodeToString(dirReceipt.Start), dirReceipt.Convert())
 	fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
+	//fr := localReceipt.Combine(&dirReceipt)
+	//fmt.Println(hex.EncodeToString(fr.Result), hex.EncodeToString(fr.Start), fr.Convert())
 	require.NoError(t, err)
 	t.Log(fullReceipt)
 }

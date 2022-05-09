@@ -611,10 +611,10 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.A
 	}
 
 	localReceipt := resp.Receipt.Receipt
-	chainid := hex.EncodeToString(localReceipt.Start)
-	chainurl := url2.MustParse(chainid)
+	//chainid := hex.EncodeToString(localReceipt.Start)
+	//chainurl := url2.MustParse(chainid)
 	//proof.State = &protocol.TokenIssuer{Url: chainurl}
-	proof.State, err = getAccount(chainurl.String())
+	proof.State, err = getAccount(accountToProve.String())
 	if err != nil {
 		return protocol.AccountStateProof{}, err
 	}

@@ -211,24 +211,14 @@ type CreateToken struct {
 }
 
 type CreateTokenAccount struct {
-<<<<<<< HEAD
-	fieldsSet        []bool
-	Url              *url.URL           `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	TokenUrl         *url.URL           `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
-	KeyBookUrl       *url.URL           `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl"`
-	Scratch          bool               `json:"scratch,omitempty" form:"scratch" query:"scratch"`
-	Manager          *url.URL           `json:"manager,omitempty" form:"manager" query:"manager"`
-	TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
-	extraData        []byte
-=======
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
-	extraData   []byte
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+	Authorities      []*url.URL         `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
+	extraData        []byte
 }
 
 type DataAccount struct {
@@ -2826,7 +2816,11 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	if len(v.Authorities) != len(u.Authorities) {
 		return false
 	}
-<<<<<<< HEAD
+	for i := range v.Authorities {
+		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
+			return false
+		}
+	}
 	switch {
 	case v.TokenIssuerProof == u.TokenIssuerProof:
 		// equal
@@ -2834,12 +2828,6 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 		return false
 	case !((v.TokenIssuerProof).Equal(u.TokenIssuerProof)):
 		return false
-=======
-	for i := range v.Authorities {
-		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
-			return false
-		}
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
 	}
 
 	return true
@@ -5439,12 +5427,8 @@ var fieldNames_CreateTokenAccount = []string{
 	2: "Url",
 	3: "TokenUrl",
 	5: "Scratch",
-<<<<<<< HEAD
-	6: "Manager",
-	7: "TokenIssuerProof",
-=======
 	7: "Authorities",
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+	8: "TokenIssuerProof",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5467,7 +5451,7 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 		}
 	}
 	if !(v.TokenIssuerProof == nil) {
-		writer.WriteValue(7, v.TokenIssuerProof)
+		writer.WriteValue(8, v.TokenIssuerProof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
@@ -10244,7 +10228,7 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(AccountStateProof); reader.ReadValue(7, x.UnmarshalBinary) {
+	if x := new(AccountStateProof); reader.ReadValue(8, x.UnmarshalBinary) {
 		v.TokenIssuerProof = x
 	}
 
@@ -12781,32 +12765,19 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 
 func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-<<<<<<< HEAD
-		Type             TransactionType    `json:"type"`
-		Url              *url.URL           `json:"url,omitempty"`
-		TokenUrl         *url.URL           `json:"tokenUrl,omitempty"`
-		KeyBookUrl       *url.URL           `json:"keyBookUrl,omitempty"`
-		Scratch          bool               `json:"scratch,omitempty"`
-		Manager          *url.URL           `json:"manager,omitempty"`
-		TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty"`
-=======
-		Type        TransactionType             `json:"type"`
-		Url         *url.URL                    `json:"url,omitempty"`
-		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
-		Scratch     bool                        `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+		Type             TransactionType             `json:"type"`
+		Url              *url.URL                    `json:"url,omitempty"`
+		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
+		Scratch          bool                        `json:"scratch,omitempty"`
+		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Scratch = v.Scratch
-<<<<<<< HEAD
-	u.Manager = v.Manager
-	u.TokenIssuerProof = v.TokenIssuerProof
-=======
 	u.Authorities = v.Authorities
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+	u.TokenIssuerProof = v.TokenIssuerProof
 	return json.Marshal(&u)
 }
 
@@ -14282,32 +14253,19 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 
 func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-<<<<<<< HEAD
-		Type             TransactionType    `json:"type"`
-		Url              *url.URL           `json:"url,omitempty"`
-		TokenUrl         *url.URL           `json:"tokenUrl,omitempty"`
-		KeyBookUrl       *url.URL           `json:"keyBookUrl,omitempty"`
-		Scratch          bool               `json:"scratch,omitempty"`
-		Manager          *url.URL           `json:"manager,omitempty"`
-		TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty"`
-=======
-		Type        TransactionType             `json:"type"`
-		Url         *url.URL                    `json:"url,omitempty"`
-		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
-		Scratch     bool                        `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+		Type             TransactionType             `json:"type"`
+		Url              *url.URL                    `json:"url,omitempty"`
+		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
+		Scratch          bool                        `json:"scratch,omitempty"`
+		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Scratch = v.Scratch
-<<<<<<< HEAD
-	u.Manager = v.Manager
-	u.TokenIssuerProof = v.TokenIssuerProof
-=======
 	u.Authorities = v.Authorities
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+	u.TokenIssuerProof = v.TokenIssuerProof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14317,12 +14275,8 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.TokenUrl = u.TokenUrl
 	v.Scratch = u.Scratch
-<<<<<<< HEAD
-	v.Manager = u.Manager
-	v.TokenIssuerProof = u.TokenIssuerProof
-=======
 	v.Authorities = u.Authorities
->>>>>>> de064a4511d6aebedde9a2ca92a446bea4bd83ec
+	v.TokenIssuerProof = u.TokenIssuerProof
 	return nil
 }
 

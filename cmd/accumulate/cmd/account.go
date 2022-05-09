@@ -241,16 +241,18 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 
 	tac := protocol.CreateTokenAccount{}
 	var accstate protocol.AccountStateProof
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		accstate = protocol.AccountStateProof{}
-		accstate, err = GetAccountStateProof(u, accountUrl)
-	}()
-	wg.Wait()
-	if accstate.Receipt == nil || err != nil {
-		return "", fmt.Errorf("unable to prove account state: %x", err)
+	accstate = protocol.AccountStateProof{}
+	if !u.LocalTo(accountUrl) && !accountUrl.Equal(protocol.AcmeUrl()) {
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			accstate, err = GetAccountStateProof(u, accountUrl)
+		}()
+		wg.Wait()
+		if accstate.Receipt == nil || err != nil {
+			return "", fmt.Errorf("unable to prove account state: %x", err)
+		}
 	}
 	tac.TokenIssuerProof = &accstate
 	tac.Url = accountUrl
