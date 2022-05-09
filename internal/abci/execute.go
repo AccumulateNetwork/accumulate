@@ -2,13 +2,13 @@ package abci
 
 import (
 	"crypto/sha256"
-	"errors"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/libs/log"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -22,7 +22,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, &protocol.Error{Code: protocol.ErrorCodeEncodingError, Message: errors.New("Unable to decode transaction(s)")}
+		return nil, nil, nil, &protocol.Error{Code: protocol.ErrorCodeEncodingError, Message: errors.New(errors.StatusBadRequest, "Unable to decode transaction(s)")}
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
@@ -38,8 +38,11 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		result, err := execute(env)
 		if err != nil {
 			sentry.CaptureException(err)
-			if err, ok := err.(*protocol.Error); ok {
-				status.Code = err.Code.GetEnumValue()
+			if err1, ok := err.(*protocol.Error); ok {
+				status.Code = err1.Code.GetEnumValue()
+			} else if err2, ok := err.(*errors.Error); ok {
+				status.Code = err2.Code.GetEnumValue()
+				status.Error = err2
 			} else {
 				status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
 			}
