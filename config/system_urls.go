@@ -29,6 +29,16 @@ func (u NetworkUrl) ValidatorPage(index uint64) *url.URL {
 	return protocol.FormatKeyPageUrl(u.ValidatorBook(), index)
 }
 
+// OperatorBook returns the URL of the subnet's operator key book.
+func (u NetworkUrl) OperatorBook() *url.URL {
+	return u.JoinPath(protocol.OperatorBook)
+}
+
+// OperatorPage returns the URL of the page of the subnet's operator key book.
+func (u NetworkUrl) OperatorPage(index uint64) *url.URL {
+	return protocol.FormatKeyPageUrl(u.OperatorBook(), index)
+}
+
 // AnchorPool returns the URL of the subnet's anchor pool.
 func (u NetworkUrl) AnchorPool() *url.URL {
 	return u.JoinPath(protocol.AnchorPool)
@@ -57,6 +67,16 @@ func (n *Network) ValidatorBook() *url.URL {
 // ValidatorPage returns the URL of the page of the subnet's validator key book.
 func (n *Network) ValidatorPage(index uint64) *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorPage(index)
+}
+
+// OperatorBook returns the URL of the subnet's operator key book.
+func (n *Network) OperatorBook() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorBook()
+}
+
+// OperatorPage returns the URL of the page of the subnet's operator key book.
+func (n *Network) OperatorPage(index uint64) *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
 }
 
 // AnchorPool returns the URL of the subnet's anchor pool.
