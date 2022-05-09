@@ -68,7 +68,7 @@ validate docker:
   - cd nodes
   - docker-compose up -d
   script:
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" -e DN_NODES_DIR="${DN_NODES_DIR}" --rm --entrypoint bash tools /scripts/ci/validate.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-minor-blocks.sh
   after_script:
   - cd nodes
