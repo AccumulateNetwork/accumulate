@@ -44,7 +44,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 
 	// Get a proof of the BVN anchor
 	req = new(query.RequestByUrl)
-	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
+	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
 	dirReceipt := chainResp.Receipt.Receipt
 

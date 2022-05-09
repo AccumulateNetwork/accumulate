@@ -225,7 +225,7 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 	// Join the remaining receipts
 	receipt := &rsig.Receipt
 	for len(receipts) > 0 {
-		hash = *(*[32]byte)(rsig.Result)
+		hash = *(*[32]byte)(rsig.Anchor)
 		rsig, ok := receipts[hash]
 		delete(receipts, hash)
 		if !ok {

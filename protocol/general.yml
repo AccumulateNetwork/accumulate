@@ -93,7 +93,7 @@ Receipt:
   fields:
     - name: Start
       type: bytes
-    - name: Result
+    - name: Anchor
       type: bytes
     - name: Entries
       repeatable: true

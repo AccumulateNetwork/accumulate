@@ -482,7 +482,7 @@ type Rational struct {
 type Receipt struct {
 	fieldsSet []bool
 	Start     []byte         `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Result    []byte         `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	Anchor    []byte         `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	Entries   []ReceiptEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
@@ -1758,7 +1758,7 @@ func (v *Receipt) Copy() *Receipt {
 	u := new(Receipt)
 
 	u.Start = encoding.BytesCopy(v.Start)
-	u.Result = encoding.BytesCopy(v.Result)
+	u.Anchor = encoding.BytesCopy(v.Anchor)
 	u.Entries = make([]ReceiptEntry, len(v.Entries))
 	for i, v := range v.Entries {
 		u.Entries[i] = *(&v).Copy()
@@ -3354,7 +3354,7 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	if !(bytes.Equal(v.Start, u.Start)) {
 		return false
 	}
-	if !(bytes.Equal(v.Result, u.Result)) {
+	if !(bytes.Equal(v.Anchor, u.Anchor)) {
 		return false
 	}
 	if len(v.Entries) != len(u.Entries) {
@@ -7121,7 +7121,7 @@ func (v *Rational) IsValid() error {
 
 var fieldNames_Receipt = []string{
 	1: "Start",
-	2: "Result",
+	2: "Anchor",
 	3: "Entries",
 }
 
@@ -7132,8 +7132,8 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Start) == 0) {
 		writer.WriteBytes(1, v.Start)
 	}
-	if !(len(v.Result) == 0) {
-		writer.WriteBytes(2, v.Result)
+	if !(len(v.Anchor) == 0) {
+		writer.WriteBytes(2, v.Anchor)
 	}
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
@@ -7158,9 +7158,9 @@ func (v *Receipt) IsValid() error {
 		errs = append(errs, "field Start is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Result is missing")
-	} else if len(v.Result) == 0 {
-		errs = append(errs, "field Result is not set")
+		errs = append(errs, "field Anchor is missing")
+	} else if len(v.Anchor) == 0 {
+		errs = append(errs, "field Anchor is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entries is missing")
@@ -11065,7 +11065,7 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Start = x
 	}
 	if x, ok := reader.ReadBytes(2); ok {
-		v.Result = x
+		v.Anchor = x
 	}
 	for {
 		if x := new(ReceiptEntry); reader.ReadValue(3, x.UnmarshalBinary) {
@@ -13017,11 +13017,11 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start   *string                         `json:"start,omitempty"`
-		Result  *string                         `json:"result,omitempty"`
+		Anchor  *string                         `json:"anchor,omitempty"`
 		Entries encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Start)
-	u.Result = encoding.BytesToJSON(v.Result)
+	u.Anchor = encoding.BytesToJSON(v.Anchor)
 	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
@@ -13041,14 +13041,14 @@ func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 		Type            SignatureType                   `json:"type"`
 		SourceNetwork   *url.URL                        `json:"sourceNetwork,omitempty"`
 		Start           *string                         `json:"start,omitempty"`
-		Result          *string                         `json:"result,omitempty"`
+		Anchor          *string                         `json:"anchor,omitempty"`
 		Entries         encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
 		TransactionHash string                          `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
-	u.Result = encoding.BytesToJSON(v.Receipt.Result)
+	u.Anchor = encoding.BytesToJSON(v.Receipt.Anchor)
 	u.Entries = v.Receipt.Entries
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	return json.Marshal(&u)
@@ -14852,11 +14852,11 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Start   *string                         `json:"start,omitempty"`
-		Result  *string                         `json:"result,omitempty"`
+		Anchor  *string                         `json:"anchor,omitempty"`
 		Entries encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Start)
-	u.Result = encoding.BytesToJSON(v.Result)
+	u.Anchor = encoding.BytesToJSON(v.Anchor)
 	u.Entries = v.Entries
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -14866,10 +14866,10 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Start = x
 	}
-	if x, err := encoding.BytesFromJSON(u.Result); err != nil {
-		return fmt.Errorf("error decoding Result: %w", err)
+	if x, err := encoding.BytesFromJSON(u.Anchor); err != nil {
+		return fmt.Errorf("error decoding Anchor: %w", err)
 	} else {
-		v.Result = x
+		v.Anchor = x
 	}
 	v.Entries = u.Entries
 	return nil
@@ -14899,14 +14899,14 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 		Type            SignatureType                   `json:"type"`
 		SourceNetwork   *url.URL                        `json:"sourceNetwork,omitempty"`
 		Start           *string                         `json:"start,omitempty"`
-		Result          *string                         `json:"result,omitempty"`
+		Anchor          *string                         `json:"anchor,omitempty"`
 		Entries         encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
 		TransactionHash string                          `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
-	u.Result = encoding.BytesToJSON(v.Receipt.Result)
+	u.Anchor = encoding.BytesToJSON(v.Receipt.Anchor)
 	u.Entries = v.Receipt.Entries
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -14921,10 +14921,10 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Receipt.Start = x
 	}
-	if x, err := encoding.BytesFromJSON(u.Result); err != nil {
-		return fmt.Errorf("error decoding Result: %w", err)
+	if x, err := encoding.BytesFromJSON(u.Anchor); err != nil {
+		return fmt.Errorf("error decoding Anchor: %w", err)
 	} else {
-		v.Receipt.Result = x
+		v.Receipt.Anchor = x
 	}
 	v.Receipt.Entries = u.Entries
 	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {

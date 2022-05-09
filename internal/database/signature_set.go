@@ -152,7 +152,7 @@ func signatureKeyHash(sig protocol.Signature) ([32]byte, error) {
 	case *protocol.ReceiptSignature:
 		// Multiple receipts doesn't make sense, but if they anchor to a unique
 		// root... ok
-		return *(*[32]byte)(sig.Result), nil
+		return *(*[32]byte)(sig.Anchor), nil
 
 	case *protocol.InternalSignature:
 		// Internal signatures only make any kind of sense if they're coming
