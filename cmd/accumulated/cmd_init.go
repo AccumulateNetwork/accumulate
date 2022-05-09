@@ -241,14 +241,15 @@ func initNamedNetwork(*cobra.Command, []string) {
 		nodeReset()
 	}
 
-	check(node.Init(node.InitOptions{
+	_, err = node.Init(node.InitOptions{
 		WorkDir:  flagMain.WorkDir,
 		Port:     lclSubnet.Port,
 		Config:   config,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
 		Logger:   newLogger(),
-	}))
+	})
+	check(err)
 }
 
 func nodeReset() {
@@ -390,7 +391,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodeReset()
 	}
 
-	check(node.Init(node.InitOptions{
+	_, err = node.Init(node.InitOptions{
 		NodeNr:     &nodeNr,
 		Version:    1,
 		WorkDir:    flagMain.WorkDir,
@@ -400,7 +401,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		RemoteIP:   []string{u.Hostname()},
 		ListenIP:   []string{u.Hostname()},
 		Logger:     newLogger(),
-	}))
+	})
+	check(err)
 }
 
 var baseIP net.IP
@@ -563,25 +565,32 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 
 func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
 	logger := newLogger()
-	check(node.Init(node.InitOptions{
-		WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
-		Port:     flagInitDevnet.BasePort,
-		Config:   dnConfig,
-		RemoteIP: dnRemote,
-		ListenIP: dnListen,
-		Logger:   logger.With("subnet", protocol.Directory),
-	}))
+	genDocMap := map[string]*types.GenesisDoc{}
+
 	for bvn := range bvnConfig {
+		subnetID := fmt.Sprintf("BVN%d", bvn)
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-		check(node.Init(node.InitOptions{
+		genDoc, err := node.Init(node.InitOptions{
 			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
 			Port:     flagInitDevnet.BasePort,
 			Config:   bvnConfig,
 			RemoteIP: bvnRemote,
 			ListenIP: bvnListen,
 			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
-		}))
+		})
+		genDocMap[subnetID] = genDoc
+		check(err)
 	}
+	_, err := node.Init(node.InitOptions{
+		WorkDir:       filepath.Join(flagMain.WorkDir, "dn"),
+		Port:          flagInitDevnet.BasePort,
+		Config:        dnConfig,
+		RemoteIP:      dnRemote,
+		ListenIP:      dnListen,
+		GenesisDocMap: genDocMap,
+		Logger:        logger.With("subnet", protocol.Directory),
+	})
+	check(err)
 }
 
 func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {

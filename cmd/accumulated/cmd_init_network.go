@@ -245,7 +245,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
-		check(node.Init(node.InitOptions{
+		_, err := node.Init(node.InitOptions{ // TODO
 			WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
 			Port:                directory.Port,
 			Config:              dnConfig,
@@ -253,10 +253,11 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			ListenIP:            dnListen,
 			Logger:              logger.With("subnet", protocol.Directory),
 			FactomAddressesFile: factomAddressesFile,
-		}))
+		})
+		check(err)
 
 		for i := range bvnSubnet {
-			check(node.Init(node.InitOptions{
+			_, err := node.Init(node.InitOptions{ // TODO
 				WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:                bvns[i].Port,
 				Config:              bvnConfig[i],
@@ -264,7 +265,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				ListenIP:            bvnListen[i],
 				Logger:              logger.With("subnet", bvns[i].Name),
 				FactomAddressesFile: factomAddressesFile,
-			}))
+			})
+			check(err)
 		}
 		return
 	}

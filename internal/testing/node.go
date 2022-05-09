@@ -149,7 +149,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
 		dir := filepath.Join(dir, subnetId)
-		require.NoError(t, node.Init(node.InitOptions{
+		_, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
 			Port:                basePort,
 			Config:              allConfigs[subnetId],
@@ -157,7 +157,8 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			ListenIP:            allRemotes[subnetId],
 			Logger:              initLogger.With("subnet", subnetId),
 			FactomAddressesFile: factomAddressFilePath,
-		}))
+		})
+		require.NoError(t, err)
 
 		daemons := make([]*accumulated.Daemon, count)
 		allDaemons[subnetId] = daemons

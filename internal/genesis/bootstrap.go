@@ -26,6 +26,7 @@ type InitOpts struct {
 	GenesisTime         time.Time
 	Logger              log.Logger
 	Router              routing.Router
+	GenesisDocMap       map[string]*tmtypes.GenesisDoc
 	FactomAddressesFile string
 }
 
@@ -152,13 +153,29 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			}
 			wd.Entry.Data = append(wd.Entry.Data, d)
 
-			da := new(protocol.DataAccount)
-			da.Url = uAdi.JoinPath(protocol.Oracle)
-			da.AddAuthority(uBook)
+			daOracle := new(protocol.DataAccount)
+			daOracle.Url = uAdi.JoinPath(protocol.Oracle)
+			daOracle.AddAuthority(uBook)
 
-			records = append(records, da)
-			urls = append(urls, da.Url)
-			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+			records = append(records, daOracle)
+			urls = append(urls, daOracle.Url)
+			dataRecords = append(dataRecords, DataRecord{daOracle, &wd.Entry})
+
+			networkDefs := generateNetworkDefinition(opts.Network, opts.GenesisDocMap, opts.Validators)
+			wd = new(protocol.WriteData)
+			d, err = json.Marshal(&networkDefs)
+			if err != nil {
+				return err
+			}
+			wd.Entry.Data = append(wd.Entry.Data, d)
+
+			daNetDef := new(protocol.DataAccount)
+			daNetDef.Url = uAdi.JoinPath(protocol.Network)
+			daNetDef.AddAuthority(uBook)
+
+			records = append(records, daNetDef)
+			urls = append(urls, daNetDef.Url)
+			dataRecords = append(dataRecords, DataRecord{daNetDef, &wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
 			acme.AddAuthority(uBook)
@@ -237,6 +254,34 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	return batch.BptRoot(), nil
+}
+
+func generateNetworkDefinition(netCfg config.Network, genesisDocMap map[string]*tmtypes.GenesisDoc, validators []tmtypes.GenesisValidator) *protocol.NetworkDefinition {
+	netDef := new(protocol.NetworkDefinition)
+
+	// Create temp GenesisDoc for DN that is currently in the process of being initialized
+	dnGenDoc := &tmtypes.GenesisDoc{
+		Validators: validators,
+	}
+	genesisDocMap[protocol.Directory] = dnGenDoc
+
+	for _, subnet := range netCfg.Subnets {
+		genDoc := genesisDocMap[subnet.ID]
+
+		// Add the validator hashes from the subnet's genesis doc
+		var vkHashes [][32]byte
+		for _, validator := range genDoc.Validators {
+			pkh := sha256.Sum256(validator.PubKey.Bytes())
+			vkHashes = append(vkHashes, pkh)
+		}
+
+		subnetDef := protocol.SubnetDefinition{
+			SubnetID:           subnet.ID,
+			ValidatorKeyHashes: vkHashes,
+		}
+		netDef.Subnets = append(netDef.Subnets, subnetDef)
+	}
+	return netDef
 }
 
 func createValidatorBook(uBook *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
