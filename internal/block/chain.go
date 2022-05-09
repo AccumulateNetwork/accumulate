@@ -43,6 +43,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			AddValidator{},
 			RemoveValidator{},
 			UpdateValidatorKey{},
+			UpdateKeyPage{},
 		)
 
 	case config.BlockValidator:

@@ -372,6 +372,15 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 		anchor.AcmeOraclePrice = ledgerState.ActiveOracle
 	}
 
+	if len(ledgerState.OperatorUpdates) > 0 {
+		anchor.OperatorUpdates = ledgerState.OperatorUpdates
+		ledgerState.OperatorUpdates = nil
+		err = ledger.PutState(ledgerState)
+		if err != nil {
+			return nil, fmt.Errorf("cannot write ledger: %w", err)
+		}
+	}
+
 	// TODO This is pretty inefficient; we're constructing a receipt for every
 	// anchor. If we were more intelligent about it, we could send just the
 	// Merkle state and a list of transactions, though we would need that for
