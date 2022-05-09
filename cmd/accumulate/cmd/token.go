@@ -157,6 +157,15 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 	params.SupplyLimit = supplyLimit
+	for _, authUrlStr := range Authorities {
+		authUrl, err := url2.Parse(authUrlStr)
+		if err != nil {
+			return "", err
+		}
+		params.Authorities = append(params.Authorities, authUrl)
+		params.Authorities = append(params.Authorities, authUrl)
+	}
+
 	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
 }
 
