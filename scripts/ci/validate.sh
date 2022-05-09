@@ -460,7 +460,9 @@ RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | 
 success
 
 section "Add manager to token account"
-wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book || die "Failed to add the manager"
+TXID=$(cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book) || die "Failed to add the manager"
+accumulate tx sign keytest manager@manager/book $TXID
+wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
