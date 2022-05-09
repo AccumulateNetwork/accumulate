@@ -85,30 +85,26 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		signer.AddDelegator(u)
 	}
 
-	var privKey []byte
+	var key *Key
 	var err error
 	if IsLiteTokenAccount(origin.String()) {
-		privKey, err = LookupByLiteTokenUrl(origin.String())
+		key, err = LookupByLiteTokenUrl(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
 
 	} else if IsLiteIdentity(origin.String()) {
-		privKey, err = LookupByLiteIdentityUrl(origin.String())
+		key, err = LookupByLiteIdentityUrl(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
 		}
 	}
 
-	if privKey != nil {
-		sigType, _, err := resolveKeyTypeAndHash(privKey[32:])
-		if err != nil {
-			return nil, nil, err
-		}
-		signer.Type = sigType
+	if key != nil {
+		signer.Type = key.Type
 		signer.Url = origin.RootIdentity()
 		signer.Version = 1
-		signer.SetPrivateKey(privKey)
+		signer.SetPrivateKey(key.PrivateKey)
 		return args, signer, nil
 	}
 
@@ -122,20 +118,16 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		keyName = args[0]
 	}
 
-	privKey, err = resolvePrivateKey(keyName)
+	key, err = resolvePrivateKey(keyName)
 	if err != nil {
 		return nil, nil, err
 	}
-	signer.SetPrivateKey(privKey)
+	signer.SetPrivateKey(key.PrivateKey)
 	ct++
 
-	sigType, keyHash, err := resolveKeyTypeAndHash(privKey[32:])
-	if err != nil {
-		return nil, nil, err
-	}
-	signer.Type = sigType
+	signer.Type = key.Type
 
-	keyInfo, err := getKey(keyHolder.String(), keyHash)
+	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
