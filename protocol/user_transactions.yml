@@ -10,12 +10,17 @@ CreateIdentity:
       type: bytes
       optional: true
     - name: KeyBookUrl
+      description: creates a new key book
       type: url
       pointer: true
       optional: true
-    - name: Manager
+    # name: Manager
+    - name: Authorities
+      description: is a list of authorities to add to the authority set, in addition to the new key book
+      field-number: 6
       type: url
       pointer: true
+      repeatable: true
       optional: true
 
 CreateTokenAccount:
@@ -27,16 +32,18 @@ CreateTokenAccount:
     - name: TokenUrl
       type: url
       pointer: true
-    - name: KeyBookUrl
-      type: url
-      pointer: true
-      optional: true
+    # name: KeyBookUrl
     - name: Scratch
+      field-number: 5
       type: bool
       optional: true
-    - name: Manager
+    # name: Manager
+    - name: Authorities
+      description: is a list of authorities to add to the authority set
+      field-number: 7
       type: url
       pointer: true
+      repeatable: true
       optional: true
     - name: TokenIssuerProof
       type: AccountStateProof
@@ -66,16 +73,17 @@ CreateDataAccount:
     - name: Url
       type: url
       pointer: true
-    - name: KeyBookUrl
-      type: url
-      pointer: true
-      optional: true
-    - name: ManagerKeyBookUrl
-      type: url
-      pointer: true
-      optional: true
+    # name: KeyBookUrl
+    # name: ManagerKeyBookUrl
     - name: Scratch
+      field-number: 5
       type: bool
+      optional: true
+    - name: Authorities
+      description: is a list of authorities to add to the authority set
+      type: url
+      pointer: true
+      repeatable: true
       optional: true
 
 WriteData:
@@ -111,11 +119,9 @@ CreateToken:
     - name: Url
       type: url
       pointer: true
-    - name: KeyBookUrl
-      type: url
-      pointer: true
-      optional: true
+    # name: KeyBookUrl
     - name: Symbol
+      field-number: 4
       type: string
     - name: Precision
       type: uvarint
@@ -127,9 +133,13 @@ CreateToken:
       type: bigint
       pointer: true
       optional: true
-    - name: Manager
+    # name: Manager
+    - name: Authorities
+      description: is a list of authorities to add to the authority set
+      field-number: 9
       type: url
       pointer: true
+      repeatable: true
       optional: true
 
 IssueTokens:
@@ -155,10 +165,7 @@ CreateKeyPage:
       type: KeySpecParams
       pointer: true
       marshal-as: reference
-    - name: Manager
-      type: url
-      pointer: true
-      optional: true
+    # name: Manager
 
 CreateKeyBook:
   union: { type: transaction }
@@ -168,9 +175,13 @@ CreateKeyBook:
       pointer: true
     - name: PublicKeyHash
       type: bytes
-    - name: Manager
+    # name: Manager
+    - name: Authorities
+      description: is a list of authorities to add to the authority set, in addition to the key book itself
+      field-number: 5
       type: url
       pointer: true
+      repeatable: true
       optional: true
 
 AddCredits:

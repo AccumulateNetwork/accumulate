@@ -18,10 +18,7 @@ func Unwrap(err error) error { return errors.Unwrap(err) }
 func makeError(code Status) *Error {
 	e := new(Error)
 	e.Code = code
-	cs := callSite(3)
-	if cs != nil {
-		e.CallStack = []*CallSite{cs}
-	}
+	e.recordCallSite(3)
 	return e
 }
 
@@ -110,18 +107,18 @@ func Format(code Status, format string, args ...interface{}) *Error {
 
 	e := convert(err)
 	e.Code = code
-	e.CallStack = []*CallSite{callSite(2)}
+	e.recordCallSite(2)
 	return e
 }
 
-func callSite(depth int) *CallSite {
+func (e *Error) recordCallSite(depth int) {
 	if !trackLocation {
-		return nil
+		return
 	}
 
 	pc, file, line, ok := runtime.Caller(depth)
 	if !ok {
-		return nil
+		return
 	}
 
 	cs := &CallSite{File: file, Line: int64(line)}
@@ -130,7 +127,7 @@ func callSite(depth int) *CallSite {
 		cs.FuncName = fn.Name()
 	}
 
-	return cs
+	e.CallStack = append(e.CallStack, cs)
 }
 
 func (e *Error) Error() string {

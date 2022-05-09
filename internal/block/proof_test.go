@@ -17,7 +17,7 @@ func init() { acctesting.EnableDebugFeatures() }
 func TestExecutor_Query_ProveAccount(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	// Create a lite address
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")

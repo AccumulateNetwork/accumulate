@@ -24,7 +24,7 @@ func TestEndToEnd(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Restart the nodes for every test
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 3, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(s.T(), 3, 1, 0, false)
 		acctesting.RunTestNet(s.T(), subnets, daemons)
 		daemon := daemons[subnets[1]][0]
 		client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
@@ -99,7 +99,7 @@ func TestSubscribeAfterClose(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	for _, netName := range subnets {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
@@ -144,7 +144,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 3, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 3, 1, 0, false)
 	acctesting.RunTestNet(t, subnets, daemons)
 	daemon := daemons[protocol.Directory][0]
 	jrpc := daemon.Jrpc_TESTONLY()

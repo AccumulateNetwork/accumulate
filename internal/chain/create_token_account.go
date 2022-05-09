@@ -54,7 +54,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("invalid accounturl state cannot be verified")
 	}
 	st.batch.BptReceipt()*/
-	err := st.SetAuth(account, body.KeyBookUrl, body.Manager)
+	err := st.SetAuth(account, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

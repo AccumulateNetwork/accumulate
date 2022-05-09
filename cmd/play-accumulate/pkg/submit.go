@@ -177,7 +177,11 @@ func (s *submittedTxn) Ok() {
 		return
 	}
 
-	s.s.Abort(fmt.Sprintf("Transaction %X failed with code %d: %s\n%s", s.Hash, s.Status.Code, s.Status.Message, s.Status.Error.Print()))
+	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", s.Hash, s.Status.Code, s.Status.Message)
+	if s.Status.Error != nil {
+		str += s.Status.Error.Print()
+	}
+	s.s.Abort(str)
 }
 
 func (s *submittedTxn) NotOk(message string) *submittedTxn {
@@ -231,7 +235,11 @@ func (c *completedTxn) Ok() *completedTxn {
 		return c
 	}
 
-	c.s.Abort(fmt.Sprintf("Transaction %X failed with code %d: %s\n%s", c.Status.For, c.Status.Code, c.Status.Message, c.Status.Error.Print()))
+	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", c.Status.For, c.Status.Code, c.Status.Message)
+	if c.Status.Error != nil {
+		str += c.Status.Error.Print()
+	}
+	c.s.Abort(str)
 	panic("unreachable")
 }
 

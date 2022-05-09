@@ -37,7 +37,7 @@ func TestEndToEndSuite(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0, false)
 		nodes := RunTestNet(s.T(), subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -46,7 +46,7 @@ func TestEndToEndSuite(t *testing.T) {
 }
 
 func TestCreateLiteAccount(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -66,7 +66,7 @@ func TestCreateLiteAccount(t *testing.T) {
 
 func TestEvilNode(t *testing.T) {
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	//tell the TestNet that we have an evil node in the midst
 	dns := subnets[0]
 	bvn := subnets[1]
@@ -148,7 +148,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 }
 
 func TestFaucet(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -171,7 +171,7 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestAnchorChain(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 	dn := nodes[subnets[0]][0]
@@ -259,7 +259,7 @@ func TestAnchorChain(t *testing.T) {
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, expected, ledgerState.ActiveOracle)
+	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
 
 	time.Sleep(2 * time.Second)
 	// Get the anchor chain manager for BVN
@@ -282,7 +282,7 @@ func TestAnchorChain(t *testing.T) {
 }
 
 func TestCreateADI(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -322,7 +322,7 @@ func TestCreateADI(t *testing.T) {
 func TestCreateADIWithoutKeybook(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
@@ -365,7 +365,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -432,7 +432,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 func TestCreateAdiDataAccount(t *testing.T) {
 
 	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -458,7 +458,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -474,8 +474,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
 			cda.Url = n.ParseUrl("FooBar/oof")
-			cda.KeyBookUrl = n.ParseUrl("acc://FooBar/foo/book1")
-			cda.ManagerKeyBookUrl = n.ParseUrl("acc://FooBar/mgr/book1")
+			cda.Authorities = []*url.URL{
+				n.ParseUrl("acc://FooBar/foo/book1"),
+				n.ParseUrl("acc://FooBar/mgr/book1"),
+			}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(cda).
@@ -493,7 +495,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account data entry", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -561,7 +563,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -593,7 +595,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Custom Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -607,7 +609,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.KeyBookUrl = n.ParseUrl("foo/book1")
+			tac.Authorities = []*url.URL{n.ParseUrl("foo/book1")}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
@@ -625,7 +627,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 }
 
 func TestLiteAccountTx(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -658,7 +660,7 @@ func TestLiteAccountTx(t *testing.T) {
 }
 
 func TestAdiAccountTx(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -686,7 +688,7 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -723,7 +725,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 }
 
 func TestAddCreditsBurnAcme(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -789,7 +791,7 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 }
 
 func TestCreateKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -827,7 +829,7 @@ func TestCreateKeyPage(t *testing.T) {
 }
 
 func TestCreateKeyBook(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -860,7 +862,7 @@ func TestCreateKeyBook(t *testing.T) {
 }
 
 func TestAddKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -893,7 +895,7 @@ func TestAddKeyPage(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -927,7 +929,7 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestUpdateKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -963,7 +965,7 @@ func TestUpdateKeyPage(t *testing.T) {
 }
 
 func TestUpdateKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1009,7 +1011,7 @@ func TestUpdateKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1056,7 +1058,7 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestSignatorHeight(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1117,7 +1119,7 @@ func TestSignatorHeight(t *testing.T) {
 }
 
 func TestCreateToken(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1143,7 +1145,7 @@ func TestCreateToken(t *testing.T) {
 }
 
 func TestIssueTokens(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1189,7 +1191,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
@@ -1354,7 +1356,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	t.Skip("TODO Fix - generate a receipt")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1419,7 +1421,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestUpdateValidators(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1540,7 +1542,7 @@ func TestUpdateValidators(t *testing.T) {
 
 func TestMultisig(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
 	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
@@ -1622,7 +1624,7 @@ func TestMultisig(t *testing.T) {
 
 func TestAccountAuth(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
