@@ -103,12 +103,27 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 
 	// Number the fields
 	for _, typ := range ttypes.Types {
-		var num uint = 1
+		taken := make(map[uint]bool, len(typ.Fields))
+		var next uint = 1
 		for _, field := range typ.Fields {
-			if field.IsMarshalled() && field.IsBinary() {
-				field.Number = num
-				num++
+			if !field.IsMarshalled() || !field.IsBinary() {
+				continue
 			}
+
+			// Use the next available number
+			if field.Number == 0 {
+				field.Number = next
+			} else {
+				next = field.Number
+			}
+			next++
+
+			// Make sure we're not doubling up
+			if taken[field.Number] {
+				return nil, fmt.Errorf("duplicate field number %d", field.Number)
+			}
+
+			taken[field.Number] = true
 		}
 	}
 
@@ -137,7 +152,6 @@ type Type struct {
 type Field struct {
 	typegen.Field
 	TypeRef    *Type
-	Number     uint
 	IsEmbedded bool
 }
 
