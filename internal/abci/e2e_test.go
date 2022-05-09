@@ -242,7 +242,7 @@ func TestAnchorChain(t *testing.T) {
 		originUrl := protocol.PriceOracleAuthority
 
 		send(newTxn(originUrl).
-			WithSigner(dn.network.ValidatorPage(0), 1).
+			WithSigner(dn.network.OperatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1423,7 +1423,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 func TestUpdateValidators(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	n := nodes[subnets[0]][0]
 
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
@@ -1439,7 +1439,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry.Data = append(wd.Entry.Data, d)
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(validators, 1).
+			WithSigner(n.network.OperatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1537,6 +1537,82 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was removed
 	pubKeys := n.client.Validators()
 	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
+
+}
+
+func TestUpdateOperators(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+	bvn := nodes[subnets[1]][0]
+
+	page := bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
+
+	operators := protocol.FormatKeyPageUrl(dn.network.OperatorBook(), 0)
+	opKeyAdd := generateKey()
+	addKeyHash := sha256.Sum256(opKeyAdd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.KeyHash = addKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second * 1)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, addKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	opKeyUpd := generateKey()
+	updKeyHash := sha256.Sum256(opKeyUpd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.UpdateKeyOperation)
+		op.OldEntry.KeyHash = addKeyHash[:]
+		op.NewEntry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 2).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, updKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.RemoveKeyOperation)
+		op.Entry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 3).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
 
 }
 
