@@ -589,13 +589,13 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 	return sigtype, nil
 }
 
-func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.AccountStateProof, err error) {
+func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.AccountStateProof, err error) {
 	if principal.LocalTo(accountToProve) {
-		return protocol.AccountStateProof{}, nil // Don't need a proof for local accounts
+		return new(protocol.AccountStateProof), nil // Don't need a proof for local accounts
 	}
 
 	if accountToProve.Equal(protocol.AcmeUrl()) {
-		return protocol.AccountStateProof{}, nil // Don't need a proof for ACME
+		return new(protocol.AccountStateProof), nil // Don't need a proof for ACME
 	}
 
 	// Get a proof of the account state
@@ -604,19 +604,15 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.A
 	resp := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
 	resp.Data = &token
-
 	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-		return protocol.AccountStateProof{}, err
+		return new(protocol.AccountStateProof), err
 	}
 
 	localReceipt := resp.Receipt.Receipt
-	//chainid := hex.EncodeToString(localReceipt.Start)
-	//chainurl := url2.MustParse(chainid)
-	//proof.State = &protocol.TokenIssuer{Url: chainurl}
 	proof.State, err = getAccount(accountToProve.String())
 	if err != nil {
-		return protocol.AccountStateProof{}, err
+		return new(protocol.AccountStateProof), err
 	}
 	// ensure the block is anchored
 	timeout := time.After(10 * time.Second)
@@ -626,7 +622,7 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.A
 		select {
 		// Got a timeout! fail with a timeout error
 		case <-timeout:
-			return protocol.AccountStateProof{}, nil
+			return new(protocol.AccountStateProof), nil
 		// Got a tick, we should check if the anchor is complete
 		case <-ticker:
 			// Get a proof of the BVN anchor
@@ -635,7 +631,7 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof protocol.A
 			resp = new(api.ChainQueryResponse)
 			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-				return protocol.AccountStateProof{}, err
+				return new(protocol.AccountStateProof), err
 			}
 			dirReceipt := resp.Receipt.Receipt
 			if dirReceipt.Result != nil {

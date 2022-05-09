@@ -34,32 +34,31 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account.TokenUrl = body.TokenUrl
 	account.Scratch = body.Scratch
 	proof := body.TokenIssuerProof
-	if proof.State != nil || proof.Receipt != nil {
 
-		if proof.State.Type() != protocol.AccountTypeTokenIssuer {
-			return nil, fmt.Errorf("Account state cannot be verified")
-		}
-		var act *protocol.TokenIssuer
-		var err error
-		act = proof.State.(*protocol.TokenIssuer)
-		accBytes, _ := act.MarshalBinary()
-		accStateHash := sha256.Sum256(accBytes)
-		var anchorChain *database.Chain
-		anchorpath := protocol.DnUrl().JoinPath(protocol.AnchorPool)
-		anchorChain, err = st.batch.Account(st.NodeUrl()).ReadChain(anchorpath.String())
-		if err != nil {
-			return nil, fmt.Errorf("Error reading achor chain: %x", err)
-		}
-		_, err = anchorChain.HeightOf(proof.Receipt.Result)
-		if err != nil {
-			return nil, fmt.Errorf("Account state cannot be verified: %x", err)
-		}
-
-		if bytes.Compare(accStateHash[:], proof.Receipt.Start) != 0 || err != nil {
-			return nil, fmt.Errorf("Account state cannot be verified")
-		}
+	if proof.State.Type() != protocol.AccountTypeTokenIssuer {
+		return nil, fmt.Errorf("Account state cannot be verified")
 	}
-	err := st.SetAuth(account, body.Authorities)
+	var act *protocol.TokenIssuer
+	var err error
+	act = proof.State.(*protocol.TokenIssuer)
+	accBytes, _ := act.MarshalBinary()
+	accStateHash := sha256.Sum256(accBytes)
+	var anchorChain *database.Chain
+	anchorpath := protocol.DnUrl().JoinPath(protocol.AnchorPool)
+	anchorChain, err = st.batch.Account(st.NodeUrl()).ReadChain(anchorpath.String())
+	if err != nil {
+		return nil, fmt.Errorf("Error reading achor chain: %x", err)
+	}
+	_, err = anchorChain.HeightOf(proof.Receipt.Result)
+	if err != nil {
+		return nil, fmt.Errorf("Account state cannot be verified: %x", err)
+	}
+
+	if bytes.Compare(accStateHash[:], proof.Receipt.Start) != 0 || err != nil {
+		return nil, fmt.Errorf("Account state cannot be verified")
+	}
+
+	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

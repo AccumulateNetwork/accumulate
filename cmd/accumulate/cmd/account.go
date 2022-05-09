@@ -240,8 +240,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
-	var accstate protocol.AccountStateProof
-	accstate = protocol.AccountStateProof{}
+	accstate := new(protocol.AccountStateProof)
 	if !u.LocalTo(accountUrl) && !accountUrl.Equal(protocol.AcmeUrl()) {
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -254,7 +253,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 			return "", fmt.Errorf("unable to prove account state: %x", err)
 		}
 	}
-	tac.TokenIssuerProof = &accstate
+	tac.TokenIssuerProof = accstate
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch
