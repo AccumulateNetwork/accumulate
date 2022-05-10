@@ -235,8 +235,20 @@ func (x *Executor) validateSigners(batch *database.Batch, transaction *protocol.
 		}
 	}
 
+	// Delegate to the transaction executor?
+	val, ok := getValidator[chain.SignerValidator](x, transaction.Body.Type())
+	if ok {
+		fallback, err := val.SignerIsAuthorized(x, batch, transaction, location, signers[len(signers)-1])
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if !fallback {
+			return signers, nil
+		}
+	}
+
 	// Verify that the final signer is authorized
-	err := x.verifySignerIsAuthorized(batch, transaction, location, signers[len(signers)-1])
+	err := x.SignerIsAuthorized(batch, transaction, location, signers[len(signers)-1], false)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -317,20 +329,8 @@ func validateSignature(transaction *protocol.Transaction, signer protocol.Signer
 	return entry, nil
 }
 
-// verifySignerIsAuthorized verifies that the signer is allowed to sign the transaction
-func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) error {
-	// Delegate to the transaction executor?
-	val, ok := getValidator[SignerValidator](x, transaction.Body.Type())
-	if ok {
-		fallback, err := val.SignerIsAuthorized(batch, transaction, signer)
-		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
-		if !fallback {
-			return nil
-		}
-	}
-
+// SignerIsAuthorized verifies that the signer is allowed to sign the transaction
+func (x *Executor) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer, ignoreAuthSet bool) error {
 	switch signer := signer.(type) {
 	case *protocol.LiteIdentity:
 		// Otherwise a lite token account is only allowed to sign for itself
@@ -349,9 +349,11 @@ func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *
 			break
 		}
 
-		err := verifyPageIsAuthorized(batch, transaction, signer)
-		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+		if !ignoreAuthSet {
+			err := x.verifyPageIsAuthorized(batch, transaction, signer)
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknown, err)
+			}
 		}
 
 	case *protocol.UnknownSigner:
@@ -371,7 +373,7 @@ func (x *Executor) verifySignerIsAuthorized(batch *database.Batch, transaction *
 
 // verifyPageIsAuthorized verifies that the key page is authorized to sign for
 // the principal.
-func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
+func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer *protocol.KeyPage) error {
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	if err != nil {
@@ -379,7 +381,7 @@ func verifyPageIsAuthorized(batch *database.Batch, transaction *protocol.Transac
 	}
 
 	// Get the principal's account auth
-	auth, err := getAccountAuth(batch, principal)
+	auth, err := x.GetAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
