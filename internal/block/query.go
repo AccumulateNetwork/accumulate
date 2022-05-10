@@ -869,7 +869,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
 
-		auth, err := getAccountAuth(batch, account)
+		auth, err := m.GetAccountAuthoritySet(batch, account)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
