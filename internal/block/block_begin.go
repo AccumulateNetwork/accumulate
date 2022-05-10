@@ -173,7 +173,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	switch x.Network.Type {
 	case config.Directory:
 		// DN -> all BVNs
-		anchor, err := x.buildPartitionAnchor(batch, ledgerState)
+		anchor, err := x.buildDirectoryAnchor(batch, ledgerState)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
 		}
@@ -187,7 +187,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 
 	case config.BlockValidator:
 		// BVN -> DN
-		anchor, err := x.buildDirectoryAnchor(batch, ledgerState)
+		anchor, err := x.buildPartitionAnchor(batch, ledgerState)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
 		}
