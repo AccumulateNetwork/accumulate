@@ -11,26 +11,45 @@ import (
 
 type CreateIdentity struct{}
 
+var _ SignerValidator = (*CreateIdentity)(nil)
+var _ PrincipalValidator = (*CreateIdentity)(nil)
+
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (CreateIdentity) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateIdentity)
+	if !ok {
+		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+	}
+
 	// Anyone is allowed to sign for a root identity
 	if transaction.Header.Principal.IsRootIdentity() {
 		return false, nil
 	}
 
-	// Fallback to general authorization
-	return true, nil
+	// Check additional authorities
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, location, signer)
 }
 
-func (CreateIdentity) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, _ *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateIdentity)
+	if !ok {
+		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+	}
+
+	// Check additional authorities
+	ready, fallback, err = additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	if !fallback || err != nil {
+		return ready, fallback, err
+	}
+
 	// Anyone is allowed to sign for a root identity
 	if transaction.Header.Principal.IsRootIdentity() {
 		return true, false, nil
 	}
 
 	// Fallback to general authorization
-	return true, false, nil
+	return false, true, nil
 }
 
 func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
