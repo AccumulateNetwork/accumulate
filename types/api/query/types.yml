@@ -122,6 +122,7 @@ GeneralReceipt:
     - name: Proof
       type: protocol.Receipt
       marshal-as: reference
+      alternative: Receipt
     - name: Error
       type: string
 
