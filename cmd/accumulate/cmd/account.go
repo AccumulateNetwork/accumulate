@@ -240,12 +240,9 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 
 	tac := protocol.CreateTokenAccount{}
 	accstate := new(protocol.AccountStateProof)
-	if !u.LocalTo(accountUrl) && !accountUrl.Equal(protocol.AcmeUrl()) {
-
-		accstate, err = GetAccountStateProof(u, accountUrl)
-		if accstate.Receipt == nil || err != nil {
-			return "", fmt.Errorf("unable to prove account state: %x", err)
-		}
+	accstate, err = GetAccountStateProof(u, accountUrl)
+	if err != nil {
+		return "", fmt.Errorf("unable to prove account state: %x", err)
 	}
 	tac.TokenIssuerProof = accstate
 	tac.Url = accountUrl
