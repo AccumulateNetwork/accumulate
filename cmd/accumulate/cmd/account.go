@@ -239,7 +239,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
-	accstate := new(protocol.AccountStateProof)
+	var accstate *protocol.AccountStateProof
 	accstate, err = GetAccountStateProof(u, accountUrl)
 	if err != nil {
 		return "", fmt.Errorf("unable to prove account state: %x", err)

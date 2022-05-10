@@ -209,7 +209,7 @@ AccountStateProof:
   - name: State
     type: Account
     marshal-as: union
-  - name: Receipt
+  - name: Proof
     type: Receipt
     marshal-as: reference
     pointer: true

@@ -33,7 +33,7 @@ type AccountAuth struct {
 type AccountStateProof struct {
 	fieldsSet []bool
 	State     Account  `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	Receipt   *Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Proof     *Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData []byte
 }
 
@@ -1002,8 +1002,8 @@ func (v *AccountStateProof) Copy() *AccountStateProof {
 	if v.State != nil {
 		u.State = (v.State).CopyAsInterface().(Account)
 	}
-	if v.Receipt != nil {
-		u.Receipt = (v.Receipt).Copy()
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
 	}
 
 	return u
@@ -2406,11 +2406,11 @@ func (v *AccountStateProof) Equal(u *AccountStateProof) bool {
 		return false
 	}
 	switch {
-	case v.Receipt == u.Receipt:
+	case v.Proof == u.Proof:
 		// equal
-	case v.Receipt == nil || u.Receipt == nil:
+	case v.Proof == nil || u.Proof == nil:
 		return false
-	case !((v.Receipt).Equal(u.Receipt)):
+	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
 
@@ -4244,7 +4244,7 @@ func (v *AccountAuth) IsValid() error {
 
 var fieldNames_AccountStateProof = []string{
 	1: "State",
-	2: "Receipt",
+	2: "Proof",
 }
 
 func (v *AccountStateProof) MarshalBinary() ([]byte, error) {
@@ -4254,8 +4254,8 @@ func (v *AccountStateProof) MarshalBinary() ([]byte, error) {
 	if !(v.State == nil) {
 		writer.WriteValue(1, v.State)
 	}
-	if !(v.Receipt == nil) {
-		writer.WriteValue(2, v.Receipt)
+	if !(v.Proof == nil) {
+		writer.WriteValue(2, v.Proof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountStateProof)
@@ -4275,9 +4275,9 @@ func (v *AccountStateProof) IsValid() error {
 		errs = append(errs, "field State is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Receipt is missing")
-	} else if v.Receipt == nil {
-		errs = append(errs, "field Receipt is not set")
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
 	}
 
 	switch len(errs) {
@@ -9576,7 +9576,7 @@ func (v *AccountStateProof) UnmarshalBinaryFrom(rd io.Reader) error {
 		return err
 	})
 	if x := new(Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Receipt = x
+		v.Proof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountStateProof)
@@ -12581,11 +12581,11 @@ func (v *AccountAuth) MarshalJSON() ([]byte, error) {
 
 func (v *AccountStateProof) MarshalJSON() ([]byte, error) {
 	u := struct {
-		State   encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
-		Receipt *Receipt                            `json:"receipt,omitempty"`
+		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
+		Proof *Receipt                            `json:"proof,omitempty"`
 	}{}
 	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
-	u.Receipt = v.Receipt
+	u.Proof = v.Proof
 	return json.Marshal(&u)
 }
 
@@ -13847,17 +13847,17 @@ func (v *AccountAuth) UnmarshalJSON(data []byte) error {
 
 func (v *AccountStateProof) UnmarshalJSON(data []byte) error {
 	u := struct {
-		State   encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
-		Receipt *Receipt                            `json:"receipt,omitempty"`
+		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
+		Proof *Receipt                            `json:"proof,omitempty"`
 	}{}
 	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
-	u.Receipt = v.Receipt
+	u.Proof = v.Proof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.State = u.State.Value
 
-	v.Receipt = u.Receipt
+	v.Proof = u.Proof
 	return nil
 }
 

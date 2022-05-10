@@ -48,11 +48,11 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		if err != nil {
 			return nil, fmt.Errorf("Error reading achor chain: %x", err)
 		}
-		_, err = anchorChain.HeightOf(proof.Receipt.Result)
+		_, err = anchorChain.HeightOf(proof.Proof.Result)
 		if err != nil {
 			return nil, fmt.Errorf("Account state cannot be verified: %x", err)
 		}
-		if bytes.Compare(accStateHash[:], proof.Receipt.Start) != 0 || err != nil {
+		if bytes.Compare(accStateHash[:], proof.Proof.Start) != 0 || err != nil {
 			return nil, fmt.Errorf("Account state cannot be verified")
 		}
 	}

@@ -57,12 +57,12 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		if err != nil {
 			return nil, fmt.Errorf("Error reading achor chain: %x", err)
 		}
-		_, err = anchorChain.HeightOf(proof.Receipt.Result)
+		_, err = anchorChain.HeightOf(proof.Proof.Result)
 		if err != nil {
 			return nil, fmt.Errorf("Account state cannot be verified: %x", err)
 		}
 
-		if bytes.Compare(accStateHash[:], proof.Receipt.Start) != 0 || err != nil {
+		if bytes.Compare(accStateHash[:], proof.Proof.Start) != 0 || err != nil {
 			return nil, fmt.Errorf("Account state cannot be verified")
 		}
 	}
@@ -118,10 +118,10 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	if proof.State == nil {
 		return errors.Format(errors.StatusBadRequest, "invalid proof: missing state")
 	}
-	if proof.Receipt == nil {
-		return errors.Format(errors.StatusBadRequest, "invalid proof: missing receipt")
+	if proof.Proof == nil {
+		return errors.Format(errors.StatusBadRequest, "invalid proof: missing Proof")
 	}
-	if !proof.Receipt.Convert().Validate() {
+	if !proof.Proof.Convert().Validate() {
 		return errors.Format(errors.StatusBadRequest, "proof is invalid")
 	}
 
@@ -141,7 +141,7 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	}
 
 	stateHash := sha256.Sum256(stateBytes)
-	if !bytes.Equal(proof.Receipt.Start, stateHash[:]) {
+	if !bytes.Equal(proof.Proof.Start, stateHash[:]) {
 		return errors.Format(errors.StatusBadRequest, "invalid proof: state hash does not match proof start")
 	}
 
@@ -150,13 +150,13 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "load anchor pool for directory anchors: %w", err)
 	}
-	_, err = chain.HeightOf(proof.Receipt.Result)
+	_, err = chain.HeightOf(proof.Proof.Result)
 	if err != nil {
 		code := errors.StatusUnknown
 		if errors.Is(err, errors.StatusNotFound) {
 			code = errors.StatusBadRequest
 		}
-		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Receipt.Result[:4], err)
+		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Proof.Result[:4], err)
 	}
 
 	return nil

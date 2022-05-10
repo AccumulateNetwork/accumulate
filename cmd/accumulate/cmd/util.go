@@ -629,7 +629,7 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 			if dirReceipt.Result != nil {
 				return proof, nil
 			}
-			proof.Receipt = localReceipt.Combine(&dirReceipt)
+			proof.Proof = localReceipt.Combine(&dirReceipt)
 
 		}
 	}
