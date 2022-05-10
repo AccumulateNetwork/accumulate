@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"encoding"
+	"os"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -47,9 +48,12 @@ func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
 func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
 	t.Helper()
 
+	f, err := os.Open(filename)
+	require.NoError(tb{t}, err)
+	defer f.Close()
 	batch := db.Begin(true)
 	defer batch.Discard()
-	require.NoError(tb{t}, exec.InitFromSnapshot(batch, filename))
+	require.NoError(tb{t}, exec.InitFromSnapshot(batch, f))
 	require.NoError(tb{t}, batch.Commit())
 }
 

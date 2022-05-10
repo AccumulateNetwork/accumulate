@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -40,6 +41,7 @@ type Daemon struct {
 	pv                *privval.FilePV
 	jrpc              *api.JrpcMethods
 	connectionManager connections.ConnectionInitializer
+	eventBus          *events.Bus
 
 	// knobs for tests
 	// IsTest   bool
@@ -151,12 +153,16 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
+	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
+
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
 		Executor: exec,
 		Logger:   d.Logger,
-		Network:  d.Config.Accumulate.Network,
+		EventBus: d.eventBus,
+		Config:   d.Config,
 	})
 
 	// Create node

@@ -90,6 +90,7 @@ func (l LogLevel) String() string {
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
 	SetModule("block-executor", "info").
+	SetModule("snapshot", "info").
 	// SetModule("accumulate", "info").
 	// SetModule("main", "info").
 	// SetModule("state", "info").
@@ -113,6 +114,9 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
+	c.Accumulate.Snapshots.Directory = "snapshots"
+	c.Accumulate.Snapshots.RetainCount = 10
+	c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
@@ -133,10 +137,11 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 
-	Network Network `toml:"network" mapstructure:"network"`
-	Storage Storage `toml:"storage" mapstructure:"storage"`
-	API     API     `toml:"api" mapstructure:"api"`
-	Website Website `toml:"website" mapstructure:"website"`
+	Network   Network   `toml:"network" mapstructure:"network"`
+	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
+	Storage   Storage   `toml:"storage" mapstructure:"storage"`
+	API       API       `toml:"api" mapstructure:"api"`
+	Website   Website   `toml:"website" mapstructure:"website"`
 }
 
 type Network struct {
@@ -155,6 +160,18 @@ type Subnet struct {
 type Node struct {
 	Address string
 	Type    NodeType `toml:"type" mapstructure:"type"`
+}
+
+type Snapshots struct {
+	// Directory is the directory to store snapshots in
+	Directory string `toml:"directory" mapstructure:"directory"`
+
+	// RetainCount is the number of snapshots to retain
+	RetainCount int `toml:"retain" mapstructure:"retain"`
+
+	// Frequency is how many major blocks should occur before another snapshot
+	// is taken
+	Frequency int `toml:"frequency" mapstructure:"frequency"`
 }
 
 type Storage struct {

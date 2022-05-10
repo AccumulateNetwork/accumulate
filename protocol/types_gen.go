@@ -330,7 +330,7 @@ type InternalGenesis struct {
 type InternalLedger struct {
 	fieldsSet       []bool
 	Url             *url.URL           `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Index           int64              `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Index           uint64             `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	Timestamp       time.Time          `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	PendingOracle   uint64             `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
 	ActiveOracle    uint64             `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
@@ -6157,7 +6157,7 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Url)
 	}
 	if !(v.Index == 0) {
-		writer.WriteInt(3, v.Index)
+		writer.WriteUint(3, v.Index)
 	}
 	if !(v.Timestamp == (time.Time{})) {
 		writer.WriteTime(4, v.Timestamp)
@@ -10601,7 +10601,7 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadInt(3); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.Index = x
 	}
 	if x, ok := reader.ReadTime(4); ok {
@@ -12856,7 +12856,7 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            AccountType                                      `json:"type"`
 		Url             *url.URL                                         `json:"url,omitempty"`
-		Index           int64                                            `json:"index,omitempty"`
+		Index           uint64                                           `json:"index,omitempty"`
 		Timestamp       time.Time                                        `json:"timestamp,omitempty"`
 		PendingOracle   uint64                                           `json:"pendingOracle,omitempty"`
 		ActiveOracle    uint64                                           `json:"activeOracle,omitempty"`
@@ -14480,7 +14480,7 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            AccountType                                      `json:"type"`
 		Url             *url.URL                                         `json:"url,omitempty"`
-		Index           int64                                            `json:"index,omitempty"`
+		Index           uint64                                           `json:"index,omitempty"`
 		Timestamp       time.Time                                        `json:"timestamp,omitempty"`
 		PendingOracle   uint64                                           `json:"pendingOracle,omitempty"`
 		ActiveOracle    uint64                                           `json:"activeOracle,omitempty"`
