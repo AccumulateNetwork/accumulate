@@ -232,6 +232,7 @@ func (n *FakeNode) NextHeight() int64 {
 }
 
 func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
+	n.t.Helper()
 	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
 	n.Require().NoError(err)
 	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
@@ -253,6 +254,7 @@ func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
 }
 
 func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
+	n.t.Helper()
 	r := n.QueryAccount(url)
 	data, err := json.Marshal(r.Data)
 	n.Require().NoError(err)
@@ -428,54 +430,63 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 }
 
 func (n *FakeNode) GetDataAccount(url string) *protocol.DataAccount {
+	n.t.Helper()
 	acct := new(protocol.DataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
+	n.t.Helper()
 	acct := new(protocol.TokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteIdentity(url string) *protocol.LiteIdentity {
+	n.t.Helper()
 	acct := new(protocol.LiteIdentity)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
+	n.t.Helper()
 	acct := new(protocol.LiteTokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteDataAccount(url string) *protocol.LiteDataAccount {
+	n.t.Helper()
 	acct := new(protocol.LiteDataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetADI(url string) *protocol.ADI {
+	n.t.Helper()
 	adi := new(protocol.ADI)
 	n.QueryAccountAs(url, adi)
 	return adi
 }
 
 func (n *FakeNode) GetKeyBook(url string) *protocol.KeyBook {
+	n.t.Helper()
 	book := new(protocol.KeyBook)
 	n.QueryAccountAs(url, book)
 	return book
 }
 
 func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
+	n.t.Helper()
 	mss := new(protocol.KeyPage)
 	n.QueryAccountAs(url, mss)
 	return mss
 }
 
 func (n *FakeNode) GetOraclePrice() uint64 {
+	n.t.Helper()
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
@@ -485,6 +496,7 @@ func (n *FakeNode) GetOraclePrice() uint64 {
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
+	n.t.Helper()
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
