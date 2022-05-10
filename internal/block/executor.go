@@ -60,7 +60,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	defer batch.Discard()
 
 	var height int64
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
@@ -96,7 +96,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AcmeUrl()
-	txn.Body = new(protocol.InternalGenesis)
+	txn.Body = new(protocol.SystemGenesis)
 
 	st := chain.NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
@@ -104,7 +104,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 	err = putSyntheticTransaction(
 		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		&protocol.InternalSignature{Network: m.Network.NodeUrl()})
+		&protocol.SystemSignature{Network: m.Network.NodeUrl()})
 	if err != nil {
 		return err
 	}
@@ -220,8 +220,8 @@ func (m *Executor) SaveSnapshot(batch *database.Batch, filename string) error {
 	return batch.SaveState(filename, &m.Network)
 }
 
-func (x *Executor) buildMirror(batch *database.Batch) (*protocol.SyntheticMirror, error) {
-	mirror := new(protocol.SyntheticMirror)
+func (x *Executor) buildMirror(batch *database.Batch) (*protocol.MirrorSystemRecords, error) {
+	mirror := new(protocol.MirrorSystemRecords)
 
 	nodeUrl := x.Network.NodeUrl()
 	rec, err := mirrorRecord(batch, nodeUrl)

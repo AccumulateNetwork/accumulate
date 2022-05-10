@@ -9,25 +9,25 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Process the anchor from BVN -> DN
+// Process the anchor from DN -> BVN
 
-type PartitionAnchor struct {
+type DirectoryAnchor struct {
 	Network *config.Network
 }
 
-func (PartitionAnchor) Type() protocol.TransactionType {
-	return protocol.TransactionTypePartitionAnchor
+func (DirectoryAnchor) Type() protocol.TransactionType {
+	return protocol.TransactionTypeDirectoryAnchor
 }
 
-func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (PartitionAnchor{}).Validate(st, tx)
+func (DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	return (DirectoryAnchor{}).Validate(st, tx)
 }
 
-func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body, ok := tx.Transaction.Body.(*protocol.PartitionAnchor)
+	body, ok := tx.Transaction.Body.(*protocol.DirectoryAnchor)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.PartitionAnchor), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin
@@ -46,25 +46,21 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
-	// Return ACME burnt by buying credits to the supply
-	var issuerState *protocol.TokenIssuer
-	err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load acme ledger")
-	}
-	var ledgerState *protocol.SystemLedger
-	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load main ledger: %w", err)
-	}
-	issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
-	err = st.Update(issuerState)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update issuer state: %v", err)
+	if body.AcmeOraclePrice != 0 {
+		var ledgerState *protocol.SystemLedger
+		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+		if err != nil {
+			return nil, fmt.Errorf("unable to load main ledger: %w", err)
+		}
+		ledgerState.PendingOracle = body.AcmeOraclePrice
+		err = st.Update(ledgerState)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update ledger state: %v", err)
+		}
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name
-	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +80,12 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		// TODO Handle major blocks?
 		return nil, nil
 	}
+
+	//todo: do something interesting with the operator updates
+	//for _, op := range body.OperatorUpdates {
+	//	//pull state for bvn-x/validators to update key page and update operation.
+	//	op.Type()
+	//}
 
 	// Process receipts
 	for i, receipt := range body.Receipts {

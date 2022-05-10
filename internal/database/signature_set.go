@@ -154,7 +154,7 @@ func signatureKeyHash(sig protocol.Signature) ([32]byte, error) {
 		// root... ok
 		return *(*[32]byte)(sig.Result), nil
 
-	case *protocol.InternalSignature:
+	case *protocol.SystemSignature:
 		// Internal signatures only make any kind of sense if they're coming
 		// from the local network, so they should never be different
 		return sha256.Sum256([]byte("Accumulate Internal Signature")), nil

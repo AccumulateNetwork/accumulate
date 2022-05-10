@@ -494,10 +494,10 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	}
 
 	req := &query.RequestMinorBlocks{
-		Account:                      u,
-		Start:                        pagination.Start,
-		Limit:                        pagination.Count,
-		TxFetchMode:                  txFetchMode,
+		Account:                       u,
+		Start:                         pagination.Start,
+		Limit:                         pagination.Count,
+		TxFetchMode:                   txFetchMode,
 		FilterSystemAnchorsOnlyBlocks: includeSystemAnchors,
 	}
 	k, v, err := q.query(req, QueryOptions{})

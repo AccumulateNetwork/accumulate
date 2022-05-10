@@ -9,7 +9,7 @@ import (
 type SyntheticMirror struct{}
 
 func (SyntheticMirror) Type() protocol.TransactionType {
-	return protocol.TransactionTypeSyntheticMirror
+	return protocol.TransactionTypeMirrorSystemRecords
 }
 
 func (SyntheticMirror) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -17,9 +17,9 @@ func (SyntheticMirror) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 }
 
 func (SyntheticMirror) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	body, ok := tx.Transaction.Body.(*protocol.SyntheticMirror)
+	body, ok := tx.Transaction.Body.(*protocol.MirrorSystemRecords)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticMirror), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.MirrorSystemRecords), tx.Transaction.Body)
 	}
 
 	for _, obj := range body.Objects {

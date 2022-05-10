@@ -16,7 +16,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Load the ledger
 	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// 	return nil
 	// }
 
-	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger) error {
+	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.SystemLedger) error {
 
 	// Load the main chain of the minor root
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
@@ -224,7 +224,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 	height := synthChain.Height()
 	offset := height - int64(len(block.State.ProducedTxns))
 	for i, txn := range block.State.ProducedTxns {
-		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
+		if txn.Type() == protocol.TransactionTypeDirectoryAnchor || txn.Type() == protocol.TransactionTypePartitionAnchor || txn.Type() == protocol.TransactionTypeMirrorSystemRecords {
 			// Do not generate a receipt for the anchor
 			continue
 		}

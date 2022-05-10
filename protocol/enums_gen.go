@@ -56,8 +56,8 @@ const AccountTypeLiteDataAccount AccountType = 12
 // AccountTypeUnknownSigner represents an unknown signer account.
 const AccountTypeUnknownSigner AccountType = 13
 
-// AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
-const AccountTypeInternalLedger AccountType = 14
+// AccountTypeSystemLedger is a ledger that tracks the state of internal operations.
+const AccountTypeSystemLedger AccountType = 14
 
 // AccountTypeLiteIdentity is a lite identity account.
 const AccountTypeLiteIdentity AccountType = 15
@@ -269,8 +269,8 @@ const TransactionMaxUser TransactionMax = 48
 // TransactionMaxSynthetic is the highest number reserved for synthetic transactions.
 const TransactionMaxSynthetic TransactionMax = 95
 
-// TransactionMaxInternal is the highest number reserved for internal transactions.
-const TransactionMaxInternal TransactionMax = 255
+// TransactionMaxSystem is the highest number reserved for internal transactions.
+const TransactionMaxSystem TransactionMax = 255
 
 // TransactionTypeUnknown represents an unknown transaction type.
 const TransactionTypeUnknown TransactionType = 0
@@ -362,8 +362,8 @@ const TransactionTypeMirrorSystemRecords TransactionType = 56
 // TransactionTypePartitionAnchor system transaction for partition data.
 const TransactionTypePartitionAnchor TransactionType = 57
 
-// TransactionTypeInternalGenesis initializes system chains.
-const TransactionTypeInternalGenesis TransactionType = 96
+// TransactionTypeSystemGenesis initializes system chains.
+const TransactionTypeSystemGenesis TransactionType = 96
 
 // TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
 const TransactionTypeSegWitDataEntry TransactionType = 57005
@@ -459,7 +459,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -492,8 +492,8 @@ func (v AccountType) String() string {
 		return "liteDataAccount"
 	case AccountTypeUnknownSigner:
 		return "unknownSigner"
-	case AccountTypeInternalLedger:
-		return "internalLedger"
+	case AccountTypeSystemLedger:
+		return "systemLedger"
 	case AccountTypeLiteIdentity:
 		return "liteIdentity"
 	case AccountTypeSyntheticLedger:
@@ -530,8 +530,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeLiteDataAccount, true
 	case "unknownsigner":
 		return AccountTypeUnknownSigner, true
-	case "internalledger":
-		return AccountTypeInternalLedger, true
+	case "systemledger":
+		return AccountTypeSystemLedger, true
 	case "liteidentity":
 		return AccountTypeLiteIdentity, true
 	case "syntheticledger":
@@ -1197,7 +1197,7 @@ func (v TransactionMax) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionMax) SetEnumValue(id uint64) bool {
 	u := TransactionMax(id)
 	switch u {
-	case TransactionMaxUser, TransactionMaxSynthetic, TransactionMaxInternal:
+	case TransactionMaxUser, TransactionMaxSynthetic, TransactionMaxSystem:
 		*v = u
 		return true
 	default:
@@ -1212,8 +1212,8 @@ func (v TransactionMax) String() string {
 		return "user"
 	case TransactionMaxSynthetic:
 		return "synthetic"
-	case TransactionMaxInternal:
-		return "internal"
+	case TransactionMaxSystem:
+		return "system"
 	default:
 		return fmt.Sprintf("TransactionMax:%d", v)
 	}
@@ -1226,8 +1226,8 @@ func TransactionMaxByName(name string) (TransactionMax, bool) {
 		return TransactionMaxUser, true
 	case "synthetic":
 		return TransactionMaxSynthetic, true
-	case "internal":
-		return TransactionMaxInternal, true
+	case "system":
+		return TransactionMaxSystem, true
 	default:
 		return 0, false
 	}
@@ -1261,7 +1261,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeDirectoryAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeMirrorSystemRecords, TransactionTypePartitionAnchor, TransactionTypeInternalGenesis, TransactionTypeSegWitDataEntry:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeDirectoryAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeMirrorSystemRecords, TransactionTypePartitionAnchor, TransactionTypeSystemGenesis, TransactionTypeSegWitDataEntry:
 		*v = u
 		return true
 	default:
@@ -1332,8 +1332,8 @@ func (v TransactionType) String() string {
 		return "mirrorSystemRecords"
 	case TransactionTypePartitionAnchor:
 		return "partitionAnchor"
-	case TransactionTypeInternalGenesis:
-		return "internalGenesis"
+	case TransactionTypeSystemGenesis:
+		return "systemGenesis"
 	case TransactionTypeSegWitDataEntry:
 		return "segWitDataEntry"
 	default:
@@ -1406,8 +1406,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeMirrorSystemRecords, true
 	case "partitionanchor":
 		return TransactionTypePartitionAnchor, true
-	case "internalgenesis":
-		return TransactionTypeInternalGenesis, true
+	case "systemgenesis":
+		return TransactionTypeSystemGenesis, true
 	case "segwitdataentry":
 		return TransactionTypeSegWitDataEntry, true
 	default:

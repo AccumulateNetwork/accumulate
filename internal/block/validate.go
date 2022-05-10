@@ -65,8 +65,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		case *protocol.ReceiptSignature:
 			err = verifyReceiptSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
 
-		case *protocol.InternalSignature:
-			err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
+		case *protocol.SystemSignature:
+			err = validateSystemSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
 
 		default:
 			err = x.validateNormalSignature(batch, delivery, signature, isInitiator)
@@ -188,7 +188,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	if !gotED25519Sig {
 		return errors.Format(errors.StatusUnauthenticated, "missing ED25519 signature")
 	}
-	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypePartitionAnchor {
 		return nil
 	}
 

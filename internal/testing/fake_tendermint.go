@@ -403,7 +403,7 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
 	for _, env := range env {
 		txnType := env.Transaction.Body.Type()
-		if !txnType.IsInternal() && txnType != protocol.TransactionTypeSyntheticAnchor {
+		if !txnType.IsInternal() && txnType != protocol.TransactionTypeDirectoryAnchor && txnType != protocol.TransactionTypePartitionAnchor {
 			c.logger.Info(msg, "type", txnType, "tx", logging.AsHex(env.Transaction.GetHash()).Slice(0, 4))
 		}
 	}

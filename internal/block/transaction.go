@@ -252,7 +252,7 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 
 func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// Anchors cannot be pending
-	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypePartitionAnchor {
 		return true, nil
 	}
 

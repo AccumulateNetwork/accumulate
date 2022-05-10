@@ -209,7 +209,7 @@ func TestAnchorChain(t *testing.T) {
 
 	// // Check each anchor
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
-	// var ledgerState *protocol.InternalLedger
+	// var ledgerState *protocol.SystemLedger
 	// require.NoError(t, ledger.GetStateAs(&ledgerState))
 	// rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	// require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestAnchorChain(t *testing.T) {
 	defer batch.Discard()
 	ledger := batch.Account(dn.network.NodeUrl(protocol.Ledger))
 	// Check each anchor
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
 	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
@@ -268,7 +268,7 @@ func TestAnchorChain(t *testing.T) {
 	ledger = batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
-	ledgerState = new(protocol.InternalLedger)
+	ledgerState = new(protocol.SystemLedger)
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	require.Equal(t, ledgerState.ActiveOracle, expected)
 
@@ -767,7 +767,7 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits

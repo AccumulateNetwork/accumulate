@@ -108,7 +108,7 @@ TransactionMax:
   Synthetic:
     value: 0x5F
     description: is the highest number reserved for synthetic transactions
-  Internal:
+  System:
     value: 0xFF
     description: is the highest number reserved for internal transactions
 
@@ -212,7 +212,7 @@ TransactionType:
     description: is a surrogate transaction segregated witness for a WriteData transaction
 
   ##### INTERNAL TRANSACTIONS #####
-  InternalGenesis:
+  SystemGenesis:
     value: 0x60
     description: initializes system chains
 
@@ -251,7 +251,7 @@ AccountType:
   UnknownSigner:
     value: 13
     description: represents an unknown signer account
-  InternalLedger:
+  SystemLedger:
     value: 14
     description: is a ledger that tracks the state of internal operations
   LiteIdentity:

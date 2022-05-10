@@ -126,7 +126,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeETH,
 		protocol.SignatureTypeBTCLegacy:
 
-	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeInternal:
+	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeSystem:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
 		panic(fmt.Errorf("invalid attempt to generate signature of type %v!", s.Type))
 

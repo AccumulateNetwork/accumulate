@@ -117,7 +117,7 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
 	params.TxFetchMode = txFetchMode
-	params.FilterSynthAnchorsOnlyBlocks = filterAnBlks
+	params.FilterSystemAnchorsOnlyBlocks = filterAnBlks
 
 	// Temporary increase timeout, we may get a large result set which takes a while to construct
 	globalTimeout := Client.Timeout

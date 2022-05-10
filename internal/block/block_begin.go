@@ -47,7 +47,7 @@ func (x *Executor) BeginBlock(block *Block) (err error) {
 
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	err = ledger.GetStateAs(&ledgerState)
 	switch {
 	case err == nil:
@@ -151,7 +151,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 // transactions (including the block anchor) for the previously committed block.
 func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64) error {
 	// Load the ledger state
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	err := batch.Account(x.Network.Ledger()).GetStateAs(&ledgerState)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
@@ -348,7 +348,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	return nil
 }
 
-func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.DirectoryAnchor, error) {
+func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger) (*protocol.DirectoryAnchor, error) {
 	anchor := new(protocol.DirectoryAnchor)
 	err := x.buildBlockAnchor(batch, ledgerState, &anchor.SystemAnchor)
 	if err != nil {
@@ -358,7 +358,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 	return nil, nil
 }
 
-func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.PartitionAnchor, error) {
+func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger) (*protocol.PartitionAnchor, error) {
 	anchor := new(protocol.PartitionAnchor)
 	err := x.buildBlockAnchor(batch, ledgerState, &anchor.SystemAnchor)
 	if err != nil {
@@ -369,7 +369,7 @@ func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *prot
 	return anchor, nil
 }
 
-func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger, anchor *protocol.SystemAnchor) error {
+func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, anchor *protocol.SystemAnchor) error {
 	// Load the root chain
 	ledger := batch.Account(x.Network.Ledger())
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)

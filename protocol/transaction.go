@@ -100,7 +100,7 @@ func (t TransactionType) IsSynthetic() bool {
 
 // IsInternal returns true if the transaction type is internal.
 func (t TransactionType) IsInternal() bool {
-	return TransactionMaxSynthetic.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxInternal.GetEnumValue()
+	return TransactionMaxSynthetic.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxSystem.GetEnumValue()
 }
 
 type SyntheticTransaction interface {
