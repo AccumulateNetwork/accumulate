@@ -1426,7 +1426,7 @@ func TestUpdateValidators(t *testing.T) {
 	n := nodes[subnets[0]][0]
 
 	netUrl := n.network.NodeUrl()
-	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
+	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 1)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
 
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2

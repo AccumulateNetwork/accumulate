@@ -22,7 +22,7 @@ func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transactio
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
 	}
 
-	if signerPageIdx > 1 {
+	if signerPageIdx > 2 {
 		return false, fmt.Errorf("cannot modify validators with a lower priority key page")
 	}
 
