@@ -9,6 +9,8 @@ import (
 
 type SyntheticDepositCredits struct{}
 
+var _ PrincipalValidator = (*SyntheticDepositCredits)(nil)
+
 func (SyntheticDepositCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositCredits
 }
