@@ -14,7 +14,7 @@ func TestBatchCommit(t *testing.T) {
 	// Setup
 	batch := db.Begin(true)
 	defer batch.Discard()
-	ledger := new(protocol.SystemLedger)
+	ledger := new(protocol.InternalLedger)
 	ledger.Url = ledgerUrl
 	ledger.Index = 5
 	require.NoError(t, batch.Account(ledgerUrl).PutState(ledger))

@@ -60,7 +60,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	defer batch.Discard()
 
 	var height int64
-	var ledger *protocol.SystemLedger
+	var ledger *protocol.InternalLedger
 	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:

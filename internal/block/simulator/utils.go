@@ -62,7 +62,7 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 	}
 	block.Batch = db.Begin(true)
 
-	var ledger *protocol.SystemLedger
+	var ledger *protocol.InternalLedger
 	require.NoError(tb{t}, block.Batch.Account(exec.Network.Ledger()).GetStateAs(&ledger))
 
 	if block.Index == 0 {

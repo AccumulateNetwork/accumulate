@@ -3,7 +3,7 @@
 
 ##### Accounts #####
 
-SystemLedger:
+InternalLedger:
   union: { type: account }
   fields:
     - name: Url

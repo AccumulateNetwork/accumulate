@@ -16,7 +16,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Load the ledger
 	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
-	var ledgerState *protocol.SystemLedger
+	var ledgerState *protocol.InternalLedger
 	err := ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return err
@@ -49,7 +49,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// 	return nil
 	// }
 
-	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.SystemLedger) error {
+	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger) error {
 
 	// Load the main chain of the minor root
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)

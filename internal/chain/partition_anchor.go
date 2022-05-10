@@ -52,7 +52,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	if err != nil {
 		return nil, fmt.Errorf("unable to load acme ledger")
 	}
-	var ledgerState *protocol.SystemLedger
+	var ledgerState *protocol.InternalLedger
 	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load main ledger: %w", err)

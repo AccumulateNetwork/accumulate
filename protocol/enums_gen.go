@@ -56,8 +56,8 @@ const AccountTypeLiteDataAccount AccountType = 12
 // AccountTypeUnknownSigner represents an unknown signer account.
 const AccountTypeUnknownSigner AccountType = 13
 
-// AccountTypeSystemLedger is a ledger that tracks the state of internal operations.
-const AccountTypeSystemLedger AccountType = 14
+// AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
+const AccountTypeInternalLedger AccountType = 14
 
 // AccountTypeLiteIdentity is a lite identity account.
 const AccountTypeLiteIdentity AccountType = 15
@@ -459,7 +459,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -492,8 +492,8 @@ func (v AccountType) String() string {
 		return "liteDataAccount"
 	case AccountTypeUnknownSigner:
 		return "unknownSigner"
-	case AccountTypeSystemLedger:
-		return "systemLedger"
+	case AccountTypeInternalLedger:
+		return "internalLedger"
 	case AccountTypeLiteIdentity:
 		return "liteIdentity"
 	case AccountTypeSyntheticLedger:
@@ -530,8 +530,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeLiteDataAccount, true
 	case "unknownsigner":
 		return AccountTypeUnknownSigner, true
-	case "systemledger":
-		return AccountTypeSystemLedger, true
+	case "internalledger":
+		return AccountTypeInternalLedger, true
 	case "liteidentity":
 		return AccountTypeLiteIdentity, true
 	case "syntheticledger":
