@@ -58,7 +58,7 @@ if [ "${FILESIZE}" -lt "500" ]; then
 fi
 
 section "Test minor block API expand on DN"
-accumulate --use-unencrypted-wallet blocks minor acc://dn 10 50 expand true >/tmp/minor.txt
+accumulate --use-unencrypted-wallet blocks minor acc://dn 10 50 expand false >/tmp/minor.txt
 FILESIZE=$(stat -c%s "/tmp/minor.txt")
 if [ "${FILESIZE}" -lt "500" ]; then
   die "minor block result set too small: ${FILESIZE}"
