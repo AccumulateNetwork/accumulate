@@ -165,7 +165,7 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 	return prev.Source + 1, entry.Source, entry.Anchor, nil
 }
 
-func getAccountAuth(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+func (*Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	switch account := account.(type) {
 	case *protocol.LiteDataAccount:
 		return &protocol.AccountAuth{
