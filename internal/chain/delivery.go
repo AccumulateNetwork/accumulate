@@ -101,7 +101,6 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 		if len(delivery.Signatures) == 0 {
 			return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction %X is unsigned", delivery.Transaction.GetHash())
 		}
-
 	}
 
 	return txnList, nil

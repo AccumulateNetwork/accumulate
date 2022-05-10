@@ -5,16 +5,19 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type UpdateKeyPage struct{}
 
+var _ SignerValidator = (*UpdateKeyPage)(nil)
+
 func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
@@ -25,26 +28,37 @@ func (UpdateKeyPage) SignerIsAuthorized(batch *database.Batch, transaction *prot
 		return true, nil // Signer is not a page
 	}
 
-	if !principalBook.Equal(signerBook) {
-		return true, nil // Signer belongs to a different book
-	}
+	// If the signer is a page of the principal
+	if principalBook.Equal(signerBook) {
+		// Lower indices are higher priority
+		if signerPageIdx > principalPageIdx {
+			return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+		}
 
-	// Lower indices are higher priority
-	if signerPageIdx > principalPageIdx {
-		return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
-	}
-
-	// Operation-specific checks
-	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
-	if !ok {
-		return false, errors.Format(errors.StatusBadRequest, "invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
-	}
-	for _, op := range body.Operation {
-		switch op.Type() {
-		case protocol.KeyPageOperationTypeUpdateAllowed:
-			if signerPageIdx == principalPageIdx {
-				return false, errors.Format(errors.StatusUnauthorized, "%v cannot modify its own allowed operations", transaction.Header.Principal)
+		// Operation-specific checks
+		body, ok := transaction.Body.(*protocol.UpdateKeyPage)
+		if !ok {
+			return false, errors.Format(errors.StatusBadRequest, "invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
+		}
+		for _, op := range body.Operation {
+			switch op.Type() {
+			case protocol.KeyPageOperationTypeUpdateAllowed:
+				if signerPageIdx == principalPageIdx {
+					return false, errors.Format(errors.StatusUnauthorized, "%v cannot modify its own allowed operations", transaction.Header.Principal)
+				}
 			}
+		}
+	}
+
+	// Signers belonging to new delegates are authorized to sign the transaction
+	newOwners, err := getNewOwners(batch, transaction)
+	if err != nil {
+		return false, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	for _, owner := range newOwners {
+		if owner.Equal(signerBook) {
+			return false, delegate.SignerIsAuthorized(batch, transaction, location, signer, true)
 		}
 	}
 
@@ -52,8 +66,21 @@ func (UpdateKeyPage) SignerIsAuthorized(batch *database.Batch, transaction *prot
 	return true, nil
 }
 
-func (UpdateKeyPage) TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
-	// Do not override the ready check
+func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	// All new delegates must sign the transaction
+	newOwners, err := getNewOwners(batch, transaction)
+	if err != nil {
+		return false, false, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	for _, owner := range newOwners {
+		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, owner)
+		if !ok || err != nil {
+			return false, false, err
+		}
+	}
+
+	// Fallback to general authorization
 	return false, true, nil
 }
 
@@ -221,4 +248,48 @@ func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (i
 		keySpec = entry.(*protocol.KeySpec)
 	}
 	return i, keySpec, ok
+}
+
+func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*url.URL, error) {
+	body, ok := transaction.Body.(*protocol.UpdateKeyPage)
+	if !ok {
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
+	}
+
+	var page *protocol.KeyPage
+	err := batch.Account(transaction.Header.Principal).GetStateAs(&page)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
+	}
+
+	var owners []*url.URL
+	for _, op := range body.Operation {
+		switch op := op.(type) {
+		case *protocol.AddKeyOperation:
+			if op.Entry.Owner == nil {
+				continue
+			}
+
+			owners = append(owners, op.Entry.Owner)
+
+		case *protocol.UpdateKeyOperation:
+			// Don't check if the new entry does not have an owner
+			if op.NewEntry.Owner == nil {
+				continue
+			}
+
+			// Don't check if the owner is not changing
+			_, oldEntry, ok := findKeyPageEntry(page, &op.OldEntry)
+			if ok && oldEntry.Owner != nil && oldEntry.Owner.Equal(op.NewEntry.Owner) {
+				continue
+			}
+
+			owners = append(owners, op.NewEntry.Owner)
+
+		default:
+			continue
+		}
+	}
+
+	return owners, nil
 }

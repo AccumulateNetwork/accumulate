@@ -442,7 +442,9 @@ BALANCE=$(accumulate --use-unencrypted-wallet -j page get manager/book/1 | jq -r
 [ "$BALANCE" -ge 100000 ] && success || die "manager/book/1 should have 100000 credits but has ${BALANCE}"
 
 section "Create token account with manager"
-wait-for cli-tx account create token keytest keytest-1-0 --authority keytest/book,manager/book keytest/managed-tokens ACME || "Failed to create managed token account"
+TXID=$(cli-tx account create token keytest keytest-1-0 --authority keytest/book,manager/book keytest/managed-tokens ACME) || "Failed to create managed token account"
+accumulate tx sign keytest manager@manager/book $TXID
+wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
@@ -458,7 +460,9 @@ RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | 
 success
 
 section "Add manager to token account"
-wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book || die "Failed to add the manager"
+TXID=$(cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book) || die "Failed to add the manager"
+accumulate tx sign keytest manager@manager/book $TXID
+wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
