@@ -37,7 +37,7 @@ type GeneralReceipt struct {
 	fieldsSet      []bool
 	LocalBlock     uint64           `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
-	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Proof          protocol.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	Error          string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData      []byte
 }
@@ -250,7 +250,7 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
-	u.Receipt = *(&v.Receipt).Copy()
+	u.Proof = *(&v.Proof).Copy()
 	u.Error = v.Error
 
 	return u
@@ -614,7 +614,7 @@ func (v *GeneralReceipt) Equal(u *GeneralReceipt) bool {
 	if !(v.DirectoryBlock == u.DirectoryBlock) {
 		return false
 	}
-	if !((&v.Receipt).Equal(&u.Receipt)) {
+	if !((&v.Proof).Equal(&u.Proof)) {
 		return false
 	}
 	if !(v.Error == u.Error) {
@@ -1151,7 +1151,7 @@ func (v *DirectoryQueryResult) IsValid() error {
 var fieldNames_GeneralReceipt = []string{
 	1: "LocalBlock",
 	2: "DirectoryBlock",
-	3: "Receipt",
+	3: "Proof",
 	4: "Error",
 }
 
@@ -1165,8 +1165,8 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.DirectoryBlock == 0) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
-	if !((v.Receipt).Equal(new(protocol.Receipt))) {
-		writer.WriteValue(3, &v.Receipt)
+	if !((v.Proof).Equal(new(protocol.Receipt))) {
+		writer.WriteValue(3, &v.Proof)
 	}
 	if !(len(v.Error) == 0) {
 		writer.WriteString(4, v.Error)
@@ -1194,9 +1194,9 @@ func (v *GeneralReceipt) IsValid() error {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Receipt is missing")
-	} else if (v.Receipt).Equal(new(protocol.Receipt)) {
-		errs = append(errs, "field Receipt is not set")
+		errs = append(errs, "field Proof is missing")
+	} else if (v.Proof).Equal(new(protocol.Receipt)) {
+		errs = append(errs, "field Proof is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Error is missing")
@@ -2426,7 +2426,7 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.DirectoryBlock = x
 	}
 	if x := new(protocol.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Receipt = *x
+		v.Proof = *x
 	}
 	if x, ok := reader.ReadString(4); ok {
 		v.Error = x
@@ -3285,14 +3285,14 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64           `json:"localBlock,omitempty"`
 		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
-		Receipt        protocol.Receipt `json:"receipt,omitempty"`
+		Proof          protocol.Receipt `json:"proof,omitempty"`
 		Error          string           `json:"error,omitempty"`
 		Account        *url.URL         `json:"account,omitempty"`
 		Chain          string           `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
-	u.Receipt = v.GeneralReceipt.Receipt
+	u.Proof = v.GeneralReceipt.Proof
 	u.Error = v.GeneralReceipt.Error
 	u.Account = v.Account
 	u.Chain = v.Chain
@@ -3746,14 +3746,14 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64           `json:"localBlock,omitempty"`
 		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
-		Receipt        protocol.Receipt `json:"receipt,omitempty"`
+		Proof          protocol.Receipt `json:"proof,omitempty"`
 		Error          string           `json:"error,omitempty"`
 		Account        *url.URL         `json:"account,omitempty"`
 		Chain          string           `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
-	u.Receipt = v.GeneralReceipt.Receipt
+	u.Proof = v.GeneralReceipt.Proof
 	u.Error = v.GeneralReceipt.Error
 	u.Account = v.Account
 	u.Chain = v.Chain
@@ -3762,7 +3762,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
-	v.GeneralReceipt.Receipt = u.Receipt
+	v.GeneralReceipt.Proof = u.Proof
 	v.GeneralReceipt.Error = u.Error
 	v.Account = u.Account
 	v.Chain = u.Chain

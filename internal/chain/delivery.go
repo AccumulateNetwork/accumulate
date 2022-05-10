@@ -133,7 +133,7 @@ func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *
 	e.Signatures = []protocol.Signature{
 		&protocol.ReceiptSignature{
 			SourceNetwork:   source,
-			Receipt:         *receipt,
+			Proof:           *receipt,
 			TransactionHash: hash,
 		},
 	}

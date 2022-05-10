@@ -119,7 +119,7 @@ GeneralReceipt:
       type: uvarint
     - name: DirectoryBlock
       type: uvarint
-    - name: Receipt
+    - name: Proof
       type: protocol.Receipt
       marshal-as: reference
     - name: Error

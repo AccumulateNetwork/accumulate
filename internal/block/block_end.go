@@ -243,7 +243,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = m.Network.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
+		sig.Proof = *protocol.ReceiptFromManaged(receipt)
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
 		if err != nil {
 			return err
