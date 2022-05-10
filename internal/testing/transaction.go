@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -109,6 +110,17 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 
 func (tb TransactionBuilder) Build() *protocol.Envelope {
 	return tb.Envelope
+}
+
+func (tb TransactionBuilder) BuildDelivery() *chain.Delivery {
+	delivery, err := chain.NormalizeEnvelope(tb.Envelope)
+	if err != nil {
+		panic(err)
+	}
+	if len(delivery) != 1 {
+		panic(fmt.Errorf("expected 1 delivery, got %d", len(delivery)))
+	}
+	return delivery[0]
 }
 
 func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) TransactionBuilder {
