@@ -245,8 +245,8 @@ const SignatureTypeReceipt SignatureType = 4
 // SignatureTypeSynthetic is used when sending synthetic transactions.
 const SignatureTypeSynthetic SignatureType = 5
 
-// SignatureTypeInternal is used when executing transactions internally.
-const SignatureTypeInternal SignatureType = 6
+// SignatureTypeSystem is used when executing transactions internally.
+const SignatureTypeSystem SignatureType = 6
 
 // SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
 const SignatureTypeForwarded SignatureType = 7
@@ -344,8 +344,8 @@ const TransactionTypeSyntheticWriteData TransactionType = 50
 // TransactionTypeSyntheticDepositTokens deposits tokens into token accounts.
 const TransactionTypeSyntheticDepositTokens TransactionType = 51
 
-// TransactionTypeSyntheticAnchor anchors one network to another.
-const TransactionTypeSyntheticAnchor TransactionType = 52
+// TransactionTypeDirectoryAnchor anchors one network to another.
+const TransactionTypeDirectoryAnchor TransactionType = 52
 
 // TransactionTypeSyntheticDepositCredits deposits credits into a credit holder.
 const TransactionTypeSyntheticDepositCredits TransactionType = 53
@@ -356,14 +356,17 @@ const TransactionTypeSyntheticBurnTokens TransactionType = 54
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 55
 
-// TransactionTypeSyntheticMirror mirrors records from one network to another.
-const TransactionTypeSyntheticMirror TransactionType = 56
+// TransactionTypeMirrorSystemRecords mirrors records from one network to another.
+const TransactionTypeMirrorSystemRecords TransactionType = 56
 
-// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
-const TransactionTypeSegWitDataEntry TransactionType = 57
+// TransactionTypePartitionAnchor system transaction for partition data.
+const TransactionTypePartitionAnchor TransactionType = 57
 
 // TransactionTypeInternalGenesis initializes system chains.
 const TransactionTypeInternalGenesis TransactionType = 96
+
+// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
+const TransactionTypeSegWitDataEntry TransactionType = 57005
 
 // VoteTypeAccept vote yea in favor of proposal.
 const VoteTypeAccept VoteType = 0
@@ -1094,7 +1097,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSystem, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
 		*v = u
 		return true
 	default:
@@ -1117,8 +1120,8 @@ func (v SignatureType) String() string {
 		return "receipt"
 	case SignatureTypeSynthetic:
 		return "synthetic"
-	case SignatureTypeInternal:
-		return "internal"
+	case SignatureTypeSystem:
+		return "system"
 	case SignatureTypeForwarded:
 		return "forwarded"
 	case SignatureTypeBTC:
@@ -1149,8 +1152,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeReceipt, true
 	case "synthetic":
 		return SignatureTypeSynthetic, true
-	case "internal":
-		return SignatureTypeInternal, true
+	case "system":
+		return SignatureTypeSystem, true
 	case "forwarded":
 		return SignatureTypeForwarded, true
 	case "btc":
@@ -1258,7 +1261,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticMirror, TransactionTypeSegWitDataEntry, TransactionTypeInternalGenesis:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeDirectoryAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeMirrorSystemRecords, TransactionTypePartitionAnchor, TransactionTypeInternalGenesis, TransactionTypeSegWitDataEntry:
 		*v = u
 		return true
 	default:
@@ -1317,20 +1320,22 @@ func (v TransactionType) String() string {
 		return "syntheticWriteData"
 	case TransactionTypeSyntheticDepositTokens:
 		return "syntheticDepositTokens"
-	case TransactionTypeSyntheticAnchor:
-		return "syntheticAnchor"
+	case TransactionTypeDirectoryAnchor:
+		return "directoryAnchor"
 	case TransactionTypeSyntheticDepositCredits:
 		return "syntheticDepositCredits"
 	case TransactionTypeSyntheticBurnTokens:
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
-	case TransactionTypeSyntheticMirror:
-		return "syntheticMirror"
-	case TransactionTypeSegWitDataEntry:
-		return "segWitDataEntry"
+	case TransactionTypeMirrorSystemRecords:
+		return "mirrorSystemRecords"
+	case TransactionTypePartitionAnchor:
+		return "partitionAnchor"
 	case TransactionTypeInternalGenesis:
 		return "internalGenesis"
+	case TransactionTypeSegWitDataEntry:
+		return "segWitDataEntry"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1389,20 +1394,22 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticWriteData, true
 	case "syntheticdeposittokens":
 		return TransactionTypeSyntheticDepositTokens, true
-	case "syntheticanchor":
-		return TransactionTypeSyntheticAnchor, true
+	case "directoryanchor":
+		return TransactionTypeDirectoryAnchor, true
 	case "syntheticdepositcredits":
 		return TransactionTypeSyntheticDepositCredits, true
 	case "syntheticburntokens":
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
-	case "syntheticmirror":
-		return TransactionTypeSyntheticMirror, true
-	case "segwitdataentry":
-		return TransactionTypeSegWitDataEntry, true
+	case "mirrorsystemrecords":
+		return TransactionTypeMirrorSystemRecords, true
+	case "partitionanchor":
+		return TransactionTypePartitionAnchor, true
 	case "internalgenesis":
 		return TransactionTypeInternalGenesis, true
+	case "segwitdataentry":
+		return TransactionTypeSegWitDataEntry, true
 	default:
 		return 0, false
 	}

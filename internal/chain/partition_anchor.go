@@ -9,23 +9,25 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type SyntheticAnchor struct {
+// Process the anchor from BVN -> DN
+
+type PartitionAnchor struct {
 	Network *config.Network
 }
 
-func (SyntheticAnchor) Type() protocol.TransactionType {
-	return protocol.TransactionTypeSyntheticAnchor
+func (PartitionAnchor) Type() protocol.TransactionType {
+	return protocol.TransactionTypePartitionAnchor
 }
 
-func (SyntheticAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SyntheticAnchor{}).Validate(st, tx)
+func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	return (PartitionAnchor{}).Validate(st, tx)
 }
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
+	body, ok := tx.Transaction.Body.(*protocol.PartitionAnchor)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticAnchor), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.PartitionAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin
@@ -44,40 +46,25 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
-	if fromDirectory && body.AcmeOraclePrice != 0 {
-		var ledgerState *protocol.InternalLedger
-		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load main ledger: %w", err)
-		}
-		ledgerState.PendingOracle = body.AcmeOraclePrice
-		err = st.Update(ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update ledger state: %v", err)
-		}
-	}
-
 	// Return ACME burnt by buying credits to the supply
-	if !fromDirectory {
-		var issuerState *protocol.TokenIssuer
-		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load acme ledger")
-		}
-		var ledgerState *protocol.InternalLedger
-		err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load main ledger: %w", err)
-		}
-		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
-		err = st.Update(issuerState)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update issuer state: %v", err)
-		}
+	var issuerState *protocol.TokenIssuer
+	err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load acme ledger")
+	}
+	var ledgerState *protocol.InternalLedger
+	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load main ledger: %w", err)
+	}
+	issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
+	err = st.Update(issuerState)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update issuer state: %v", err)
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name
-	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}

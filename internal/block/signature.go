@@ -59,8 +59,8 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
 
-	case *protocol.InternalSignature:
-		err = validateInternalSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
+	case *protocol.SystemSignature:
+		err = validateSystemSignature(&x.Network, batch, delivery.Transaction, signature, !initiated)
 
 	default:
 		signers, err = x.processNormalSignature(batch, delivery, signature, !initiated)
@@ -166,7 +166,7 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 	switch signature.Type() {
 	case protocol.SignatureTypeSynthetic,
 		protocol.SignatureTypeReceipt,
-		protocol.SignatureTypeInternal:
+		protocol.SignatureTypeSystem:
 		return nil
 	}
 
@@ -593,7 +593,7 @@ func verifyReceiptSignature(_ *config.Network, _ *database.Batch, transaction *p
 	return nil
 }
 
-func validateInternalSignature(net *config.Network, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.InternalSignature, _ bool) error {
+func validateSystemSignature(net *config.Network, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.SystemSignature, _ bool) error {
 	if !transaction.Body.Type().IsInternal() {
 		return fmt.Errorf("internal signatures are not allowed for non-internal transactions")
 	}

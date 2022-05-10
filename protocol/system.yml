@@ -34,7 +34,7 @@ SyntheticLedger:
 
 ##### Transactions #####
 
-InternalGenesis:
+SystemGenesis:
   union: { type: transaction }
 
 ##### Data Types #####

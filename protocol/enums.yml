@@ -45,7 +45,7 @@ SignatureType:
   Synthetic:
     value: 5
     description: is used when sending synthetic transactions
-  Internal:
+  System:
     value: 6
     description: is used when executing transactions internally
   Forwarded:
@@ -189,7 +189,7 @@ TransactionType:
   SyntheticDepositTokens:
     value: 0x33
     description: deposits tokens into token accounts
-  SyntheticAnchor:
+  DirectoryAnchor:
     value: 0x34
     description: anchors one network to another
   SyntheticDepositCredits:
@@ -201,11 +201,14 @@ TransactionType:
   SyntheticForwardTransaction:
     value: 0x37
     description: forwards a transaction from one subnet to another
-  SyntheticMirror:
+  MirrorSystemRecords:
     value: 0x38
     description: mirrors records from one network to another
-  SegWitDataEntry:
+  PartitionAnchor:
     value: 0x39
+    description: system transaction for partition data
+  SegWitDataEntry:
+    value: 0xDEAD
     description: is a surrogate transaction segregated witness for a WriteData transaction
 
   ##### INTERNAL TRANSACTIONS #####

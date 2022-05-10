@@ -279,7 +279,7 @@ MinorBlocksQuery:
     - name: TxFetchMode
       type: query.TxFetchMode
       optional: true
-    - name: FilterSynthAnchorsOnlyBlocks
+    - name: FilterSystemAnchorsOnlyBlocks
       type: bool
       optional: true
 

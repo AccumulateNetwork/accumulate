@@ -48,7 +48,7 @@ func (s SignatureType) IsSystem() bool {
 	switch s {
 	case SignatureTypeSynthetic,
 		SignatureTypeReceipt,
-		SignatureTypeInternal:
+		SignatureTypeSystem:
 		return true
 	default:
 		return false
@@ -776,38 +776,38 @@ func (s *SyntheticSignature) Verify(hash []byte) bool {
  */
 
 // GetSigner returns SourceNetwork.
-func (s *InternalSignature) GetSigner() *url.URL { return netVal(s.Network) }
+func (s *SystemSignature) GetSigner() *url.URL { return netVal(s.Network) }
 
 // RoutingLocation returns SourceNetwork.
-func (s *InternalSignature) RoutingLocation() *url.URL { return netVal(s.Network) }
+func (s *SystemSignature) RoutingLocation() *url.URL { return netVal(s.Network) }
 
 // GetSignerVersion returns 1.
-func (s *InternalSignature) GetSignerVersion() uint64 { return 1 }
+func (s *SystemSignature) GetSignerVersion() uint64 { return 1 }
 
 // GetTimestamp returns 1.
-func (s *InternalSignature) GetTimestamp() uint64 { return 1 }
+func (s *SystemSignature) GetTimestamp() uint64 { return 1 }
 
 // GetPublicKey returns nil
-func (s *InternalSignature) GetPublicKeyHash() []byte { return nil }
+func (s *SystemSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns nil.
-func (s *InternalSignature) GetSignature() []byte { return nil }
+func (s *SystemSignature) GetSignature() []byte { return nil }
 
 // GetTransactionHash returns TransactionHash.
-func (s *InternalSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+func (s *SystemSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
 
 // Hash returns the hash of the signature.
-func (s *InternalSignature) Hash() []byte { return signatureHash(s) }
+func (s *SystemSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
-func (s *InternalSignature) Metadata() Signature {
+func (s *SystemSignature) Metadata() Signature {
 	r := s.Copy()                  // Copy the struct
 	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
 // InitiatorHash returns the network account ID.
-func (s *InternalSignature) Initiator() (hash.Hasher, error) {
+func (s *SystemSignature) Initiator() (hash.Hasher, error) {
 	if s.Network == nil {
 		return nil, ErrCannotInitiate
 	}
@@ -816,12 +816,12 @@ func (s *InternalSignature) Initiator() (hash.Hasher, error) {
 }
 
 // GetVote returns how the signer votes on a particular transaction
-func (s *InternalSignature) GetVote() VoteType {
+func (s *SystemSignature) GetVote() VoteType {
 	return VoteTypeAccept
 }
 
 // Verify returns true.
-func (s *InternalSignature) Verify(hash []byte) bool {
+func (s *SystemSignature) Verify(hash []byte) bool {
 	return true
 }
 

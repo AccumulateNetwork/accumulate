@@ -170,7 +170,7 @@ SyntheticSignature:
       type: hash
       optional: true
 
-InternalSignature:
+SystemSignature:
   union: { type: signature }
   description: is used when executing transactions internally
   fields:

@@ -203,10 +203,14 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateToken), nil
 	case TransactionTypeCreateTokenAccount:
 		return new(CreateTokenAccount), nil
-	case TransactionTypeInternalGenesis:
-		return new(InternalGenesis), nil
+	case TransactionTypeDirectoryAnchor:
+		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
+	case TransactionTypeMirrorSystemRecords:
+		return new(MirrorSystemRecords), nil
+	case TransactionTypePartitionAnchor:
+		return new(PartitionAnchor), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
@@ -215,8 +219,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
-	case TransactionTypeSyntheticAnchor:
-		return new(SyntheticAnchor), nil
 	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
 	case TransactionTypeSyntheticCreateIdentity:
@@ -227,10 +229,10 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticForwardTransaction:
 		return new(SyntheticForwardTransaction), nil
-	case TransactionTypeSyntheticMirror:
-		return new(SyntheticMirror), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeSystemGenesis:
+		return new(SystemGenesis), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -281,11 +283,17 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *CreateTokenAccount:
 		b, ok := b.(*CreateTokenAccount)
 		return ok && a.Equal(b)
-	case *InternalGenesis:
-		b, ok := b.(*InternalGenesis)
+	case *DirectoryAnchor:
+		b, ok := b.(*DirectoryAnchor)
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
+		return ok && a.Equal(b)
+	case *MirrorSystemRecords:
+		b, ok := b.(*MirrorSystemRecords)
+		return ok && a.Equal(b)
+	case *PartitionAnchor:
+		b, ok := b.(*PartitionAnchor)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)
@@ -298,9 +306,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SendTokens:
 		b, ok := b.(*SendTokens)
-		return ok && a.Equal(b)
-	case *SyntheticAnchor:
-		b, ok := b.(*SyntheticAnchor)
 		return ok && a.Equal(b)
 	case *SyntheticBurnTokens:
 		b, ok := b.(*SyntheticBurnTokens)
@@ -317,11 +322,11 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *SyntheticForwardTransaction:
 		b, ok := b.(*SyntheticForwardTransaction)
 		return ok && a.Equal(b)
-	case *SyntheticMirror:
-		b, ok := b.(*SyntheticMirror)
-		return ok && a.Equal(b)
 	case *SyntheticWriteData:
 		b, ok := b.(*SyntheticWriteData)
+		return ok && a.Equal(b)
+	case *SystemGenesis:
+		b, ok := b.(*SystemGenesis)
 		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		b, ok := b.(*UpdateAccountAuth)
@@ -687,8 +692,6 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ETHSignature), nil
 	case SignatureTypeForwarded:
 		return new(ForwardedSignature), nil
-	case SignatureTypeInternal:
-		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
@@ -697,6 +700,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ReceiptSignature), nil
 	case SignatureTypeSynthetic:
 		return new(SyntheticSignature), nil
+	case SignatureTypeSystem:
+		return new(SystemSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
@@ -723,9 +728,6 @@ func EqualSignature(a, b Signature) bool {
 	case *ForwardedSignature:
 		b, ok := b.(*ForwardedSignature)
 		return ok && a.Equal(b)
-	case *InternalSignature:
-		b, ok := b.(*InternalSignature)
-		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
 		b, ok := b.(*LegacyED25519Signature)
 		return ok && a.Equal(b)
@@ -737,6 +739,9 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	case *SyntheticSignature:
 		b, ok := b.(*SyntheticSignature)
+		return ok && a.Equal(b)
+	case *SystemSignature:
+		b, ok := b.(*SystemSignature)
 		return ok && a.Equal(b)
 	default:
 		return false
