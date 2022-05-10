@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"sync"
 
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
@@ -242,13 +241,8 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac := protocol.CreateTokenAccount{}
 	accstate := new(protocol.AccountStateProof)
 	if !u.LocalTo(accountUrl) && !accountUrl.Equal(protocol.AcmeUrl()) {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			accstate, err = GetAccountStateProof(u, accountUrl)
-		}()
-		wg.Wait()
+
+		accstate, err = GetAccountStateProof(u, accountUrl)
 		if accstate.Receipt == nil || err != nil {
 			return "", fmt.Errorf("unable to prove account state: %x", err)
 		}
