@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"strconv"
@@ -18,7 +17,6 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -159,95 +157,42 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
-func resolveKeyTypeAndHash(pubKey []byte) (protocol.SignatureType, []byte, error) {
-	sig, err := GetWallet().Get(BucketSigType, pubKey)
-	switch {
-	case err == nil:
-		// Ok
-
-	case errors.Is(err, db.ErrNotFound),
-		errors.Is(err, db.ErrNoBucket):
-		// Default to legacy ED25519
-		hash := sha256.Sum256(pubKey)
-		return protocol.SignatureTypeLegacyED25519, hash[:], nil
-
-	default:
-		return 0, nil, err
-	}
-
-	t, _ := common.BytesUint64(sig)
-	var sigType protocol.SignatureType
-	if !sigType.SetEnumValue(t) {
-		return 0, nil, fmt.Errorf("unknown signature type %d", t)
-	}
-
-	switch sigType {
-	case protocol.SignatureTypeLegacyED25519,
-		protocol.SignatureTypeED25519:
-		hash := sha256.Sum256(pubKey)
-		return sigType, hash[:], nil
-
-	case protocol.SignatureTypeRCD1:
-		hash := protocol.GetRCDHashFromPublicKey(pubKey, 1)
-		return sigType, hash, nil
-	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
-		hash := protocol.BTCHash(pubKey)
-		return sigType, hash[:], nil
-	case protocol.SignatureTypeETH:
-		hash := protocol.ETHhash(pubKey)
-		return sigType, hash[:], nil
-	default:
-		return 0, nil, fmt.Errorf("unsupported signature type %v", sigType)
-	}
-}
-
-func resolvePrivateKey(s string) ([]byte, error) {
-	pub, priv, err := parseKey(s)
+func resolvePrivateKey(s string) (*Key, error) {
+	k, err := parseKey(s)
 	if err != nil {
 		return nil, err
 	}
 
-	if priv != nil {
-		return priv, nil
+	if k.PrivateKey != nil {
+		return k, nil
 	}
 
-	return LookupByPubKey(pub)
+	return LookupByPubKey(k.PublicKey)
 }
 
-func resolvePublicKey(s string) (pubKey, keyHash []byte, sigType protocol.SignatureType, err error) {
-	pub, _, err := parseKey(s)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	sigType, keyHash, err = resolveKeyTypeAndHash(pub)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	return pub, keyHash, sigType, nil
+func resolvePublicKey(s string) (*Key, error) {
+	return parseKey(s)
 }
 
-func parseKey(s string) (pubKey, privKey []byte, err error) {
-	privKey, err = hex.DecodeString(s)
+func parseKey(s string) (*Key, error) {
+	privKey, err := hex.DecodeString(s)
 	if err == nil && len(privKey) == 64 {
-		return privKey[32:], privKey, nil
+		return &Key{PrivateKey: privKey, PublicKey: privKey[32:], Type: protocol.SignatureTypeED25519}, nil
 	}
 
-	pubKey, err = pubKeyFromString(s)
+	k, err := pubKeyFromString(s)
 	if err == nil {
-		return pubKey, nil, nil
+		return k, nil
 	}
 
-	privKey, err = LookupByLabel(s)
+	k, err = LookupByLabel(s)
 	if err == nil {
-		// Assume ED25519
-		return privKey[32:], privKey, nil
+		return k, nil
 	}
 
 	b, err := ioutil.ReadFile(s)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
+		return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
 	}
 
 	var pvkey privval.FilePVKey
@@ -259,13 +204,14 @@ func parseKey(s string) (pubKey, privKey []byte, err error) {
 		if pvkey.PrivKey != nil {
 			priv = pvkey.PrivKey.Bytes()
 		}
-		return pub, priv, nil
+		// TODO Check the key type
+		return &Key{PrivateKey: pub, PublicKey: priv, Type: protocol.SignatureTypeED25519}, nil
 	}
 
-	return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
+	return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
 }
 
-func pubKeyFromString(s string) ([]byte, error) {
+func pubKeyFromString(s string) (*Key, error) {
 	var pubKey types.Bytes32
 	if len(s) != 64 {
 		return nil, fmt.Errorf("invalid public key or wallet key name")
@@ -280,10 +226,10 @@ func pubKeyFromString(s string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid public key")
 	}
 
-	return pubKey[:], nil
+	return &Key{PublicKey: pubKey[:], Type: protocol.SignatureTypeED25519}, nil
 }
 
-func LookupByLiteTokenUrl(lite string) ([]byte, error) {
+func LookupByLiteTokenUrl(lite string) (*Key, error) {
 	liteKey, isLite := LabelForLiteTokenAccount(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite account %s", liteKey)
@@ -297,7 +243,7 @@ func LookupByLiteTokenUrl(lite string) ([]byte, error) {
 	return LookupByLabel(string(label))
 }
 
-func LookupByLiteIdentityUrl(lite string) ([]byte, error) {
+func LookupByLiteIdentityUrl(lite string) (*Key, error) {
 	liteKey, isLite := LabelForLiteIdentity(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite identity %s", liteKey)
@@ -311,14 +257,9 @@ func LookupByLiteIdentityUrl(lite string) ([]byte, error) {
 	return LookupByLabel(string(label))
 }
 
-func LookupByLabel(label string) ([]byte, error) {
-	label, _ = LabelForLiteTokenAccount(label)
-
-	pubKey, err := GetWallet().Get(BucketLabel, []byte(label))
-	if err != nil {
-		return nil, fmt.Errorf("valid key not found for %s", label)
-	}
-	return LookupByPubKey(pubKey)
+func LookupByLabel(label string) (*Key, error) {
+	k := new(Key)
+	return k, k.LoadByLabel(label)
 }
 
 // LabelForLiteTokenAccount returns the identity of the token account if label
@@ -355,8 +296,9 @@ func LabelForLiteIdentity(label string) (string, bool) {
 	return u.Hostname(), true
 }
 
-func LookupByPubKey(pubKey []byte) ([]byte, error) {
-	return GetWallet().Get(BucketKeys, pubKey)
+func LookupByPubKey(pubKey []byte) (*Key, error) {
+	k := new(Key)
+	return k, k.LoadByPublicKey(pubKey)
 }
 
 func GenerateKey(label string) (string, error) {
@@ -445,22 +387,11 @@ func GenerateKey(label string) (string, error) {
 		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
 
-	err = GetWallet().Put(BucketKeys, pubKey, privKey)
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketLabel, []byte(label), pubKey)
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketLite, []byte(liteLabel), []byte(label))
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketSigType, pubKey, common.Uint64Bytes(sigtype.GetEnumValue()))
+	k := new(Key)
+	k.PrivateKey = privKey
+	k.PublicKey = pubKey
+	k.Type = sigtype
+	err = k.Save(label, liteLabel)
 	if err != nil {
 		return "", err
 	}
@@ -623,40 +554,31 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 }
 
 func ExportKey(label string) (string, error) {
-	pk, err := LookupByLabel(label)
-	var sigType protocol.SignatureType
+	k, err := LookupByLabel(label)
 	if err != nil {
-		pubk, err := pubKeyFromString(label)
+		k, err := pubKeyFromString(label)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
-		pk, err = LookupByPubKey(pubk)
+		k, err = LookupByPubKey(k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
-		}
-		_, err = FindLabelFromPubKey(pubk)
-		if err != nil {
-			return "", fmt.Errorf("no private key found for key name %s", label)
-		}
-		sigType, _, err = resolveKeyTypeAndHash(pubk)
-		if err != nil {
-			return "", fmt.Errorf("no key type found")
 		}
 	}
 
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PrivateKey = pk[:32]
-		a.PublicKey = pk[32:]
-		a.KeyType = sigType
+		a.PrivateKey = k.PrivateKey
+		a.PublicKey = k.PublicKey
+		a.KeyType = k.Type
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s\n", string(dump)), nil
 	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, pk[:32], pk[32:], sigType), nil
+		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.Type), nil
 	}
 }
 
@@ -843,13 +765,12 @@ func UpdateKey(args []string) (string, error) {
 		return "", err
 	}
 
-	newPubKey, _, _, err := resolvePublicKey(args[0])
+	k, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
 
-	newPubKeyHash := sha256.Sum256(newPubKey)
 	txn := new(protocol.UpdateKey)
-	txn.NewKeyHash = newPubKeyHash[:]
+	txn.NewKeyHash = k.PublicKeyHash()
 	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }

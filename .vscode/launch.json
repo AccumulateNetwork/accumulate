@@ -118,7 +118,7 @@
       "program": "${workspaceFolder}/tools/test/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
-        "-X", "-v=1,-b=1,--reset,--debug", "play",
+        "-X", "-v=1,-b=1,--reset", "play",
         "${workspaceFolder}/playbooks/validate/01-lite-token.play",
         "${workspaceFolder}/playbooks/validate/02-identity.play",
         "${workspaceFolder}/playbooks/validate/03-lite-data.play",
@@ -144,7 +144,7 @@
         "account_auth_operations.yml",
         "accounts.yml",
         "general.yml",
-        "internal.yml",
+        "system.yml",
         "key_page_operations.yml",
         "query.yml",
         "signatures.yml",

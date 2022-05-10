@@ -17,7 +17,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 	// Initialize
 	sim := simulator.New(tt, 1)
-	sim.InitChain()
+	sim.InitFromGenesis()
 	x := sim.Subnet(sim.Subnets[0].ID)
 	exec := x.Executor
 	t := NewBatchTest(tt, x.Database)

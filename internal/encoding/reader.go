@@ -29,8 +29,8 @@ type Reader struct {
 }
 
 func NewReader(r io.Reader) *Reader {
-	if r, ok := r.(bytesReader); ok {
-		return &Reader{r: r}
+	if br, ok := r.(bytesReader); ok {
+		return &Reader{r: br}
 	} else {
 		return &Reader{r: bufio.NewReader(r)}
 	}
@@ -73,6 +73,10 @@ func (r *Reader) readUint(field uint) (uint64, bool) {
 func (r *Reader) readRaw(field uint, n int) ([]byte, bool) {
 	if r.err != nil {
 		return nil, false
+	}
+
+	if n == 0 {
+		return nil, true
 	}
 
 	v := make([]byte, n)

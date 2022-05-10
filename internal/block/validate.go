@@ -80,7 +80,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	case txnType.IsUser():
 		err = nil
 	case txnType.IsSynthetic():
-		err = validateSyntheticEnvelope(&x.Network, batch, delivery)
+		err = validateSyntheticTransactionSignatures(delivery.Transaction, delivery.Signatures)
 	case txnType.IsInternal():
 		// TODO Validate internal transactions
 		err = nil
@@ -146,7 +146,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(batch.Begin(false), x.Network.NodeUrl(), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(&x.Network, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 

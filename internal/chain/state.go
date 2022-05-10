@@ -6,6 +6,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -20,13 +21,13 @@ type StateManager struct {
 	OriginUrl *url.URL
 }
 
-func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+func LoadStateManager(net *config.Network, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
 	var signer protocol.Signer
 	err := batch.Account(status.Initiator).GetStateAs(&signer)
 	switch {
 	case err == nil:
 		// Found it
-		return NewStateManager(batch, nodeUrl, principal, transaction, logger), nil
+		return NewStateManager(net, batch, principal, transaction, logger), nil
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
@@ -43,18 +44,18 @@ func LoadStateManager(batch *database.Batch, nodeUrl *url.URL, principal protoco
 		return nil, fmt.Errorf("transaction signer set does not include the initiator")
 	}
 
-	return NewStateManager(batch, nodeUrl, principal, transaction, logger), nil
+	return NewStateManager(net, batch, principal, transaction, logger), nil
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net *config.Network, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
-	m.stateCache = *newStateCache(nodeUrl, transaction.Body.Type(), txid, batch)
+	m.stateCache = *newStateCache(net, transaction.Body.Type(), txid, batch)
 	m.logger.L = logger
 	return m
 }
@@ -105,16 +106,18 @@ func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	})
 }
 
-func (m *StateManager) AddAuthority(account protocol.FullAccount, u *url.URL) error {
-	if m.OriginUrl.LocalTo(u) {
+func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url.URL) error {
+	if m.OriginUrl.LocalTo(authority) {
 		var book *protocol.KeyBook
-		err := m.LoadUrlAs(u, &book)
+		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return fmt.Errorf("invalid key book %q: %v", u, err)
+			return fmt.Errorf("invalid key book %q: %v", authority, err)
 		}
 	}
 
-	account.GetAuth().AddAuthority(u)
+	// TODO Check the proof if the authority is remote
+
+	account.GetAuth().AddAuthority(authority)
 	return nil
 }
 
@@ -134,19 +137,22 @@ func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
 	return nil
 }
 
-func (m *StateManager) SetAuth(account protocol.FullAccount, mainKeyBook, managerKeyBook *url.URL) error {
-	var err error
-	if mainKeyBook == nil {
-		err = m.InheritAuth(account)
-	} else {
-		err = m.AddAuthority(account, mainKeyBook)
-	}
-	if err != nil {
-		return err
+func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.URL) error {
+	switch {
+	case len(authorities) > 0:
+		// If the user specified a list of authorities, use them
+
+	case len(account.GetAuth().Authorities) > 0:
+		// If the account already has an authority, there's nothing to do
+		return nil
+
+	default:
+		// Otherwise, inherit
+		return m.InheritAuth(account)
 	}
 
-	if managerKeyBook != nil {
-		err = m.AddAuthority(account, managerKeyBook)
+	for _, authority := range authorities {
+		err := m.AddAuthority(account, authority)
 		if err != nil {
 			return err
 		}
