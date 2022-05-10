@@ -244,7 +244,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			out += s
 		}
 	case "minorBlock":
-		str := fmt.Sprintf("\n\tMinor block result Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		str := fmt.Sprintf("\n\tMinor block result Start: %d\t Count: %d\t Total blocks: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
 			str += fmt.Sprintln("==========================================================================")
 

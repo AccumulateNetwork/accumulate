@@ -270,13 +270,7 @@ RequestMinorBlocks:
 
 ResponseMinorBlocks:
   fields:
-    - name: Start
-      type: uint
-      keep-empty: true
-    - name: End
-      type: uint
-      keep-empty: true
-    - name: Total
+    - name: TotalBlocks
       type: uint
       keep-empty: true
     - name: Entries

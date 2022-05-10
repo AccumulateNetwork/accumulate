@@ -157,12 +157,10 @@ type ResponseKeyPageIndex struct {
 }
 
 type ResponseMinorBlocks struct {
-	fieldsSet []bool
-	Start     uint64                `json:"start" form:"start" query:"start" validate:"required"`
-	End       uint64                `json:"end" form:"end" query:"end" validate:"required"`
-	Total     uint64                `json:"total" form:"total" query:"total" validate:"required"`
-	Entries   []*ResponseMinorEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
-	extraData []byte
+	fieldsSet   []bool
+	TotalBlocks uint64                `json:"totalBlocks" form:"totalBlocks" query:"totalBlocks" validate:"required"`
+	Entries     []*ResponseMinorEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData   []byte
 }
 
 type ResponseMinorEntry struct {
@@ -460,9 +458,7 @@ func (v *ResponseKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponseMinorBlocks) Copy() *ResponseMinorBlocks {
 	u := new(ResponseMinorBlocks)
 
-	u.Start = v.Start
-	u.End = v.End
-	u.Total = v.Total
+	u.TotalBlocks = v.TotalBlocks
 	u.Entries = make([]*ResponseMinorEntry, len(v.Entries))
 	for i, v := range v.Entries {
 		if v != nil {
@@ -907,13 +903,7 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 }
 
 func (v *ResponseMinorBlocks) Equal(u *ResponseMinorBlocks) bool {
-	if !(v.Start == u.Start) {
-		return false
-	}
-	if !(v.End == u.End) {
-		return false
-	}
-	if !(v.Total == u.Total) {
+	if !(v.TotalBlocks == u.TotalBlocks) {
 		return false
 	}
 	if len(v.Entries) != len(u.Entries) {
@@ -2006,22 +1996,18 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 }
 
 var fieldNames_ResponseMinorBlocks = []string{
-	1: "Start",
-	2: "End",
-	3: "Total",
-	4: "Entries",
+	1: "TotalBlocks",
+	2: "Entries",
 }
 
 func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteUint(1, v.Start)
-	writer.WriteUint(2, v.End)
-	writer.WriteUint(3, v.Total)
+	writer.WriteUint(1, v.TotalBlocks)
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(4, v)
+			writer.WriteValue(2, v)
 		}
 	}
 
@@ -2037,15 +2023,9 @@ func (v *ResponseMinorBlocks) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Start is missing")
+		errs = append(errs, "field TotalBlocks is missing")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field End is missing")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Total is missing")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
@@ -2853,16 +2833,10 @@ func (v *ResponseMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUint(1); ok {
-		v.Start = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.End = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Total = x
+		v.TotalBlocks = x
 	}
 	for {
-		if x := new(ResponseMinorEntry); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(ResponseMinorEntry); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Entries = append(v.Entries, x)
 		} else {
 			break
@@ -3215,14 +3189,10 @@ func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseMinorBlocks) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Start   uint64                                 `json:"start"`
-		End     uint64                                 `json:"end"`
-		Total   uint64                                 `json:"total"`
-		Entries encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
+		TotalBlocks uint64                                 `json:"totalBlocks"`
+		Entries     encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
 	}{}
-	u.Start = v.Start
-	u.End = v.End
-	u.Total = v.Total
+	u.TotalBlocks = v.TotalBlocks
 	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
@@ -3627,21 +3597,15 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseMinorBlocks) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Start   uint64                                 `json:"start"`
-		End     uint64                                 `json:"end"`
-		Total   uint64                                 `json:"total"`
-		Entries encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
+		TotalBlocks uint64                                 `json:"totalBlocks"`
+		Entries     encoding.JsonList[*ResponseMinorEntry] `json:"entries,omitempty"`
 	}{}
-	u.Start = v.Start
-	u.End = v.End
-	u.Total = v.Total
+	u.TotalBlocks = v.TotalBlocks
 	u.Entries = v.Entries
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Start = u.Start
-	v.End = u.End
-	v.Total = u.Total
+	v.TotalBlocks = u.TotalBlocks
 	v.Entries = u.Entries
 	return nil
 }

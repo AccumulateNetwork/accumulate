@@ -976,7 +976,6 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
 					continue
 				}
-				minorEntry.TxCount++
 
 				if req.TxFetchMode <= query.TxFetchModeIds {
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
@@ -984,6 +983,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
+						minorEntry.TxCount++
 						txt := qr.Envelope.Transaction[0].Body.Type()
 						if txt.IsInternal() {
 							internalTxCount++
@@ -994,14 +994,18 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 							synthAnchorCount++
 						}
 					}
+				} else {
+					minorEntry.TxCount++
 				}
 				lastTxid = updIdx.Entry
 			}
 			if minorEntry.TxCount > (internalTxCount + synthAnchorCount) {
 				resp.Entries = append(resp.Entries, minorEntry)
+				resp.TotalBlocks++
 			}
 		} else {
 			resp.Entries = append(resp.Entries, minorEntry)
+			resp.TotalBlocks++
 		}
 	}
 	return &resp, nil
