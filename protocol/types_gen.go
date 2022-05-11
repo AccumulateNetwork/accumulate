@@ -30,6 +30,13 @@ type AccountAuth struct {
 	extraData   []byte
 }
 
+type AccountStateProof struct {
+	fieldsSet []bool
+	State     Account  `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	Proof     *Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData []byte
+}
+
 type AcmeFaucet struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -209,8 +216,9 @@ type CreateTokenAccount struct {
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
-	extraData   []byte
+	Authorities      []*url.URL         `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
+	extraData        []byte
 }
 
 type DataAccount struct {
@@ -1002,6 +1010,21 @@ func (v *AccountAuth) Copy() *AccountAuth {
 
 func (v *AccountAuth) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *AccountStateProof) Copy() *AccountStateProof {
+	u := new(AccountStateProof)
+
+	if v.State != nil {
+		u.State = (v.State).CopyAsInterface().(Account)
+	}
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+
+	return u
+}
+
+func (v *AccountStateProof) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *AcmeFaucet) Copy() *AcmeFaucet {
 	u := new(AcmeFaucet)
 
@@ -1325,6 +1348,9 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 		if v != nil {
 			u.Authorities[i] = (v).Copy()
 		}
+	}
+	if v.TokenIssuerProof != nil {
+		u.TokenIssuerProof = (v.TokenIssuerProof).Copy()
 	}
 
 	return u
@@ -2406,6 +2432,22 @@ func (v *AccountAuth) Equal(u *AccountAuth) bool {
 	return true
 }
 
+func (v *AccountStateProof) Equal(u *AccountStateProof) bool {
+	if !(EqualAccount(v.State, u.State)) {
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
 func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
 	switch {
 	case v.Url == u.Url:
@@ -2823,6 +2865,14 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 		if !((v.Authorities[i]).Equal(u.Authorities[i])) {
 			return false
 		}
+	}
+	switch {
+	case v.TokenIssuerProof == u.TokenIssuerProof:
+		// equal
+	case v.TokenIssuerProof == nil || u.TokenIssuerProof == nil:
+		return false
+	case !((v.TokenIssuerProof).Equal(u.TokenIssuerProof)):
+		return false
 	}
 
 	return true
@@ -4231,6 +4281,54 @@ func (v *AccountAuth) IsValid() error {
 	}
 }
 
+var fieldNames_AccountStateProof = []string{
+	1: "State",
+	2: "Proof",
+}
+
+func (v *AccountStateProof) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.State == nil) {
+		writer.WriteValue(1, v.State)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(2, v.Proof)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccountStateProof)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *AccountStateProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field State is missing")
+	} else if v.State == nil {
+		errs = append(errs, "field State is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_AcmeFaucet = []string{
 	1: "Type",
 	2: "Url",
@@ -5399,6 +5497,7 @@ var fieldNames_CreateTokenAccount = []string{
 	3: "TokenUrl",
 	5: "Scratch",
 	7: "Authorities",
+	8: "TokenIssuerProof",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5419,6 +5518,9 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Authorities {
 			writer.WriteUrl(7, v)
 		}
+	}
+	if !(v.TokenIssuerProof == nil) {
+		writer.WriteValue(8, v.TokenIssuerProof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
@@ -9569,6 +9671,33 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *AccountStateProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccountStateProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, func(b []byte) error {
+		x, err := UnmarshalAccount(b)
+		if err == nil {
+			v.State = x
+		}
+		return err
+	})
+	if x := new(Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AccountStateProof)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *AcmeFaucet) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10260,6 +10389,9 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		} else {
 			break
 		}
+	}
+	if x := new(AccountStateProof); reader.ReadValue(8, x.UnmarshalBinary) {
+		v.TokenIssuerProof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
@@ -12597,6 +12729,16 @@ func (v *AccountAuth) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AccountStateProof) MarshalJSON() ([]byte, error) {
+	u := struct {
+		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
+		Proof *Receipt                            `json:"proof,omitempty"`
+	}{}
+	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
+	u.Proof = v.Proof
+	return json.Marshal(&u)
+}
+
 func (v *AcmeFaucet) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type TransactionType `json:"type"`
@@ -12849,17 +12991,19 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 
 func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        TransactionType             `json:"type"`
-		Url         *url.URL                    `json:"url,omitempty"`
-		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
-		Scratch     bool                        `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		Type             TransactionType             `json:"type"`
+		Url              *url.URL                    `json:"url,omitempty"`
+		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
+		Scratch          bool                        `json:"scratch,omitempty"`
+		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Scratch = v.Scratch
 	u.Authorities = v.Authorities
+	u.TokenIssuerProof = v.TokenIssuerProof
 	return json.Marshal(&u)
 }
 
@@ -13887,6 +14031,22 @@ func (v *AccountAuth) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *AccountStateProof) UnmarshalJSON(data []byte) error {
+	u := struct {
+		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
+		Proof *Receipt                            `json:"proof,omitempty"`
+	}{}
+	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
+	u.Proof = v.Proof
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.State = u.State.Value
+
+	v.Proof = u.Proof
+	return nil
+}
+
 func (v *AcmeFaucet) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type TransactionType `json:"type"`
@@ -14359,17 +14519,19 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 
 func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        TransactionType             `json:"type"`
-		Url         *url.URL                    `json:"url,omitempty"`
-		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
-		Scratch     bool                        `json:"scratch,omitempty"`
-		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		Type             TransactionType             `json:"type"`
+		Url              *url.URL                    `json:"url,omitempty"`
+		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
+		Scratch          bool                        `json:"scratch,omitempty"`
+		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Scratch = v.Scratch
 	u.Authorities = v.Authorities
+	u.TokenIssuerProof = v.TokenIssuerProof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14380,6 +14542,7 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	v.TokenUrl = u.TokenUrl
 	v.Scratch = u.Scratch
 	v.Authorities = u.Authorities
+	v.TokenIssuerProof = u.TokenIssuerProof
 	return nil
 }
 
