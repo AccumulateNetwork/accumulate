@@ -88,12 +88,13 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 			out += fmt.Sprintf("  - Signatures            :\n")
 			out += fmt.Sprintf("    - Signer              : %s (%v)\n", page.Signer.Url, page.Signer.Type)
 			for _, sig := range page.Signatures {
-				if sig.Type().IsSystem() {
+				keysig, ok := sig.(protocol.KeySignature)
+				if !ok || sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
-				} else {
-					out += fmt.Sprintf("      -                   : %x (sig)\n", sig.GetSignature())
-					out += fmt.Sprintf("      -                   : %x (key hash)\n", sig.GetPublicKeyHash())
+					continue
 				}
+				out += fmt.Sprintf("      -                   : %x (sig)\n", keysig.GetSignature())
+				out += fmt.Sprintf("      -                   : %x (key hash)\n", keysig.GetPublicKeyHash())
 			}
 		}
 	}
