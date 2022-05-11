@@ -103,25 +103,6 @@ function success {
     echo
 }
 
-
-NODE_PRIV_VAL="${NODE_ROOT:-~/.accumulate/dn/Node0}/config/priv_validator_key.json"
-
-#spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-NUM_DNNS=$(find ${NODE_ROOT:-~/.accumulate/dn/Node0}/.. -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
-if [ -f "$NODE_PRIV_VAL" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
-   section "Add a new DN validator"
-   declare -g TEST_NODE_WORK_DIR=~/node1
-   accumulated init node tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$TEST_NODE_WORK_DIR/dn" --skip-version-check --no-website
-   accumulated run -n 0 -w "$TEST_NODE_WORK_DIR/dn" &
-   declare -g ACCPID=$!
-   # Get Keys
-   pubkey=$(jq -re .pub_key.value $TEST_NODE_WORK_DIR/dn/Node0/config/priv_validator_key.json)
-   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An )
-   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
-   # Register new validator
-   wait-for cli-tx validator add dn "$NODE_PRIV_VAL" $hexPubKey
-fi
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
@@ -130,6 +111,8 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
 fi
 [ -z "${MNEMONIC}" ] || accumulate --use-unencrypted-wallet key import mnemonic ${MNEMONIC}
 echo
+
+
 
 section "Generate a Lite Token Account"
 accumulate --use-unencrypted-wallet account list 2>&1 | grep -q ACME || accumulate --use-unencrypted-wallet account generate
@@ -442,7 +425,9 @@ BALANCE=$(accumulate --use-unencrypted-wallet -j page get manager/book/1 | jq -r
 [ "$BALANCE" -ge 100000 ] && success || die "manager/book/1 should have 100000 credits but has ${BALANCE}"
 
 section "Create token account with manager"
-wait-for cli-tx account create token keytest keytest-1-0 --authority keytest/book,manager/book keytest/managed-tokens ACME || "Failed to create managed token account"
+TXID=$(cli-tx account create token keytest keytest-1-0 --authority keytest/book,manager/book keytest/managed-tokens ACME) || "Failed to create managed token account"
+accumulate tx sign keytest manager@manager/book $TXID
+wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
@@ -458,7 +443,9 @@ RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | 
 success
 
 section "Add manager to token account"
-wait-for cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book || die "Failed to add the manager"
+TXID=$(cli-tx auth add keytest/managed-tokens keytest-1-0 manager/book) || die "Failed to add the manager"
+accumulate tx sign keytest manager@manager/book $TXID
+wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 2 ] || die "Expected 2 authorities, got $RESULT"
 success
@@ -502,40 +489,3 @@ TXID=$(cli-tx tx create keytest/tokens keytest-2-0 acc://invalid-account 1)
 wait-for-tx $TXID
 BALANCE1=$(accumulate --use-unencrypted-wallet -j account get keytest/tokens | jq -r .data.balance)
 [ $BALANCE -eq $BALANCE1 ] && success || die "Expected $BALANCE, got $BALANCE1"
-
-section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    wait-for cli-tx data write dn/oracle "$NODE_PRIV_VAL" '{"price":501}'
-    RESULT=$(accumulate --use-unencrypted-wallet -j data get dn/oracle)
-    RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
-    [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
-else
-    echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
-    echo
-fi
-
-section "Query votes chain"
-if [ -f "$NODE_PRIV_VAL" ]; then
-    #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
-    RESULT=$(accumulate --use-unencrypted-wallet -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
-    #convert the node address to search for to base64
-    NODE_ADDRESS=$(jq -re .address $NODE_PRIV_VAL | xxd -r -p | base64 )
-    VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
-    FOUND=0
-    for ((i = 0; i < $VOTE_COUNT; i++)); do
-    R2=$(echo "$RESULT" | jq -re .votes[$i].validator.address)
-    if [ "$R2" == "$NODE_ADDRESS" ]; then
-        FOUND=1
-    fi
-    done
-    [ "$FOUND" -eq  1 ] && success || die "No vote record found on DN"
-else
-    echo -e '\033[1;31mCannot verify the votes chain: private validator key not found\033[0m'
-fi
-
-if [ ! -z "${ACCPID}" ]; then
-    section "Shutdown dynamic validator"
-    wait-for cli-tx validator remove dn "$NODE_PRIV_VAL" $hexPubKey
-    kill -9 $ACCPID
-    rm -rf $TEST_NODE_WORK_DIR
-fi

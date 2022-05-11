@@ -48,34 +48,16 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
-		uBook := uAdi.JoinPath(protocol.ValidatorBook)
+		uVal := uAdi.JoinPath(protocol.ValidatorBook)
+		uOper := uAdi.JoinPath(protocol.OperatorBook)
 
 		adi := new(protocol.ADI)
 		adi.Url = uAdi
-		adi.AddAuthority(uBook)
+		adi.AddAuthority(uOper)
 		records = append(records, adi)
 
-		book := new(protocol.KeyBook)
-		book.Url = uBook
-		book.BookType = protocol.BookTypeValidator
-		book.AddAuthority(uBook)
-		book.PageCount = 1
-		records = append(records, book)
-
-		page := new(protocol.KeyPage)
-		page.Url = protocol.FormatKeyPageUrl(uBook, 0)
-
-		page.AcceptThreshold = protocol.GetValidatorsMOfN(len(opts.Validators), protocol.FallbackValidatorThreshold)
-		page.Version = 1
-		records = append(records, page)
-
-		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
-		for i, val := range opts.Validators {
-			spec := new(protocol.KeySpec)
-			kh := sha256.Sum256(val.PubKey.Bytes())
-			spec.PublicKeyHash = kh[:]
-			page.Keys[i] = spec
-		}
+		valBook, valPage := createValidatorBook(uVal, opts.Validators)
+		records = append(records, valBook, valPage)
 
 		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
 		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
@@ -97,7 +79,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
 		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
-		anchors.AddAuthority(uBook)
+		anchors.AddAuthority(uOper)
 		records = append(records, anchors)
 
 		// Create records and directory entries
@@ -124,7 +106,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da := new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Votes)
-		da.AddAuthority(uBook)
+		da.AddAuthority(uOper)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -134,7 +116,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da = new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Evidence)
-		da.AddAuthority(uBook)
+		da.AddAuthority(uOper)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -152,13 +134,16 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			return err
 		}
 		wg.Entry.Data = append(wg.Entry.Data, dat)
-		global.AddAuthority(uBook)
+		global.AddAuthority(uOper)
 		records = append(records, global)
 		urls = append(urls, global.Url)
 		dataRecords = append(dataRecords, DataRecord{global, &wg.Entry})
 
 		switch opts.Network.Type {
 		case config.Directory:
+			operBook, page1 := createDNOperatorBook(opts.Network.NodeUrl(), opts.Validators)
+			records = append(records, operBook, page1)
+
 			oracle := new(protocol.AcmeOracle)
 			oracle.Price = oraclePrice
 			wd := new(protocol.WriteData)
@@ -167,16 +152,17 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				return err
 			}
 			wd.Entry.Data = append(wd.Entry.Data, d)
+
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
-			da.AddAuthority(uBook)
+			da.AddAuthority(uOper)
 
 			records = append(records, da)
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
-			acme.AddAuthority(uBook)
+			acme.AddAuthority(uOper)
 			acme.Url = protocol.AcmeUrl()
 			acme.Precision = 8
 			acme.Symbol = "ACME"
@@ -196,6 +182,9 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			if err := protocol.IsValidAdiUrl(&url.URL{Authority: opts.Network.LocalSubnetID}); err != nil {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
+
+			operBook, page1, page2 := createBVNOperatorBook(opts.Network.NodeUrl(), opts.Validators)
+			records = append(records, operBook, page1, page2)
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
 			if err == nil && subnet == opts.Network.LocalSubnetID {
@@ -249,4 +238,77 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	return batch.BptRoot(), nil
+}
+
+func createValidatorBook(uBook *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
+	book := new(protocol.KeyBook)
+	book.Url = uBook
+	book.BookType = protocol.BookTypeValidator
+	book.AddAuthority(uBook)
+	book.PageCount = 1
+
+	return book, createOperatorPage(uBook, 0, operators, true)
+}
+
+func createDNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
+	book := new(protocol.KeyBook)
+	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.AddAuthority(book.Url)
+	book.PageCount = 1
+
+	return book, createOperatorPage(book.Url, 0, operators, false)
+}
+
+func createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage, *protocol.KeyPage) {
+	book := new(protocol.KeyBook)
+	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.AddAuthority(book.Url)
+	book.PageCount = 2
+
+	page1 := new(protocol.KeyPage)
+	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
+	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
+	page1.Version = 1
+	page1.Keys = make([]*protocol.KeySpec, 1)
+	spec := new(protocol.KeySpec)
+	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
+	page1.Keys[0] = spec
+
+	page2 := createOperatorPage(book.Url, 1, operators, false)
+	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+
+	return book, page1, page2
+}
+
+func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
+	page := new(protocol.KeyPage)
+	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
+	page.Version = 1
+
+	for _, operator := range operators {
+		/* TODO
+		Determine which operators are also validators and which not. Followers should be omitted,
+		but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
+		*/
+		isValidator := true
+		if isValidator || !validatorsOnly {
+			spec := new(protocol.KeySpec)
+			kh := sha256.Sum256(operator.PubKey.Bytes())
+			spec.PublicKeyHash = kh[:]
+			page.Keys = append(page.Keys, spec)
+		}
+	}
+	return page
+}
+
+func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.TransactionType) {
+	page.TransactionBlacklist = new(protocol.AllowedTransactions)
+	for _, txType := range txTypes {
+		bit, ok := txType.AllowedTransactionBit()
+		if !ok {
+			panic(fmt.Errorf("failed to blacklist %v", txType))
+		}
+		page.TransactionBlacklist.Set(bit)
+	}
 }

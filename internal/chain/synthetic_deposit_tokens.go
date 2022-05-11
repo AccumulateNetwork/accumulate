@@ -10,6 +10,8 @@ import (
 
 type SyntheticDepositTokens struct{}
 
+var _ TransactionExecutorCleanup = (*SyntheticDepositTokens)(nil)
+
 func (SyntheticDepositTokens) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
 }
