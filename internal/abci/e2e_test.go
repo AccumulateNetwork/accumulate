@@ -242,7 +242,7 @@ func TestAnchorChain(t *testing.T) {
 		originUrl := protocol.PriceOracleAuthority
 
 		send(newTxn(originUrl).
-			WithSigner(dn.network.OperatorPage(0), 1).
+			WithSigner(dn.network.ValidatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1474,7 +1474,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry.Data = append(wd.Entry.Data, d)
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(n.network.OperatorPage(0), 1).
+			WithSigner(n.network.ValidatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
