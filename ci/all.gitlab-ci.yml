@@ -69,6 +69,9 @@ validate docker:
   - ls -l ${PWD}
   - ls -l ${PWD}/nodes
   - cd nodes
+  - docker-compose up -d tools
+  - ls -l ${PWD}
+  - ls -l ${PWD}/nodes
   - docker-compose up -d
   script:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
