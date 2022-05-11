@@ -65,11 +65,8 @@ validate docker:
   - apk add --no-cache docker-compose
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0
-  - echo ${PWD}
-  - ls -l ${PWD}
-  - ls -l ${PWD}/nodes
   - cd nodes
-  - docker-compose up -d tools
+  - docker-compose up tools
   - ls -l ${PWD}
   - ls -l ${PWD}/nodes
   - docker-compose up -d

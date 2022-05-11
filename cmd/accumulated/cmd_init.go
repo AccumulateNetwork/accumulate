@@ -591,6 +591,7 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
 	svc.Environment = map[string]*string{"ACC_API": &api}
+	svc.Extras["profiles"] = [...]string{"init"}
 
 	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
