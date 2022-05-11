@@ -244,7 +244,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	case "pending":
 		switch len(fragment) {
 		case 1:
-			txIds, err := indexing.PendingTransactions(batch, u).Get()
+			txIds, err := batch.Account(u).Pending()
 			if err != nil {
 				return nil, nil, err
 			}
@@ -869,7 +869,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
 
-		auth, err := getAccountAuth(batch, account)
+		auth, err := m.GetAccountAuthoritySet(batch, account)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}

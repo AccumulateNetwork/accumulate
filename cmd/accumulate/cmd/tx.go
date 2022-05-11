@@ -327,6 +327,9 @@ func CreateTX(sender string, args []string) (string, error) {
 	}
 
 	args, signer, err := prepareSigner(u, args)
+	if err != nil {
+		return "", err
+	}
 
 	if len(args) < 2 {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)

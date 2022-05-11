@@ -37,7 +37,7 @@ func TestEndToEndSuite(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0, false)
 		nodes := RunTestNet(s.T(), subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -46,7 +46,7 @@ func TestEndToEndSuite(t *testing.T) {
 }
 
 func TestCreateLiteAccount(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -66,7 +66,7 @@ func TestCreateLiteAccount(t *testing.T) {
 
 func TestEvilNode(t *testing.T) {
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	//tell the TestNet that we have an evil node in the midst
 	dns := subnets[0]
 	bvn := subnets[1]
@@ -148,7 +148,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 }
 
 func TestFaucet(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -171,7 +171,7 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestAnchorChain(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 	dn := nodes[subnets[0]][0]
@@ -242,7 +242,7 @@ func TestAnchorChain(t *testing.T) {
 		originUrl := protocol.PriceOracleAuthority
 
 		send(newTxn(originUrl).
-			WithSigner(dn.network.ValidatorPage(0), 1).
+			WithSigner(dn.network.OperatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -259,7 +259,7 @@ func TestAnchorChain(t *testing.T) {
 	var ledgerState *protocol.InternalLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, expected, ledgerState.ActiveOracle)
+	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
 
 	time.Sleep(2 * time.Second)
 	// Get the anchor chain manager for BVN
@@ -282,7 +282,7 @@ func TestAnchorChain(t *testing.T) {
 }
 
 func TestCreateADI(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -322,7 +322,7 @@ func TestCreateADI(t *testing.T) {
 func TestCreateADIWithoutKeybook(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
@@ -365,7 +365,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -430,9 +430,8 @@ func TestCreateLiteDataAccount(t *testing.T) {
 }
 
 func TestCreateAdiDataAccount(t *testing.T) {
-
-	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	t.Run("Data Account with Default Key Book and no Manager Key Book", func(t *testing.T) {
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -457,8 +456,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 	})
 
-	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	t.Run("Data Account with Custom Key Book and Manager Key Book Url", func(t *testing.T) {
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -469,17 +468,25 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/foo/book1/1"), 1e9))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/mgr/book1/2"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
 			cda.Url = n.ParseUrl("FooBar/oof")
-			cda.KeyBookUrl = n.ParseUrl("acc://FooBar/foo/book1")
-			cda.ManagerKeyBookUrl = n.ParseUrl("acc://FooBar/mgr/book1")
+			cda.Authorities = []*url.URL{
+				n.ParseUrl("acc://FooBar/foo/book1"),
+				n.ParseUrl("acc://FooBar/mgr/book1"),
+			}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(cda).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				WithSigner(url.MustParse("FooBar/foo/book1/1"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
+				WithSigner(url.MustParse("FooBar/mgr/book1/2"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
 				Build())
 		})
 
@@ -493,7 +500,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account data entry", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -561,7 +568,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
@@ -593,39 +600,69 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Custom Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
 
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "FooBar/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/book1/1"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.KeyBookUrl = n.ParseUrl("foo/book1")
+			tac.Authorities = []*url.URL{n.ParseUrl("FooBar/book1")}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				WithSigner(url.MustParse("FooBar/book1/1"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
+				Build())
+		})
+	})
+
+	t.Run("Remote Key Book", func(t *testing.T) {
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+		n := nodes[subnets[1]][0]
+
+		aliceKey, bobKey := generateKey(), generateKey()
+		batch := n.db.Begin(true)
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+		require.NoError(t, batch.Commit())
+
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			tac := new(protocol.CreateTokenAccount)
+			tac.Url = n.ParseUrl("alice/tokens")
+			tac.TokenUrl = protocol.AcmeUrl()
+			tac.Authorities = []*url.URL{n.ParseUrl("bob/book0")}
+			send(newTxn("alice").
+				WithSigner(url.MustParse("alice/book0/1"), 1).
+				WithBody(tac).
+				Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+				WithSigner(url.MustParse("bob/book0/1"), 1).
+				Sign(protocol.SignatureTypeED25519, bobKey).
 				Build())
 		})
 
-		u := n.ParseUrl("foo/book1")
+		// Wait for the remote signature to settle
+		time.Sleep(time.Second)
 
-		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		r := n.GetTokenAccount("alice/tokens")
+		require.Equal(t, "alice/tokens", r.Url.ShortString())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
-		require.Equal(t, u.String(), r.KeyBook().String())
+		require.Equal(t, "bob/book0", r.KeyBook().ShortString())
 	})
 }
 
 func TestLiteAccountTx(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -658,7 +695,7 @@ func TestLiteAccountTx(t *testing.T) {
 }
 
 func TestAdiAccountTx(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -686,7 +723,7 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -723,7 +760,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 }
 
 func TestAddCreditsBurnAcme(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -789,7 +826,7 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 }
 
 func TestCreateKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -827,7 +864,7 @@ func TestCreateKeyPage(t *testing.T) {
 }
 
 func TestCreateKeyBook(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -860,7 +897,7 @@ func TestCreateKeyBook(t *testing.T) {
 }
 
 func TestAddKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -893,7 +930,7 @@ func TestAddKeyPage(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -927,7 +964,7 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestUpdateKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -963,7 +1000,7 @@ func TestUpdateKeyPage(t *testing.T) {
 }
 
 func TestUpdateKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1009,7 +1046,7 @@ func TestUpdateKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1056,7 +1093,7 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestSignatorHeight(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1117,7 +1154,7 @@ func TestSignatorHeight(t *testing.T) {
 }
 
 func TestCreateToken(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1143,7 +1180,7 @@ func TestCreateToken(t *testing.T) {
 }
 
 func TestIssueTokens(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1189,7 +1226,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
@@ -1354,7 +1391,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	t.Skip("TODO Fix - generate a receipt")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
 
@@ -1419,9 +1456,9 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestUpdateValidators(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	n := nodes[subnets[0]][0]
 
 	netUrl := n.network.NodeUrl()
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
@@ -1437,7 +1474,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry.Data = append(wd.Entry.Data, d)
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(validators, 1).
+			WithSigner(n.network.OperatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1538,9 +1575,85 @@ func TestUpdateValidators(t *testing.T) {
 
 }
 
+func TestUpdateOperators(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+	bvn := nodes[subnets[1]][0]
+
+	page := bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
+
+	operators := protocol.FormatKeyPageUrl(dn.network.OperatorBook(), 0)
+	opKeyAdd := generateKey()
+	addKeyHash := sha256.Sum256(opKeyAdd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.KeyHash = addKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second * 1)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, addKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	opKeyUpd := generateKey()
+	updKeyHash := sha256.Sum256(opKeyUpd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.UpdateKeyOperation)
+		op.OldEntry.KeyHash = addKeyHash[:]
+		op.NewEntry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 2).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, updKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.RemoveKeyOperation)
+		op.Entry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 3).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
+
+}
+
 func TestMultisig(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
 	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
@@ -1622,7 +1735,7 @@ func TestMultisig(t *testing.T) {
 
 func TestAccountAuth(t *testing.T) {
 	check := CheckError{H: NewDefaultErrorHandler(t)}
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 

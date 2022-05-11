@@ -152,6 +152,8 @@ type Union struct {
 type Field struct {
 	// Name is the name of the field.
 	Name string
+	// Number overrides the default field number.
+	Number uint `yaml:"field-number"`
 	// Description is the description of the field.
 	Description string
 	// Type is the type of the field.

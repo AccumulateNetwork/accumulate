@@ -7,7 +7,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -50,14 +51,14 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 
 	if transaction.Body.Type().IsSynthetic() {
 		// Verify that the synthetic transaction has all the right signatures
-		err = processSyntheticTransaction(&x.Network, batch, transaction, status)
+		err = processSyntheticTransaction(batch, transaction, status)
 		if err != nil {
 			return x.recordFailedTransaction(batch, transaction, err)
 		}
 	}
 
 	// Set up the state manager
-	st, err := chain.LoadStateManager(batch.Begin(true), x.Network.NodeUrl(), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
+	st, err := chain.LoadStateManager(&x.Network, batch.Begin(true), principal, transaction, status, x.logger.With("operation", "ProcessTransaction"))
 	if err != nil {
 		return x.recordFailedTransaction(batch, transaction, err)
 	}
@@ -88,7 +89,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 }
 
 func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
-	val, ok := getValidator[PrincipalValidator](x, transaction.Body.Type())
+	val, ok := getValidator[chain.PrincipalValidator](x, transaction.Body.Type())
 	if ok {
 		allow, fallback := val.AllowMissingPrincipal(transaction)
 		if !fallback {
@@ -126,7 +127,7 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protoc
 	case transaction.Body.Type().IsUser():
 		return x.userTransactionIsReady(batch, transaction, status)
 	case transaction.Body.Type().IsSynthetic():
-		return synthTransactionIsReady(&x.Network, batch, transaction, status)
+		return x.synthTransactionIsReady(batch, transaction, status)
 	default:
 		return true, nil
 	}
@@ -135,13 +136,12 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protoc
 func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// UpdateKey transactions are always M=1 and always require a signature from
 	// the initiator
-	txnObj := batch.Transaction(transaction.GetHash())
 	if transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
 		if status.Initiator == nil {
 			return false, fmt.Errorf("missing initiator")
 		}
 
-		initSigs, err := txnObj.ReadSignatures(status.Initiator)
+		initSigs, err := batch.Transaction(transaction.GetHash()).ReadSignatures(status.Initiator)
 		if err != nil {
 			return false, fmt.Errorf("load initiator signatures: %w", err)
 		}
@@ -154,9 +154,9 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := getValidator[SignerValidator](x, transaction.Body.Type())
+	val, ok := getValidator[chain.SignerValidator](x, transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
+		ready, fallback, err := val.TransactionIsReady(x, batch, transaction, status)
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -172,13 +172,12 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Get the principal's account auth
-	auth, err := getAccountAuth(batch, principal)
+	auth, err := x.GetAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return false, fmt.Errorf("unable to load authority of %v: %w", transaction.Header.Principal, err)
 	}
 
 	// For each authority
-outer:
 	for _, entry := range auth.Authorities {
 		// Do not check signers for disabled authorities
 		if entry.Disabled {
@@ -186,26 +185,37 @@ outer:
 		}
 
 		// Check if any signer has reached its threshold
-		for _, signer := range status.FindSigners(entry.Url) {
-			ok, err := signerIsSatisfied(txnObj, status, signer)
-			if err != nil {
-				return false, errors.Wrap(errors.StatusUnknown, err)
-			}
-			if ok {
-				continue outer
-			}
+		ok, err := x.AuthorityIsSatisfied(batch, transaction, status, entry.Url)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
-
-		return false, nil
+		if !ok {
+			return false, nil
+		}
 	}
 
 	// If every authority is disabled, at least one signature is required
 	return len(status.Signers) > 0, nil
 }
 
-func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
+func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
+	// Check if any signer has reached its threshold
+	for _, signer := range status.FindSigners(authUrl) {
+		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if ok {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
 	// Load the signature set
-	signatures, err := txn.ReadSignaturesForSigner(signer)
+	signatures, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
 	if err != nil {
 		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 	}
@@ -229,7 +239,7 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 		// Are any of the pages of the owner satisfied?
 		var ok bool
 		for _, signer := range status.FindSigners(entry.Owner) {
-			ok, err = signerIsSatisfied(txn, status, signer)
+			ok, err = x.SignerIsSatisfied(batch, transaction, status, signer)
 			if err != nil {
 				return false, errors.Wrap(errors.StatusUnknown, err)
 			}
@@ -250,12 +260,20 @@ func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionSt
 	return false, nil
 }
 
-func synthTransactionIsReady(net *config.Network, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
+	// Anchors cannot be pending
 	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
 		return true, nil
 	}
 
-	receipt, sourceNet, err := assembleSynthReceipt(batch, transaction, status)
+	// Load all of the signatures
+	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	if err != nil {
+		return false, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Build a receipt from the signatures
+	receipt, sourceNet, err := assembleSynthReceipt(transaction, signatures)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -265,7 +283,7 @@ func synthTransactionIsReady(net *config.Network, batch *database.Batch, transac
 
 	// Determine which anchor chain to load
 	var subnet string
-	if net.Type != config.Directory {
+	if x.Network.Type != config.Directory {
 		subnet = protocol.Directory
 	} else {
 		var ok bool
@@ -276,7 +294,7 @@ func synthTransactionIsReady(net *config.Network, batch *database.Batch, transac
 	}
 
 	// Load the anchor chain
-	anchorChain, err := batch.Account(net.AnchorPool()).ReadChain(protocol.AnchorChain(subnet))
+	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.AnchorChain(subnet))
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", subnet, err)
 	}
@@ -285,12 +303,51 @@ func synthTransactionIsReady(net *config.Network, batch *database.Batch, transac
 	_, err = anchorChain.HeightOf(receipt.Result)
 	switch {
 	case err == nil:
-		return true, nil
+		// Ready
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
 		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Result[:4], subnet, err)
 	}
+
+	// Get the synthetic signature
+	synthSig, ok := signatures[0].(*protocol.SyntheticSignature)
+	if !ok {
+		return false, errors.Format(errors.StatusInternalError, "missing synthetic signature")
+	}
+
+	// Load the ledger
+	var ledger *protocol.SyntheticLedger
+	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	if err != nil {
+		return false, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
+	}
+
+	// Verify the sequence number
+	subnetLedger := ledger.Subnet(synthSig.SourceNetwork)
+	if subnetLedger.Received+1 != synthSig.SequenceNumber {
+		// TODO Out of sequence synthetic transactions should be marked pending
+		// and the source BVN should be queried to retrieve the missing
+		// synthetic transactions
+
+		x.logger.Error("Out of sequence synthetic transaction",
+			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
+			"seq-got", synthSig.SequenceNumber,
+			"seq-want", subnetLedger.Received+1,
+			"source", synthSig.SourceNetwork,
+			"destination", synthSig.DestinationNetwork)
+	}
+
+	// Update the received number
+	if synthSig.SequenceNumber > subnetLedger.Received {
+		subnetLedger.Received = synthSig.SequenceNumber
+		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
+		}
+	}
+
+	return true, nil
 }
 
 func recordTransaction(batch *database.Batch, transaction *protocol.Transaction, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
@@ -328,8 +385,7 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 
 	// Add the user transaction to the principal's list of pending transactions
 	if transaction.Body.Type().IsUser() {
-		pending := indexing.PendingTransactions(batch, transaction.Header.Principal)
-		err = pending.Add(*(*[32]byte)(transaction.GetHash()))
+		err = batch.Account(transaction.Header.Principal).AddPending(*(*[32]byte)(transaction.GetHash()))
 		if err != nil {
 			return nil, nil, fmt.Errorf("store pending list: %w", err)
 		}
@@ -337,8 +393,14 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 		return status, new(chain.ProcessTransactionState), nil
 	}
 
+	// Load all of the signatures
+	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
 	// Add the synthetic transaction to the anchor's list of pending transactions
-	receipt, _, err := assembleSynthReceipt(batch, transaction, status)
+	receipt, _, err := assembleSynthReceipt(transaction, signatures)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -374,8 +436,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	pending := indexing.PendingTransactions(batch, transaction.Header.Principal)
-	err = pending.Remove(*(*[32]byte)(transaction.GetHash()))
+	err = batch.Account(transaction.Header.Principal).RemovePending(*(*[32]byte)(transaction.GetHash()))
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -425,7 +486,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *p
 	}
 
 	// Execute the post-failure hook if the transaction executor defines one
-	if val, ok := getValidator[TransactionExecutorCleanup](x, transaction.Body.Type()); ok {
+	if val, ok := getValidator[chain.TransactionExecutorCleanup](x, transaction.Body.Type()); ok {
 		err = val.DidFail(state, transaction)
 		if err != nil {
 			return nil, nil, err
@@ -433,8 +494,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *p
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	pending := indexing.PendingTransactions(batch, transaction.Header.Principal)
-	err = pending.Remove(*(*[32]byte)(transaction.GetHash()))
+	err = batch.Account(transaction.Header.Principal).RemovePending(*(*[32]byte)(transaction.GetHash()))
 	if err != nil {
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}

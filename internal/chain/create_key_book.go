@@ -3,12 +3,34 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type CreateKeyBook struct{}
 
+var _ SignerValidator = (*CreateKeyBook)(nil)
+
 func (CreateKeyBook) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyBook }
+
+func (CreateKeyBook) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateKeyBook)
+	if !ok {
+		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), transaction.Body)
+	}
+
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, location, signer)
+}
+
+func (CreateKeyBook) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateKeyBook)
+	if !ok {
+		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), transaction.Body)
+	}
+
+	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+}
 
 func (CreateKeyBook) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateKeyBook{}).Validate(st, tx)
@@ -33,11 +55,9 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	book.AddAuthority(body.Url)
 	book.PageCount = 1
 
-	if body.Manager != nil {
-		err := st.AddAuthority(book, body.Manager)
-		if err != nil {
-			return nil, err
-		}
+	err := st.SetAuth(book, body.Authorities)
+	if err != nil {
+		return nil, err
 	}
 
 	page := new(protocol.KeyPage)
@@ -48,7 +68,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	key.PublicKeyHash = body.PublicKeyHash
 	page.Keys = []*protocol.KeySpec{key}
 
-	err := st.Create(book, page)
+	err = st.Create(book, page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %v: %w", book.Url, err)
 	}

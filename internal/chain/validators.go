@@ -16,7 +16,11 @@ type AddValidator struct{ checkValidatorSigner }
 type RemoveValidator struct{ checkValidatorSigner }
 type UpdateValidatorKey struct{ checkValidatorSigner }
 
-func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+var _ SignerValidator = (*AddValidator)(nil)
+var _ SignerValidator = (*RemoveValidator)(nil)
+var _ SignerValidator = (*UpdateValidatorKey)(nil)
+
+func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, _ *url.URL, signer protocol.Signer) (fallback bool, err error) {
 	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
@@ -30,7 +34,7 @@ func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transactio
 	return true, nil
 }
 
-func (checkValidatorSigner) TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (checkValidatorSigner) TransactionIsReady(AuthDelegate, *database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	// Do not override the ready check
 	return false, true, nil
 }
@@ -83,7 +87,7 @@ func addValidator(st *StateManager, env *Delivery, execute bool) error {
 	page.Keys = append(page.Keys, key)
 
 	// Update the threshold
-	ratio := loadValidatorsThresholdRatio(st, st.nodeUrl.JoinPath(protocol.Globals))
+	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
@@ -125,7 +129,7 @@ func removeValidator(st *StateManager, env *Delivery, execute bool) error {
 
 	// Update the threshold
 
-	ratio := loadValidatorsThresholdRatio(st, st.nodeUrl.JoinPath(protocol.Globals))
+	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
@@ -185,8 +189,8 @@ func updateValidator(st *StateManager, env *Delivery, execute bool) error {
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
 	validatorBookUrl := env.Transaction.Header.Principal
-	if !st.nodeUrl.Equal(validatorBookUrl.RootIdentity()) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.nodeUrl, validatorBookUrl)
+	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
+		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
 	}
 
 	var book *protocol.KeyBook

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -23,7 +24,7 @@ func NewStateManagerForTest(t *testing.T, db *database.Database, envelope *proto
 	txid := types.Bytes(delivery[0].Transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = delivery[0].Transaction.Header.Principal
-	m.stateCache = *newStateCache(protocol.SubnetUrl(t.Name()), delivery[0].Transaction.Body.Type(), txid, db.Begin(true))
+	m.stateCache = *newStateCache(&config.Network{LocalSubnetID: t.Name()}, delivery[0].Transaction.Body.Type(), txid, db.Begin(true))
 
 	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
 	return m, delivery[0]

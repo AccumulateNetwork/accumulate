@@ -126,6 +126,14 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 			Initiate(SignatureTypeED25519, bob).
 			Build(),
 	)
+	sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(bobUrl.JoinPath("account")).
+			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
+			WithTxnHash(envs[0].Transaction[0].GetHash()).
+			Sign(SignatureTypeED25519, charlie).
+			Build(),
+	)
 	sim.WaitForTransactions(delivered, envs...)
 }
 
@@ -134,7 +142,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
@@ -191,7 +199,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
@@ -248,7 +256,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
@@ -308,7 +316,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))

@@ -1,23 +1,23 @@
 package block_test
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
+func init() { EnableDebugFeatures() }
 
 func TestTransactionIsReady(tt *testing.T) {
-
 	// Initialize
 	sim := simulator.New(tt, 1)
-	sim.InitChain()
+	sim.InitFromGenesis()
 	x := sim.Subnet(sim.Subnets[0].ID)
 	exec := x.Executor
 	t := NewBatchTest(tt, x.Database)
@@ -298,5 +298,171 @@ func TestTransactionIsReady(tt *testing.T) {
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
+}
 
+func TestAddAuthority(tt *testing.T) {
+	// Initialize
+	sim := simulator.New(tt, 1)
+	sim.InitFromGenesis()
+
+	// Main identity
+	alice := url.MustParse("alice")
+	aliceKey := GenerateKey(tt.Name(), alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e9)})
+	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
+
+	// Second identity
+	bob := url.MustParse("bob")
+	bobKey := GenerateKey(tt.Name(), bob)
+	sim.CreateIdentity(bob, bobKey[32:])
+	updateAccount(sim, bob.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
+
+	// Test setup
+	execAlice := sim.SubnetFor(alice).Executor
+	execBob := sim.SubnetFor(bob).Executor
+	t := NewBatchTest(tt, sim.SubnetFor(alice).Database)
+	defer t.Discard()
+
+	t.Run("UpdateAccountAuthority.Add", func(t BatchTest) {
+		tx := NewTransaction().
+			WithPrincipal(alice.JoinPath("tokens")).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{
+				&protocol.AddAccountAuthorityOperation{Authority: bob.JoinPath("book")},
+			}}).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+			WithSigner(bob.JoinPath("book", "1"), 1).
+			Sign(protocol.SignatureTypeED25519, bobKey).
+			BuildDelivery()
+
+		// First signature is accepted
+		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
+		require.NoError(t, err)
+
+		// Transaction is not ready
+		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		require.NoError(t, err)
+		ready, err := execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		require.NoError(t, err)
+		require.False(t, ready)
+
+		// Second signature is accepted
+		state, err := execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
+		require.NoError(t, err)
+		fwdBody := &protocol.SyntheticForwardTransaction{
+			Transaction: tx.Transaction,
+			Signatures: []protocol.ForwardedSignature{{
+				Destination: tx.Transaction.Header.Principal,
+				Signature:   tx.Signatures[1].(protocol.KeySignature),
+				Signers:     state.Signers,
+			}},
+		}
+		fwd := (&chain.Delivery{Transaction: &protocol.Transaction{Body: fwdBody}}).NewForwarded(fwdBody)
+		_, err = execAlice.ProcessSignature(t.Batch, fwd, fwd.Signatures[0])
+		require.NoError(t, err)
+
+		// Transaction is now ready
+		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		require.NoError(t, err)
+		ready, err = execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		require.NoError(t, err)
+		require.True(t, ready)
+	})
+
+	t.Run("UpdateKeyPage.Add w/Owner", func(t BatchTest) {
+		tx := NewTransaction().
+			WithPrincipal(alice.JoinPath("book", "1")).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Owner: bob.JoinPath("book")}},
+			}}).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+			WithSigner(bob.JoinPath("book", "1"), 1).
+			Sign(protocol.SignatureTypeED25519, bobKey).
+			BuildDelivery()
+
+		// First signature is accepted
+		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
+		require.NoError(t, err)
+
+		// Transaction is not ready
+		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		require.NoError(t, err)
+		ready, err := execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		require.NoError(t, err)
+		require.False(t, ready)
+
+		// Second signature is accepted
+		state, err := execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
+		require.NoError(t, err)
+		fwdBody := &protocol.SyntheticForwardTransaction{
+			Transaction: tx.Transaction,
+			Signatures: []protocol.ForwardedSignature{{
+				Destination: tx.Transaction.Header.Principal,
+				Signature:   tx.Signatures[1].(protocol.KeySignature),
+				Signers:     state.Signers,
+			}},
+		}
+		fwd := (&chain.Delivery{Transaction: &protocol.Transaction{Body: fwdBody}}).NewForwarded(fwdBody)
+		_, err = execAlice.ProcessSignature(t.Batch, fwd, fwd.Signatures[0])
+		require.NoError(t, err)
+
+		// Transaction is now ready
+		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		require.NoError(t, err)
+		ready, err = execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		require.NoError(t, err)
+		require.True(t, ready)
+	})
+
+	t.Run("Create Account", func(t BatchTest) {
+		tx := NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&protocol.CreateDataAccount{
+				Url:         alice.JoinPath("data"),
+				Authorities: []*url.URL{bob.JoinPath("book")},
+			}).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+			WithSigner(bob.JoinPath("book", "1"), 1).
+			Sign(protocol.SignatureTypeED25519, bobKey).
+			BuildDelivery()
+
+		// First signature is accepted
+		_, err := execAlice.ProcessSignature(t.Batch, tx, tx.Signatures[0])
+		require.NoError(t, err)
+
+		// Transaction is not ready
+		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		require.NoError(t, err)
+		ready, err := execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		require.NoError(t, err)
+		require.False(t, ready)
+
+		// Second signature is accepted
+		state, err := execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
+		require.NoError(t, err)
+		fwdBody := &protocol.SyntheticForwardTransaction{
+			Transaction: tx.Transaction,
+			Signatures: []protocol.ForwardedSignature{{
+				Destination: tx.Transaction.Header.Principal,
+				Signature:   tx.Signatures[1].(protocol.KeySignature),
+				Signers:     state.Signers,
+			}},
+		}
+		fwd := (&chain.Delivery{Transaction: &protocol.Transaction{Body: fwdBody}}).NewForwarded(fwdBody)
+		_, err = execAlice.ProcessSignature(t.Batch, fwd, fwd.Signatures[0])
+		require.NoError(t, err)
+
+		// Transaction is now ready
+		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
+		require.NoError(t, err)
+		ready, err = execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		require.NoError(t, err)
+		require.True(t, ready)
+	})
 }

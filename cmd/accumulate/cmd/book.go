@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -93,19 +92,26 @@ func CreateKeyBook(args []string) (string, error) {
 	keyBook := protocol.CreateKeyBook{}
 	keyBook.Url = newUrl
 
+	for _, authUrlStr := range Authorities {
+		authUrl, err := url2.Parse(authUrlStr)
+		if err != nil {
+			return "", err
+		}
+		keyBook.Authorities = append(keyBook.Authorities, authUrl)
+	}
+
 	var keyName string
 	if len(args) > 1 {
 		keyName = args[1]
 	} else {
 		keyName = originKeyName
 	}
-	pbkey, _, _, err := resolvePublicKey(keyName)
+	k, err := resolvePublicKey(keyName)
 	if err != nil {
 		return "", fmt.Errorf("could not resolve public key hash %s: %w", keyName, err)
 	}
 
-	ph := sha256.Sum256(pbkey)
-	publicKeyHash := ph[:]
+	publicKeyHash := k.PublicKeyHash()
 	keyBook.PublicKeyHash = publicKeyHash
 	return dispatchTxAndPrintResponse(&keyBook, nil, originUrl, signer)
 }

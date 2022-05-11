@@ -3,12 +3,34 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type CreateToken struct{}
 
+var _ SignerValidator = (*CreateToken)(nil)
+
 func (CreateToken) Type() protocol.TransactionType { return protocol.TransactionTypeCreateToken }
+
+func (CreateToken) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateToken)
+	if !ok {
+		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), transaction.Body)
+	}
+
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, location, signer)
+}
+
+func (CreateToken) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateToken)
+	if !ok {
+		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), transaction.Body)
+	}
+
+	return additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+}
 
 func (CreateToken) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	return (CreateToken{}).Validate(st, tx)
@@ -31,7 +53,7 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
 
-	err := st.SetAuth(token, body.KeyBookUrl, body.Manager)
+	err := st.SetAuth(token, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

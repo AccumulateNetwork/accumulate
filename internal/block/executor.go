@@ -7,7 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -71,12 +71,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		return nil, err
 	}
 
-	anchor, err := batch.GetMinorRootChainAnchor(&m.Network)
-	if err != nil {
-		return nil, err
-	}
-
-	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(anchor))
+	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
 }
 
@@ -92,7 +87,7 @@ func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	m.logger.Error(msg, keyVals...)
 }
 
-func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) error) error {
+func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) error {
 	var err error
 
 	if !m.isGenesis {
@@ -103,7 +98,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.InternalGenesis)
 
-	st := chain.NewStateManager(block.Batch.Begin(true), m.Network.NodeUrl(), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = putSyntheticTransaction(
@@ -159,69 +154,70 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 	return nil
 }
 
-func (m *Executor) InitChain(block *Block, data []byte) ([]byte, error) {
+func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
+	_, err := batch.Account(m.Network.NodeUrl()).GetState()
+	switch {
+	case err == nil:
+		return batch.BptRoot(), nil
+	case errors.Is(err, storage.ErrNotFound):
+		return nil, nil
+	default:
+		return nil, err
+	}
+}
+
+func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	if m.isGenesis {
 		panic("Cannot call InitChain on a genesis txn executor")
 	}
 
-	// Check if InitChain already happened
-	var anchor []byte
-	var err error
-	err = block.Batch.View(func(batch *database.Batch) error {
-		anchor, err = batch.GetMinorRootChainAnchor(&m.Network)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	if len(anchor) > 0 {
-		return anchor, nil
-	}
-
 	// Load the genesis state (JSON) into an in-memory key-value store
 	src := memory.New(nil)
-	err = src.UnmarshalJSON(data)
+	err := src.UnmarshalJSON(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal app state: %v", err)
+		return fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
 	// Load the root anchor chain so we can verify the system state
 	srcBatch := database.New(src, nil).Begin(false)
 	defer srcBatch.Discard()
-	srcAnchor, err := srcBatch.GetMinorRootChainAnchor(&m.Network)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load root anchor chain from app state: %v", err)
-	}
+	srcRoot := srcBatch.BptRoot()
 
 	// Dump the genesis state into the key-value store
-	batch := block.Batch.Begin(true)
-	defer batch.Discard()
-	err = batch.Import(src)
+	subbatch := batch.Begin(true)
+	defer subbatch.Discard()
+	err = subbatch.Import(src)
 	if err != nil {
-		return nil, fmt.Errorf("failed to import database: %v", err)
+		return fmt.Errorf("failed to import database: %v", err)
 	}
 
 	// Commit the database batch
-	err = batch.Commit()
+	err = subbatch.Commit()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load app state into database: %v", err)
+		return fmt.Errorf("failed to load app state into database: %v", err)
 	}
 
-	// Recreate the batch to reload the BPT
-	batch = block.Batch.Begin(false)
-	defer batch.Discard()
-
-	anchor, err = batch.GetMinorRootChainAnchor(&m.Network)
-	if err != nil {
-		return nil, err
-	}
+	root := batch.BptRoot()
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(srcAnchor, anchor) {
-		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcAnchor, anchor))
+	if !bytes.Equal(srcRoot, root) {
+		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
 	}
 
-	return anchor, nil
+	return nil
+}
+
+func (m *Executor) InitFromSnapshot(batch *database.Batch, filename string) error {
+	err := batch.LoadState(filename)
+	if err != nil {
+		return fmt.Errorf("load state: %w", err)
+	}
+
+	return nil
+}
+
+func (m *Executor) SaveSnapshot(batch *database.Batch, filename string) error {
+	return batch.SaveState(filename, &m.Network)
 }
 
 func (x *Executor) buildMirror(batch *database.Batch) (*protocol.SyntheticMirror, error) {
@@ -254,6 +250,18 @@ func (x *Executor) buildMirror(batch *database.Batch) (*protocol.SyntheticMirror
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "load %s: %w", u, err)
 		}
+
+		// Only mirror keys
+		switch rec.Account.(type) {
+		case *protocol.ADI,
+			*protocol.KeyBook,
+			*protocol.KeyPage:
+			// Keep
+		default:
+			// Discard
+			continue
+		}
+
 		mirror.Objects = append(mirror.Objects, rec)
 	}
 

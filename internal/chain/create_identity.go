@@ -7,31 +7,49 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type CreateIdentity struct{}
 
+var _ SignerValidator = (*CreateIdentity)(nil)
+var _ PrincipalValidator = (*CreateIdentity)(nil)
+
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (CreateIdentity) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateIdentity)
+	if !ok {
+		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+	}
+
 	// Anyone is allowed to sign for a root identity
 	if transaction.Header.Principal.IsRootIdentity() {
 		return false, nil
 	}
 
-	// Fallback to general authorization
-	return true, nil
+	// Check additional authorities
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, location, signer)
 }
 
-func (CreateIdentity) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, _ *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	body, ok := transaction.Body.(*protocol.CreateIdentity)
+	if !ok {
+		return false, false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+	}
+
+	// Check additional authorities
+	ready, fallback, err = additionalAuthorities(body.Authorities).TransactionIsReady(delegate, batch, transaction, status)
+	if !fallback || err != nil {
+		return ready, fallback, err
+	}
+
 	// Anyone is allowed to sign for a root identity
 	if transaction.Header.Principal.IsRootIdentity() {
 		return true, false, nil
 	}
 
 	// Fallback to general authorization
-	return true, false, nil
+	return false, true, nil
 }
 
 func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
@@ -56,70 +74,69 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		}
 	}
 
+	if body.KeyBookUrl == nil && len(body.Authorities) == 0 && body.Url.IsRootIdentity() {
+		return nil, fmt.Errorf("a root identity cannot be created with an empty authority set")
+	}
+
 	err := protocol.IsValidAdiUrl(body.Url)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
 
-	bookUrl := body.KeyBookUrl
-	if bookUrl != nil {
-		err = validateKeyBookUrl(bookUrl, body.Url)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	identity := new(protocol.ADI)
 	identity.Url = body.Url
-	identity.AddAuthority(bookUrl)
-
-	if body.Manager != nil {
-		err = st.AddAuthority(identity, body.Manager)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if bookUrl == nil {
-		return nil, fmt.Errorf("key book url is required to create identity")
-	}
-
 	accounts := []protocol.Account{identity}
-	var book *protocol.KeyBook
-	err = st.LoadUrlAs(bookUrl, &book)
-	switch {
-	case err == nil:
-		// Ok
-	case errors.Is(err, storage.ErrNotFound):
+
+	// Create a new key book
+	if body.KeyBookUrl != nil {
+		// Verify the user provided a first key
 		if len(body.KeyHash) == 0 {
 			return nil, fmt.Errorf("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
 
-		book = new(protocol.KeyBook)
-		book.Url = bookUrl
+		// Verify the URL is ok
+		err = validateKeyBookUrl(body.KeyBookUrl, body.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add it to the authority set
+		identity.AddAuthority(body.KeyBookUrl)
+
+		// Create the book
+		book := new(protocol.KeyBook)
+		book.Url = body.KeyBookUrl
 		book.PageCount = 1
-		book.AddAuthority(bookUrl)
+		book.AddAuthority(body.KeyBookUrl)
 		accounts = append(accounts, book)
 		if len(body.KeyHash) != 32 {
 			return nil, fmt.Errorf("invalid Key Hash: length must be equal to 32 bytes")
 		}
+
+		// Create the page
 		page := new(protocol.KeyPage)
 		page.Version = 1
-		page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
+		page.Url = protocol.FormatKeyPageUrl(body.KeyBookUrl, 0)
 		page.AcceptThreshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
 		keySpec.PublicKeyHash = body.KeyHash
 		page.Keys = append(page.Keys, keySpec)
 		accounts = append(accounts, page)
-	default:
+	}
+
+	// Add additional authorities or inherit
+	err = st.SetAuth(identity, body.Authorities)
+	if err != nil {
 		return nil, err
 	}
 
+	// If the ADI is remote, use a synthetic transaction
 	if !tx.Transaction.Header.Principal.LocalTo(body.Url) {
 		st.Submit(body.Url, &protocol.SyntheticCreateIdentity{Accounts: accounts})
 		return nil, nil
 	}
 
+	// If the ADI is local, create it directly
 	err = st.Create(accounts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create %v: %v", body.Url, err)

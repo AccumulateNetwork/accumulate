@@ -18,7 +18,7 @@ func delivered(status *protocol.TransactionStatus) bool {
 func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
-	sim.InitChain()
+	sim.InitFromGenesis()
 
 	// Create a lite address
 	alice := acctesting.GenerateTmKey(t.Name(), "Alice")

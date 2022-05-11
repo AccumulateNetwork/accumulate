@@ -2,7 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -46,21 +45,16 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// When on a BVN, process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 && protocol.IsBvnUrl(st.nodeUrl) {
+	if len(body.OperatorUpdates) > 0 && fromDirectory {
 		result, err := executeOperatorUpdates(st, body)
 		if err != nil {
 			return result, err
 		}
 	}
 
-	// Update the oracle
-	if fromDirectory {
-		if body.AcmeOraclePrice == 0 {
-			return nil, fmt.Errorf("attempting to set oracle price to 0")
-		}
-
+	if fromDirectory && body.AcmeOraclePrice != 0 {
 		var ledgerState *protocol.InternalLedger
-		err := st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
@@ -69,15 +63,17 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		if err != nil {
 			return nil, fmt.Errorf("failed to update ledger state: %v", err)
 		}
-	} else {
-		//Add the burnt acme tokens back to the supply
+	}
+
+	// Return ACME burnt by buying credits to the supply
+	if !fromDirectory {
 		var issuerState *protocol.TokenIssuer
 		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load acme ledger")
 		}
 		var ledgerState *protocol.InternalLedger
-		err = st.LoadUrlAs(st.nodeUrl.JoinPath(protocol.Ledger), &ledgerState)
+		err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
 		}
@@ -90,6 +86,12 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 	// Add the anchor to the chain - use the subnet name as the chain name
 	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	if err != nil {
+		return nil, err
+	}
+
+	// And the BPT root
+	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +114,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start), "to", logging.AsHex(body.RootAnchor), "block", body.Block, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.nodeUrl.JoinPath(protocol.Ledger)).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
 			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
@@ -127,7 +129,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (protocol.TransactionResult, error) {
 	for _, opUpd := range body.OperatorUpdates {
-		bookUrl := st.nodeUrl.JoinPath(protocol.OperatorBook)
+		bookUrl := st.NodeUrl().JoinPath(protocol.OperatorBook)
 
 		var page1 *protocol.KeyPage
 		err := st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 0), &page1)
@@ -136,13 +138,9 @@ func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (p
 		}
 
 		// Validate source
-		dnSpec := new(protocol.KeySpec)
-		dnSpec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
-		kh := sha256.Sum256(dnSpec.Owner.AccountID())
-		dnSpec.PublicKeyHash = kh[:]
-		srcSpec := page1.Keys[0]
-		if !dnSpec.Equal(srcSpec) {
-			return nil, fmt.Errorf("source is not from DN but from %q", srcSpec.Owner)
+		_, _, ok := page1.EntryByDelegate(body.Source.JoinPath(protocol.OperatorBook))
+		if !ok {
+			return nil, fmt.Errorf("source is not from DN but from %q", body.Source)
 		}
 
 		var page2 *protocol.KeyPage

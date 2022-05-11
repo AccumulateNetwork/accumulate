@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -145,16 +144,19 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
 
-	if len(args) > 1 {
+	if len(args) > 0 {
 		adiUrlStr = args[0]
 	}
-	if len(args) < 2 {
+	if len(args) < 1 {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	pubKey, _, _, err := resolvePublicKey(args[1])
-	if err != nil {
-		return "", err
+	var k *Key
+	if len(args) > 1 {
+		k, err = resolvePublicKey(args[1])
+		if err != nil {
+			return "", err
+		}
 	}
 
 	adiUrl, err := url2.Parse(adiUrlStr)
@@ -170,15 +172,24 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
 		}
-	} else {
+	} else if adiUrl.IsRootIdentity() || k != nil {
 		bookUrl = adiUrl.JoinPath("/book")
 	}
 
 	idc := protocol.CreateIdentity{}
 	idc.Url = adiUrl
-	kh := sha256.Sum256(pubKey)
-	idc.KeyHash = kh[:]
 	idc.KeyBookUrl = bookUrl
+	if k != nil {
+		idc.KeyHash = k.PublicKeyHash()
+	}
+
+	for _, authUrlStr := range Authorities {
+		authUrl, err := url2.Parse(authUrlStr)
+		if err != nil {
+			return "", err
+		}
+		idc.Authorities = append(idc.Authorities, authUrl)
+	}
 
 	res, err := dispatchTxAndWait(&idc, nil, origin, signer)
 	if err != nil {
@@ -192,9 +203,11 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	}
 
 	//todo: turn around and query the ADI and store the results.
-	err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), pubKey)
-	if err != nil {
-		return "", fmt.Errorf("DB: %v", err)
+	if k != nil {
+		err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), k.PublicKey)
+		if err != nil {
+			return "", fmt.Errorf("DB: %v", err)
+		}
 	}
 
 	return out, nil
