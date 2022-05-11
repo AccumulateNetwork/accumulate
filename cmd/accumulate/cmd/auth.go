@@ -83,15 +83,11 @@ func EnableAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	if err != nil {
 		return "", err
 	}
-	var accstate *protocol.AccountStateProof
-
 	op := &protocol.EnableAccountAuthOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	accstate, err = GetAccountStateProof(signer.Url, account)
 	if err != nil {
 		return "", err
 	}
-	txn.TokenIssuerProof = accstate
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
@@ -100,15 +96,11 @@ func DisableAuth(account *url2.URL, signer *signing.Builder, args []string) (str
 	if err != nil {
 		return "", err
 	}
-	var accstate *protocol.AccountStateProof
-
 	op := &protocol.DisableAccountAuthOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	accstate, err = GetAccountStateProof(signer.Url, account)
 	if err != nil {
 		return "", err
 	}
-	txn.TokenIssuerProof = accstate
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
@@ -117,15 +109,11 @@ func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string,
 	if err != nil {
 		return "", err
 	}
-	var accstate *protocol.AccountStateProof
-
 	op := &protocol.AddAccountAuthorityOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	accstate, err = GetAccountStateProof(signer.Url, account)
 	if err != nil {
 		return "", err
 	}
-	txn.TokenIssuerProof = accstate
 
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
@@ -135,13 +123,10 @@ func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	if err != nil {
 		return "", err
 	}
-	var accstate *protocol.AccountStateProof
 	op := &protocol.RemoveAccountAuthorityOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	accstate, err = GetAccountStateProof(signer.Url, account)
 	if err != nil {
 		return "", err
 	}
-	txn.TokenIssuerProof = accstate
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }

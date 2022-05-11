@@ -761,10 +761,9 @@ type UnknownSigner struct {
 }
 
 type UpdateAccountAuth struct {
-	fieldsSet        []bool
-	Operations       []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
-	TokenIssuerProof *AccountStateProof     `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
-	extraData        []byte
+	fieldsSet  []bool
+	Operations []AccountAuthOperation `json:"operations,omitempty" form:"operations" query:"operations" validate:"required"`
+	extraData  []byte
 }
 
 type UpdateAllowedKeyPageOperation struct {
@@ -2260,9 +2259,6 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 		if v != nil {
 			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
 		}
-	}
-	if v.TokenIssuerProof != nil {
-		u.TokenIssuerProof = (v.TokenIssuerProof).Copy()
 	}
 
 	return u
@@ -4029,14 +4025,6 @@ func (v *UpdateAccountAuth) Equal(u *UpdateAccountAuth) bool {
 		if !(EqualAccountAuthOperation(v.Operations[i], u.Operations[i])) {
 			return false
 		}
-	}
-	switch {
-	case v.TokenIssuerProof == u.TokenIssuerProof:
-		// equal
-	case v.TokenIssuerProof == nil || u.TokenIssuerProof == nil:
-		return false
-	case !((v.TokenIssuerProof).Equal(u.TokenIssuerProof)):
-		return false
 	}
 
 	return true
@@ -9056,7 +9044,6 @@ func (v *UnknownSigner) IsValid() error {
 var fieldNames_UpdateAccountAuth = []string{
 	1: "Type",
 	2: "Operations",
-	3: "TokenIssuerProof",
 }
 
 func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
@@ -9068,9 +9055,6 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Operations {
 			writer.WriteValue(2, v)
 		}
-	}
-	if !(v.TokenIssuerProof == nil) {
-		writer.WriteValue(3, v.TokenIssuerProof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateAccountAuth)
@@ -12288,9 +12272,6 @@ func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(AccountStateProof); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.TokenIssuerProof = x
-	}
 
 	seen, err := reader.Reset(fieldNames_UpdateAccountAuth)
 	if err != nil {
@@ -13705,13 +13686,11 @@ func (v *UnknownSigner) MarshalJSON() ([]byte, error) {
 
 func (v *UpdateAccountAuth) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type             TransactionType                                      `json:"type"`
-		Operations       encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
-		TokenIssuerProof *AccountStateProof                                   `json:"tokenIssuerProof,omitempty"`
+		Type       TransactionType                                      `json:"type"`
+		Operations encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Operations = encoding.JsonUnmarshalListWith[AccountAuthOperation]{Value: v.Operations, Func: UnmarshalAccountAuthOperationJSON}
-	u.TokenIssuerProof = v.TokenIssuerProof
 	return json.Marshal(&u)
 }
 
@@ -15963,13 +15942,11 @@ func (v *UnknownSigner) UnmarshalJSON(data []byte) error {
 
 func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type             TransactionType                                      `json:"type"`
-		Operations       encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
-		TokenIssuerProof *AccountStateProof                                   `json:"tokenIssuerProof,omitempty"`
+		Type       TransactionType                                      `json:"type"`
+		Operations encoding.JsonUnmarshalListWith[AccountAuthOperation] `json:"operations,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Operations = encoding.JsonUnmarshalListWith[AccountAuthOperation]{Value: v.Operations, Func: UnmarshalAccountAuthOperationJSON}
-	u.TokenIssuerProof = v.TokenIssuerProof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15980,7 +15957,6 @@ func (v *UpdateAccountAuth) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Operations.Value {
 		v.Operations[i] = x
 	}
-	v.TokenIssuerProof = u.TokenIssuerProof
 	return nil
 }
 

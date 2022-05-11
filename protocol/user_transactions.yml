@@ -222,11 +222,7 @@ UpdateAccountAuth:
       type: AccountAuthOperation
       marshal-as: union
       repeatable: true
-    - name: TokenIssuerProof
-      type: AccountStateProof
-      marshal-as: reference
-      pointer: true
-      optional: true
+    
 
 AddValidator:
   union: { type: transaction }
