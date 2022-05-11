@@ -70,11 +70,11 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 			// Synthetics...
 			DirectoryAnchor{Network: &opts.Network},
+			MirrorSystemRecords{},
 			SyntheticBurnTokens{},
 			SyntheticCreateIdentity{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
-			MirrorSystemRecords{},
 			SyntheticWriteData{},
 			SyntheticForwardTransaction{},
 
