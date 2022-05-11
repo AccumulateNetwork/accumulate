@@ -14,7 +14,7 @@ SMTs can be arranged in any way an application requires.  The SMT manager
 can be redirected to update multiple SMTs.  Note that one of the logical
 arrangements for SMT is to create an SMT of SMTs.
 
-SMTs collect entries in lists maintained on power of 2 boundries (i.e. 
+SMTs collect entries in lists maintained on power of 2 boundaries (i.e. 
 every 4, 8, ... 1024, .... boundaries. Blocks are documented by creating
 indexes of blocks and elements in a shadow Merkle tree.  This is all that is 
 needed to be able to generate the state of the Merkle Tree at the end of any 
@@ -331,8 +331,8 @@ of shadow Merkle Trees, and more.
 * `func (m MerkleManager) Copy(salt []byte)` Effectively points the 
   MerkleManager to point to a MerkleTree associated with the given salt
   `func (m MerkleManager) CurrentSalt() (salt []byte)` Returns the current 
-  salt in used by the MerkleManagher
-* `func (m MerkleManager) GetLementCount() (elementCount int64)` Returns the 
+  salt in use by the MerkleManager
+* `func (m MerkleManager) GetElementCount() (elementCount int64)` Returns the 
   count of elements in the Stateful Merkle Tree currently under the focus of 
   the MerkleManager
 * `func (m MerkleManager) SetBlockIndex(blockIndex int)` Mark this point in the 
@@ -365,7 +365,7 @@ time either to other merkle trees or to blockchains.
   element hash.  Note that the element index must be less than or equal to 
   the anchor index. If either hash is not a member of the merkle tree, or 
   the hash of the element has an index higher than the index of the anchor, 
-  a nil reciept is returned.
+  a nil receipt is returned.
 * `(r Receipt) Validate` applies the hashes as specified by the receipt and 
   validates that the element hash is proven by the anchor hash.  
 
