@@ -66,12 +66,7 @@ validate docker:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0
   - cd nodes
-  - docker-compose up -d
-  - sleep 10
-  - echo "again.."
-  - docker-compose up -d
-  - sleep 10
-  - echo "done.."
+  - sudo docker-compose up -d
   script:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-minor-blocks.sh
