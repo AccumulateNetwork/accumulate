@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -291,6 +292,9 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 	if err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
+	}
+	if res.Code != 0 {
+		return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
 	}
 
 	return res, nil
@@ -579,4 +583,58 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 		sigtype = protocol.SignatureTypeED25519
 	}
 	return sigtype, nil
+}
+
+func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.AccountStateProof, err error) {
+	if principal.LocalTo(accountToProve) {
+		return nil, nil // Don't need a proof for local accounts
+	}
+
+	if accountToProve.Equal(protocol.AcmeUrl()) {
+		return nil, nil // Don't need a proof for ACME
+	}
+
+	// Get a proof of the account state
+	req := new(api.GeneralQuery)
+	req.Url = accountToProve
+	resp := new(api.ChainQueryResponse)
+	token := protocol.TokenIssuer{}
+	resp.Data = &token
+	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
+		return nil, err
+	}
+
+	localReceipt := resp.Receipt.Receipt
+	proof.State, err = getAccount(accountToProve.String())
+	if err != nil {
+		return nil, err
+	}
+	// ensure the block is anchored
+	timeout := time.After(10 * time.Second)
+	ticker := time.Tick(1 * time.Second)
+	// Keep trying until we're timed out or get a result/error
+	for {
+		select {
+		// Got a timeout! fail with a timeout error
+		case <-timeout:
+			return nil, nil
+		// Got a tick, we should check if the anchor is complete
+		case <-ticker:
+			// Get a proof of the BVN anchor
+			req = new(api.GeneralQuery)
+			req.Url = url2.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
+			resp = new(api.ChainQueryResponse)
+			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
+				return nil, err
+			}
+			dirReceipt := resp.Receipt.Receipt
+			if dirReceipt.Result != nil {
+				return proof, nil
+			}
+			proof.Proof = localReceipt.Combine(&dirReceipt)
+
+		}
+	}
 }
