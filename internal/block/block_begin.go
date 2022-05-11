@@ -355,7 +355,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 		return nil, err
 	}
 	anchor.AcmeOraclePrice = ledgerState.ActiveOracle
-	return nil, nil
+	return anchor, nil
 }
 
 func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.PartitionAnchor, error) {
