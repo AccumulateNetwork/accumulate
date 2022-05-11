@@ -53,7 +53,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		adi := new(protocol.ADI)
 		adi.Url = uAdi
-		adi.AddAuthority(uVal)
+		adi.AddAuthority(uOper)
 		records = append(records, adi)
 
 		valBook, valPage := createValidatorBook(uVal, opts.Validators)
@@ -155,14 +155,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
-			da.AddAuthority(uVal)
+			da.AddAuthority(uOper)
 
 			records = append(records, da)
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
-			acme.AddAuthority(uVal)
+			acme.AddAuthority(uOper)
 			acme.Url = protocol.AcmeUrl()
 			acme.Precision = 8
 			acme.Symbol = "ACME"
