@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -291,6 +292,9 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 	if err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
+	}
+	if res.Code != 0 {
+		return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
 	}
 
 	return res, nil
