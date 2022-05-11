@@ -85,9 +85,6 @@ func EnableAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	}
 	op := &protocol.EnableAccountAuthOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	if err != nil {
-		return "", err
-	}
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
@@ -111,10 +108,6 @@ func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string,
 	}
 	op := &protocol.AddAccountAuthorityOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	if err != nil {
-		return "", err
-	}
-
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
 
@@ -125,8 +118,5 @@ func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 	}
 	op := &protocol.RemoveAccountAuthorityOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	if err != nil {
-		return "", err
-	}
 	return dispatchTxAndPrintResponse(txn, nil, account, signer)
 }
