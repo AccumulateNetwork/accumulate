@@ -21,11 +21,6 @@ SystemAnchor:
   - name: Block
     description: is the index of the block
     type: uvarint
-  - name: Receipts
-    description: are receipts for anchors from other subnets that were included in the block
-    type: Receipt
-    repeatable: true
-    marshal-as: reference
 
 PartitionAnchor:
   union: { type: transaction }
@@ -48,6 +43,12 @@ DirectoryAnchor:
       type: KeyPageOperation
       repeatable: true
       marshal-as: union
+    - name: Receipts
+      description: are receipts for anchors from other subnets that were included in the block
+      type: Receipt
+      repeatable: true
+      marshal-as: reference
+
 
 MirrorSystemRecords:
   union: { type: transaction }

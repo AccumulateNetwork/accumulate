@@ -3,9 +3,9 @@ package chain
 import (
 	"bytes"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

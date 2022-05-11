@@ -242,7 +242,9 @@ type DirectoryAnchor struct {
 	AcmeOraclePrice uint64 `json:"acmeOraclePrice,omitempty" form:"acmeOraclePrice" query:"acmeOraclePrice" validate:"required"`
 	// OperatorUpdates anchor-based synchronization updates from bvn.
 	OperatorUpdates []KeyPageOperation `json:"operatorUpdates,omitempty" form:"operatorUpdates" query:"operatorUpdates" validate:"required"`
-	extraData       []byte
+	// Receipts are receipts for anchors from other subnets that were included in the block.
+	Receipts  []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	extraData []byte
 }
 
 type DirectoryIndexMetadata struct {
@@ -661,9 +663,7 @@ type SystemAnchor struct {
 	// RootIndex is the index of the root anchor chain anchor.
 	RootIndex uint64 `json:"rootIndex,omitempty" form:"rootIndex" query:"rootIndex" validate:"required"`
 	// Block is the index of the block.
-	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
-	// Receipts are receipts for anchors from other subnets that were included in the block.
-	Receipts  []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Block     uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	extraData []byte
 }
 
@@ -1384,6 +1384,10 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 			u.OperatorUpdates[i] = (v).CopyAsInterface().(KeyPageOperation)
 		}
 	}
+	u.Receipts = make([]Receipt, len(v.Receipts))
+	for i, v := range v.Receipts {
+		u.Receipts[i] = *(&v).Copy()
+	}
 
 	return u
 }
@@ -2072,10 +2076,6 @@ func (v *SystemAnchor) Copy() *SystemAnchor {
 	u.RootAnchor = v.RootAnchor
 	u.RootIndex = v.RootIndex
 	u.Block = v.Block
-	u.Receipts = make([]Receipt, len(v.Receipts))
-	for i, v := range v.Receipts {
-		u.Receipts[i] = *(&v).Copy()
-	}
 
 	return u
 }
@@ -2881,6 +2881,14 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 	}
 	for i := range v.OperatorUpdates {
 		if !(EqualKeyPageOperation(v.OperatorUpdates[i], u.OperatorUpdates[i])) {
+			return false
+		}
+	}
+	if len(v.Receipts) != len(u.Receipts) {
+		return false
+	}
+	for i := range v.Receipts {
+		if !((&v.Receipts[i]).Equal(&u.Receipts[i])) {
 			return false
 		}
 	}
@@ -3760,14 +3768,6 @@ func (v *SystemAnchor) Equal(u *SystemAnchor) bool {
 	}
 	if !(v.Block == u.Block) {
 		return false
-	}
-	if len(v.Receipts) != len(u.Receipts) {
-		return false
-	}
-	for i := range v.Receipts {
-		if !((&v.Receipts[i]).Equal(&u.Receipts[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -5593,6 +5593,7 @@ var fieldNames_DirectoryAnchor = []string{
 	2: "SystemAnchor",
 	3: "AcmeOraclePrice",
 	4: "OperatorUpdates",
+	5: "Receipts",
 }
 
 func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
@@ -5607,6 +5608,11 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	if !(len(v.OperatorUpdates) == 0) {
 		for _, v := range v.OperatorUpdates {
 			writer.WriteValue(4, v)
+		}
+	}
+	if !(len(v.Receipts) == 0) {
+		for _, v := range v.Receipts {
+			writer.WriteValue(5, &v)
 		}
 	}
 
@@ -5636,6 +5642,11 @@ func (v *DirectoryAnchor) IsValid() error {
 		errs = append(errs, "field OperatorUpdates is missing")
 	} else if len(v.OperatorUpdates) == 0 {
 		errs = append(errs, "field OperatorUpdates is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Receipts is missing")
+	} else if len(v.Receipts) == 0 {
+		errs = append(errs, "field Receipts is not set")
 	}
 
 	switch len(errs) {
@@ -8305,7 +8316,6 @@ var fieldNames_SystemAnchor = []string{
 	4: "RootAnchor",
 	5: "RootIndex",
 	6: "Block",
-	7: "Receipts",
 }
 
 func (v *SystemAnchor) MarshalBinary() ([]byte, error) {
@@ -8329,11 +8339,6 @@ func (v *SystemAnchor) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Block == 0) {
 		writer.WriteUint(6, v.Block)
-	}
-	if !(len(v.Receipts) == 0) {
-		for _, v := range v.Receipts {
-			writer.WriteValue(7, &v)
-		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemAnchor)
@@ -8376,11 +8381,6 @@ func (v *SystemAnchor) IsValid() error {
 		errs = append(errs, "field Block is missing")
 	} else if v.Block == 0 {
 		errs = append(errs, "field Block is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field Receipts is missing")
-	} else if len(v.Receipts) == 0 {
-		errs = append(errs, "field Receipts is not set")
 	}
 
 	switch len(errs) {
@@ -10364,6 +10364,13 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		if x := new(Receipt); reader.ReadValue(5, x.UnmarshalBinary) {
+			v.Receipts = append(v.Receipts, *x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_DirectoryAnchor)
 	if err != nil {
@@ -11877,13 +11884,6 @@ func (v *SystemAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(6); ok {
 		v.Block = x
 	}
-	for {
-		if x := new(Receipt); reader.ReadValue(7, x.UnmarshalBinary) {
-			v.Receipts = append(v.Receipts, *x)
-		} else {
-			break
-		}
-	}
 
 	seen, err := reader.Reset(fieldNames_SystemAnchor)
 	if err != nil {
@@ -12875,9 +12875,9 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 		RootAnchor      string                                           `json:"rootAnchor,omitempty"`
 		RootIndex       uint64                                           `json:"rootIndex,omitempty"`
 		Block           uint64                                           `json:"block,omitempty"`
-		Receipts        encoding.JsonList[Receipt]                       `json:"receipts,omitempty"`
 		AcmeOraclePrice uint64                                           `json:"acmeOraclePrice,omitempty"`
 		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
+		Receipts        encoding.JsonList[Receipt]                       `json:"receipts,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SystemAnchor.Source
@@ -12886,9 +12886,9 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u.RootAnchor = encoding.ChainToJSON(v.SystemAnchor.RootAnchor)
 	u.RootIndex = v.SystemAnchor.RootIndex
 	u.Block = v.SystemAnchor.Block
-	u.Receipts = v.SystemAnchor.Receipts
 	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	u.Receipts = v.Receipts
 	return json.Marshal(&u)
 }
 
@@ -13217,15 +13217,14 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 
 func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       TransactionType            `json:"type"`
-		Source     *url.URL                   `json:"source,omitempty"`
-		Major      bool                       `json:"major,omitempty"`
-		StateRoot  string                     `json:"stateRoot,omitempty"`
-		RootAnchor string                     `json:"rootAnchor,omitempty"`
-		RootIndex  uint64                     `json:"rootIndex,omitempty"`
-		Block      uint64                     `json:"block,omitempty"`
-		Receipts   encoding.JsonList[Receipt] `json:"receipts,omitempty"`
-		AcmeBurnt  *string                    `json:"acmeBurnt,omitempty"`
+		Type       TransactionType `json:"type"`
+		Source     *url.URL        `json:"source,omitempty"`
+		Major      bool            `json:"major,omitempty"`
+		StateRoot  string          `json:"stateRoot,omitempty"`
+		RootAnchor string          `json:"rootAnchor,omitempty"`
+		RootIndex  uint64          `json:"rootIndex,omitempty"`
+		Block      uint64          `json:"block,omitempty"`
+		AcmeBurnt  *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SystemAnchor.Source
@@ -13234,7 +13233,6 @@ func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u.RootAnchor = encoding.ChainToJSON(v.SystemAnchor.RootAnchor)
 	u.RootIndex = v.SystemAnchor.RootIndex
 	u.Block = v.SystemAnchor.Block
-	u.Receipts = v.SystemAnchor.Receipts
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	return json.Marshal(&u)
 }
@@ -13535,13 +13533,12 @@ func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 
 func (v *SystemAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Source     *url.URL                   `json:"source,omitempty"`
-		Major      bool                       `json:"major,omitempty"`
-		StateRoot  string                     `json:"stateRoot,omitempty"`
-		RootAnchor string                     `json:"rootAnchor,omitempty"`
-		RootIndex  uint64                     `json:"rootIndex,omitempty"`
-		Block      uint64                     `json:"block,omitempty"`
-		Receipts   encoding.JsonList[Receipt] `json:"receipts,omitempty"`
+		Source     *url.URL `json:"source,omitempty"`
+		Major      bool     `json:"major,omitempty"`
+		StateRoot  string   `json:"stateRoot,omitempty"`
+		RootAnchor string   `json:"rootAnchor,omitempty"`
+		RootIndex  uint64   `json:"rootIndex,omitempty"`
+		Block      uint64   `json:"block,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.Major = v.Major
@@ -13549,7 +13546,6 @@ func (v *SystemAnchor) MarshalJSON() ([]byte, error) {
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
 	u.Block = v.Block
-	u.Receipts = v.Receipts
 	return json.Marshal(&u)
 }
 
@@ -14426,9 +14422,9 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 		RootAnchor      string                                           `json:"rootAnchor,omitempty"`
 		RootIndex       uint64                                           `json:"rootIndex,omitempty"`
 		Block           uint64                                           `json:"block,omitempty"`
-		Receipts        encoding.JsonList[Receipt]                       `json:"receipts,omitempty"`
 		AcmeOraclePrice uint64                                           `json:"acmeOraclePrice,omitempty"`
 		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
+		Receipts        encoding.JsonList[Receipt]                       `json:"receipts,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SystemAnchor.Source
@@ -14437,9 +14433,9 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u.RootAnchor = encoding.ChainToJSON(v.SystemAnchor.RootAnchor)
 	u.RootIndex = v.SystemAnchor.RootIndex
 	u.Block = v.SystemAnchor.Block
-	u.Receipts = v.SystemAnchor.Receipts
 	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	u.Receipts = v.Receipts
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14460,12 +14456,12 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	}
 	v.SystemAnchor.RootIndex = u.RootIndex
 	v.SystemAnchor.Block = u.Block
-	v.SystemAnchor.Receipts = u.Receipts
 	v.AcmeOraclePrice = u.AcmeOraclePrice
 	v.OperatorUpdates = make([]KeyPageOperation, len(u.OperatorUpdates.Value))
 	for i, x := range u.OperatorUpdates.Value {
 		v.OperatorUpdates[i] = x
 	}
+	v.Receipts = u.Receipts
 	return nil
 }
 
@@ -15086,15 +15082,14 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 
 func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       TransactionType            `json:"type"`
-		Source     *url.URL                   `json:"source,omitempty"`
-		Major      bool                       `json:"major,omitempty"`
-		StateRoot  string                     `json:"stateRoot,omitempty"`
-		RootAnchor string                     `json:"rootAnchor,omitempty"`
-		RootIndex  uint64                     `json:"rootIndex,omitempty"`
-		Block      uint64                     `json:"block,omitempty"`
-		Receipts   encoding.JsonList[Receipt] `json:"receipts,omitempty"`
-		AcmeBurnt  *string                    `json:"acmeBurnt,omitempty"`
+		Type       TransactionType `json:"type"`
+		Source     *url.URL        `json:"source,omitempty"`
+		Major      bool            `json:"major,omitempty"`
+		StateRoot  string          `json:"stateRoot,omitempty"`
+		RootAnchor string          `json:"rootAnchor,omitempty"`
+		RootIndex  uint64          `json:"rootIndex,omitempty"`
+		Block      uint64          `json:"block,omitempty"`
+		AcmeBurnt  *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SystemAnchor.Source
@@ -15103,7 +15098,6 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	u.RootAnchor = encoding.ChainToJSON(v.SystemAnchor.RootAnchor)
 	u.RootIndex = v.SystemAnchor.RootIndex
 	u.Block = v.SystemAnchor.Block
-	u.Receipts = v.SystemAnchor.Receipts
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -15125,7 +15119,6 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	}
 	v.SystemAnchor.RootIndex = u.RootIndex
 	v.SystemAnchor.Block = u.Block
-	v.SystemAnchor.Receipts = u.Receipts
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
@@ -15706,13 +15699,12 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 
 func (v *SystemAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Source     *url.URL                   `json:"source,omitempty"`
-		Major      bool                       `json:"major,omitempty"`
-		StateRoot  string                     `json:"stateRoot,omitempty"`
-		RootAnchor string                     `json:"rootAnchor,omitempty"`
-		RootIndex  uint64                     `json:"rootIndex,omitempty"`
-		Block      uint64                     `json:"block,omitempty"`
-		Receipts   encoding.JsonList[Receipt] `json:"receipts,omitempty"`
+		Source     *url.URL `json:"source,omitempty"`
+		Major      bool     `json:"major,omitempty"`
+		StateRoot  string   `json:"stateRoot,omitempty"`
+		RootAnchor string   `json:"rootAnchor,omitempty"`
+		RootIndex  uint64   `json:"rootIndex,omitempty"`
+		Block      uint64   `json:"block,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.Major = v.Major
@@ -15720,7 +15712,6 @@ func (v *SystemAnchor) UnmarshalJSON(data []byte) error {
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
 	u.Block = v.Block
-	u.Receipts = v.Receipts
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15738,7 +15729,6 @@ func (v *SystemAnchor) UnmarshalJSON(data []byte) error {
 	}
 	v.RootIndex = u.RootIndex
 	v.Block = u.Block
-	v.Receipts = u.Receipts
 	return nil
 }
 

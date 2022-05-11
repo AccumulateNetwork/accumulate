@@ -1,11 +1,9 @@
 package chain
 
 import (
-	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,12 +35,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 	// Verify the source URL and get the subnet name
 	name, ok := protocol.ParseBvnUrl(body.Source)
-	var fromDirectory bool
-	switch {
-	case ok:
-	case protocol.IsDnUrl(body.Source):
-		name, fromDirectory = protocol.Directory, true
-	default:
+	if !ok {
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
@@ -75,32 +68,9 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, err
 	}
 
-	if !fromDirectory {
-		// The directory does not process receipts
-		return nil, nil
-	}
-
 	if body.Major {
 		// TODO Handle major blocks?
 		return nil, nil
-	}
-
-	// Process receipts
-	for i, receipt := range body.Receipts {
-		if !bytes.Equal(receipt.Result, body.RootAnchor[:]) {
-			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
-		}
-
-		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start), "to", logging.AsHex(body.RootAnchor), "block", body.Block, "source", body.Source, "module", "synthetic")
-
-		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
-		if err != nil {
-			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
-		}
-		for _, hash := range synth {
-			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
-			st.state.ProcessAdditionalTransaction(d)
-		}
 	}
 
 	return nil, nil
