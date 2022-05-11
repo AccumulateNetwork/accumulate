@@ -18,7 +18,7 @@ func (sentryHack) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			fmt.Printf("Failed to send event to sentry: %v", r)
+			fmt.Printf("Failed to send event to sentry: %v", r) //nolint:noprint
 		}
 	}()
 

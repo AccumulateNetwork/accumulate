@@ -81,7 +81,7 @@ func (k Key) Append(key ...interface{}) Key {
 	debugKeyMu.Unlock()
 
 	if debugPrintKeys {
-		fmt.Printf("Key %s => %X\n", s, k[:])
+		fmt.Printf("Key %s => %X\n", s, k[:]) //nolint:noprint
 	}
 	return k
 }
