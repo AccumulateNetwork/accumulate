@@ -35,15 +35,9 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.Type())
 	}
 
-	// Verify the source URL and get the subnet name
-	name, ok := protocol.ParseBvnUrl(body.Source)
-	var fromDirectory bool
-	switch {
-	case ok:
-	case protocol.IsDnUrl(body.Source):
-		name, fromDirectory = protocol.Directory, true
-	default:
-		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
+	// Verify the source URL is from the DN
+	if !protocol.IsDnUrl(body.Source) {
+		return nil, fmt.Errorf("invalid source: not the DN")
 	}
 
 	if body.AcmeOraclePrice != 0 {
@@ -60,20 +54,15 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name
-	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
+	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(protocol.Directory)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
 	if err != nil {
 		return nil, err
-	}
-
-	if !fromDirectory {
-		// The directory does not process receipts
-		return nil, nil
 	}
 
 	if body.Major {
@@ -81,11 +70,13 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, nil
 	}
 
-	//todo: do something interesting with the operator updates
-	//for _, op := range body.OperatorUpdates {
-	//	//pull state for bvn-x/validators to update key page and update operation.
-	//	op.Type()
-	//}
+	// Process OperatorUpdates when present
+	if len(body.OperatorUpdates) > 0 {
+		result, err := executeOperatorUpdates(st, body)
+		if err != nil {
+			return result, err
+		}
+	}
 
 	// Process receipts
 	for i, receipt := range body.Receipts {
@@ -105,5 +96,40 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
+	return nil, nil
+}
+
+func executeOperatorUpdates(st *StateManager, body *protocol.DirectoryAnchor) (protocol.TransactionResult, error) {
+	for _, opUpd := range body.OperatorUpdates {
+		bookUrl := st.NodeUrl().JoinPath(protocol.OperatorBook)
+
+		var page1 *protocol.KeyPage
+		err := st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 0), &page1)
+		if err != nil {
+			return nil, fmt.Errorf("invalid key page: %v", err)
+		}
+
+		// Validate source
+		_, _, ok := page1.EntryByDelegate(body.Source.JoinPath(protocol.OperatorBook))
+		if !ok {
+			return nil, fmt.Errorf("source is not from DN but from %q", body.Source)
+		}
+
+		var page2 *protocol.KeyPage
+		err = st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 1), &page2)
+		if err != nil {
+			return nil, fmt.Errorf("invalid key page: %v", err)
+		}
+
+		updateKeyPage := &UpdateKeyPage{}
+		err = updateKeyPage.executeOperation(page2, opUpd)
+		if err != nil {
+			return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
+		}
+		err = st.Update(page2)
+		if err != nil {
+			return nil, fmt.Errorf("unable to update main ledger: %w", err)
+		}
+	}
 	return nil, nil
 }

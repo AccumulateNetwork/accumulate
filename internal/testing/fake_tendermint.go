@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -22,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -313,9 +313,14 @@ func (c *FakeTendermint) checkResultSet(data []byte) {
 	}
 
 	for _, r := range rs.Results {
-		if r.Code != 0 && r.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
-			c.onError(fmt.Errorf("DeliverTx failed: %v (%v)", r.Message, r.Code))
+		if r.Code == 0 || r.Code == protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
+			continue
 		}
+		if r.Error != nil && r.Error.Code == errors.StatusDelivered {
+			continue
+		}
+
+		c.onError(fmt.Errorf("DeliverTx failed: %v (%v)", r.Message, r.Code))
 	}
 }
 
@@ -348,7 +353,7 @@ func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctyp
 	c.txMu.RUnlock()
 
 	if st == nil || st.DeliverResult == nil {
-		return nil, errors.New("not found")
+		return nil, errors.NotFound("not found")
 	}
 	return &ctypes.ResultTx{
 		Hash:     st.Hash[:],

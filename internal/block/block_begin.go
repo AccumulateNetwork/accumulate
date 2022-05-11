@@ -350,11 +350,21 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 
 func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.DirectoryAnchor, error) {
 	anchor := new(protocol.DirectoryAnchor)
-	rootChain, err := x.buildBlockAnchor(batch, ledgerState, &anchor.SystemAnchor)
+	ledger := batch.Account(x.Network.Ledger())
+	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SystemAnchor)
 	if err != nil {
 		return nil, err
 	}
 	anchor.AcmeOraclePrice = ledgerState.ActiveOracle
+
+	if len(ledgerState.OperatorUpdates) > 0 {
+		anchor.OperatorUpdates = ledgerState.OperatorUpdates
+		ledgerState.OperatorUpdates = nil
+		err = ledger.PutState(ledgerState)
+		if err != nil {
+			return nil, fmt.Errorf("cannot write ledger: %w", err)
+		}
+	}
 
 	// TODO This is pretty inefficient; we're constructing a receipt for every
 	// anchor. If we were more intelligent about it, we could send just the
@@ -422,7 +432,8 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 
 func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.PartitionAnchor, error) {
 	anchor := new(protocol.PartitionAnchor)
-	_, err := x.buildBlockAnchor(batch, ledgerState, &anchor.SystemAnchor)
+	ledger := batch.Account(x.Network.Ledger())
+	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SystemAnchor)
 	if err != nil {
 		return nil, err
 	}
@@ -430,9 +441,8 @@ func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *prot
 	return anchor, nil
 }
 
-func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger, anchor *protocol.SystemAnchor) (*database.Chain, error) {
+func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger, ledger *database.Account, anchor *protocol.SystemAnchor) (*database.Chain, error) {
 	// Load the root chain
-	ledger := batch.Account(x.Network.Ledger())
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load root chain: %w", err)

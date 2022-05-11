@@ -334,14 +334,15 @@ type IndexEntry struct {
 }
 
 type InternalLedger struct {
-	fieldsSet     []bool
-	Url           *url.URL  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Index         int64     `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Timestamp     time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	PendingOracle uint64    `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
-	ActiveOracle  uint64    `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
-	AcmeBurnt     big.Int   `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
-	extraData     []byte
+	fieldsSet       []bool
+	Url             *url.URL           `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Index           int64              `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp       time.Time          `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	PendingOracle   uint64             `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
+	ActiveOracle    uint64             `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
+	AcmeBurnt       big.Int            `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	OperatorUpdates []KeyPageOperation `json:"operatorUpdates,omitempty" form:"operatorUpdates" query:"operatorUpdates" validate:"required"`
+	extraData       []byte
 }
 
 type IssueTokens struct {
@@ -1555,6 +1556,12 @@ func (v *InternalLedger) Copy() *InternalLedger {
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
+	u.OperatorUpdates = make([]KeyPageOperation, len(v.OperatorUpdates))
+	for i, v := range v.OperatorUpdates {
+		if v != nil {
+			u.OperatorUpdates[i] = (v).CopyAsInterface().(KeyPageOperation)
+		}
+	}
 
 	return u
 }
@@ -3103,6 +3110,14 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
 		return false
+	}
+	if len(v.OperatorUpdates) != len(u.OperatorUpdates) {
+		return false
+	}
+	for i := range v.OperatorUpdates {
+		if !(EqualKeyPageOperation(v.OperatorUpdates[i], u.OperatorUpdates[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -6217,6 +6232,7 @@ var fieldNames_InternalLedger = []string{
 	5: "PendingOracle",
 	6: "ActiveOracle",
 	7: "AcmeBurnt",
+	8: "OperatorUpdates",
 }
 
 func (v *InternalLedger) MarshalBinary() ([]byte, error) {
@@ -6241,6 +6257,11 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(7, &v.AcmeBurnt)
+	}
+	if !(len(v.OperatorUpdates) == 0) {
+		for _, v := range v.OperatorUpdates {
+			writer.WriteValue(8, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_InternalLedger)
@@ -6286,6 +6307,11 @@ func (v *InternalLedger) IsValid() error {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field OperatorUpdates is missing")
+	} else if len(v.OperatorUpdates) == 0 {
+		errs = append(errs, "field OperatorUpdates is not set")
 	}
 
 	switch len(errs) {
@@ -10739,6 +10765,18 @@ func (v *InternalLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(7); ok {
 		v.AcmeBurnt = *x
 	}
+	for {
+		ok := reader.ReadValue(8, func(b []byte) error {
+			x, err := UnmarshalKeyPageOperation(b)
+			if err == nil {
+				v.OperatorUpdates = append(v.OperatorUpdates, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_InternalLedger)
 	if err != nil {
@@ -13003,13 +13041,14 @@ func (v *HashSet) MarshalJSON() ([]byte, error) {
 
 func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type          AccountType `json:"type"`
-		Url           *url.URL    `json:"url,omitempty"`
-		Index         int64       `json:"index,omitempty"`
-		Timestamp     time.Time   `json:"timestamp,omitempty"`
-		PendingOracle uint64      `json:"pendingOracle,omitempty"`
-		ActiveOracle  uint64      `json:"activeOracle,omitempty"`
-		AcmeBurnt     *string     `json:"acmeBurnt,omitempty"`
+		Type            AccountType                                      `json:"type"`
+		Url             *url.URL                                         `json:"url,omitempty"`
+		Index           int64                                            `json:"index,omitempty"`
+		Timestamp       time.Time                                        `json:"timestamp,omitempty"`
+		PendingOracle   uint64                                           `json:"pendingOracle,omitempty"`
+		ActiveOracle    uint64                                           `json:"activeOracle,omitempty"`
+		AcmeBurnt       *string                                          `json:"acmeBurnt,omitempty"`
+		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -13018,6 +13057,7 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
 	return json.Marshal(&u)
 }
 
@@ -14683,13 +14723,14 @@ func (v *HashSet) UnmarshalJSON(data []byte) error {
 
 func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type          AccountType `json:"type"`
-		Url           *url.URL    `json:"url,omitempty"`
-		Index         int64       `json:"index,omitempty"`
-		Timestamp     time.Time   `json:"timestamp,omitempty"`
-		PendingOracle uint64      `json:"pendingOracle,omitempty"`
-		ActiveOracle  uint64      `json:"activeOracle,omitempty"`
-		AcmeBurnt     *string     `json:"acmeBurnt,omitempty"`
+		Type            AccountType                                      `json:"type"`
+		Url             *url.URL                                         `json:"url,omitempty"`
+		Index           int64                                            `json:"index,omitempty"`
+		Timestamp       time.Time                                        `json:"timestamp,omitempty"`
+		PendingOracle   uint64                                           `json:"pendingOracle,omitempty"`
+		ActiveOracle    uint64                                           `json:"activeOracle,omitempty"`
+		AcmeBurnt       *string                                          `json:"acmeBurnt,omitempty"`
+		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14698,6 +14739,7 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14713,6 +14755,10 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
 		v.AcmeBurnt = *x
+	}
+	v.OperatorUpdates = make([]KeyPageOperation, len(u.OperatorUpdates.Value))
+	for i, x := range u.OperatorUpdates.Value {
+		v.OperatorUpdates[i] = x
 	}
 	return nil
 }
