@@ -262,7 +262,10 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
-	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
+	bobKey := acctesting.GenerateKey(t.Name(), bobUrl)
+	charlieKey1 := acctesting.GenerateKey(t.Name(), charlieUrl, 1)
+	charlieKey2 := acctesting.GenerateKey(t.Name(), charlieUrl, 2)
+	charlieKey3 := acctesting.GenerateKey(t.Name(), charlieUrl, 3)
 
 	// Force the accounts onto different BVNs
 	sim.SetRouteFor(aliceUrl, "BVN0")
@@ -270,7 +273,16 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	sim.SetRouteFor(charlieUrl, "BVN2")
 
 	// Setup
-	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey)
+	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey1)
+
+	updateAccount(sim, charlieUrl.JoinPath("book", "1"), func(p *KeyPage) {
+		hash2 := sha256.Sum256(charlieKey2[32:])
+		hash3 := sha256.Sum256(charlieKey3[32:])
+		p.Keys = append(p.Keys,
+			&KeySpec{PublicKeyHash: hash2[:]},
+			&KeySpec{PublicKeyHash: hash3[:]})
+		p.AcceptThreshold = 2
+	})
 
 	// Initiate with the remote authority
 	envs := sim.MustSubmitAndExecuteBlock(
@@ -283,7 +295,9 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 			}).
 			WithTimestampVar(&timestamp).
 			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-			Initiate(SignatureTypeED25519, charlieKey).
+			Initiate(SignatureTypeED25519, charlieKey1).
+			Sign(SignatureTypeED25519, charlieKey2).
+			Sign(SignatureTypeED25519, charlieKey3).
 			Build(),
 	)
 	sim.WaitForTransactions(pending, envs...)
