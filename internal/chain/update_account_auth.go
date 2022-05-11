@@ -85,6 +85,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("account type %v does not support advanced auth", st.Origin.Type())
 	}
 	auth := account.GetAuth()
+
 	for _, op := range body.Operations {
 		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:
