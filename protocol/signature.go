@@ -106,14 +106,14 @@ func BTCaddress(pubKey []byte) string {
 }
 
 func ETHhash(pubKey []byte) []byte {
-	hash := sha3.NewLegacyKeccak512()
+	hash := sha3.NewLegacyKeccak256()
 	hash.Write(pubKey[:])
-	return hash.Sum(nil)
+	return hash.Sum(nil)[12:]
 }
 
 func ETHaddress(pubKey []byte) string {
 	address := ETHhash(pubKey)
-	return fmt.Sprintf("0x%x", address[12:])
+	return fmt.Sprintf("0x%x", address[:])
 }
 
 func netVal(u *url.URL) *url.URL {

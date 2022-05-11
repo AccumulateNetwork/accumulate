@@ -126,6 +126,14 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 			Initiate(SignatureTypeED25519, bob).
 			Build(),
 	)
+	sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(bobUrl.JoinPath("account")).
+			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
+			WithTxnHash(envs[0].Transaction[0].GetHash()).
+			Sign(SignatureTypeED25519, charlie).
+			Build(),
+	)
 	sim.WaitForTransactions(delivered, envs...)
 }
 

@@ -22,7 +22,7 @@ func NewBatchTest(t *testing.T, beginner DbBeginner) BatchTest {
 	return BatchTest{t, beginner.Begin(true)}
 }
 
-func (t BatchTest) Run(name string, run func(BatchTest)) {
+func (t BatchTest) Run(name string, run func(t BatchTest)) {
 	t.T.Run(name, func(s *testing.T) {
 		t := BatchTest{s, t.Begin(true)}
 		defer t.Discard()
