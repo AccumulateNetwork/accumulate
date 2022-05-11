@@ -518,7 +518,7 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	mres.Type = "minorBlock"
 	mres.Items = make([]interface{}, 0)
 	mres.Start = pagination.Start
-	mres.Count = pagination.Count
+	mres.Count = uint64(len(res.Entries))
 	mres.Total = res.TotalBlocks
 	for _, entry := range res.Entries {
 		queryRes, err := packMinorQueryResponse(entry)

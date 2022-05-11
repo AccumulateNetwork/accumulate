@@ -940,8 +940,14 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 	}
 
-	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	idxChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	var ledger *protocol.InternalLedger
+	err = ledgerAcc.GetStateAs(&ledger)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
+
+	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
@@ -950,7 +956,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 	}
 
-	resp := query.ResponseMinorBlocks{}
+	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
 	for _, idxData := range idxEntries {
 		minorEntry := new(query.ResponseMinorEntry)
 
@@ -1001,11 +1007,9 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 			}
 			if minorEntry.TxCount > (internalTxCount + synthAnchorCount) {
 				resp.Entries = append(resp.Entries, minorEntry)
-				resp.TotalBlocks++
 			}
 		} else {
 			resp.Entries = append(resp.Entries, minorEntry)
-			resp.TotalBlocks++
 		}
 	}
 	return &resp, nil
