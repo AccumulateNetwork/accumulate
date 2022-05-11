@@ -1,76 +1,130 @@
 package block
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Delivery) error {
-	var transactions []*protocol.SyntheticForwardTransaction
-	index := map[[32]byte]int{}
+	// Synthetic transactions are never remote
+	if !delivery.Transaction.Body.Type().IsUser() {
+		return nil
+	}
 
-	for _, signature := range delivery.Remote {
-		var transaction *protocol.SyntheticForwardTransaction
-		if i, ok := index[signature.Destination.AccountID32()]; ok {
-			transaction = transactions[i]
-		} else {
-			transaction = new(protocol.SyntheticForwardTransaction)
-			transaction.Transaction = delivery.Transaction
-			index[signature.Destination.AccountID32()] = len(transactions)
-			transactions = append(transactions, transaction)
-			delivery.State.DidProduceTxn(signature.Destination, transaction)
+	var transactions []*protocol.SyntheticForwardTransaction
+	txnIndex := map[[32]byte]int{}
+	signerSeen := map[[32]byte]bool{}
+
+	batch := block.Batch.Begin(false)
+	defer batch.Discard()
+
+	for _, signature := range delivery.Signatures {
+		_, fwd, err := x.shouldForwardSignature(batch, delivery.Transaction, signature, delivery.Transaction.Header.Principal, signerSeen)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+		if fwd == nil {
+			continue
 		}
 
-		transaction.Signatures = append(transaction.Signatures, *signature)
+		if fwd.Destination == nil {
+			fwd.Destination = delivery.Transaction.Header.Principal
+		}
+
+		if i, ok := txnIndex[fwd.Destination.AccountID32()]; ok {
+			transaction := transactions[i]
+			transaction.Signatures = append(transaction.Signatures, *fwd)
+		}
+
+		transaction := new(protocol.SyntheticForwardTransaction)
+		transaction.Transaction = delivery.Transaction
+		transaction.Signatures = append(transaction.Signatures, *fwd)
+		txnIndex[fwd.Destination.AccountID32()] = len(transactions)
+		transactions = append(transactions, transaction)
+		delivery.State.DidProduceTxn(fwd.Destination, transaction)
 	}
 
 	return nil
 }
 
-func (x *Executor) prepareToForward(delivery *chain.Delivery, state *ProcessSignatureState, signature protocol.Signature) (*protocol.ForwardedSignature, error) {
-	// Do not process remote signatures for synthetic transactions
-	if !delivery.Transaction.Body.Type().IsUser() {
-		return nil, nil
-	}
-
-	fwd := new(protocol.ForwardedSignature)
-	for i, signer := range state.Signers {
-		if signer, ok := signer.(*protocol.UnknownSigner); ok {
-			if signer.GetUrl().LocalTo(signature.RoutingLocation()) {
-				// This should not happen
-				return nil, fmt.Errorf("signer is local but unknown")
-			}
-			fwd.Destination = signer.GetUrl()
-			fwd.Signers = state.Signers[:i]
-			break
-		}
-	}
-	if fwd.Destination != nil {
-		// Forward to next signer
-	} else if !delivery.Transaction.Header.Principal.LocalTo(signature.RoutingLocation()) {
-		// Forward to principal
-		fwd.Destination = delivery.Transaction.Header.Principal
-		fwd.Signers = state.Signers
-	} else {
-		// No forwarding needeed
-		return nil, nil
-	}
-
+func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature, destination *url.URL, seen map[[32]byte]bool) (*url.URL, *protocol.RemoteSignature, error) {
+	var signerUrl *url.URL
 	switch signature := signature.(type) {
-	case *protocol.ForwardedSignature:
-		fwd.Signature = signature.Signature
+	case *protocol.DelegatedSignature:
+		// Check inner signature
+		s, fwd, err := x.shouldForwardSignature(batch, transaction, signature.Signature, signature.Delegator, seen)
+		if err != nil {
+			return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if fwd != nil {
+			delegated := signature.Copy()
+			delegated.Signature = fwd.Signature
+			fwd.Signature = delegated
+			return s, fwd, nil
+		}
+
+		signerUrl = signature.Delegator
+
+	case *protocol.RemoteSignature:
+		return x.shouldForwardSignature(batch, transaction, signature.Signature, destination, seen)
+
+	case *protocol.SignatureSet:
+		// Already forwarded
+		return nil, nil, nil
+
 	case protocol.KeySignature:
-		fwd.Signature = signature
-	default:
-		// This should not happen
-		return nil, fmt.Errorf("unexpected remote signature that is not a key signature: %T", signature)
+		signerUrl = signature.GetSigner()
 	}
 
-	for i, signer := range fwd.Signers {
-		fwd.Signers[i] = protocol.MakeLiteSigner(signer)
+	if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+		signerUrl = signerUrl.RootIdentity()
 	}
 
-	return fwd, nil
+	// Signer is remote?
+	if signerUrl.LocalTo(destination) {
+		return signerUrl, nil, nil
+	}
+
+	if seen[signerUrl.AccountID32()] {
+		return nil, nil, nil
+	} else {
+		seen[signerUrl.AccountID32()] = true
+	}
+
+	signer, err := loadSigner(batch, signerUrl)
+	if err != nil {
+		return nil, nil, errors.Format(errors.StatusUnknown, "load signer: %w", err)
+	}
+
+	// Signer is satisfied?
+	record := batch.Transaction(transaction.GetHash())
+	status, err := record.GetStatus()
+	if err != nil {
+		return nil, nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
+	}
+
+	ready, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+	if !ready || err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Load all of the signatures
+	sigset, err := GetSignaturesForSigner(batch, batch.Transaction(transaction.GetHash()), signer)
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	set := new(protocol.SignatureSet)
+	set.Vote = protocol.VoteTypeAccept
+	set.Signer = signerUrl
+	set.TransactionHash = *(*[32]byte)(transaction.GetHash())
+	set.Signatures = sigset
+
+	fwd := new(protocol.RemoteSignature)
+	fwd.Destination = destination
+	fwd.Signature = set
+	return signerUrl, fwd, nil
 }

@@ -138,7 +138,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	err = putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		&protocol.InternalSignature{Network: signerUrl})
+		nil)
 	if err != nil {
 		return err
 	}
@@ -277,7 +277,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
 		}
-		sigs, err := getAllSignatures(batch, record, status, txn.Header.Initiator[:])
+		sigs, err := GetAllSignatures(batch, record, status, txn.Header.Initiator[:])
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
 		}
@@ -327,7 +327,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
-		_, err = batch.Transaction(hash).AddSignature(proofSig)
+		_, err = batch.Transaction(hash).AddSignature(0, proofSig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", hash[:4], err)
 		}
