@@ -70,6 +70,11 @@ txn2 = Transaction("ethan/book/1").
 		Add(KeyEntry().WithOwner("paul/book")).
 	Initiate(ethanKey).
 	Submit()
+txn3 := Transaction("ethan/book/1").
+	WithSigner("paul/book/1", 1).
+	WithHash(txn2.Hash[:]).
+	Sign(paulKey).
+	Submit()
 txn1.Wait().Ok()
 txn2.Wait().Ok()
 Show("Create token account and delegated key page entry ✔")
