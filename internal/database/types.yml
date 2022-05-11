@@ -3,17 +3,20 @@ sigSetData:
     - name: Version
       type: uint
     - name: Entries
-      type: sigSetKeyData
+      type: SigSetEntry
       marshal-as: reference
       repeatable: true
 
-sigSetKeyData:
+SigSetEntry:
   fields:
     - name: System
       type: bool
-    - name: KeyHash
-      type: hash
-    - name: EntryHash
+    - name: Type
+      type: protocol.SignatureType
+      marshal-as: enum
+    - name: KeyEntryIndex
+      type: uint
+    - name: SignatureHash
       type: hash
 
 txSyntheticTxns:

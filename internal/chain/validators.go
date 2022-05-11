@@ -20,7 +20,7 @@ var _ SignerValidator = (*AddValidator)(nil)
 var _ SignerValidator = (*RemoveValidator)(nil)
 var _ SignerValidator = (*UpdateValidatorKey)(nil)
 
-func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, _ *url.URL, signer protocol.Signer) (fallback bool, err error) {
+func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
 	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
@@ -44,7 +44,7 @@ func (AddValidator) Type() protocol.TransactionType {
 }
 
 func (AddValidator) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return nil, addValidator(st, tx, true)
+	return nil, addValidator(st, tx)
 }
 
 func (RemoveValidator) Type() protocol.TransactionType {
@@ -52,7 +52,7 @@ func (RemoveValidator) Type() protocol.TransactionType {
 }
 
 func (RemoveValidator) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return nil, removeValidator(st, tx, true)
+	return nil, removeValidator(st, tx)
 }
 
 func (UpdateValidatorKey) Type() protocol.TransactionType {
@@ -64,10 +64,10 @@ func (UpdateValidatorKey) Execute(st *StateManager, tx *Delivery) (protocol.Tran
 }
 
 func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
-	return nil, addValidator(st, env, false)
+	return nil, addValidator(st, env)
 }
 
-func addValidator(st *StateManager, env *Delivery, execute bool) error {
+func addValidator(st *StateManager, env *Delivery) error {
 	body := env.Transaction.Body.(*protocol.AddValidator)
 
 	page, err := checkValidatorTransaction(st, env)
@@ -102,10 +102,10 @@ func addValidator(st *StateManager, env *Delivery, execute bool) error {
 }
 
 func (RemoveValidator) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
-	return nil, removeValidator(st, env, false)
+	return nil, removeValidator(st, env)
 }
 
-func removeValidator(st *StateManager, env *Delivery, execute bool) error {
+func removeValidator(st *StateManager, env *Delivery) error {
 	body := env.Transaction.Body.(*protocol.RemoveValidator)
 
 	page, err := checkValidatorTransaction(st, env)
@@ -144,10 +144,10 @@ func removeValidator(st *StateManager, env *Delivery, execute bool) error {
 }
 
 func (UpdateValidatorKey) Validate(st *StateManager, env *Delivery) (protocol.TransactionResult, error) {
-	return nil, updateValidator(st, env, false)
+	return nil, updateValidator(st, env)
 }
 
-func updateValidator(st *StateManager, env *Delivery, execute bool) error {
+func updateValidator(st *StateManager, env *Delivery) error {
 	body := env.Transaction.Body.(*protocol.UpdateValidatorKey)
 
 	page, err := checkValidatorTransaction(st, env)
