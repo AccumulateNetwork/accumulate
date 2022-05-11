@@ -10,7 +10,7 @@ type additionalAuthorities []*url.URL
 
 // SignerIsAuthorized authorizes a signer if it belongs to an additional
 // authority. Otherwise, it falls back to the default.
-func (a additionalAuthorities) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+func (a additionalAuthorities) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
 	signerBook, _, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		// Fallback to general authorization
@@ -24,7 +24,7 @@ func (a additionalAuthorities) SignerIsAuthorized(delegate AuthDelegate, batch *
 			continue
 		}
 
-		return false, delegate.SignerIsAuthorized(batch, transaction, location, signer, true)
+		return false, delegate.SignerIsAuthorized(batch, transaction, signer, false)
 	}
 
 	// Fallback to general authorization

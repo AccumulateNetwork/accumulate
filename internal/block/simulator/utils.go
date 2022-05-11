@@ -91,7 +91,7 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 
 	// Is the block empty?
 	if block.State.Empty() {
-		return nil, nil
+		return results, nil
 	}
 
 	// Commit the batch
