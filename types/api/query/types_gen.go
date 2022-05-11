@@ -3066,6 +3066,22 @@ func (v *DirectoryQueryResult) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
+	u := struct {
+		LocalBlock     uint64           `json:"localBlock,omitempty"`
+		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
+		Proof          protocol.Receipt `json:"proof,omitempty"`
+		Receipt        protocol.Receipt `json:"receipt,omitempty"`
+		Error          string           `json:"error,omitempty"`
+	}{}
+	u.LocalBlock = v.LocalBlock
+	u.DirectoryBlock = v.DirectoryBlock
+	u.Proof = v.Proof
+	u.Receipt = v.Proof
+	u.Error = v.Error
+	return json.Marshal(&u)
+}
+
 func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type  string                    `json:"type,omitempty"`
@@ -3286,6 +3302,7 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 		LocalBlock     uint64           `json:"localBlock,omitempty"`
 		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
 		Proof          protocol.Receipt `json:"proof,omitempty"`
+		Receipt        protocol.Receipt `json:"receipt,omitempty"`
 		Error          string           `json:"error,omitempty"`
 		Account        *url.URL         `json:"account,omitempty"`
 		Chain          string           `json:"chain,omitempty"`
@@ -3293,6 +3310,7 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	u.Proof = v.GeneralReceipt.Proof
+	u.Receipt = v.GeneralReceipt.Proof
 	u.Error = v.GeneralReceipt.Error
 	u.Account = v.Account
 	u.Chain = v.Chain
@@ -3354,6 +3372,33 @@ func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
 		v.ExpandedEntries[i] = x
 	}
 	v.Total = u.Total
+	return nil
+}
+
+func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
+	u := struct {
+		LocalBlock     uint64           `json:"localBlock,omitempty"`
+		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
+		Proof          protocol.Receipt `json:"proof,omitempty"`
+		Receipt        protocol.Receipt `json:"receipt,omitempty"`
+		Error          string           `json:"error,omitempty"`
+	}{}
+	u.LocalBlock = v.LocalBlock
+	u.DirectoryBlock = v.DirectoryBlock
+	u.Proof = v.Proof
+	u.Receipt = v.Proof
+	u.Error = v.Error
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.LocalBlock = u.LocalBlock
+	v.DirectoryBlock = u.DirectoryBlock
+	if u.Proof != (protocol.Receipt{}) {
+		v.Proof = u.Proof
+	} else {
+		v.Proof = u.Receipt
+	}
+	v.Error = u.Error
 	return nil
 }
 
@@ -3747,6 +3792,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 		LocalBlock     uint64           `json:"localBlock,omitempty"`
 		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
 		Proof          protocol.Receipt `json:"proof,omitempty"`
+		Receipt        protocol.Receipt `json:"receipt,omitempty"`
 		Error          string           `json:"error,omitempty"`
 		Account        *url.URL         `json:"account,omitempty"`
 		Chain          string           `json:"chain,omitempty"`
@@ -3754,6 +3800,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	u.Proof = v.GeneralReceipt.Proof
+	u.Receipt = v.GeneralReceipt.Proof
 	u.Error = v.GeneralReceipt.Error
 	u.Account = v.Account
 	u.Chain = v.Chain
@@ -3762,7 +3809,11 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
-	v.GeneralReceipt.Proof = u.Proof
+	if u.Proof != (protocol.Receipt{}) {
+		v.GeneralReceipt.Proof = u.Proof
+	} else {
+		v.GeneralReceipt.Proof = u.Receipt
+	}
 	v.GeneralReceipt.Error = u.Error
 	v.Account = u.Account
 	v.Chain = u.Chain
