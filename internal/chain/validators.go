@@ -16,7 +16,11 @@ type AddValidator struct{ checkValidatorSigner }
 type RemoveValidator struct{ checkValidatorSigner }
 type UpdateValidatorKey struct{ checkValidatorSigner }
 
-func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+var _ SignerValidator = (*AddValidator)(nil)
+var _ SignerValidator = (*RemoveValidator)(nil)
+var _ SignerValidator = (*UpdateValidatorKey)(nil)
+
+func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, _ *url.URL, signer protocol.Signer) (fallback bool, err error) {
 	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
@@ -30,7 +34,7 @@ func (checkValidatorSigner) SignerIsAuthorized(batch *database.Batch, transactio
 	return true, nil
 }
 
-func (checkValidatorSigner) TransactionIsReady(*database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (checkValidatorSigner) TransactionIsReady(AuthDelegate, *database.Batch, *protocol.Transaction, *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	// Do not override the ready check
 	return false, true, nil
 }
