@@ -51,7 +51,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   done
 
   # Start the new validator and increment NUM_DMNS
-  accumulated --use-unencrypted-wallet run -n 3 -w "$DN_NODES_DIR" &
+  accumulated run -n 3 -w "$DN_NODES_DIR" &
   declare -g ACCPID=$!
 
   # Increment NUM_DNNS so sigCount returns an updated result
@@ -127,5 +127,5 @@ if [ ! -z "${ACCPID}" ]; then
   accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
 
-  kill -9 $ACCPID
+  kill -9 $ACCPID || true
 fi
