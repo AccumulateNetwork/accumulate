@@ -29,7 +29,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 	case config.Directory:
 		return newExecutor(opts, db,
 			PartitionAnchor{Network: &opts.Network},
-			SyntheticMirror{},
+			MirrorSystemRecords{},
 			SyntheticForwardTransaction{},
 
 			// for data accounts
@@ -74,7 +74,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			SyntheticCreateIdentity{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
-			SyntheticMirror{},
+			MirrorSystemRecords{},
 			SyntheticWriteData{},
 			SyntheticForwardTransaction{},
 
