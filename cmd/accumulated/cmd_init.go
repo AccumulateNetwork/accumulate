@@ -591,9 +591,6 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
 	svc.Environment = map[string]*string{"ACC_API": &api}
-	extras := make(map[string]interface{})
-	extras["profiles"] = [...]string{"init"}
-	svc.Extras = extras
 
 	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
 	cmd.Flags().Visit(func(flag *pflag.Flag) {
@@ -679,7 +676,7 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 	svc.Name = name
 	svc.ContainerName = "devnet-" + name
 	svc.Image = flagInitDevnet.DockerImage
-	//svc.DependsOn = []string{"tools"}
+	svc.DependsOn = []string{"tools"}
 
 	if flagInitDevnet.UseVolumes {
 		svc.Volumes = []dc.ServiceVolumeConfig{
