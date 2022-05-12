@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"math/big"
+	"path"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
@@ -22,13 +23,14 @@ import (
 )
 
 type InitOpts struct {
-	Network              config.Network
-	Validators           []tmtypes.GenesisValidator
-	NetworkValidatorsMap map[string][]*tmtypes.GenesisValidator
-	GenesisTime          time.Time
-	Logger               log.Logger
-	Router               routing.Router
-	FactomAddressesFile  string
+	Network             config.Network
+	Configs             []*config.Config
+	Validators          []tmtypes.GenesisValidator
+	NetworkValidatorMap NetworkValidatorMap
+	GenesisTime         time.Time
+	Logger              log.Logger
+	Router              routing.Router
+	FactomAddressesFile string
 }
 
 type DataRecord struct {
@@ -36,8 +38,11 @@ type DataRecord struct {
 	Entry   *protocol.DataEntry
 }
 
+type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
+
 type Genesis struct {
 	opts         InitOpts
+	network      config.Network
 	kvdb         storage.KeyValueStore
 	db           *database.Database
 	block        *block.Block
@@ -48,15 +53,18 @@ type Genesis struct {
 	dataRecords  []DataRecord
 }
 
-type GenesisCtl interface {
+type Initializer interface {
 	GenerateNetworkDefinition() error
 	Commit() (*tmtypes.GenesisDoc, error)
 	Discard()
+	IsDN() bool
+	WriteGenesisFile(doc *tmtypes.GenesisDoc) error
 }
 
-func Init(kvdb storage.KeyValueStore, opts InitOpts) (GenesisCtl, error) {
+func Init(kvdb storage.KeyValueStore, opts InitOpts) (Initializer, error) {
 	g := &Genesis{
 		kvdb: kvdb,
+		opts: opts,
 		db:   database.New(kvdb, opts.Logger.With("module", "database")),
 	}
 
@@ -119,6 +127,10 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (GenesisCtl, error) {
 			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
 		}
 
+		// Add validator keys to NetworkValidatorMap when not there
+		if _, ok := g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID]; !ok {
+			g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID] = g.opts.Validators
+		}
 		return st.AddDirectoryEntry(g.adiUrl, g.urls...)
 	})
 	if err != nil {
@@ -339,6 +351,15 @@ func (g *Genesis) Commit() (*tmtypes.GenesisDoc, error) {
 	}, nil
 }
 
+func (g *Genesis) WriteGenesisFile(genDoc *tmtypes.GenesisDoc) error {
+	for _, config := range g.opts.Configs {
+		if err := genDoc.SaveAs(path.Join(config.RootDir, config.BaseConfig.Genesis)); err != nil {
+			return fmt.Errorf("failed to save gen doc: %v", err)
+		}
+	}
+	return nil
+}
+
 func (g *Genesis) Discard() {
 	g.block.Batch.Discard()
 }
@@ -350,7 +371,7 @@ func (g *Genesis) generateNetworkDefinition() *protocol.NetworkDefinition {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte
-		for _, validator := range g.opts.NetworkValidatorsMap[subnet.ID] {
+		for _, validator := range g.opts.NetworkValidatorMap[subnet.ID] {
 			pkh := sha256.Sum256(validator.PubKey.Bytes())
 			vkHashes = append(vkHashes, pkh)
 		}
@@ -442,4 +463,37 @@ func (g *Genesis) createADI() {
 	adi.Url = g.adiUrl
 	adi.AddAuthority(g.authorityUrl)
 	g.WriteRecords(adi)
+}
+
+func (g *Genesis) IsDN() bool {
+	return g.opts.Network.Type == config.Directory
+}
+
+type existingGenesis struct {
+	genesisDoc *tmtypes.GenesisDoc
+	network    config.Network
+}
+
+func Existing(genesisDoc *tmtypes.GenesisDoc, network config.Network) Initializer {
+	return existingGenesis{genesisDoc, network}
+}
+
+func (e existingGenesis) GenerateNetworkDefinition() error {
+	return nil
+}
+
+func (e existingGenesis) Commit() (*tmtypes.GenesisDoc, error) {
+	return e.genesisDoc, nil
+}
+
+func (e existingGenesis) Discard() {
+}
+
+func (e existingGenesis) IsDN() bool {
+	return e.network.Type == config.Directory
+}
+
+func (e existingGenesis) WriteGenesisFile(doc *tmtypes.GenesisDoc) error {
+	// We don't write a file that is already there
+	return nil
 }

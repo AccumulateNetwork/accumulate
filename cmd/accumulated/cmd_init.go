@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"io"
 	"io/fs"
 	"net"
@@ -565,22 +566,22 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 
 func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
 	logger := newLogger()
-	genDocMap := map[string]*types.GenesisDoc{}
-	_, err := node.Init(node.InitOptions{
-		WorkDir:              filepath.Join(flagMain.WorkDir, "dn"),
-		Port:                 flagInitDevnet.BasePort,
-		Config:               dnConfig,
-		RemoteIP:             dnRemote,
-		ListenIP:             dnListen,
-		NetworkValidatorsMap: genDocMap,
-		Logger:               logger.With("subnet", protocol.Directory),
+	netValMap := make(genesis.NetworkValidatorMap)
+	genInit, err := node.Init(node.InitOptions{
+		WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
+		Port:                flagInitDevnet.BasePort,
+		Config:              dnConfig,
+		RemoteIP:            dnRemote,
+		ListenIP:            dnListen,
+		NetworkValidatorMap: netValMap,
+		Logger:              logger.With("subnet", protocol.Directory),
 	})
 	check(err)
+	genInits := []genesis.Initializer{genInit}
 
 	for bvn := range bvnConfig {
-		subnetId := fmt.Sprintf("BVN%d", bvn)
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-		genDoc, err := node.Init(node.InitOptions{
+		genInit, err := node.Init(node.InitOptions{
 			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
 			Port:     flagInitDevnet.BasePort,
 			Config:   bvnConfig,
@@ -588,8 +589,26 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 			ListenIP: bvnListen,
 			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 		})
-		genDocMap[subnetId] = genDoc
 		check(err)
+		genInits = append(genInits, genInit)
+	}
+
+	for _, genInit := range genInits {
+		func() {
+			defer genInit.Discard()
+			if genInit.IsDN() {
+				err := genInit.GenerateNetworkDefinition()
+				if err != nil {
+					panic(fmt.Errorf("could not generate genesis network definition for DN: %v", err))
+				}
+			}
+			genesisDoc, err := genInit.Commit()
+			if err != nil {
+				panic(fmt.Errorf("could not generate commit genesis: %v", err))
+			}
+
+			genInit.WriteGenesisFile(genesisDoc)
+		}()
 	}
 }
 

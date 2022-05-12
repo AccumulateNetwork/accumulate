@@ -48,8 +48,10 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert  *assert.Assertions
-	require *require.Assertions
+	assert             *assert.Assertions
+	require            *require.Assertions
+	netValMap          genesis.NetworkValidatorMap
+	GenesisInitializer genesis.Initializer
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -58,6 +60,8 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.Client{}
+	netValMap := make(genesis.NetworkValidatorMap)
+	genInits := []genesis.Initializer{}
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -71,18 +75,36 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil, netValMap)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
 	}
+
 	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
+			genInits = append(genInits, nodes[i].GenesisInitializer)
 		}
+	}
+
+	for _, genInit := range genInits {
+		func() {
+			defer genInit.Discard()
+			if genInit.IsDN() {
+				err := genInit.GenerateNetworkDefinition()
+				if err != nil {
+					panic(fmt.Errorf("could not generate genesis network definition for DN: %v", err))
+				}
+			}
+			_, err := genInit.Commit()
+			if err != nil {
+				panic(fmt.Errorf("could not generate commit genesis: %v", err))
+			}
+		}()
 	}
 	return allNodes
 }
@@ -94,7 +116,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkValidatorMap) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -110,6 +132,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.key = pv.Key.PrivKey
 	n.network = &d.Config.Accumulate.Network
 	n.logger = d.Logger
+	n.netValMap = netValMap
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
@@ -184,21 +207,17 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.height++
 
 	kv := memory.New(nil)
-	genDocMap := map[string]*tmtypes.GenesisDoc{}
 	opts := genesis.InitOpts{
-		Network:              *n.network,
-		GenesisTime:          time.Now(),
-		NetworkValidatorsMap: genDocMap,
-		Logger:               n.logger,
-		Router:               n.router,
+		Network:             *n.network,
+		GenesisTime:         time.Now(),
+		NetworkValidatorMap: n.netValMap,
+		Logger:              n.logger,
+		Router:              n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
 	}
-	_, err = genesis.Init(kv, opts)
-	genDocMap[n.network.LocalSubnetID] = &tmtypes.GenesisDoc{
-		Validators: opts.Validators,
-	}
+	n.GenesisInitializer, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
 
 	state, err := kv.MarshalJSON()

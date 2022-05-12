@@ -2,7 +2,7 @@ package testing
 
 import (
 	"fmt"
-	"github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"io"
 	"path/filepath"
 	"testing"
@@ -147,23 +147,24 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
-	genDocMap := map[string]*types.GenesisDoc{}
+	netValMap := make(genesis.NetworkValidatorMap)
+	var genInits []genesis.Initializer
+
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
 		dir := filepath.Join(tempDir, subnetId)
-		genDoc, err := node.Init(node.InitOptions{
-			WorkDir:              dir,
-			Port:                 basePort,
-			Config:               allConfigs[subnetId],
-			RemoteIP:             allRemotes[subnetId],
-			ListenIP:             allRemotes[subnetId],
-			NetworkValidatorsMap: genDocMap,
-			Logger:               initLogger.With("subnet", subnetId),
-			FactomAddressesFile:  factomAddressFilePath,
+		genInit, err := node.Init(node.InitOptions{
+			WorkDir:             dir,
+			Port:                basePort,
+			Config:              allConfigs[subnetId],
+			RemoteIP:            allRemotes[subnetId],
+			ListenIP:            allRemotes[subnetId],
+			NetworkValidatorMap: netValMap,
+			Logger:              initLogger.With("subnet", subnetId),
+			FactomAddressesFile: factomAddressFilePath,
 		})
 		require.NoError(t, err)
-
-		genDocMap[subnetId] = genDoc
+		genInits = append(genInits, genInit)
 
 		daemons := make([]*accumulated.Daemon, count)
 		allDaemons[subnetId] = daemons
@@ -177,6 +178,23 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 	}
 
+	for _, genInit := range genInits {
+		func() {
+			defer genInit.Discard()
+			if genInit.IsDN() {
+				err := genInit.GenerateNetworkDefinition()
+				if err != nil {
+					panic(fmt.Errorf("could not generate genesis network definition for DN: %v", err))
+				}
+			}
+			genesisDoc, err := genInit.Commit()
+			if err != nil {
+				panic(fmt.Errorf("could not generate commit genesis: %v", err))
+			}
+
+			genInit.WriteGenesisFile(genesisDoc)
+		}()
+	}
 	return getSubnetNames(subnets), allDaemons
 }
 
