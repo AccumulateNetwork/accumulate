@@ -283,15 +283,12 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if err != nil {
 			amt = "unknown"
 		}
-		idUrl := ata.Url.RootIdentity()
-		fmt.Println(idUrl)
 		params := api2.UrlQuery{}
-		params.Url = idUrl
+		params.Url = ata.Url.RootIdentity()
 		qres := new(QueryResponse)
 		litIdentity := new(protocol.LiteIdentity)
 		qres.Data = litIdentity
 		err = queryAs("query", &params, &qres)
-		fmt.Println(err, *litIdentity)
 		if err != nil {
 			return "", err
 		}
@@ -299,8 +296,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCreditBalance\t\t:\t%d\n", litIdentity.CreditBalance)
-		out += fmt.Sprintf("\tLast Used On\t\t:\t%v\n", time.Unix(0, int64(litIdentity.LastUsedOn*uint64(time.Microsecond))))
+		out += fmt.Sprintf("\tCreditBalance\t:\t%d\n", litIdentity.CreditBalance)
+		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(litIdentity.LastUsedOn*uint64(time.Microsecond))))
 
 		return out, nil
 	case protocol.AccountTypeLiteIdentity.String():
