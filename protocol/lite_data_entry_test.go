@@ -25,7 +25,7 @@ import (
 
 func TestLiteDataEntry(t *testing.T) {
 
-	firstEntry := DataEntry{}
+	firstEntry := AccumulateDataEntry{}
 
 	firstEntry.Data = append(firstEntry.Data, []byte{})
 	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
@@ -44,24 +44,21 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("lite token account id doesn't match the expected id")
 	}
 
-	lde := NewLiteDataEntry()
+	lde := NewFactomDataEntry()
 	copy(lde.AccountId[:], chainId)
-	lde.Data = append(lde.Data, []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here."))
+	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
 	for i := 0; i < 3; i++ {
-		lde.Data = append(lde.Data, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
+		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
 	}
 
 	expectedHash := "1bd5955a72f8696416ac3ca39f7aa6a054e7209aa2f9a5f95d601640b8d047a5"
-	entryHash, err := lde.Hash()
-	if err != nil {
-		t.Fatal(err)
-	}
+	entryHash := lde.Hash()
 	entryHashHex := fmt.Sprintf("%x", entryHash)
 	if entryHashHex != expectedHash {
 		t.Fatalf("expected hash %v, but received %x", expectedHash, entryHash)
 	}
 
-	cost, err := lde.Cost()
+	cost, err := DataEntryCost(lde)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,11 +66,11 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
 	}
 
-	de := NewLiteDataEntry()
+	de := new(AccumulateDataEntry)
 
 	//add test for an empty entry to make sure function behaves as expected.
-	h := ComputeLiteDataAccountId(de.DataEntry)
-	if strings.Compare(fmt.Sprintf("%x", h),
+	accountId := *(*[32]byte)(ComputeLiteDataAccountId(de))
+	if strings.Compare(fmt.Sprintf("%x", accountId),
 		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") != 0 {
 		t.Fatalf("invalid account id from empty lite entry")
 	}
@@ -84,7 +81,7 @@ func TestLiteDataEntry(t *testing.T) {
 		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
-	cost, err = de.Cost()
+	cost, err = DataEntryCost(de)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +97,7 @@ func TestLiteDataEntry(t *testing.T) {
 	}
 
 	//now the size of the entry is 10878 bytes, so the cost should fail.
-	cost, err = de.Cost()
+	cost, err = DataEntryCost(de)
 	if err == nil {
 		t.Fatalf("expected failure on data to large, but it passed and returned a cost of %d", cost)
 	}

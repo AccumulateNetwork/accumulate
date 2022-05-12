@@ -34,23 +34,6 @@ func (m *Executor) EndBlock(block *Block) error {
 		"submitted", len(block.State.ProducedTxns))
 	t := time.Now()
 
-	// 	err = m.doEndBlock(block, ledgerState)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	// Write the updated ledger
-	// 	err = ledger.PutState(ledgerState)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	m.logInfo("Committed", "height", block.Index, "duration", time.Since(t))
-	// 	return nil
-	// }
-
-	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger) error {
-
 	// Load the main chain of the minor root
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
 	if err != nil {
@@ -195,12 +178,12 @@ func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
 	}
 
 	o := protocol.AcmeOracle{}
-	if e.Data == nil {
+	if e.GetData() == nil {
 		return 0, fmt.Errorf("no data in oracle data account")
 	}
-	err = json.Unmarshal(e.Data[0], &o)
+	err = json.Unmarshal(e.GetData()[0], &o)
 	if err != nil {
-		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.Data)
+		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.GetData())
 	}
 
 	if o.Price == 0 {
