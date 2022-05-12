@@ -287,7 +287,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		c.app.Commit()
 
 		for _, update := range endBlockResp.ValidatorUpdates {
-			c.applyValidatorUpdate(&update)
+			c.applyValidatorUpdate(&update) //nolint:rangevarref
 		}
 
 		for _, sub := range queue {

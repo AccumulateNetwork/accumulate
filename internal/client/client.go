@@ -46,7 +46,7 @@ func New(server string) (*Client, error) {
 // RequestAPIv2 makes a JSON RPC request to the Accumulate API v2.
 func (c *Client) RequestAPIv2(ctx context.Context, method string, params, result interface{}) error {
 	if c.DebugRequest {
-		fmt.Println("accumulated:", c.serverV2)
+		fmt.Println("accumulated:", c.serverV2) //nolint:noprint
 	}
 
 	return c.Client.Request(ctx, c.serverV2, method, params, result)

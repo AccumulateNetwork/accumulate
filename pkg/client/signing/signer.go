@@ -56,13 +56,13 @@ func (k PrivateKey) Sign(sig protocol.Signature, message []byte) error {
 		protocol.SignRCD1(sig, k, message)
 
 	case *protocol.BTCSignature:
-		protocol.SignBTC(sig, k, message)
+		return protocol.SignBTC(sig, k, message)
 
 	case *protocol.BTCLegacySignature:
-		protocol.SignBTCLegacy(sig, k, message)
+		return protocol.SignBTCLegacy(sig, k, message)
 
 	case *protocol.ETHSignature:
-		protocol.SignETH(sig, k, message)
+		return protocol.SignETH(sig, k, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)
