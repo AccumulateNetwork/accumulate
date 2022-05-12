@@ -690,18 +690,18 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
 		return new(ETHSignature), nil
-	case SignatureTypeForwarded:
-		return new(ForwardedSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
 		return new(RCD1Signature), nil
 	case SignatureTypeReceipt:
 		return new(ReceiptSignature), nil
+	case SignatureTypeRemote:
+		return new(RemoteSignature), nil
+	case SignatureTypeSet:
+		return new(SignatureSet), nil
 	case SignatureTypeSynthetic:
 		return new(SyntheticSignature), nil
-	case SignatureTypeSystem:
-		return new(SystemSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
@@ -725,9 +725,6 @@ func EqualSignature(a, b Signature) bool {
 	case *ETHSignature:
 		b, ok := b.(*ETHSignature)
 		return ok && a.Equal(b)
-	case *ForwardedSignature:
-		b, ok := b.(*ForwardedSignature)
-		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
 		b, ok := b.(*LegacyED25519Signature)
 		return ok && a.Equal(b)
@@ -737,11 +734,14 @@ func EqualSignature(a, b Signature) bool {
 	case *ReceiptSignature:
 		b, ok := b.(*ReceiptSignature)
 		return ok && a.Equal(b)
+	case *RemoteSignature:
+		b, ok := b.(*RemoteSignature)
+		return ok && a.Equal(b)
+	case *SignatureSet:
+		b, ok := b.(*SignatureSet)
+		return ok && a.Equal(b)
 	case *SyntheticSignature:
 		b, ok := b.(*SyntheticSignature)
-		return ok && a.Equal(b)
-	case *SystemSignature:
-		b, ok := b.(*SystemSignature)
 		return ok && a.Equal(b)
 	default:
 		return false

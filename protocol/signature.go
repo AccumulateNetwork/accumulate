@@ -26,29 +26,28 @@ type Signature interface {
 
 	GetVote() VoteType
 	GetSigner() *url.URL
-	GetSignerVersion() uint64
-	GetTimestamp() uint64
-	GetSignature() []byte
 	GetTransactionHash() [32]byte
 
-	Verify(hash []byte) bool
 	Hash() []byte
 	Metadata() Signature
 	Initiator() (hash.Hasher, error)
-	GetPublicKeyHash() []byte
 }
 
 type KeySignature interface {
 	Signature
+	GetSignature() []byte
+	GetPublicKeyHash() []byte
 	GetPublicKey() []byte
+	GetSignerVersion() uint64
+	GetTimestamp() uint64
+	Verify(hash []byte) bool
 }
 
 // IsSystem returns true if the signature type is a system signature type.
 func (s SignatureType) IsSystem() bool {
 	switch s {
 	case SignatureTypeSynthetic,
-		SignatureTypeReceipt,
-		SignatureTypeSystem:
+		SignatureTypeReceipt:
 		return true
 	default:
 		return false
@@ -121,6 +120,22 @@ func netVal(u *url.URL) *url.URL {
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
+loop:
+	for sig := sig; ; {
+		switch s := sig.(type) {
+		case *ReceiptSignature,
+			*RemoteSignature,
+			*SignatureSet:
+			return false
+
+		case *DelegatedSignature:
+			sig = s.Signature
+
+		default:
+			break loop
+		}
+	}
+
 	if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
 		return true
 	}
@@ -766,94 +781,54 @@ func (s *SyntheticSignature) GetVote() VoteType {
 	return VoteTypeAccept
 }
 
-// Verify returns true.
-func (s *SyntheticSignature) Verify(hash []byte) bool {
-	return true
-}
-
 /*
- * Internal Signature
+ * Signature Set
  */
 
-// GetSigner returns SourceNetwork.
-func (s *SystemSignature) GetSigner() *url.URL { return netVal(s.Network) }
+// GetVote returns Vote.
+func (s *SignatureSet) GetVote() VoteType { return s.Vote }
 
-// RoutingLocation returns SourceNetwork.
-func (s *SystemSignature) RoutingLocation() *url.URL { return netVal(s.Network) }
-
-// GetSignerVersion returns 1.
-func (s *SystemSignature) GetSignerVersion() uint64 { return 1 }
-
-// GetTimestamp returns 1.
-func (s *SystemSignature) GetTimestamp() uint64 { return 1 }
-
-// GetPublicKey returns nil
-func (s *SystemSignature) GetPublicKeyHash() []byte { return nil }
-
-// GetSignature returns nil.
-func (s *SystemSignature) GetSignature() []byte { return nil }
+// GetSigner returns Signer.
+func (s *SignatureSet) GetSigner() *url.URL { return s.Signer }
 
 // GetTransactionHash returns TransactionHash.
-func (s *SystemSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+func (s *SignatureSet) GetTransactionHash() [32]byte { return s.TransactionHash }
 
 // Hash returns the hash of the signature.
-func (s *SystemSignature) Hash() []byte { return signatureHash(s) }
+func (s *SignatureSet) Hash() []byte { return signatureHash(s) }
 
-// Metadata returns the signature's metadata.
-func (s *SystemSignature) Metadata() Signature {
-	r := s.Copy()                  // Copy the struct
-	r.TransactionHash = [32]byte{} // Clear the transaction hash
-	return r
+// RoutingLocation returns Signer.
+func (s *SignatureSet) RoutingLocation() *url.URL { return s.Signer }
+
+// Initiator returns an error.
+func (s *SignatureSet) Initiator() (hash.Hasher, error) {
+	return nil, fmt.Errorf("cannot initate a transaction")
 }
 
-// InitiatorHash returns the network account ID.
-func (s *SystemSignature) Initiator() (hash.Hasher, error) {
-	if s.Network == nil {
-		return nil, ErrCannotInitiate
-	}
-
-	return hash.Hasher{s.Network.AccountID()}, nil
-}
-
-// GetVote returns how the signer votes on a particular transaction
-func (s *SystemSignature) GetVote() VoteType {
-	return VoteTypeAccept
-}
-
-// Verify returns true.
-func (s *SystemSignature) Verify(hash []byte) bool {
-	return true
-}
+// Metadata panics.
+func (s *SignatureSet) Metadata() Signature { panic("not supported") }
 
 /*
- * Forwarded Signature
+ * Remote Signature
  */
 
-func (s *ForwardedSignature) GetVote() VoteType               { return s.Signature.GetVote() }
-func (s *ForwardedSignature) GetSigner() *url.URL             { return s.Signature.GetSigner() }
-func (s *ForwardedSignature) GetSignerVersion() uint64        { return s.Signature.GetSignerVersion() }
-func (s *ForwardedSignature) GetTimestamp() uint64            { return s.Signature.GetTimestamp() }
-func (s *ForwardedSignature) GetSignature() []byte            { return s.Signature.GetSignature() }
-func (s *ForwardedSignature) GetPublicKeyHash() []byte        { return s.Signature.GetPublicKeyHash() }
-func (s *ForwardedSignature) GetTransactionHash() [32]byte    { return s.Signature.GetTransactionHash() }
-func (s *ForwardedSignature) Hash() []byte                    { return s.Signature.Hash() }
-func (s *ForwardedSignature) Metadata() Signature             { return s.Signature.Metadata() }
-func (s *ForwardedSignature) Initiator() (hash.Hasher, error) { return s.Signature.Initiator() }
-func (s *ForwardedSignature) Verify(hash []byte) bool         { return s.Signature.Verify(hash) }
-func (s *ForwardedSignature) GetPublicKey() []byte            { return s.Signature.GetPublicKey() }
+func (s *RemoteSignature) GetVote() VoteType            { return s.Signature.GetVote() }
+func (s *RemoteSignature) GetSigner() *url.URL          { return s.Signature.GetSigner() }
+func (s *RemoteSignature) GetTransactionHash() [32]byte { return s.Signature.GetTransactionHash() }
 
-func (s *ForwardedSignature) RoutingLocation() *url.URL { return s.Destination }
-func (s *ForwardedSignature) Unwrap() Signature         { return s.Signature }
+// Hash returns the hash of the signature.
+func (s *RemoteSignature) Hash() []byte { return signatureHash(s) }
 
-// Signer retrieves the specified signer from the forwarded signature.
-func (s *ForwardedSignature) Signer(signerUrl *url.URL) (Signer, bool) {
-	for _, signer := range s.Signers {
-		if signer.GetUrl().Equal(signerUrl) {
-			return signer, true
-		}
-	}
-	return nil, false
+// RoutingLocation returns Destination.
+func (s *RemoteSignature) RoutingLocation() *url.URL { return s.Destination }
+
+// Initiator returns an error.
+func (s *RemoteSignature) Initiator() (hash.Hasher, error) {
+	return nil, fmt.Errorf("cannot initate a transaction")
 }
+
+// Metadata panics.
+func (s *RemoteSignature) Metadata() Signature { panic("not supported") }
 
 /*
  * Delegated Signature
@@ -862,21 +837,14 @@ func (s *ForwardedSignature) Signer(signerUrl *url.URL) (Signer, bool) {
 func (s *DelegatedSignature) GetVote() VoteType            { return s.Signature.GetVote() }
 func (s *DelegatedSignature) RoutingLocation() *url.URL    { return s.Signature.RoutingLocation() }
 func (s *DelegatedSignature) GetSigner() *url.URL          { return s.Signature.GetSigner() }
-func (s *DelegatedSignature) GetSignerVersion() uint64     { return s.Signature.GetSignerVersion() }
-func (s *DelegatedSignature) GetTimestamp() uint64         { return s.Signature.GetTimestamp() }
-func (s *DelegatedSignature) GetSignature() []byte         { return s.Signature.GetSignature() }
-func (s *DelegatedSignature) GetPublicKeyHash() []byte     { return s.Signature.GetPublicKeyHash() }
 func (s *DelegatedSignature) GetTransactionHash() [32]byte { return s.Signature.GetTransactionHash() }
-func (s *DelegatedSignature) Verify(hash []byte) bool      { return s.Signature.Verify(hash) }
-func (s *DelegatedSignature) GetPublicKey() []byte         { return s.Signature.GetPublicKey() }
 
-func (s *DelegatedSignature) Hash() []byte      { return signatureHash(s) }
-func (s *DelegatedSignature) Unwrap() Signature { return s.Signature }
+func (s *DelegatedSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *DelegatedSignature) Metadata() Signature {
 	r := s.Copy()
-	r.Signature = r.Signature.Metadata().(KeySignature)
+	r.Signature = r.Signature.Metadata()
 	return r
 }
 

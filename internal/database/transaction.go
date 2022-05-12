@@ -115,13 +115,13 @@ func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer) (*Signatur
 
 // AddSignature loads the appropriate siganture set and adds the signature to
 // it.
-func (t *Transaction) AddSignature(newSignature protocol.Signature) (int, error) {
+func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.Signature) (int, error) {
 	set, err := t.newSigSet(newSignature.GetSigner(), true)
 	if err != nil {
 		return 0, err
 	}
 
-	return set.Add(newSignature)
+	return set.Add(keyEntryIndex, newSignature)
 }
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {

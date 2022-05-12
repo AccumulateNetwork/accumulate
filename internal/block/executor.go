@@ -104,7 +104,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 	err = putSyntheticTransaction(
 		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		&protocol.SystemSignature{Network: m.Network.NodeUrl()})
+		nil)
 	if err != nil {
 		return err
 	}

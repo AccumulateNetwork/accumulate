@@ -38,41 +38,12 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
-		err := x.signatureIsWellFormed(delivery, signature)
+		_, err := x.validateSignature(batch, delivery, signature, sigExecMetadata{
+			Location:  signature.RoutingLocation(),
+			Initiated: i > 0 || txnType == protocol.TransactionTypeRemote,
+		})
 		if err != nil {
-			return nil, err
-		}
-
-		isInitiator := i == 0 && txnType != protocol.TransactionTypeRemote
-		if isInitiator {
-			// Verify that the initiator signature matches the transaction
-			err = validateInitialSignature(delivery.Transaction, signature)
-			if err != nil {
-				return nil, errors.Wrap(errors.StatusUnknown, err)
-			}
-		}
-
-		// Basic validation
-		if !signature.Verify(delivery.Transaction.GetHash()) {
-			return nil, errors.Format(errors.StatusBadRequest, "signature %d: invalid", i)
-		}
-
-		// Stateful validation (mostly for synthetic transactions)
-		switch signature := signature.(type) {
-		case *protocol.SyntheticSignature:
-			err = verifySyntheticSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
-
-		case *protocol.ReceiptSignature:
-			err = verifyReceiptSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
-
-		case *protocol.SystemSignature:
-			err = validateSystemSignature(&x.Network, batch, delivery.Transaction, signature, isInitiator)
-
-		default:
-			err = x.validateNormalSignature(batch, delivery, signature, isInitiator)
-		}
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnauthenticated, "signature %d: %w", i, err)
+			return nil, errors.Format(errors.StatusUnknown, "signature %d: %w", i, err)
 		}
 	}
 
@@ -164,6 +135,71 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	return result, nil
 }
 
+func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
+	err := x.checkRouting(delivery, signature)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify that the initiator signature matches the transaction
+	err = validateInitialSignature(delivery.Transaction, signature, md)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Stateful validation (mostly for synthetic transactions)
+	var signer, delegate protocol.Signer
+	switch signature := signature.(type) {
+	case *protocol.SyntheticSignature:
+		err = verifySyntheticSignature(&x.Network, batch, delivery.Transaction, signature, md)
+
+	case *protocol.ReceiptSignature:
+		err = verifyReceiptSignature(delivery.Transaction, signature, md)
+
+	case *protocol.RemoteSignature:
+		return nil, errors.New(errors.StatusBadRequest, "a remote signature is not allowed outside of a forwarded transaction")
+
+	case *protocol.SignatureSet:
+		return nil, errors.New(errors.StatusBadRequest, "a signature set is not allowed outside of a forwarded transaction")
+
+	case *protocol.DelegatedSignature:
+		delegate, err = x.validateSignature(batch, delivery, signature.Signature, md.SetDelegated())
+		if err != nil {
+			return nil, err
+		}
+		if !signature.Delegator.LocalTo(md.Location) {
+			return nil, nil
+		}
+
+		// Validate the delegator
+		signer, err = x.validateSigner(batch, delivery.Transaction, signature.Delegator, md.Location, false)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknown, err)
+		}
+
+		// Verify delegation
+		_, _, ok := signer.EntryByDelegate(delegate.GetUrl())
+		if !ok {
+			return nil, errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign for %v", delegate.GetUrl(), signature.Delegator)
+		}
+
+	case protocol.KeySignature:
+		// Basic validation
+		if !signature.Verify(delivery.Transaction.GetHash()) {
+			return nil, errors.New(errors.StatusBadRequest, "invalid")
+		}
+		signer, err = x.validateNormalSignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+
+	default:
+		return nil, errors.Format(errors.StatusBadRequest, "unknown signature type %v", signature.Type())
+	}
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnauthenticated, err)
+	}
+
+	return signer, nil
+}
+
 func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, signatures []protocol.Signature) error {
 	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
 	for _, sig := range signatures {
@@ -198,9 +234,8 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	return nil
 }
 
-// signatureIsWellFormed verifies that the signature satisfies various
-// restrictions.
-func (x *Executor) signatureIsWellFormed(delivery *chain.Delivery, signature protocol.Signature) error {
+// checkRouting verifies that the signature was routed to the correct subnet.
+func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Signature) error {
 	if signature.Type().IsSystem() {
 		return nil
 	}
@@ -215,39 +250,5 @@ func (x *Executor) signatureIsWellFormed(delivery *chain.Delivery, signature pro
 		}
 	}
 
-	if fwd, ok := signature.(*protocol.ForwardedSignature); ok {
-		// Forwarded signatures are only legal within a synthetic forwarded
-		// transaction
-		if !delivery.IsForwarded() {
-			return errors.New(errors.StatusBadRequest, "invalid forwarded signature")
-		}
-		signature = fwd.Signature
-
-	} else if !signature.GetSigner().LocalTo(signature.RoutingLocation()) {
-		// The first signer *must* be local unless the signature is forwarded.
-		// This should be impossible, but it's easy to check here and harder to
-		// guarantee that the various signature types don't allow this to
-		// happen.
-		return errors.Format(errors.StatusBadRequest, "signer %v is not local", signature.GetSigner())
-	}
-
-	for {
-		// Nested system signatures are not allowed
-		if signature.Type().IsSystem() {
-			return errors.New(errors.StatusBadRequest, "invalid nested signature")
-		}
-
-		// Nested forwarded signatures are not allowed
-		if _, ok := signature.(*protocol.ForwardedSignature); ok {
-			return errors.New(errors.StatusBadRequest, "invalid nested signature")
-		}
-
-		// Unwrap delegated signature
-		u, ok := signature.(interface{ Unwrap() protocol.Signature })
-		if !ok {
-			break
-		}
-		signature = u.Unwrap()
-	}
 	return nil
 }

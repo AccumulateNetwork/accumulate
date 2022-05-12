@@ -170,39 +170,42 @@ SyntheticSignature:
       type: hash
       optional: true
 
-SystemSignature:
-  union: { type: signature }
-  description: is used when executing transactions internally
+SignatureSet:
+  union: { type: signature, value: Set }
+  description: is used when forwarding a set of signatures
   fields:
-    - name: Network
-      description: is the network that produced the transaction
+    - name: Vote
+      type: VoteType
+      marshal-as: enum
+      optional: true
+    - name: Signer
       type: url
       pointer: true
     - name: TransactionHash
       type: hash
       optional: true
+    - name: Signatures
+      type: Signature
+      marshal-as: union
+      repeatable: true
 
-ForwardedSignature:
+RemoteSignature:
   union: { type: signature }
-  description: is used when forwarding signatures from one subnet to another
+  description: is used when forwarding a signature from one subnet to another
   fields:
     - name: Destination
       type: url
       pointer: true
     - name: Signature
-      type: KeySignature
+      type: Signature
       marshal-as: union
-    - name: Signers
-      type: Signer
-      marshal-as: union
-      repeatable: true
 
 DelegatedSignature:
   union: { type: signature }
   description: is used when signing a transaction on behalf of another authority
   fields:
     - name: Signature
-      type: KeySignature
+      type: Signature
       marshal-as: union
     - name: Delegator
       description: is the authority that delegated its authority to the signer

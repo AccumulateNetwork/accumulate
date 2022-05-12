@@ -245,11 +245,11 @@ const SignatureTypeReceipt SignatureType = 4
 // SignatureTypeSynthetic is used when sending synthetic transactions.
 const SignatureTypeSynthetic SignatureType = 5
 
-// SignatureTypeSystem is used when executing transactions internally.
-const SignatureTypeSystem SignatureType = 6
+// SignatureTypeSet is used when forwarding multiple signatures.
+const SignatureTypeSet SignatureType = 6
 
-// SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
-const SignatureTypeForwarded SignatureType = 7
+// SignatureTypeRemote is used when forwarding a signature from one subnet to another.
+const SignatureTypeRemote SignatureType = 7
 
 // SignatureTypeBTC represents an BTC signature.
 const SignatureTypeBTC SignatureType = 8
@@ -1097,7 +1097,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSystem, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
 		*v = u
 		return true
 	default:
@@ -1120,10 +1120,10 @@ func (v SignatureType) String() string {
 		return "receipt"
 	case SignatureTypeSynthetic:
 		return "synthetic"
-	case SignatureTypeSystem:
-		return "system"
-	case SignatureTypeForwarded:
-		return "forwarded"
+	case SignatureTypeSet:
+		return "set"
+	case SignatureTypeRemote:
+		return "remote"
 	case SignatureTypeBTC:
 		return "btc"
 	case SignatureTypeBTCLegacy:
@@ -1152,10 +1152,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeReceipt, true
 	case "synthetic":
 		return SignatureTypeSynthetic, true
-	case "system":
-		return SignatureTypeSystem, true
-	case "forwarded":
-		return SignatureTypeForwarded, true
+	case "set":
+		return SignatureTypeSet, true
+	case "remote":
+		return SignatureTypeRemote, true
 	case "btc":
 		return SignatureTypeBTC, true
 	case "btclegacy":

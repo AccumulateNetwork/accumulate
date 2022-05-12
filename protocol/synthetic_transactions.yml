@@ -67,7 +67,7 @@ SyntheticForwardTransaction:
   union: { type: transaction, value: SyntheticForwardTransaction }
   fields:
     - name: Signatures
-      type: ForwardedSignature
+      type: RemoteSignature
       marshal-as: reference
       repeatable: true
     - name: Transaction
