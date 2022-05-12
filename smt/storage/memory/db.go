@@ -162,7 +162,7 @@ func (m *DB) MarshalJSON() ([]byte, error) {
 	jdb := make(jsonDB, 0, size)
 	for _, key := range keys {
 		entry := m.entries[key]
-		jdb = append(jdb, jsonEntry{hex.EncodeToString(key[:]), hex.EncodeToString(entry)})
+		jdb = append(jdb, jsonEntry{hex.EncodeToString(key[:]), hex.EncodeToString(entry)}) //nolint:rangevarref
 	}
 	return json.Marshal(jdb)
 }

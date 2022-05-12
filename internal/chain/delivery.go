@@ -119,6 +119,7 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 	e.Signatures = make([]protocol.Signature, len(fwd.Signatures))
 	e.Transaction = fwd.Transaction
 	for i, sig := range fwd.Signatures {
+		sig := sig // See docs/developer/rangevarref.md
 		e.Signatures[i] = &sig
 	}
 
