@@ -50,11 +50,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	switch {
 	case txnType.IsUser():
 		err = nil
-	case txnType.IsSynthetic():
+	case txnType.IsSynthetic(), txnType.IsSystem():
 		err = validateSyntheticTransactionSignatures(delivery.Transaction, delivery.Signatures)
-	case txnType.IsSystem():
-		// TODO Validate internal transactions
-		err = nil
 	default:
 		// Should be unreachable
 		return nil, errors.Format(errors.StatusInternalError, "transaction type %v is not user, synthetic, or internal", txnType)
