@@ -344,29 +344,29 @@ const TransactionTypeSyntheticWriteData TransactionType = 50
 // TransactionTypeSyntheticDepositTokens deposits tokens into token accounts.
 const TransactionTypeSyntheticDepositTokens TransactionType = 51
 
-// TransactionTypeDirectoryAnchor anchors one network to another.
-const TransactionTypeDirectoryAnchor TransactionType = 52
-
 // TransactionTypeSyntheticDepositCredits deposits credits into a credit holder.
-const TransactionTypeSyntheticDepositCredits TransactionType = 53
+const TransactionTypeSyntheticDepositCredits TransactionType = 52
 
 // TransactionTypeSyntheticBurnTokens returns tokens to a token issuer's pool of issuable tokens.
-const TransactionTypeSyntheticBurnTokens TransactionType = 54
+const TransactionTypeSyntheticBurnTokens TransactionType = 53
 
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
-const TransactionTypeSyntheticForwardTransaction TransactionType = 55
+const TransactionTypeSyntheticForwardTransaction TransactionType = 54
 
-// TransactionTypeMirrorSystemRecords mirrors records from one network to another.
-const TransactionTypeMirrorSystemRecords TransactionType = 56
-
-// TransactionTypePartitionAnchor system transaction for partition data.
-const TransactionTypePartitionAnchor TransactionType = 57
+// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
+const TransactionTypeSegWitDataEntry TransactionType = 57
 
 // TransactionTypeSystemGenesis initializes system chains.
 const TransactionTypeSystemGenesis TransactionType = 96
 
-// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
-const TransactionTypeSegWitDataEntry TransactionType = 57005
+// TransactionTypeDirectoryAnchor anchors one network to another.
+const TransactionTypeDirectoryAnchor TransactionType = 97
+
+// TransactionTypeMirrorSystemRecords mirrors records from one network to another.
+const TransactionTypeMirrorSystemRecords TransactionType = 98
+
+// TransactionTypePartitionAnchor system transaction for partition data.
+const TransactionTypePartitionAnchor TransactionType = 99
 
 // VoteTypeAccept vote yea in favor of proposal.
 const VoteTypeAccept VoteType = 0
@@ -1261,7 +1261,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeDirectoryAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeMirrorSystemRecords, TransactionTypePartitionAnchor, TransactionTypeSystemGenesis, TransactionTypeSegWitDataEntry:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSegWitDataEntry, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeMirrorSystemRecords, TransactionTypePartitionAnchor:
 		*v = u
 		return true
 	default:
@@ -1320,22 +1320,22 @@ func (v TransactionType) String() string {
 		return "syntheticWriteData"
 	case TransactionTypeSyntheticDepositTokens:
 		return "syntheticDepositTokens"
-	case TransactionTypeDirectoryAnchor:
-		return "directoryAnchor"
 	case TransactionTypeSyntheticDepositCredits:
 		return "syntheticDepositCredits"
 	case TransactionTypeSyntheticBurnTokens:
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
+	case TransactionTypeSegWitDataEntry:
+		return "segWitDataEntry"
+	case TransactionTypeSystemGenesis:
+		return "systemGenesis"
+	case TransactionTypeDirectoryAnchor:
+		return "directoryAnchor"
 	case TransactionTypeMirrorSystemRecords:
 		return "mirrorSystemRecords"
 	case TransactionTypePartitionAnchor:
 		return "partitionAnchor"
-	case TransactionTypeSystemGenesis:
-		return "systemGenesis"
-	case TransactionTypeSegWitDataEntry:
-		return "segWitDataEntry"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1394,22 +1394,22 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticWriteData, true
 	case "syntheticdeposittokens":
 		return TransactionTypeSyntheticDepositTokens, true
-	case "directoryanchor":
-		return TransactionTypeDirectoryAnchor, true
 	case "syntheticdepositcredits":
 		return TransactionTypeSyntheticDepositCredits, true
 	case "syntheticburntokens":
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
+	case "segwitdataentry":
+		return TransactionTypeSegWitDataEntry, true
+	case "systemgenesis":
+		return TransactionTypeSystemGenesis, true
+	case "directoryanchor":
+		return TransactionTypeDirectoryAnchor, true
 	case "mirrorsystemrecords":
 		return TransactionTypeMirrorSystemRecords, true
 	case "partitionanchor":
 		return TransactionTypePartitionAnchor, true
-	case "systemgenesis":
-		return TransactionTypeSystemGenesis, true
-	case "segwitdataentry":
-		return TransactionTypeSegWitDataEntry, true
 	default:
 		return 0, false
 	}
