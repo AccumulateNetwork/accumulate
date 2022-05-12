@@ -22,10 +22,10 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
-	return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, body.Cause, false)
+	return executeWriteLiteDataAccount(st, tx.Transaction, body.Entry, body.Cause, false)
 }
 
-func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
+func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, entry protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
 	if scratch {
 		return nil, fmt.Errorf("cannot write scratch data to a lite data account")
 	}
@@ -44,7 +44,7 @@ func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, en
 			liteDataAccountId = append(liteDataAccountId, origin.Tail...)
 
 			//compute the hash for this entry
-			entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, entry)
+			entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
 			if err != nil {
 				return nil, err
 			}
@@ -82,7 +82,7 @@ func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, en
 		//12 additional bytes.
 		lite.Tail = liteDataAccountId[20:32]
 
-		entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, entry)
+		entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
 		if err != nil {
 			return nil, err
 		}

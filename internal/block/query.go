@@ -309,7 +309,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 			res := &query.ResponseDataEntry{
-				Entry: *entry,
+				Entry: entry,
 			}
 			copy(res.EntryHash[:], entryHash)
 			return []byte("data-entry"), res, nil
@@ -339,7 +339,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					if err != nil {
 						return nil, nil, err
 					}
-					er.Entry = *entry
+					er.Entry = entry
 					res.DataEntries = append(res.DataEntries, er)
 				}
 				return []byte("data-entry-set"), res, nil
@@ -357,7 +357,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 					res := &query.ResponseDataEntry{}
 					copy(res.EntryHash[:], entry.Hash())
-					res.Entry = *entry
+					res.Entry = entry
 					return []byte("data-entry"), res, nil
 				} else {
 					entry, err := data.Entry(int64(index))
@@ -368,7 +368,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					_, err = protocol.ParseLiteDataAddress(u)
 					if err != nil {
 						copy(res.EntryHash[:], entry.Hash())
-						res.Entry = *entry
+						res.Entry = entry
 						return []byte("data-entry"), res, nil
 					}
 					firstentry, err := data.Entry(int64(0))
@@ -376,9 +376,9 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 						return nil, nil, err
 					}
 					id := protocol.ComputeLiteDataAccountId(firstentry)
-					newh, _ := protocol.ComputeLiteEntryHashFromEntry(id, entry)
+					newh, _ := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
 					copy(res.EntryHash[:], newh)
-					res.Entry = *entry
+					res.Entry = entry
 					return []byte("data-entry"), res, nil
 				}
 			}
@@ -663,7 +663,7 @@ func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*query.Res
 	}
 
 	copy(qr.EntryHash[:], entryHash)
-	qr.Entry = *entry
+	qr.Entry = entry
 	return &qr, nil
 }
 
@@ -681,7 +681,7 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 		return nil, err
 	}
 
-	qr.Entry = *entry
+	qr.Entry = entry
 	return &qr, nil
 }
 
@@ -708,7 +708,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 			if err != nil {
 				return nil, err
 			}
-			er.Entry = *entry
+			er.Entry = entry
 		}
 
 		qr.DataEntries = append(qr.DataEntries, er)
