@@ -19,13 +19,13 @@ type addDataEntry struct {
 	url          *url.URL
 	liteStateRec protocol.Account
 	hash         []byte
-	entry        *protocol.DataEntry
+	entry        protocol.DataEntry
 }
 
 //UpdateData will cache a data associated with a DataAccount chain.
 //the cache data will not be stored directly in the state but can be used
 //upstream for storing a chain in the state database.
-func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataEntry *protocol.DataEntry) {
+func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataEntry protocol.DataEntry) {
 	var stateRec protocol.Account
 
 	if record.Type() == protocol.AccountTypeLiteDataAccount {
