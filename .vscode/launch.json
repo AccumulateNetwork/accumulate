@@ -37,6 +37,7 @@
         "${workspaceFolder}/.nodes",
         "--truncate",
         "--debug",
+        "-x=bvn0.101"
       ]
     },
     {
@@ -92,11 +93,10 @@
       "args": [
         "run",
         "-w",
-        "${workspaceFolder}/.nodes/dn",
+        "${workspaceFolder}/.nodes/bvn0",
         "-n",
-        "0",
+        "101",
         "--truncate",
-        "--debug",
       ]
     },
     {

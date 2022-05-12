@@ -52,7 +52,7 @@ func (x *Executor) BeginBlock(block *Block) (err error) {
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if ledgerState.Index >= block.Index {
+		if uint64(ledgerState.Index) >= block.Index {
 			panic(fmt.Errorf("Current height is %d but the next block height is %d!", ledgerState.Index, block.Index))
 		}
 

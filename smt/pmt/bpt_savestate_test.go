@@ -6,9 +6,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
@@ -46,13 +48,20 @@ func TestSaveState(t *testing.T) {
 	storeTx = BDB.Begin(true)
 	bpt.manager.DBManager = storeTx
 
-	err = bpt.SaveSnapshot(DirName+"/SnapShot", func(key storage.Key, hash [32]byte) ([]byte, error) {
+	f, err := os.Create(filepath.Join(DirName, "SnapShot"))
+	require.NoError(t, err)
+	defer f.Close()
+
+	err = bpt.SaveSnapshot(f, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		return storeTx.Get(hash)
 	})
 	require.NoErrorf(t, err, "%v", err)
 
+	_, err = f.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+
 	bptMan := NewBPTManager(nil)
-	err = bptMan.Bpt.LoadSnapshot(DirName+"/SnapShot", func(key storage.Key, hash [32]byte, reader SectionReader) error {
+	err = bptMan.Bpt.LoadSnapshot(f, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		value, err := io.ReadAll(reader)
 		if err != nil {
 			return err
