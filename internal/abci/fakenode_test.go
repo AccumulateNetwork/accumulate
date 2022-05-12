@@ -371,8 +371,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 func convertIds32(ids ...[32]byte) [][]byte {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
-		// Make a copy to avoid capturing the loop variable
-		id := id
+		id := id // See docs/developer/rangevarref.md
 		ids2[i] = id[:]
 	}
 	return ids2

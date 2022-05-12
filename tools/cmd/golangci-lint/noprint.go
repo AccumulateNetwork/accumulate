@@ -3,8 +3,24 @@ package main
 import (
 	"go/ast"
 
+	"github.com/golangci/golangci-lint/pkg/golinters/goanalysis"
+	"github.com/golangci/golangci-lint/pkg/lint/linter"
 	"golang.org/x/tools/go/analysis"
 )
+
+func init() {
+	const name = "noprint"
+	const doc = "Checks for out of place print statements"
+
+	customLinters = append(customLinters, linter.NewConfig(
+		goanalysis.NewLinter(name, doc, []*analysis.Analyzer{{
+			Name: name,
+			Doc:  doc,
+			Run:  noprint,
+		}}, nil).
+			WithLoadMode(goanalysis.LoadModeSyntax),
+	))
+}
 
 func noprint(pass *analysis.Pass) (interface{}, error) {
 	inspect := func(node ast.Node) bool {

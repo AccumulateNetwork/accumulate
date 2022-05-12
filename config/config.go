@@ -82,7 +82,7 @@ func (l LogLevel) String() string {
 	s := new(strings.Builder)
 	s.WriteString(l.Default)
 	for _, m := range l.Modules {
-		fmt.Fprintf(s, ";%s=%s", m[0], m[1])
+		fmt.Fprintf(s, ";%s=%s", m[0], m[1]) //nolint:rangevarref
 	}
 	return s.String()
 }

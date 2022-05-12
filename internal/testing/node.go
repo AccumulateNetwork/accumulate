@@ -197,7 +197,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		errg := new(errgroup.Group)
 		for _, netName := range subnets {
 			for _, daemon := range daemons[netName] {
-				daemon := daemon
+				daemon := daemon // See docs/developer/rangevarref.md
 				errg.Go(func() error {
 					return daemon.Stop()
 				})
