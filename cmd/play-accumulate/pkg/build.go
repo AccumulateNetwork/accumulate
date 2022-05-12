@@ -237,7 +237,7 @@ func (b bldTxn) WriteData(data ...[]byte) bldWriteData {
 	var c bldWriteData
 	c.body = new(protocol.WriteData)
 	c.bldTxn = b.WithBody(c.body)
-	c.body.Entry = protocol.DataEntry{Data: data}
+	c.body.Entry = &protocol.AccumulateDataEntry{Data: data}
 	return c
 }
 
@@ -246,7 +246,7 @@ func (b bldTxn) WriteDataTo(recipient Urlish, data ...[]byte) bldWriteDataTo {
 	c.body = new(protocol.WriteDataTo)
 	c.bldTxn = b.WithBody(c.body)
 	c.body.Recipient = b.s.url(recipient)
-	c.body.Entry = protocol.DataEntry{Data: data}
+	c.body.Entry = &protocol.AccumulateDataEntry{Data: data}
 	return c
 }
 

@@ -229,7 +229,7 @@ func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
 	}
 
 	globals := new(protocol.NetworkGlobals)
-	err = globals.UnmarshalBinary(entry.Data[0])
+	err = globals.UnmarshalBinary(entry.GetData()[0])
 	if err != nil {
 		st.logger.Error("Failed to decode latest globals entry", "error", err)
 		return protocol.FallbackValidatorThreshold

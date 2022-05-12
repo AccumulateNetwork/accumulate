@@ -15,6 +15,14 @@ ChainType:
     value: 0x04
     description: indexes other chains
 
+DataEntryType:
+  Unknown:
+    value: 0
+  Factom:
+    value: 1
+  Accumulate:
+    value: 2
+
 ObjectType:
   Unknown:
     value: 0

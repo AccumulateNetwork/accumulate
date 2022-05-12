@@ -37,6 +37,13 @@ type AccountStateProof struct {
 	extraData []byte
 }
 
+type AccumulateDataEntry struct {
+	fieldsSet []bool
+	Version   uint64   `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
+}
+
 type AcmeFaucet struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -229,12 +236,6 @@ type DataAccount struct {
 	extraData []byte
 }
 
-type DataEntry struct {
-	fieldsSet []bool
-	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	extraData []byte
-}
-
 // DelegatedSignature is used when signing a transaction on behalf of another authority.
 type DelegatedSignature struct {
 	fieldsSet []bool
@@ -299,6 +300,13 @@ type Envelope struct {
 	TxHash      []byte         `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Transaction []*Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction"`
 	extraData   []byte
+}
+
+type FactomDataEntry struct {
+	AccountId [32]byte `json:"accountId,omitempty" form:"accountId" query:"accountId" validate:"required"`
+	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ExtIds    [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
+	extraData []byte
 }
 
 type HashSet struct {
@@ -823,6 +831,8 @@ type WriteDataTo struct {
 
 func (*ADI) Type() AccountType { return AccountTypeIdentity }
 
+func (*AccumulateDataEntry) Type() DataEntryType { return DataEntryTypeAccumulate }
+
 func (*AcmeFaucet) Type() TransactionType { return TransactionTypeAcmeFaucet }
 
 func (*AddAccountAuthorityOperation) Type() AccountAuthOperationType {
@@ -874,6 +884,8 @@ func (*EmptyResult) Type() TransactionType { return TransactionTypeUnknown }
 func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
+
+func (*FactomDataEntry) Type() DataEntryType { return DataEntryTypeFactom }
 
 func (*InternalGenesis) Type() TransactionType { return TransactionTypeInternalGenesis }
 
@@ -1009,6 +1021,20 @@ func (v *AccountStateProof) Copy() *AccountStateProof {
 }
 
 func (v *AccountStateProof) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AccumulateDataEntry) Copy() *AccumulateDataEntry {
+	u := new(AccumulateDataEntry)
+
+	u.Version = v.Version
+	u.Data = make([][]byte, len(v.Data))
+	for i, v := range v.Data {
+		u.Data[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *AccumulateDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AcmeFaucet) Copy() *AcmeFaucet {
 	u := new(AcmeFaucet)
@@ -1357,19 +1383,6 @@ func (v *DataAccount) Copy() *DataAccount {
 
 func (v *DataAccount) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *DataEntry) Copy() *DataEntry {
-	u := new(DataEntry)
-
-	u.Data = make([][]byte, len(v.Data))
-	for i, v := range v.Data {
-		u.Data[i] = encoding.BytesCopy(v)
-	}
-
-	return u
-}
-
-func (v *DataEntry) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *DelegatedSignature) Copy() *DelegatedSignature {
 	u := new(DelegatedSignature)
 
@@ -1484,6 +1497,21 @@ func (v *Envelope) Copy() *Envelope {
 }
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FactomDataEntry) Copy() *FactomDataEntry {
+	u := new(FactomDataEntry)
+
+	u.AccountId = v.AccountId
+	u.Data = encoding.BytesCopy(v.Data)
+	u.ExtIds = make([][]byte, len(v.ExtIds))
+	for i, v := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesCopy(v)
+	}
+
+	return u
+}
+
+func (v *FactomDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *HashSet) Copy() *HashSet {
 	u := new(HashSet)
@@ -2095,7 +2123,9 @@ func (v *SyntheticWriteData) Copy() *SyntheticWriteData {
 	u := new(SyntheticWriteData)
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
-	u.Entry = *(&v.Entry).Copy()
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+	}
 
 	return u
 }
@@ -2334,7 +2364,9 @@ func (v *UpdateValidatorKey) CopyAsInterface() interface{} { return v.Copy() }
 func (v *WriteData) Copy() *WriteData {
 	u := new(WriteData)
 
-	u.Entry = *(&v.Entry).Copy()
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+	}
 	u.Scratch = v.Scratch
 
 	return u
@@ -2362,7 +2394,9 @@ func (v *WriteDataTo) Copy() *WriteDataTo {
 	if v.Recipient != nil {
 		u.Recipient = (v.Recipient).Copy()
 	}
-	u.Entry = *(&v.Entry).Copy()
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+	}
 
 	return u
 }
@@ -2409,6 +2443,22 @@ func (v *AccountStateProof) Equal(u *AccountStateProof) bool {
 		return false
 	case !((v.Proof).Equal(u.Proof)):
 		return false
+	}
+
+	return true
+}
+
+func (v *AccumulateDataEntry) Equal(u *AccumulateDataEntry) bool {
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if len(v.Data) != len(u.Data) {
+		return false
+	}
+	for i := range v.Data {
+		if !(bytes.Equal(v.Data[i], u.Data[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -2863,19 +2913,6 @@ func (v *DataAccount) Equal(u *DataAccount) bool {
 	return true
 }
 
-func (v *DataEntry) Equal(u *DataEntry) bool {
-	if len(v.Data) != len(u.Data) {
-		return false
-	}
-	for i := range v.Data {
-		if !(bytes.Equal(v.Data[i], u.Data[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *DelegatedSignature) Equal(u *DelegatedSignature) bool {
 	if !(EqualSignature(v.Signature, u.Signature)) {
 		return false
@@ -3010,6 +3047,25 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	}
 	for i := range v.Transaction {
 		if !((v.Transaction[i]).Equal(u.Transaction[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
+	if !(v.AccountId == u.AccountId) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+	if len(v.ExtIds) != len(u.ExtIds) {
+		return false
+	}
+	for i := range v.ExtIds {
+		if !(bytes.Equal(v.ExtIds[i], u.ExtIds[i])) {
 			return false
 		}
 	}
@@ -3805,7 +3861,7 @@ func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
 	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
 		return false
 	}
-	if !((&v.Entry).Equal(&u.Entry)) {
+	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -4099,7 +4155,7 @@ func (v *UpdateValidatorKey) Equal(u *UpdateValidatorKey) bool {
 }
 
 func (v *WriteData) Equal(u *WriteData) bool {
-	if !((&v.Entry).Equal(&u.Entry)) {
+	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
@@ -4137,7 +4193,7 @@ func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
 	case !((v.Recipient).Equal(u.Recipient)):
 		return false
 	}
-	if !((&v.Entry).Equal(&u.Entry)) {
+	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -4270,6 +4326,61 @@ func (v *AccountStateProof) IsValid() error {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AccumulateDataEntry = []string{
+	1: "Type",
+	2: "Version",
+	3: "Data",
+}
+
+func (v *AccumulateDataEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Version == 0) {
+		writer.WriteUint(2, v.Version)
+	}
+	if !(len(v.Data) == 0) {
+		for _, v := range v.Data {
+			writer.WriteBytes(3, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccumulateDataEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *AccumulateDataEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
 	}
 
 	switch len(errs) {
@@ -5552,47 +5663,6 @@ func (v *DataAccount) IsValid() error {
 	}
 	if err := v.AccountAuth.IsValid(); err != nil {
 		errs = append(errs, err.Error())
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_DataEntry = []string{
-	1: "Data",
-}
-
-func (v *DataEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Data) == 0) {
-		for _, v := range v.Data {
-			writer.WriteBytes(1, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_DataEntry)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *DataEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Data is missing")
-	} else if len(v.Data) == 0 {
-		errs = append(errs, "field Data is not set")
 	}
 
 	switch len(errs) {
@@ -8449,8 +8519,8 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SyntheticOrigin)
-	if !((v.Entry).Equal(new(DataEntry))) {
-		writer.WriteValue(3, &v.Entry)
+	if !(v.Entry == nil) {
+		writer.WriteValue(3, v.Entry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticWriteData)
@@ -8472,7 +8542,7 @@ func (v *SyntheticWriteData) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entry is missing")
-	} else if (v.Entry).Equal(new(DataEntry)) {
+	} else if v.Entry == nil {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -9349,8 +9419,8 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !((v.Entry).Equal(new(DataEntry))) {
-		writer.WriteValue(2, &v.Entry)
+	if !(v.Entry == nil) {
+		writer.WriteValue(2, v.Entry)
 	}
 	if !(!v.Scratch) {
 		writer.WriteBool(3, v.Scratch)
@@ -9372,7 +9442,7 @@ func (v *WriteData) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if (v.Entry).Equal(new(DataEntry)) {
+	} else if v.Entry == nil {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -9462,8 +9532,8 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
-	if !((v.Entry).Equal(new(DataEntry))) {
-		writer.WriteValue(3, &v.Entry)
+	if !(v.Entry == nil) {
+		writer.WriteValue(3, v.Entry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_WriteDataTo)
@@ -9487,7 +9557,7 @@ func (v *WriteDataTo) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entry is missing")
-	} else if (v.Entry).Equal(new(DataEntry)) {
+	} else if v.Entry == nil {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -9572,6 +9642,40 @@ func (v *AccountStateProof) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountStateProof)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *AccumulateDataEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccumulateDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Version = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(3); ok {
+			v.Data = append(v.Data, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_AccumulateDataEntry)
 	if err != nil {
 		return err
 	}
@@ -10308,30 +10412,6 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DataAccount)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *DataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadBytes(1); ok {
-			v.Data = append(v.Data, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_DataEntry)
 	if err != nil {
 		return err
 	}
@@ -11947,9 +12027,13 @@ func (v *SyntheticWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-	if x := new(DataEntry); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Entry = *x
-	}
+	reader.ReadValue(3, func(b []byte) error {
+		x, err := UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_SyntheticWriteData)
 	if err != nil {
@@ -12468,9 +12552,13 @@ func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Entry = *x
-	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
 	if x, ok := reader.ReadBool(3); ok {
 		v.Scratch = x
 	}
@@ -12534,9 +12622,13 @@ func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
-	if x := new(DataEntry); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Entry = *x
-	}
+	reader.ReadValue(3, func(b []byte) error {
+		x, err := UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_WriteDataTo)
 	if err != nil {
@@ -12578,6 +12670,21 @@ func (v *AccountStateProof) MarshalJSON() ([]byte, error) {
 	}{}
 	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
 	u.Proof = v.Proof
+	return json.Marshal(&u)
+}
+
+func (v *AccumulateDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    DataEntryType              `json:"type"`
+		Version uint64                     `json:"version,omitempty"`
+		Data    encoding.JsonList[*string] `json:"data,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Version = v.Version
+	u.Data = make(encoding.JsonList[*string], len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -12867,17 +12974,6 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *DataEntry) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Data encoding.JsonList[*string] `json:"data,omitempty"`
-	}{}
-	u.Data = make(encoding.JsonList[*string], len(v.Data))
-	for i, x := range v.Data {
-		u.Data[i] = encoding.BytesToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
 func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      SignatureType                         `json:"type"`
@@ -12971,6 +13067,23 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	u.Signatures = encoding.JsonUnmarshalListWith[Signature]{Value: v.Signatures, Func: UnmarshalSignatureJSON}
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Transaction = v.Transaction
+	return json.Marshal(&u)
+}
+
+func (v *FactomDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      DataEntryType              `json:"type"`
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.AccountId = encoding.ChainToJSON(v.AccountId)
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -13543,19 +13656,19 @@ func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
-		Source    *url.URL        `json:"source,omitempty"`
-		Initiator *url.URL        `json:"initiator,omitempty"`
-		FeeRefund uint64          `json:"feeRefund,omitempty"`
-		Entry     DataEntry       `json:"entry,omitempty"`
+		Type      TransactionType                       `json:"type"`
+		Cause     string                                `json:"cause,omitempty"`
+		Source    *url.URL                              `json:"source,omitempty"`
+		Initiator *url.URL                              `json:"initiator,omitempty"`
+		FeeRefund uint64                                `json:"feeRefund,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
 	u.Source = v.SyntheticOrigin.Source
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
 
@@ -13765,12 +13878,12 @@ func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
 
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    TransactionType `json:"type"`
-		Entry   DataEntry       `json:"entry,omitempty"`
-		Scratch bool            `json:"scratch,omitempty"`
+		Type    TransactionType                       `json:"type"`
+		Entry   encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Scratch bool                                  `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
@@ -13791,13 +13904,13 @@ func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
 
 func (v *WriteDataTo) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Recipient *url.URL        `json:"recipient,omitempty"`
-		Entry     DataEntry       `json:"entry,omitempty"`
+		Type      TransactionType                       `json:"type"`
+		Recipient *url.URL                              `json:"recipient,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
 
@@ -13850,6 +13963,36 @@ func (v *AccountStateProof) UnmarshalJSON(data []byte) error {
 	v.State = u.State.Value
 
 	v.Proof = u.Proof
+	return nil
+}
+
+func (v *AccumulateDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    DataEntryType              `json:"type"`
+		Version uint64                     `json:"version,omitempty"`
+		Data    encoding.JsonList[*string] `json:"data,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Version = v.Version
+	u.Data = make(encoding.JsonList[*string], len(v.Data))
+	for i, x := range v.Data {
+		u.Data[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Version = u.Version
+	v.Data = make([][]byte, len(u.Data))
+	for i, x := range u.Data {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Data: %w", err)
+		} else {
+			v.Data[i] = x
+		}
+	}
 	return nil
 }
 
@@ -14379,28 +14522,6 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *DataEntry) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Data encoding.JsonList[*string] `json:"data,omitempty"`
-	}{}
-	u.Data = make(encoding.JsonList[*string], len(v.Data))
-	for i, x := range v.Data {
-		u.Data[i] = encoding.BytesToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Data = make([][]byte, len(u.Data))
-	for i, x := range u.Data {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Data: %w", err)
-		} else {
-			v.Data[i] = x
-		}
-	}
-	return nil
-}
-
 func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      SignatureType                         `json:"type"`
@@ -14586,6 +14707,47 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 		v.TxHash = x
 	}
 	v.Transaction = u.Transaction
+	return nil
+}
+
+func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      DataEntryType              `json:"type"`
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.AccountId = encoding.ChainToJSON(v.AccountId)
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
+		return fmt.Errorf("error decoding AccountId: %w", err)
+	} else {
+		v.AccountId = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	v.ExtIds = make([][]byte, len(u.ExtIds))
+	for i, x := range u.ExtIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ExtIds: %w", err)
+		} else {
+			v.ExtIds[i] = x
+		}
+	}
 	return nil
 }
 
@@ -15682,19 +15844,19 @@ func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
-		Source    *url.URL        `json:"source,omitempty"`
-		Initiator *url.URL        `json:"initiator,omitempty"`
-		FeeRefund uint64          `json:"feeRefund,omitempty"`
-		Entry     DataEntry       `json:"entry,omitempty"`
+		Type      TransactionType                       `json:"type"`
+		Cause     string                                `json:"cause,omitempty"`
+		Source    *url.URL                              `json:"source,omitempty"`
+		Initiator *url.URL                              `json:"initiator,omitempty"`
+		FeeRefund uint64                                `json:"feeRefund,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
 	u.Source = v.SyntheticOrigin.Source
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15709,7 +15871,8 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	v.SyntheticOrigin.Source = u.Source
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
-	v.Entry = u.Entry
+	v.Entry = u.Entry.Value
+
 	return nil
 }
 
@@ -16087,12 +16250,12 @@ func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
 
 func (v *WriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    TransactionType `json:"type"`
-		Entry   DataEntry       `json:"entry,omitempty"`
-		Scratch bool            `json:"scratch,omitempty"`
+		Type    TransactionType                       `json:"type"`
+		Entry   encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Scratch bool                                  `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -16100,7 +16263,8 @@ func (v *WriteData) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Entry = u.Entry
+	v.Entry = u.Entry.Value
+
 	v.Scratch = u.Scratch
 	return nil
 }
@@ -16138,13 +16302,13 @@ func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
 
 func (v *WriteDataTo) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Recipient *url.URL        `json:"recipient,omitempty"`
-		Entry     DataEntry       `json:"entry,omitempty"`
+		Type      TransactionType                       `json:"type"`
+		Recipient *url.URL                              `json:"recipient,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16152,6 +16316,7 @@ func (v *WriteDataTo) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Recipient = u.Recipient
-	v.Entry = u.Entry
+	v.Entry = u.Entry.Value
+
 	return nil
 }

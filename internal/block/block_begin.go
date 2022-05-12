@@ -102,7 +102,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.WriteData{}
-	wd.Entry.Data = append(wd.Entry.Data, data)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
@@ -133,7 +133,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return err
 	}
 
-	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
+	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
 	err = putSyntheticTransaction(
 		batch, txn,
