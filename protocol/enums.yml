@@ -189,32 +189,32 @@ TransactionType:
   SyntheticDepositTokens:
     value: 0x33
     description: deposits tokens into token accounts
-  DirectoryAnchor:
-    value: 0x34
-    description: anchors one network to another
   SyntheticDepositCredits:
-    value: 0x35
+    value: 0x34
     description: deposits credits into a credit holder
   SyntheticBurnTokens:
-    value: 0x36
+    value: 0x35
     description: returns tokens to a token issuer's pool of issuable tokens
   SyntheticForwardTransaction:
-    value: 0x37
+    value: 0x36
     description: forwards a transaction from one subnet to another
-  MirrorSystemRecords:
-    value: 0x38
-    description: mirrors records from one network to another
-  PartitionAnchor:
-    value: 0x39
-    description: system transaction for partition data
   SegWitDataEntry:
-    value: 0xDEAD
+    value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
 
-  ##### INTERNAL TRANSACTIONS #####
+  ##### SYSTEM TRANSACTIONS #####
   SystemGenesis:
     value: 0x60
     description: initializes system chains
+  DirectoryAnchor:
+    value: 0x61
+    description: anchors one network to another
+  MirrorSystemRecords:
+    value: 0x62
+    description: mirrors records from one network to another
+  PartitionAnchor:
+    value: 0x63
+    description: system transaction for partition data
 
 AccountType:
   Unknown:
