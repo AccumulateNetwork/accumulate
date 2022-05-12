@@ -120,7 +120,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
+			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status) //nolint:rangevarref
 			if err != nil {
 				return nil, err
 			}
@@ -183,7 +183,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		qr.Type = "pending"
 		qr.Items = make([]interface{}, len(res.Transactions))
 		for i, txid := range res.Transactions {
-			qr.Items[i] = hex.EncodeToString(txid[:])
+			qr.Items[i] = hex.EncodeToString(txid[:]) //nolint:rangevarref
 		}
 		return qr, nil
 
@@ -368,7 +368,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
+		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status) //nolint:rangevarref
 		if err != nil {
 			return nil, err
 		}
