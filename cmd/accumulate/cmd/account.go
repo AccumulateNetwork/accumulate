@@ -239,6 +239,12 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
+	var accstate *protocol.AccountStateProof
+	accstate, err = GetAccountStateProof(u, accountUrl)
+	if err != nil {
+		return "", fmt.Errorf("unable to prove account state: %x", err)
+	}
+	tac.TokenIssuerProof = accstate
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch
@@ -293,11 +299,12 @@ func ListAccounts() (string, error) {
 			return "", fmt.Errorf("invalid signature type")
 		}
 
-		_, hash, err := resolveKeyTypeAndHash(pubKey)
+		k := new(Key)
+		err = k.LoadByPublicKey(pubKey)
 		if err != nil {
 			return "", err
 		}
-		lt, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
+		lt, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
 		if err != nil {
 			return "", err
 		}
@@ -433,11 +440,12 @@ func RestoreAccounts() (out string, err error) {
 		return
 	}
 	for _, v := range labelz.KeyValueList {
-		signatureType, hash, err := resolveKeyTypeAndHash(v.Value)
+		k := new(Key)
+		err = k.LoadByPublicKey(v.Value)
 		if err != nil {
 			return "", err
 		}
-		liteAccount, err := protocol.LiteTokenAddressFromHash(hash, protocol.ACME)
+		liteAccount, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
 		if err != nil {
 			return "", err
 		}
@@ -455,7 +463,7 @@ func RestoreAccounts() (out string, err error) {
 			return "", err
 		}
 
-		err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(signatureType.GetEnumValue()))
+		err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.Type.GetEnumValue()))
 		if err != nil {
 			return "", err
 		}

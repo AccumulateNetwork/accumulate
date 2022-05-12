@@ -8,6 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -88,7 +89,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 }
 
 func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
-	val, ok := getValidator[PrincipalValidator](x, transaction.Body.Type())
+	val, ok := getValidator[chain.PrincipalValidator](x, transaction.Body.Type())
 	if ok {
 		allow, fallback := val.AllowMissingPrincipal(transaction)
 		if !fallback {
@@ -135,13 +136,12 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protoc
 func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// UpdateKey transactions are always M=1 and always require a signature from
 	// the initiator
-	txnObj := batch.Transaction(transaction.GetHash())
 	if transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
 		if status.Initiator == nil {
 			return false, fmt.Errorf("missing initiator")
 		}
 
-		initSigs, err := txnObj.ReadSignatures(status.Initiator)
+		initSigs, err := batch.Transaction(transaction.GetHash()).ReadSignatures(status.Initiator)
 		if err != nil {
 			return false, fmt.Errorf("load initiator signatures: %w", err)
 		}
@@ -154,9 +154,9 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := getValidator[SignerValidator](x, transaction.Body.Type())
+	val, ok := getValidator[chain.SignerValidator](x, transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.TransactionIsReady(batch, transaction, status)
+		ready, fallback, err := val.TransactionIsReady(x, batch, transaction, status)
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -172,13 +172,12 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Get the principal's account auth
-	auth, err := getAccountAuth(batch, principal)
+	auth, err := x.GetAccountAuthoritySet(batch, principal)
 	if err != nil {
 		return false, fmt.Errorf("unable to load authority of %v: %w", transaction.Header.Principal, err)
 	}
 
 	// For each authority
-outer:
 	for _, entry := range auth.Authorities {
 		// Do not check signers for disabled authorities
 		if entry.Disabled {
@@ -186,65 +185,51 @@ outer:
 		}
 
 		// Check if any signer has reached its threshold
-		for _, signer := range status.FindSigners(entry.Url) {
-			ok, err := signerIsSatisfied(txnObj, status, signer)
-			if err != nil {
-				return false, errors.Wrap(errors.StatusUnknown, err)
-			}
-			if ok {
-				continue outer
-			}
+		ok, err := x.AuthorityIsSatisfied(batch, transaction, status, entry.Url)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
-
-		return false, nil
+		if !ok {
+			return false, nil
+		}
 	}
 
 	// If every authority is disabled, at least one signature is required
 	return len(status.Signers) > 0, nil
 }
 
-func signerIsSatisfied(txn *database.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
+func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
+	// Check if any signer has reached its threshold
+	for _, signer := range status.FindSigners(authUrl) {
+		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknown, err)
+		}
+		if ok {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
 	// Load the signature set
-	signatures, err := txn.ReadSignaturesForSigner(signer)
+	signatures, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
 	if err != nil {
 		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
+	}
+
+	// Check if the signature set includes a completed set
+	for _, e := range signatures.Entries() {
+		if e.Type == protocol.SignatureTypeSet {
+			return true, nil
+		}
 	}
 
 	// Check if the threshold has been reached
 	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
 		return true, nil
-	}
-
-	// Check if the threshold has been reached when considering delegates
-	page, ok := signer.(*protocol.KeyPage)
-	if !ok {
-		return false, nil
-	}
-	required := int64(signer.GetSignatureThreshold()) - int64(signatures.Count())
-	for _, entry := range page.Keys {
-		if entry.Owner == nil {
-			continue
-		}
-
-		// Are any of the pages of the owner satisfied?
-		var ok bool
-		for _, signer := range status.FindSigners(entry.Owner) {
-			ok, err = signerIsSatisfied(txn, status, signer)
-			if err != nil {
-				return false, errors.Wrap(errors.StatusUnknown, err)
-			}
-			if ok {
-				break
-			}
-		}
-		if !ok {
-			continue
-		}
-
-		required--
-		if required == 0 {
-			return true, nil
-		}
 	}
 
 	return false, nil
@@ -257,7 +242,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Load all of the signatures
-	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -384,7 +369,7 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 	}
 
 	// Load all of the signatures
-	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -476,7 +461,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, transaction *p
 	}
 
 	// Execute the post-failure hook if the transaction executor defines one
-	if val, ok := getValidator[TransactionExecutorCleanup](x, transaction.Body.Type()); ok {
+	if val, ok := getValidator[chain.TransactionExecutorCleanup](x, transaction.Body.Type()); ok {
 		err = val.DidFail(state, transaction)
 		if err != nil {
 			return nil, nil, err

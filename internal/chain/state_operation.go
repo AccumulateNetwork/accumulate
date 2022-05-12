@@ -1,12 +1,10 @@
 package chain
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -15,87 +13,6 @@ type stateOperation interface {
 	// Execute executes the operation and returns any chains that should be
 	// created via a synthetic transaction.
 	Execute(*stateCache) ([]protocol.Account, error)
-}
-
-type updateTxStatus struct {
-	txid   []byte
-	status *protocol.TransactionStatus
-}
-
-func (m *StateManager) UpdateStatus(txid []byte, status *protocol.TransactionStatus) {
-	m.operations = append(m.operations, &updateTxStatus{txid, status})
-}
-
-func (u *updateTxStatus) Execute(st *stateCache) ([]protocol.Account, error) {
-	// Load the transaction status & state
-	tx := st.batch.Transaction(u.txid)
-	curStatus, err := tx.GetStatus()
-	if err != nil {
-		return nil, fmt.Errorf("retrieving status for transaction %s failed: %w", logging.AsHex(u.txid), err)
-	}
-
-	// Only update the status when changed
-	if curStatus != nil && curStatus.Equal(u.status) {
-		return nil, nil
-	}
-
-	err = tx.PutStatus(u.status)
-	if err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
-type updateSignator struct {
-	url    *url.URL
-	record protocol.Account
-}
-
-func (m *stateCache) UpdateSignator(record protocol.Account) error {
-	// Load the previous state of the record
-	rec := m.batch.Account(record.GetUrl())
-	old, err := rec.GetState()
-	if err != nil {
-		return fmt.Errorf("failed to load state for %q", record.GetUrl())
-	}
-
-	// Check that the nonce is the only thing that changed
-	switch record.Type() {
-	case protocol.AccountTypeLiteIdentity:
-		old, new := old.(*protocol.LiteIdentity), record.(*protocol.LiteIdentity)
-		old.LastUsedOn = new.LastUsedOn
-		old.CreditBalance = new.CreditBalance
-		if !old.Equal(new) {
-			return fmt.Errorf("attempted to change more than the nonce and the credit balance")
-		}
-
-	case protocol.AccountTypeKeyPage:
-		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
-		old.CreditBalance = new.CreditBalance
-		for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
-			old.Keys[i].LastUsedOn = new.Keys[i].LastUsedOn
-		}
-		if !old.Equal(new) {
-			return fmt.Errorf("attempted to change more than a nonce and the credit balance")
-		}
-
-	default:
-		return fmt.Errorf("account type %d is not a signator", old.Type())
-	}
-
-	m.chains[record.GetUrl().AccountID32()] = record
-	m.operations = append(m.operations, &updateSignator{record.GetUrl(), record})
-	return nil
-}
-
-func (op *updateSignator) Execute(st *stateCache) ([]protocol.Account, error) {
-	record := st.batch.Account(op.url)
-	err := record.PutState(op.record)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
-	}
-
-	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.SignatureChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addDataEntry struct {
@@ -195,10 +112,6 @@ func (c *stateCache) RecordIndex(u *url.URL, key ...interface{}) *writeIndex {
 	return c.getIndex(c.batch.Account(u).Index(key...))
 }
 
-func (c *stateCache) TxnIndex(id []byte, key ...interface{}) *writeIndex {
-	return c.getIndex(c.batch.Transaction(id).Index(key...))
-}
-
 func (c *stateCache) getIndex(i *database.Value) *writeIndex {
 	op, ok := c.indices[i.Key()]
 	if ok {
@@ -228,56 +141,4 @@ func (op *writeIndex) Execute(st *stateCache) ([]protocol.Account, error) {
 		return nil, nil
 	}
 	return nil, op.index.Put(op.value)
-}
-
-type signTransaction struct {
-	txid       []byte
-	signatures []protocol.Signature
-}
-
-func (m *stateCache) SignTransaction(txid []byte, signatures ...protocol.Signature) {
-	m.operations = append(m.operations, &signTransaction{
-		txid:       txid,
-		signatures: signatures,
-	})
-}
-
-func (op *signTransaction) Execute(st *stateCache) ([]protocol.Account, error) {
-	t := st.batch.Transaction(op.txid)
-	for _, sig := range op.signatures {
-		// Add the signature
-		_, err := t.AddSignature(sig)
-		if err != nil {
-			return nil, err
-		}
-
-		// Ensure it's stored locally. This shouldn't be necessary, but *shrug*
-		// it works.
-		data, err := sig.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		hash := sha256.Sum256(data)
-		err = st.batch.Transaction(hash[:]).PutState(&database.SigOrTxn{Signature: sig, Hash: *(*[32]byte)(op.txid)})
-		if err != nil {
-			return nil, err
-		}
-	}
-	return nil, nil
-}
-
-type addSyntheticTxns struct {
-	txid  []byte
-	synth [32]byte
-}
-
-func (m *stateCache) AddSyntheticTxn(txid []byte, synth [32]byte) {
-	m.operations = append(m.operations, &addSyntheticTxns{
-		txid:  txid,
-		synth: synth,
-	})
-}
-
-func (op *addSyntheticTxns) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth)
 }

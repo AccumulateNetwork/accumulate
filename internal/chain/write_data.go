@@ -11,6 +11,8 @@ import (
 
 type WriteData struct{}
 
+var _ SignerValidator = (*WriteData)(nil)
+
 func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
 
 func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
@@ -44,7 +46,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 // SignerIsAuthorized returns nil if the transaction is writing to a lite data
 // account.
-func (WriteData) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
@@ -55,17 +57,19 @@ func (WriteData) SignerIsAuthorized(batch *database.Batch, transaction *protocol
 
 // TransactionIsReady returns true if the transaction is writing to a lite data
 // account.
-func (WriteData) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, _ *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, false, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if !lite {
-		return false, true, nil
+	// Writing to a lite data account only requires one signature
+	if lite {
+		return len(status.Signers) > 0, false, nil
 	}
 
-	return true, false, nil
+	// Fallback to general authorization
+	return false, true, nil
 }
 
 func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {

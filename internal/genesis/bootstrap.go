@@ -49,14 +49,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
-		uBook := uAdi.JoinPath(protocol.ValidatorBook)
+		uVal := uAdi.JoinPath(protocol.ValidatorBook)
+		uOper := uAdi.JoinPath(protocol.OperatorBook)
 
 		adi := new(protocol.ADI)
 		adi.Url = uAdi
-		adi.AddAuthority(uBook)
+		adi.AddAuthority(uVal)
 		records = append(records, adi)
 
-		valBook, valPage := createValidatorBook(uBook, opts.Validators)
+		valBook, valPage := createValidatorBook(uVal, opts.Validators)
 		records = append(records, valBook, valPage)
 
 		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
@@ -79,7 +80,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
 		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
-		anchors.AddAuthority(uBook)
+		anchors.AddAuthority(uVal)
 		records = append(records, anchors)
 
 		// Create records and directory entries
@@ -106,7 +107,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da := new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Votes)
-		da.AddAuthority(uBook)
+		da.AddAuthority(uVal)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -116,7 +117,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da = new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Evidence)
-		da.AddAuthority(uBook)
+		da.AddAuthority(uVal)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -134,14 +135,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			return err
 		}
 		wg.Entry.Data = append(wg.Entry.Data, dat)
-		global.AddAuthority(uBook)
+		global.AddAuthority(uVal)
 		records = append(records, global)
 		urls = append(urls, global.Url)
 		dataRecords = append(dataRecords, DataRecord{global, &wg.Entry})
 
 		switch opts.Network.Type {
 		case config.Directory:
-			operBook, page1 := createDNOperatorBook(opts.Network.NodeUrl(), uBook, opts.Validators)
+			operBook, page1 := createDNOperatorBook(opts.Network.NodeUrl(), opts.Validators)
 			records = append(records, operBook, page1)
 
 			oracle := new(protocol.AcmeOracle)
@@ -155,7 +156,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			daOracle := new(protocol.DataAccount)
 			daOracle.Url = uAdi.JoinPath(protocol.Oracle)
-			daOracle.AddAuthority(uBook)
+			daOracle.AddAuthority(uOper)
 
 			records = append(records, daOracle)
 			urls = append(urls, daOracle.Url)
@@ -171,14 +172,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 			daNetDef := new(protocol.DataAccount)
 			daNetDef.Url = uAdi.JoinPath(protocol.Network)
-			daNetDef.AddAuthority(uBook)
+			daNetDef.AddAuthority(uVal)
 
 			records = append(records, daNetDef)
 			urls = append(urls, daNetDef.Url)
 			dataRecords = append(dataRecords, DataRecord{daNetDef, &wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
-			acme.AddAuthority(uBook)
+			acme.AddAuthority(uVal)
 			acme.Url = protocol.AcmeUrl()
 			acme.Precision = 8
 			acme.Symbol = "ACME"
@@ -199,7 +200,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.LocalSubnetID, err))
 			}
 
-			operBook, page1, page2 := createBVNOperatorBook(opts.Network.NodeUrl(), uBook, opts.Validators)
+			operBook, page1, page2 := createBVNOperatorBook(opts.Network.NodeUrl(), opts.Validators)
 			records = append(records, operBook, page1, page2)
 
 			subnet, err := routing.RouteAccount(&opts.Network, protocol.FaucetUrl)
@@ -256,34 +257,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 	return batch.BptRoot(), nil
 }
 
-func generateNetworkDefinition(netCfg config.Network, genesisDocMap map[string]*tmtypes.GenesisDoc, validators []tmtypes.GenesisValidator) *protocol.NetworkDefinition {
-	netDef := new(protocol.NetworkDefinition)
-
-	// Create temp GenesisDoc for DN that is currently in the process of being initialized
-	dnGenDoc := &tmtypes.GenesisDoc{
-		Validators: validators,
-	}
-	genesisDocMap[protocol.Directory] = dnGenDoc
-
-	for _, subnet := range netCfg.Subnets {
-		genDoc := genesisDocMap[subnet.ID]
-
-		// Add the validator hashes from the subnet's genesis doc
-		var vkHashes [][32]byte
-		for _, validator := range genDoc.Validators {
-			pkh := sha256.Sum256(validator.PubKey.Bytes())
-			vkHashes = append(vkHashes, pkh)
-		}
-
-		subnetDef := protocol.SubnetDefinition{
-			SubnetID:           subnet.ID,
-			ValidatorKeyHashes: vkHashes,
-		}
-		netDef.Subnets = append(netDef.Subnets, subnetDef)
-	}
-	return netDef
-}
-
 func createValidatorBook(uBook *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
 	book := new(protocol.KeyBook)
 	book.Url = uBook
@@ -294,19 +267,19 @@ func createValidatorBook(uBook *url.URL, operators []tmtypes.GenesisValidator) (
 	return book, createOperatorPage(uBook, 0, operators, true)
 }
 
-func createDNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
+func createDNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
-	book.AddAuthority(authUrl)
-	book.PageCount = 2
+	book.AddAuthority(book.Url)
+	book.PageCount = 1
 
 	return book, createOperatorPage(book.Url, 0, operators, false)
 }
 
-func createBVNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage, *protocol.KeyPage) {
+func createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) (*protocol.KeyBook, *protocol.KeyPage, *protocol.KeyPage) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
-	book.AddAuthority(authUrl)
+	book.AddAuthority(book.Url)
 	book.PageCount = 2
 
 	page1 := new(protocol.KeyPage)
@@ -316,8 +289,6 @@ func createBVNOperatorBook(nodeUrl *url.URL, authUrl *url.URL, operators []tmtyp
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
 	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
-	kh := sha256.Sum256(spec.Owner.AccountID())
-	spec.PublicKeyHash = kh[:]
 	page1.Keys[0] = spec
 
 	page2 := createOperatorPage(book.Url, 1, operators, false)
@@ -352,8 +323,38 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 	page.TransactionBlacklist = new(protocol.AllowedTransactions)
 	for _, txType := range txTypes {
 		bit, ok := txType.AllowedTransactionBit()
-		if ok {
-			page.TransactionBlacklist.Set(bit)
+		if !ok {
+			panic(fmt.Errorf("failed to blacklist %v", txType))
 		}
+		page.TransactionBlacklist.Set(bit)
 	}
 }
+
+func generateNetworkDefinition(netCfg config.Network, genesisDocMap map[string]*tmtypes.GenesisDoc, validators []tmtypes.GenesisValidator) *protocol.NetworkDefinition {
+	netDef := new(protocol.NetworkDefinition)
+
+	// Create temp GenesisDoc for DN that is currently in the process of being initialized
+	dnGenDoc := &tmtypes.GenesisDoc{
+		Validators: validators,
+	}
+	genesisDocMap[protocol.Directory] = dnGenDoc
+
+	for _, subnet := range netCfg.Subnets {
+		genDoc := genesisDocMap[subnet.ID]
+
+		// Add the validator hashes from the subnet's genesis doc
+		var vkHashes [][32]byte
+		for _, validator := range genDoc.Validators {
+			pkh := sha256.Sum256(validator.PubKey.Bytes())
+			vkHashes = append(vkHashes, pkh)
+		}
+
+		subnetDef := protocol.SubnetDefinition{
+			SubnetID:           subnet.ID,
+			ValidatorKeyHashes: vkHashes,
+		}
+		netDef.Subnets = append(netDef.Subnets, subnetDef)
+	}
+	return netDef
+}
+

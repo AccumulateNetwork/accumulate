@@ -139,13 +139,9 @@ func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (p
 		}
 
 		// Validate source
-		dnSpec := new(protocol.KeySpec)
-		dnSpec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
-		kh := sha256.Sum256(dnSpec.Owner.AccountID())
-		dnSpec.PublicKeyHash = kh[:]
-		srcSpec := page1.Keys[0]
-		if !dnSpec.Equal(srcSpec) {
-			return nil, fmt.Errorf("source is not from DN but from %q", srcSpec.Owner)
+		_, _, ok := page1.EntryByDelegate(body.Source.JoinPath(protocol.OperatorBook))
+		if !ok {
+			return nil, fmt.Errorf("source is not from DN but from %q", body.Source)
 		}
 
 		var page2 *protocol.KeyPage

@@ -44,13 +44,13 @@ func addValidator(args []string) (string, error) {
 		return "", err
 	}
 
-	newKey, _, _, err := resolvePublicKey(args[0])
+	newKey, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
 
 	txn := new(protocol.AddValidator)
-	txn.PubKey = newKey
+	txn.PubKey = newKey.PublicKey
 	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }
 
@@ -60,13 +60,13 @@ func removeValidator(args []string) (string, error) {
 		return "", err
 	}
 
-	oldKey, _, _, err := resolvePublicKey(args[0])
+	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
 
 	txn := new(protocol.RemoveValidator)
-	txn.PubKey = oldKey
+	txn.PubKey = oldKey.PublicKey
 	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }
 
@@ -76,18 +76,18 @@ func updateValidatorKey(args []string) (string, error) {
 		return "", err
 	}
 
-	oldKey, _, _, err := resolvePublicKey(args[0])
+	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
 		return "", err
 	}
 
-	newKey, _, _, err := resolvePublicKey(args[1])
+	newKey, err := resolvePublicKey(args[1])
 	if err != nil {
 		return "", err
 	}
 
 	txn := new(protocol.UpdateValidatorKey)
-	txn.PubKey = oldKey
-	txn.NewPubKey = newKey
+	txn.PubKey = oldKey.PublicKey
+	txn.NewPubKey = newKey.PublicKey
 	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
 }

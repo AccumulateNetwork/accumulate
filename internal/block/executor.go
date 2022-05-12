@@ -7,7 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -87,7 +87,7 @@ func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	m.logger.Error(msg, keyVals...)
 }
 
-func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) error) error {
+func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) error {
 	var err error
 
 	if !m.isGenesis {
@@ -98,13 +98,13 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.InternalGenesis)
 
-	st := chain.NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = putSyntheticTransaction(
 		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		&protocol.InternalSignature{Network: m.Network.NodeUrl()})
+		nil)
 	if err != nil {
 		return err
 	}

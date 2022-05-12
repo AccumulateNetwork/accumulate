@@ -580,15 +580,15 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		// Load all the signatures
 		var qset query.SignatureSet
 		qset.Account = signer
-		for _, entryHash := range sigset.EntryHashes() {
-			state, err := batch.Transaction(entryHash[:]).GetState()
+		for _, e := range sigset.Entries() {
+			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
 			switch {
 			case err == nil:
 				qset.Signatures = append(qset.Signatures, state.Signature)
 			case errors.Is(err, storage.ErrNotFound):
 				// Leave it nil
 			default:
-				return nil, fmt.Errorf("load signature entry %X: %w", entryHash, err)
+				return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
 			}
 		}
 
@@ -869,7 +869,7 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
 
-		auth, err := getAccountAuth(batch, account)
+		auth, err := m.GetAccountAuthoritySet(batch, account)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
