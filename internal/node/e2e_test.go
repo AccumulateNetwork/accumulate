@@ -86,7 +86,7 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 			d.Require().True(r.Status.Delivered, "Transaction has not been delivered")
 			d.Require().Zero(r.Status.Code, "Transaction failed")
 			for _, id := range r.SyntheticTxids {
-				id := id // We want a pointer to a copy, not to the loop var
+				id := id // See docs/developer/rangevarref.md
 				synth = append(synth, id[:])
 			}
 		}
@@ -158,7 +158,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	txqResp := new(apiv2.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
 	for _, txid := range txqResp.SyntheticTxids {
-		rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}, nil)
+		rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}, nil) //nolint:rangevarref
 	}
 
 	// Wait for synthetic TX to settle
