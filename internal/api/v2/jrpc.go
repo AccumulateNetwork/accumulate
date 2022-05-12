@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	stdlog "log"
 	"mime"
 	"net/http"
@@ -71,13 +71,14 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/status", m.jrpc2http(m.Status))
 	mux.Handle("/version", m.jrpc2http(m.Version))
+	mux.Handle("/describe", m.jrpc2http(m.Describe))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
 }
 
 func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			res.WriteHeader(http.StatusBadRequest)
 			return
