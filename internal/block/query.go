@@ -567,6 +567,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	qr.TxSynthTxIds = make(types.Bytes, 0, len(synth.Hashes)*32)
 	for _, synth := range synth.Hashes {
+		synth := synth // See docs/developer/rangevarref.md
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
