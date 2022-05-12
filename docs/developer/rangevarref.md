@@ -51,7 +51,7 @@ An easy way around this problem is to redeclare the range variable:
 
 ```go
 for _, x := range []int{1, 2, 3} {
-    x := x
+    x := x // See docs/developer/rangevarref.md
     values = append(values, &x)
 }
 ```
