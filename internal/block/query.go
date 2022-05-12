@@ -969,8 +969,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
 			minorEntry.TxCount = uint64(0)
-			internalTxCount := uint64(0)
-			systemAnchorCount := uint64(0)
+			systemTxCount := uint64(0)
 			var lastTxid []byte
 			for _, updIdx := range chainUpdatesIndex.Entries {
 				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
@@ -985,19 +984,16 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
 						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt.IsInternal() {
-							internalTxCount++
+						if txt.IsSystem() {
+							systemTxCount++
 						} else if req.TxFetchMode == query.TxFetchModeExpand {
 							minorEntry.Transactions = append(minorEntry.Transactions, qr)
-						}
-						if (txt == protocol.TransactionTypePartitionAnchor || txt == protocol.TransactionTypeDirectoryAnchor) && req.FilterSystemAnchorsOnlyBlocks {
-							systemAnchorCount++
 						}
 					}
 				}
 				lastTxid = updIdx.Entry
 			}
-			if minorEntry.TxCount > (internalTxCount + systemAnchorCount) {
+			if minorEntry.TxCount > systemTxCount {
 				resp.Entries = append(resp.Entries, minorEntry)
 			}
 		} else {

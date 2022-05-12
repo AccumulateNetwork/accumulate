@@ -406,7 +406,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 	}
 
 	// Don't add internal transactions to chains
-	if transaction.Body.Type().IsInternal() {
+	if transaction.Body.Type().IsSystem() {
 		return status, state, nil
 	}
 
