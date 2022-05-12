@@ -78,7 +78,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, transaction *protoc
 		return x.recordFailedTransaction(batch, transaction, err)
 	}
 
-	// Commit changes, queue state creates for synthetic transactions
+	// Execute changes, queue state creates for synthetic transactions
 	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)

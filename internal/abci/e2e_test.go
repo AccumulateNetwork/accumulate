@@ -1384,7 +1384,7 @@ func TestInvalidDeposit(t *testing.T) {
 	// The lite address ends with `foo/tokens` but the token is `foo2/tokens` so
 	// the synthetic transaction will fail. This test verifies that the
 	// transaction fails, but more importantly it verifies that
-	// `Executor.Commit()` does *not* break if DeliverTx fails with a
+	// `Executor.Execute()` does *not* break if DeliverTx fails with a
 	// non-existent origin. This is motivated by a bug that has been fixed. This
 	// bug could have been triggered by a failing SyntheticCreateChains,
 	// SyntheticDepositTokens, or SyntheticDepositCredits.
@@ -1830,6 +1830,9 @@ func TestNetworkDefinition(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	dn := nodes[subnets[0]][0]
+
+	// Without the sleep, this test fails on Windows and macOS
+	time.Sleep(3 * time.Second)
 
 	// Test getting the data by URL
 	rde := new(query.ResponseDataEntry)

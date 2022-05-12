@@ -245,7 +245,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
-	// Commit the batch
+	// Execute the batch
 	err = block.Batch.Commit()
 	if err != nil {
 		panic(fmt.Errorf("failed to commit block: %v", err))
@@ -441,7 +441,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		return abci.ResponseCommit{Data: batch.BptRoot()}
 	}
 
-	// Commit the batch
+	// Execute the batch
 	err := app.block.Batch.Commit()
 	if err != nil {
 		app.fatal(err, true)

@@ -721,7 +721,7 @@ func (v *NodeStatus) IsValid() error {
 
 var fieldNames_NodeVersion = []string{
 	1: "Version",
-	2: "Commit",
+	2: "Execute",
 	3: "VersionIsKnown",
 	4: "IsTestNet",
 }
@@ -760,9 +760,9 @@ func (v *NodeVersion) IsValid() error {
 		errs = append(errs, "field Version is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Commit is missing")
+		errs = append(errs, "field Execute is missing")
 	} else if len(v.Commit) == 0 {
-		errs = append(errs, "field Commit is not set")
+		errs = append(errs, "field Execute is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field VersionIsKnown is missing")

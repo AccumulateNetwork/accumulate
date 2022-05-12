@@ -191,7 +191,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 		return fmt.Errorf("failed to import database: %v", err)
 	}
 
-	// Commit the database batch
+	// Execute the database batch
 	err = subbatch.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)

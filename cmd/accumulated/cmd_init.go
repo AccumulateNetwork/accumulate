@@ -577,37 +577,32 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 		Logger:              logger.With("subnet", protocol.Directory),
 	})
 	check(err)
-	genInits := []genesis.Initializer{genInit}
+	genList := []genesis.Genesis{genInit}
 
 	for bvn := range bvnConfig {
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-		genInit, err := node.Init(node.InitOptions{
-			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-			Port:     flagInitDevnet.BasePort,
-			Config:   bvnConfig,
-			RemoteIP: bvnRemote,
-			ListenIP: bvnListen,
-			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
+		genesis, err := node.Init(node.InitOptions{
+			WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
+			Port:                flagInitDevnet.BasePort,
+			Config:              bvnConfig,
+			RemoteIP:            bvnRemote,
+			ListenIP:            bvnListen,
+			NetworkValidatorMap: netValMap,
+			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 		})
 		check(err)
-		genInits = append(genInits, genInit)
+		if genesis != nil {
+			genList = append(genList, genesis)
+		}
 	}
 
-	for _, genInit := range genInits {
+	for _, genesis := range genList {
 		func() {
-			defer genInit.Discard()
-			if genInit.IsDN() {
-				err := genInit.GenerateNetworkDefinition()
-				if err != nil {
-					panic(fmt.Errorf("could not generate genesis network definition for DN: %v", err))
-				}
-			}
-			genesisDoc, err := genInit.Commit()
+			defer genesis.Discard()
+			err := genesis.Execute()
 			if err != nil {
-				panic(fmt.Errorf("could not generate commit genesis: %v", err))
+				panic(fmt.Errorf("could not execute genesis: %v", err))
 			}
-
-			genInit.WriteGenesisFile(genesisDoc)
 		}()
 	}
 }

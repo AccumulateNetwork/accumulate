@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"math/big"
 	"path"
@@ -14,7 +15,6 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -40,7 +40,7 @@ type DataRecord struct {
 
 type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
 
-type Genesis struct {
+type genesis struct {
 	opts         InitOpts
 	network      config.Network
 	kvdb         storage.KeyValueStore
@@ -51,96 +51,41 @@ type Genesis struct {
 	urls         []*url.URL
 	records      []protocol.Account
 	dataRecords  []DataRecord
+	genesisExec  *block.Executor
 }
 
-type Initializer interface {
-	GenerateNetworkDefinition() error
-	Commit() (*tmtypes.GenesisDoc, error)
+type Genesis interface {
+	Execute() error
 	Discard()
-	IsDN() bool
-	WriteGenesisFile(doc *tmtypes.GenesisDoc) error
 }
 
-func Init(kvdb storage.KeyValueStore, opts InitOpts) (Initializer, error) {
-	g := &Genesis{
+func Init(kvdb storage.KeyValueStore, opts InitOpts) (Genesis, error) {
+	g := &genesis{
 		kvdb: kvdb,
 		opts: opts,
 		db:   database.New(kvdb, opts.Logger.With("module", "database")),
+	}
+
+	// Add validator keys to NetworkValidatorMap when not there
+	if _, ok := g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID]; !ok {
+		g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID] = g.opts.Validators
 	}
 
 	exec, err := block.NewGenesisExecutor(g.db, opts.Logger, opts.Network, opts.Router)
 	if err != nil {
 		return nil, err
 	}
+	g.genesisExec = exec
 
 	g.block = new(block.Block)
 	g.block.Index = protocol.GenesisBlock
 	g.block.Time = opts.GenesisTime
 	g.block.Batch = g.db.Begin(true)
 
-	err = exec.Genesis(g.block, func(st *chain.StateManager) error {
-		g.adiUrl = g.opts.Network.NodeUrl()
-		g.authorityUrl = g.adiUrl.JoinPath(protocol.ValidatorBook)
-
-		g.createADI()
-		g.createValidatorBook()
-
-		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
-		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
-		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
-
-		g.createMainLedger(oraclePrice)
-		g.createSyntheticLedger()
-		g.createAnchorPool()
-
-		err = g.createVoteScratchChain()
-		if err != nil {
-			return err
-		}
-
-		g.createEvidenceChain()
-
-		err = g.createGlobals()
-		if err != nil {
-			return err
-		}
-
-		switch opts.Network.Type {
-		case config.Directory:
-			err = g.initDN(oraclePrice)
-			if err != nil {
-				return err
-			}
-		case config.BlockValidator:
-			err = g.initBVN()
-			if err != nil {
-				return err
-			}
-		}
-
-		err = st.Create(g.records...)
-		if err != nil {
-			return fmt.Errorf("failed to create records: %w", err)
-		}
-
-		for _, wd := range g.dataRecords {
-			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
-		}
-
-		// Add validator keys to NetworkValidatorMap when not there
-		if _, ok := g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID]; !ok {
-			g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID] = g.opts.Validators
-		}
-		return st.AddDirectoryEntry(g.adiUrl, g.urls...)
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	return g, nil
 }
 
-func (g *Genesis) initDN(oraclePrice uint64) error {
+func (g *genesis) initDN(oraclePrice uint64) error {
 	g.createDNOperatorBook()
 
 	oracle := new(protocol.AcmeOracle)
@@ -174,7 +119,7 @@ func (g *Genesis) initDN(oraclePrice uint64) error {
 	return nil
 }
 
-func (g *Genesis) initBVN() error {
+func (g *genesis) initBVN() error {
 	// Test with `${ID}` not `bvn-${ID}` because the latter will fail
 	// with "bvn-${ID} is reserved"
 	network := g.opts.Network
@@ -214,20 +159,20 @@ func (g *Genesis) initBVN() error {
 	return nil
 }
 
-func (g *Genesis) WriteRecords(record ...protocol.Account) {
+func (g *genesis) WriteRecords(record ...protocol.Account) {
 	g.records = append(g.records, record...)
 	for _, rec := range record {
 		g.urls = append(g.urls, rec.GetUrl())
 	}
 }
 
-func (g *Genesis) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
+func (g *genesis) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
 	g.records = append(g.records, account)
 	g.urls = append(g.urls, url)
 	g.dataRecords = append(g.dataRecords, dataRecord)
 }
 
-func (g *Genesis) createValidatorBook() {
+func (g *genesis) createValidatorBook() {
 	uBook := g.authorityUrl
 	book := new(protocol.KeyBook)
 	book.Url = uBook
@@ -239,7 +184,7 @@ func (g *Genesis) createValidatorBook() {
 	g.WriteRecords(book, page)
 }
 
-func (g *Genesis) createDNOperatorBook() {
+func (g *genesis) createDNOperatorBook() {
 	book := new(protocol.KeyBook)
 	book.Url = g.adiUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -249,7 +194,7 @@ func (g *Genesis) createDNOperatorBook() {
 	g.WriteRecords(book, page)
 }
 
-func (g *Genesis) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
+func (g *genesis) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -303,11 +248,11 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 	}
 }
 
-func (g *Genesis) GenerateNetworkDefinition() error {
+func (g *genesis) generateNetworkDefinition() error {
 	if g.opts.Network.Type != config.Directory {
-		return fmt.Errorf("GenerateNetworkDefinition is only allowed for DNs")
+		return fmt.Errorf("generateNetworkDefinition is only allowed for DNs")
 	}
-	networkDefs := g.generateNetworkDefinition()
+	networkDefs := g.buildNetworkDefinition()
 	wd := new(protocol.WriteData)
 	d, err := json.Marshal(&networkDefs)
 	if err != nil {
@@ -322,36 +267,94 @@ func (g *Genesis) GenerateNetworkDefinition() error {
 	return nil
 }
 
-func (g *Genesis) Commit() (*tmtypes.GenesisDoc, error) {
-	err := g.block.Batch.Commit()
+func (g *genesis) Execute() error {
+	err := g.genesisExec.Genesis(g.block, func(st *chain.StateManager) error {
+		g.adiUrl = g.opts.Network.NodeUrl()
+		g.authorityUrl = g.adiUrl.JoinPath(protocol.ValidatorBook)
+
+		g.createADI()
+		g.createValidatorBook()
+
+		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
+		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
+		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
+
+		g.createMainLedger(oraclePrice)
+		g.createSyntheticLedger()
+		g.createAnchorPool()
+
+		err := g.createVoteScratchChain()
+		if err != nil {
+			return err
+		}
+
+		g.createEvidenceChain()
+
+		err = g.createGlobals()
+		if err != nil {
+			return err
+		}
+
+		switch g.opts.Network.Type {
+		case config.Directory:
+			err = g.initDN(oraclePrice)
+			if err != nil {
+				return err
+			}
+			g.generateNetworkDefinition()
+		case config.BlockValidator:
+			err = g.initBVN()
+			if err != nil {
+				return err
+			}
+		}
+
+		err = st.Create(g.records...)
+		if err != nil {
+			return fmt.Errorf("failed to create records: %w", err)
+		}
+
+		for _, wd := range g.dataRecords {
+			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
+		}
+		return st.AddDirectoryEntry(g.adiUrl, g.urls...)
+	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+
+	err = g.block.Batch.Commit()
+	if err != nil {
+		return err
 	}
 
 	batch := g.db.Begin(false)
 	defer batch.Discard()
+	g.writeGenesisFile(batch.BptRoot())
+	return nil
+}
 
+func (g *genesis) writeGenesisFile(appHash []byte) error {
 	memDb, ok := g.kvdb.(*memory.DB)
 
 	var state []byte
+	var err error
 	if ok {
 		state, err = memDb.MarshalJSON()
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return &tmtypes.GenesisDoc{
+	genDoc := &tmtypes.GenesisDoc{
 		ChainID:         g.opts.Network.LocalSubnetID,
 		GenesisTime:     g.opts.GenesisTime,
 		InitialHeight:   protocol.GenesisBlock + 1,
 		Validators:      g.opts.Validators,
 		ConsensusParams: tmtypes.DefaultConsensusParams(),
 		AppState:        state,
-		AppHash:         batch.BptRoot(),
-	}, nil
-}
+		AppHash:         appHash,
+	}
 
-func (g *Genesis) WriteGenesisFile(genDoc *tmtypes.GenesisDoc) error {
 	for _, config := range g.opts.Configs {
 		if err := genDoc.SaveAs(path.Join(config.RootDir, config.BaseConfig.Genesis)); err != nil {
 			return fmt.Errorf("failed to save gen doc: %v", err)
@@ -360,11 +363,11 @@ func (g *Genesis) WriteGenesisFile(genDoc *tmtypes.GenesisDoc) error {
 	return nil
 }
 
-func (g *Genesis) Discard() {
+func (g *genesis) Discard() {
 	g.block.Batch.Discard()
 }
 
-func (g *Genesis) generateNetworkDefinition() *protocol.NetworkDefinition {
+func (g *genesis) buildNetworkDefinition() *protocol.NetworkDefinition {
 	netDef := new(protocol.NetworkDefinition)
 
 	for _, subnet := range g.opts.Network.Subnets {
@@ -385,7 +388,7 @@ func (g *Genesis) generateNetworkDefinition() *protocol.NetworkDefinition {
 	return netDef
 }
 
-func (g *Genesis) createGlobals() error {
+func (g *genesis) createGlobals() error {
 	//create a new Globals account
 	global := new(protocol.DataAccount)
 	global.Url = g.adiUrl.JoinPath(protocol.Globals)
@@ -403,7 +406,7 @@ func (g *Genesis) createGlobals() error {
 	return nil
 }
 
-func (g *Genesis) createEvidenceChain() {
+func (g *genesis) createEvidenceChain() {
 	//create an evidence scratch chain
 	da := new(protocol.DataAccount)
 	da.Scratch = true
@@ -413,7 +416,7 @@ func (g *Genesis) createEvidenceChain() {
 	g.urls = append(g.urls, da.Url)
 }
 
-func (g *Genesis) createVoteScratchChain() error {
+func (g *genesis) createVoteScratchChain() error {
 	//create a vote scratch chain
 	wd := new(protocol.WriteData)
 	lci := types.LastCommitInfo{}
@@ -431,7 +434,7 @@ func (g *Genesis) createVoteScratchChain() error {
 	return nil
 }
 
-func (g *Genesis) createAnchorPool() {
+func (g *genesis) createAnchorPool() {
 	// Create the anchor pool
 	anchors := new(protocol.Anchor)
 	anchors.Url = g.adiUrl.JoinPath(protocol.AnchorPool)
@@ -440,14 +443,14 @@ func (g *Genesis) createAnchorPool() {
 
 }
 
-func (g *Genesis) createSyntheticLedger() {
+func (g *genesis) createSyntheticLedger() {
 	// Create the synth ledger
 	synthLedger := new(protocol.SyntheticLedger)
 	synthLedger.Url = g.adiUrl.JoinPath(protocol.Synthetic)
 	g.WriteRecords(synthLedger)
 }
 
-func (g *Genesis) createMainLedger(oraclePrice uint64) {
+func (g *genesis) createMainLedger(oraclePrice uint64) {
 	// Create the main ledger
 	ledger := new(protocol.InternalLedger)
 	ledger.Url = g.adiUrl.JoinPath(protocol.Ledger)
@@ -457,43 +460,10 @@ func (g *Genesis) createMainLedger(oraclePrice uint64) {
 	g.WriteRecords(ledger)
 }
 
-func (g *Genesis) createADI() {
+func (g *genesis) createADI() {
 	// Create the ADI
 	adi := new(protocol.ADI)
 	adi.Url = g.adiUrl
 	adi.AddAuthority(g.authorityUrl)
 	g.WriteRecords(adi)
-}
-
-func (g *Genesis) IsDN() bool {
-	return g.opts.Network.Type == config.Directory
-}
-
-type existingGenesis struct {
-	genesisDoc *tmtypes.GenesisDoc
-	network    config.Network
-}
-
-func Existing(genesisDoc *tmtypes.GenesisDoc, network config.Network) Initializer {
-	return existingGenesis{genesisDoc, network}
-}
-
-func (e existingGenesis) GenerateNetworkDefinition() error {
-	return nil
-}
-
-func (e existingGenesis) Commit() (*tmtypes.GenesisDoc, error) {
-	return e.genesisDoc, nil
-}
-
-func (e existingGenesis) Discard() {
-}
-
-func (e existingGenesis) IsDN() bool {
-	return e.network.Type == config.Directory
-}
-
-func (e existingGenesis) WriteGenesisFile(doc *tmtypes.GenesisDoc) error {
-	// We don't write a file that is already there
-	return nil
 }

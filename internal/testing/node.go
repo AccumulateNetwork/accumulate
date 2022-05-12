@@ -148,12 +148,12 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
 	netValMap := make(genesis.NetworkValidatorMap)
-	var genInits []genesis.Initializer
+	var genList []genesis.Genesis
 
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
 		dir := filepath.Join(tempDir, subnetId)
-		genInit, err := node.Init(node.InitOptions{
+		genesis, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
 			Port:                basePort,
 			Config:              allConfigs[subnetId],
@@ -164,7 +164,9 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			FactomAddressesFile: factomAddressFilePath,
 		})
 		require.NoError(t, err)
-		genInits = append(genInits, genInit)
+		if genesis != nil {
+			genList = append(genList, genesis)
+		}
 
 		daemons := make([]*accumulated.Daemon, count)
 		allDaemons[subnetId] = daemons
@@ -178,21 +180,13 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 	}
 
-	for _, genInit := range genInits {
+	for _, genesis := range genList {
 		func() {
-			defer genInit.Discard()
-			if genInit.IsDN() {
-				err := genInit.GenerateNetworkDefinition()
-				if err != nil {
-					panic(fmt.Errorf("could not generate genesis network definition for DN: %v", err))
-				}
-			}
-			genesisDoc, err := genInit.Commit()
+			defer genesis.Discard()
+			err := genesis.Execute()
 			if err != nil {
-				panic(fmt.Errorf("could not generate commit genesis: %v", err))
+				panic(fmt.Errorf("could not execute genesis: %v", err))
 			}
-
-			genInit.WriteGenesisFile(genesisDoc)
 		}()
 	}
 	return getSubnetNames(subnets), allDaemons

@@ -69,7 +69,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 		// each loop iteration. Without this statement, `k[:]` creates a slice
 		// that points to the range variable, so every call to `txn.Set` gets a
 		// slice pointing to the same memory. Since the transaction defers the
-		// actual write until `txn.Commit` is called, it saves the slice. And
+		// actual write until `txn.Execute` is called, it saves the slice. And
 		// since all of the slices are pointing to the same variable, and that
 		// variable is overwritten on each iteration, the slices held by `txn`
 		// all point to the same value. When the transaction is committed, every

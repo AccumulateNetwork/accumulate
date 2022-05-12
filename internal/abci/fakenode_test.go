@@ -48,10 +48,10 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert             *assert.Assertions
-	require            *require.Assertions
-	netValMap          genesis.NetworkValidatorMap
-	GenesisInitializer genesis.Initializer
+	assert    *assert.Assertions
+	require   *require.Assertions
+	netValMap genesis.NetworkValidatorMap
+	Genesis   genesis.Genesis
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -61,7 +61,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.Client{}
 	netValMap := make(genesis.NetworkValidatorMap)
-	genInits := []genesis.Initializer{}
+	genList := []genesis.Genesis{}
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -87,25 +87,28 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
-			genInits = append(genInits, nodes[i].GenesisInitializer)
+			genList = append(genList, nodes[i].Genesis)
 		}
 	}
 
-	for _, genInit := range genInits {
+	for _, genesis := range genList {
 		func() {
-			defer genInit.Discard()
-			if genInit.IsDN() {
-				err := genInit.GenerateNetworkDefinition()
-				if err != nil {
-					panic(fmt.Errorf("could not generate genesis network definition for DN: %v", err))
-				}
-			}
-			_, err := genInit.Commit()
+			defer genesis.Discard()
+			err := genesis.Execute()
 			if err != nil {
-				panic(fmt.Errorf("could not generate commit genesis: %v", err))
+				panic(fmt.Errorf("could not execute genesis: %v", err))
 			}
 		}()
 	}
+
+	for _, netName := range subnets {
+		netName = strings.TrimPrefix(netName, evilNodePrefix)
+		nodes := allNodes[netName]
+		for i := range nodes {
+			nodes[i].client.Start(100 * time.Millisecond)
+		}
+	}
+
 	return allNodes
 }
 
@@ -157,7 +160,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
-	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, errorHandler, 100*time.Millisecond, isEvil)
+	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, errorHandler, isEvil)
 
 	return n, appChan
 }
@@ -217,7 +220,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 			{PubKey: n.key.PubKey()},
 		},
 	}
-	n.GenesisInitializer, err = genesis.Init(kv, opts)
+	n.Genesis, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
 
 	state, err := kv.MarshalJSON()

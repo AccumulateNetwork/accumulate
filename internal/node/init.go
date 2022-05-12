@@ -40,7 +40,7 @@ type InitOptions struct {
 // Init creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func Init(opts InitOptions) (genInit genesis.Initializer, err error) {
+func Init(opts InitOptions) (genInit genesis.Genesis, err error) {
 	switch opts.Version {
 	case 0:
 		fallthrough
@@ -57,7 +57,7 @@ func Init(opts InitOptions) (genInit genesis.Initializer, err error) {
 // initV1 creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func initV1(opts InitOptions) (genInit genesis.Initializer, err error) {
+func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(opts.WorkDir)
@@ -129,9 +129,7 @@ func initV1(opts InitOptions) (genInit genesis.Initializer, err error) {
 	}
 
 	// Generate genesis doc from generated validators
-	if opts.GenesisDoc != nil {
-		genInit = genesis.Existing(opts.GenesisDoc, configs[0].Accumulate.Network)
-	} else {
+	if opts.GenesisDoc == nil {
 		genTime := tmtime.Now()
 
 		db := memory.New(opts.Logger.With("module", "storage"))

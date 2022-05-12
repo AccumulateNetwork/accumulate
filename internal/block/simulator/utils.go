@@ -94,7 +94,7 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 		return results, nil
 	}
 
-	// Commit the batch
+	// Execute the batch
 	require.NoError(tb{t}, block.Batch.Commit())
 
 	return results, nil
