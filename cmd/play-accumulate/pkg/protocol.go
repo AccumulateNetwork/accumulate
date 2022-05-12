@@ -30,11 +30,9 @@ func (s *Session) LiteAddress(keyOrEntry interface{}, args ...interface{}) *URL 
 		case ed25519.PrivateKey, ed25519.PublicKey, []byte:
 			return protocol.LiteAuthorityForKey(s.pubkey(v), protocol.SignatureTypeED25519)
 		case protocol.DataEntry:
-			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(&v))
-		case *protocol.DataEntry:
 			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(v))
 		case [][]byte:
-			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(&protocol.DataEntry{Data: v}))
+			addr, err = protocol.LiteDataAddress(protocol.ComputeLiteDataAccountId(&protocol.AccumulateDataEntry{Data: v}))
 		}
 	case 1:
 		addr, err = protocol.LiteTokenAddress(s.pubkey(keyOrEntry), s.url(args[0]).String(), protocol.SignatureTypeED25519)
