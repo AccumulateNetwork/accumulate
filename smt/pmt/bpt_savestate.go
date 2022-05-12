@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -34,16 +35,14 @@ const nLen = 32 + 32 + 8    //                               Each node is a key 
 //   8  byte                  -- length of value
 //   n  [length of value]byte -- the bytes of the value
 //
-func (b *BPT) SaveSnapshot(filename string, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
+func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
 	if b.manager == nil { //                                  Snapshot cannot be taken if we have no db
 		return fmt.Errorf("No manager found for BPT") //      return error
 	}
 
-	file, e1 := os.OpenFile(filename, os.O_CREATE|os.O_RDWR, 0600) //    Open the snapshot file
-	_, e2 := file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0})            //                    Safe Space to write number of nodes
-	values, e3 := os.CreateTemp("", "values")                      //             Collect the values here
+	_, e1 := file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) //                    Safe Space to write number of nodes
+	values, e2 := os.CreateTemp("", "values")           //             Collect the values here
 
-	defer file.Close()
 	defer os.Remove(values.Name())
 	defer values.Close()
 
@@ -52,8 +51,6 @@ func (b *BPT) SaveSnapshot(filename string, loadState func(key storage.Key, hash
 		return e1
 	case e2 != nil:
 		return e2
-	case e3 != nil:
-		return e3
 	}
 
 	// Start is the first possible key in a BPT
@@ -103,10 +100,10 @@ func (b *BPT) SaveSnapshot(filename string, loadState func(key storage.Key, hash
 		}
 	}
 
-	_, e1 = file.Seek(0, 0)                              // Goto front of file
+	_, e1 = file.Seek(0, io.SeekStart)                   // Goto front of file
 	_, e2 = file.Write(common.Uint64FixedBytes(NodeCnt)) //   and update number of nodes found
-	_, e3 = values.Seek(0, 0)                            // Go to front of values
-	_, e4 := file.Seek(0, 2)                             // Go to the end of file
+	_, e3 := values.Seek(0, io.SeekStart)                // Go to front of values
+	_, e4 := file.Seek(0, io.SeekEnd)                    // Go to the end of file
 	_, e5 := io.Copy(file, values)                       // Copy values to file
 	switch {                                             // Not likely to fail, but report if it does
 	case e1 != nil:
@@ -124,29 +121,16 @@ func (b *BPT) SaveSnapshot(filename string, loadState func(key storage.Key, hash
 	return nil
 }
 
-type SectionReader interface {
-	io.Reader
-	io.ReaderAt
-	io.Seeker
-	Size() int64
-}
-
 // ReadSnapshot
 //
-func (b *BPT) LoadSnapshot(filename string, storeState func(key storage.Key, hash [32]byte, reader SectionReader) error) error {
+func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
 	if b.MaxHeight != 0 {
 		return errors.New("A snapshot can only be read into a new BPT")
 	}
 
-	file, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	buff := make([]byte, window*(nLen))   //			          buff is a window's worth of key/hash/offset
-	vBuff := make([]byte, 1024*128)       //                    Big enough to load any value. 128k?
-	_, err = io.ReadFull(file, vBuff[:8]) //                    Read number of entries
+	buff := make([]byte, window*(nLen))    //			          buff is a window's worth of key/hash/offset
+	vBuff := make([]byte, 1024*128)        //                    Big enough to load any value. 128k?
+	_, err := io.ReadFull(file, vBuff[:8]) //                    Read number of entries
 	if err != nil {
 		return err
 	}
