@@ -6,7 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 
 	"github.com/mdp/qrterminal"
@@ -194,7 +194,7 @@ func QrAccount(s string) (string, error) {
 		QuietZone:      2,
 	})
 
-	r, err := ioutil.ReadAll(b)
+	r, err := io.ReadAll(b)
 	return string(r), err
 }
 
