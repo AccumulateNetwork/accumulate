@@ -2,7 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"

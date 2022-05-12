@@ -338,15 +338,6 @@ type InternalLedger struct {
 	extraData       []byte
 }
 
-// InternalSignature is used when executing transactions internally.
-type InternalSignature struct {
-	fieldsSet []bool
-	// Network is the network that produced the transaction.
-	Network         *url.URL `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
-	extraData       []byte
-}
-
 type IssueTokens struct {
 	fieldsSet []bool
 	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
@@ -566,13 +557,6 @@ type SetThresholdKeyPageOperation struct {
 	extraData []byte
 }
 
-type SubnetDefinition struct {
-	fieldsSet          []bool
-	SubnetID           string     `json:"subnetID,omitempty" form:"subnetID" query:"subnetID" validate:"required"`
-	ValidatorKeyHashes [][32]byte `json:"validatorKeyHashes,omitempty" form:"validatorKeyHashes" query:"validatorKeyHashes" validate:"required"`
-	extraData          []byte
-}
-
 // SignatureSet is used when forwarding a set of signatures.
 type SignatureSet struct {
 	fieldsSet       []bool
@@ -581,6 +565,13 @@ type SignatureSet struct {
 	TransactionHash [32]byte    `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	Signatures      []Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	extraData       []byte
+}
+
+type SubnetDefinition struct {
+	fieldsSet          []bool
+	SubnetID           string     `json:"subnetID,omitempty" form:"subnetID" query:"subnetID" validate:"required"`
+	ValidatorKeyHashes [][32]byte `json:"validatorKeyHashes,omitempty" form:"validatorKeyHashes" query:"validatorKeyHashes" validate:"required"`
+	extraData          []byte
 }
 
 type SubnetSyntheticLedger struct {
@@ -1930,20 +1921,6 @@ func (v *SetThresholdKeyPageOperation) Copy() *SetThresholdKeyPageOperation {
 
 func (v *SetThresholdKeyPageOperation) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SubnetDefinition) Copy() *SubnetDefinition {
-	u := new(SubnetDefinition)
-
-	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make([][32]byte, len(v.ValidatorKeyHashes))
-	for i, v := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = v
-	}
-
-	return u
-}
-
-func (v *SubnetDefinition) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *SignatureSet) Copy() *SignatureSet {
 	u := new(SignatureSet)
 
@@ -1963,6 +1940,20 @@ func (v *SignatureSet) Copy() *SignatureSet {
 }
 
 func (v *SignatureSet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SubnetDefinition) Copy() *SubnetDefinition {
+	u := new(SubnetDefinition)
+
+	u.SubnetID = v.SubnetID
+	u.ValidatorKeyHashes = make([][32]byte, len(v.ValidatorKeyHashes))
+	for i, v := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = v
+	}
+
+	return u
+}
+
+func (v *SubnetDefinition) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SubnetSyntheticLedger) Copy() *SubnetSyntheticLedger {
 	u := new(SubnetSyntheticLedger)
@@ -3130,25 +3121,6 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
 		return false
 	}
-	if len(v.OperatorUpdates) != len(u.OperatorUpdates) {
-		return false
-	}
-	for i := range v.OperatorUpdates {
-		if !(EqualKeyPageOperation(v.OperatorUpdates[i], u.OperatorUpdates[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (v *InternalSignature) Equal(u *InternalSignature) bool {
-	switch {
-	case v.Network == u.Network:
-		// equal
-	case v.Network == nil || u.Network == nil:
-		return false
-	case !((v.Network).Equal(u.Network)):
 	if len(v.OperatorUpdates) != len(u.OperatorUpdates) {
 		return false
 	}
@@ -6376,54 +6348,6 @@ func (v *InternalLedger) IsValid() error {
 	}
 }
 
-var fieldNames_InternalSignature = []string{
-	1: "Type",
-	2: "Network",
-	3: "TransactionHash",
-}
-
-func (v *InternalSignature) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(v.Network == nil) {
-		writer.WriteUrl(2, v.Network)
-	}
-	if !(v.TransactionHash == ([32]byte{})) {
-		writer.WriteHash(3, &v.TransactionHash)
-	}
-
-	_, _, err := writer.Reset(fieldNames_InternalSignature)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *InternalSignature) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Network is missing")
-	} else if v.Network == nil {
-		errs = append(errs, "field Network is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_IssueTokens = []string{
 	1: "Type",
 	2: "Recipient",
@@ -7884,56 +7808,6 @@ func (v *SetThresholdKeyPageOperation) IsValid() error {
 	}
 }
 
-var fieldNames_SubnetDefinition = []string{
-	1: "SubnetID",
-	2: "ValidatorKeyHashes",
-}
-
-func (v *SubnetDefinition) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.SubnetID) == 0) {
-		writer.WriteString(1, v.SubnetID)
-	}
-	if !(len(v.ValidatorKeyHashes) == 0) {
-		for _, v := range v.ValidatorKeyHashes {
-			writer.WriteHash(2, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_SubnetDefinition)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *SubnetDefinition) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field SubnetID is missing")
-	} else if len(v.SubnetID) == 0 {
-		errs = append(errs, "field SubnetID is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field ValidatorKeyHashes is missing")
-	} else if len(v.ValidatorKeyHashes) == 0 {
-		errs = append(errs, "field ValidatorKeyHashes is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_SignatureSet = []string{
 	1: "Type",
 	2: "Vote",
@@ -7985,6 +7859,56 @@ func (v *SignatureSet) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SubnetDefinition = []string{
+	1: "SubnetID",
+	2: "ValidatorKeyHashes",
+}
+
+func (v *SubnetDefinition) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.SubnetID) == 0) {
+		writer.WriteString(1, v.SubnetID)
+	}
+	if !(len(v.ValidatorKeyHashes) == 0) {
+		for _, v := range v.ValidatorKeyHashes {
+			writer.WriteHash(2, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_SubnetDefinition)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *SubnetDefinition) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field SubnetID is missing")
+	} else if len(v.SubnetID) == 0 {
+		errs = append(errs, "field SubnetID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ValidatorKeyHashes is missing")
+	} else if len(v.ValidatorKeyHashes) == 0 {
+		errs = append(errs, "field ValidatorKeyHashes is not set")
 	}
 
 	switch len(errs) {
@@ -13302,18 +13226,6 @@ func (v *InternalLedger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *InternalSignature) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type            SignatureType `json:"type"`
-		Network         *url.URL      `json:"network,omitempty"`
-		TransactionHash string        `json:"transactionHash,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Network = v.Network
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
-	return json.Marshal(&u)
-}
-
 func (v *IssueTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
@@ -14983,30 +14895,6 @@ func (v *InternalLedger) UnmarshalJSON(data []byte) error {
 	v.OperatorUpdates = make([]KeyPageOperation, len(u.OperatorUpdates.Value))
 	for i, x := range u.OperatorUpdates.Value {
 		v.OperatorUpdates[i] = x
-	}
-	return nil
-}
-
-func (v *InternalSignature) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type            SignatureType `json:"type"`
-		Network         *url.URL      `json:"network,omitempty"`
-		TransactionHash string        `json:"transactionHash,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Network = v.Network
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.Network = u.Network
-	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
-		return fmt.Errorf("error decoding TransactionHash: %w", err)
-	} else {
-		v.TransactionHash = x
 	}
 	return nil
 }

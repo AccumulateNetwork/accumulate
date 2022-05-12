@@ -25,17 +25,17 @@ import (
 const nodeDirPerm = 0755
 
 type InitOptions struct {
-	Version             int
-	WorkDir             string
-	Port                int
-	NodeNr              *uint64
-	GenesisDoc          *types.GenesisDoc
-	Config              []*cfg.Config
-	RemoteIP            []string
-	ListenIP            []string
-	GenesisDocMap       map[string]*types.GenesisDoc
-	Logger              log.Logger
-	FactomAddressesFile string
+	Version              int
+	WorkDir              string
+	Port                 int
+	NodeNr               *uint64
+	GenesisDoc           *types.GenesisDoc
+	Config               []*cfg.Config
+	RemoteIP             []string
+	ListenIP             []string
+	NetworkValidatorsMap map[string][]*types.GenesisValidator
+	Logger               log.Logger
+	FactomAddressesFile  string
 }
 
 // Init creates the initial configuration for a set of nodes, using
@@ -136,13 +136,13 @@ func initV1(opts InitOptions) (genDoc *types.GenesisDoc, err error) {
 
 		db := memory.New(opts.Logger.With("module", "storage"))
 		root, err := genesis.Init(db, genesis.InitOpts{
-			Network:             config[0].Accumulate.Network,
-			GenesisTime:         genTime,
-			Validators:          genVals,
-			GenesisDocMap:       opts.GenesisDocMap,
-			Logger:              opts.Logger,
-			Router:              &routing.RouterInstance{Network: &config[0].Accumulate.Network},
-			FactomAddressesFile: opts.FactomAddressesFile,
+			Network:              config[0].Accumulate.Network,
+			GenesisTime:          genTime,
+			Validators:           genVals,
+			NetworkValidatorsMap: opts.NetworkValidatorsMap,
+			Logger:               opts.Logger,
+			Router:               &routing.RouterInstance{Network: &config[0].Accumulate.Network},
+			FactomAddressesFile:  opts.FactomAddressesFile,
 		})
 		if err != nil {
 			return genDoc, err

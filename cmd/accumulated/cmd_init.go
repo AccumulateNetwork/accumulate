@@ -566,9 +566,19 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
 	logger := newLogger()
 	genDocMap := map[string]*types.GenesisDoc{}
+	_, err := node.Init(node.InitOptions{
+		WorkDir:              filepath.Join(flagMain.WorkDir, "dn"),
+		Port:                 flagInitDevnet.BasePort,
+		Config:               dnConfig,
+		RemoteIP:             dnRemote,
+		ListenIP:             dnListen,
+		NetworkValidatorsMap: genDocMap,
+		Logger:               logger.With("subnet", protocol.Directory),
+	})
+	check(err)
 
 	for bvn := range bvnConfig {
-		subnetID := fmt.Sprintf("BVN%d", bvn)
+		subnetId := fmt.Sprintf("BVN%d", bvn)
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
 		genDoc, err := node.Init(node.InitOptions{
 			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
@@ -578,19 +588,9 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 			ListenIP: bvnListen,
 			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 		})
-		genDocMap[subnetID] = genDoc
+		genDocMap[subnetId] = genDoc
 		check(err)
 	}
-	_, err := node.Init(node.InitOptions{
-		WorkDir:       filepath.Join(flagMain.WorkDir, "dn"),
-		Port:          flagInitDevnet.BasePort,
-		Config:        dnConfig,
-		RemoteIP:      dnRemote,
-		ListenIP:      dnListen,
-		GenesisDocMap: genDocMap,
-		Logger:        logger.With("subnet", protocol.Directory),
-	})
-	check(err)
 }
 
 func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {

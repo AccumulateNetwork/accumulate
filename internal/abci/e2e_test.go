@@ -1825,3 +1825,19 @@ func TestAccountAuth(t *testing.T) {
 	})
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
 }
+
+func TestNetworkDefinition(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+
+	// Test getting the data by URL
+	rde := new(query.ResponseDataEntry)
+	dn.QueryAccountAs(protocol.DnUrl().JoinPath(protocol.Network).String(), rde)
+
+	fmt.Println()
+	/*	if !rde.Entry.Equal(&wd.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+	*/
+}

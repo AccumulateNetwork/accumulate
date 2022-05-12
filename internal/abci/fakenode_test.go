@@ -184,15 +184,21 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.height++
 
 	kv := memory.New(nil)
-	_, err = genesis.Init(kv, genesis.InitOpts{
-		Network:     *n.network,
-		GenesisTime: time.Now(),
-		Logger:      n.logger,
-		Router:      n.router,
+	genDocMap := map[string]*tmtypes.GenesisDoc{}
+	opts := genesis.InitOpts{
+		Network:              *n.network,
+		GenesisTime:          time.Now(),
+		NetworkValidatorsMap: genDocMap,
+		Logger:               n.logger,
+		Router:               n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
-	})
+	}
+	_, err = genesis.Init(kv, opts)
+	genDocMap[n.network.LocalSubnetID] = &tmtypes.GenesisDoc{
+		Validators: opts.Validators,
+	}
 	n.Require().NoError(err)
 
 	state, err := kv.MarshalJSON()

@@ -2,6 +2,7 @@ package testing
 
 import (
 	"fmt"
+	"github.com/tendermint/tendermint/types"
 	"io"
 	"path/filepath"
 	"testing"
@@ -72,7 +73,7 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 
 func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	const basePort = 30000
-	dir := t.TempDir()
+	tempDir := t.TempDir()
 
 	count := numValidators + numFollowers
 	subnets := make([]config.Subnet, numBvns+1)
@@ -146,19 +147,23 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
+	genDocMap := map[string]*types.GenesisDoc{}
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
-		dir := filepath.Join(dir, subnetId)
-		_, err := node.Init(node.InitOptions{
-			WorkDir:             dir,
-			Port:                basePort,
-			Config:              allConfigs[subnetId],
-			RemoteIP:            allRemotes[subnetId],
-			ListenIP:            allRemotes[subnetId],
-			Logger:              initLogger.With("subnet", subnetId),
-			FactomAddressesFile: factomAddressFilePath,
+		dir := filepath.Join(tempDir, subnetId)
+		genDoc, err := node.Init(node.InitOptions{
+			WorkDir:              dir,
+			Port:                 basePort,
+			Config:               allConfigs[subnetId],
+			RemoteIP:             allRemotes[subnetId],
+			ListenIP:             allRemotes[subnetId],
+			NetworkValidatorsMap: genDocMap,
+			Logger:               initLogger.With("subnet", subnetId),
+			FactomAddressesFile:  factomAddressFilePath,
 		})
 		require.NoError(t, err)
+
+		genDocMap[subnetId] = genDoc
 
 		daemons := make([]*accumulated.Daemon, count)
 		allDaemons[subnetId] = daemons
