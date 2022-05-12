@@ -44,6 +44,7 @@ type Batch struct {
 	id          int
 	nextChildId int
 	parent      *Batch
+	flush       bool
 	logger      logging.OptionalLogger
 	store       storage.KeyValueTxn
 	values      map[storage.Key]cachedValue
@@ -76,6 +77,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
+	c.flush = true //flush
 	c.store = b.store.Begin(c.writable)
 	c.values = map[storage.Key]cachedValue{}
 	c.bptEntries = map[storage.Key][32]byte{}
@@ -311,6 +313,35 @@ func (b *Batch) Commit() error {
 	}
 
 	b.done = true
+
+	if b.parent != nil && b.flush {
+		for k, v := range b.values {
+			if !v.dirty {
+				continue
+			}
+
+			data, err := v.value.MarshalBinary()
+			if err != nil {
+				return fmt.Errorf("marshal %v: %v", k, err)
+			}
+
+			err = b.store.Put(k, data)
+			if err != nil {
+				return fmt.Errorf("store %v: %v", k, err)
+			}
+
+			b.parent.cacheValue(k, v.value, false)
+		}
+		for k, v := range b.bptEntries {
+			b.parent.bptEntries[k] = v
+		}
+		if db, ok := b.store.(*storage.DebugBatch); ok {
+			db.PretendWrite()
+		}
+
+		return b.store.Commit()
+	}
+
 	if b.parent != nil {
 		for k, v := range b.values {
 			if !v.dirty {

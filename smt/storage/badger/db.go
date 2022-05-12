@@ -51,6 +51,7 @@ func New(filepath string, logger storage.Logger) (*DB, error) {
 
 	// Open Badger
 	d := new(DB)
+	opts = opts.WithMaxTableSize(1 << 30)
 	d.badgerDB, err = badger.Open(opts)
 	if err != nil {
 		return nil, err
