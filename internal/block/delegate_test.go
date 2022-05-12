@@ -67,7 +67,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -85,7 +85,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 func TestDelegatedSignature_LocalMultisig(t *testing.T) {
@@ -114,7 +114,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	envs := sim.MustSubmitAndExecuteBlock(acctesting.NewTransaction().
 		WithPrincipal(alice.JoinPath("data")).
 		WithBody(&WriteData{
-			Entry: DataEntry{Data: [][]byte{
+			Entry: &AccumulateDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -133,7 +133,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -167,7 +167,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -186,7 +186,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -219,7 +219,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -237,7 +237,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -272,7 +272,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -290,7 +290,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -327,7 +327,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -345,7 +345,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -385,7 +385,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -404,7 +404,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -451,7 +451,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -506,7 +506,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		require.NotZero(t, data.Height())
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 
 		// alice/book/1 should have one delegated signature each from bob/book/1
 		// and charlie/book/1

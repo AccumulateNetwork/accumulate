@@ -3,10 +3,12 @@ package protocol
 import (
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDataEntry(t *testing.T) {
-	de := DataEntry{}
+	de := AccumulateDataEntry{}
 
 	de.Data = append(de.Data, []byte("test data entry"))
 	for i := 0; i < 10; i++ {
@@ -19,7 +21,7 @@ func TestDataEntry(t *testing.T) {
 		t.Fatalf("expected hash %v, but received %v", expectedHash, entryHash)
 	}
 
-	cost, err := de.Cost()
+	cost, err := DataEntryCost(&de)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +34,7 @@ func TestDataEntry(t *testing.T) {
 		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
-	cost, err = de.Cost()
+	cost, err = DataEntryCost(&de)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,8 +50,20 @@ func TestDataEntry(t *testing.T) {
 	}
 
 	//now the size of the entry is 10878 bytes, so the cost should fail.
-	cost, err = de.Cost()
+	cost, err = DataEntryCost(&de)
 	if err == nil {
 		t.Fatalf("expected failure on data to large, but it passed and returned a cost of %d", cost)
 	}
+}
+
+func TestDataEntryEmpty(t *testing.T) {
+	de := new(AccumulateDataEntry)
+	de.Data = [][]byte{nil, []byte("foo")}
+
+	marshalled, err := de.MarshalBinary()
+	require.NoError(t, err)
+
+	de2 := new(AccumulateDataEntry)
+	require.NoError(t, de2.UnmarshalBinary(marshalled))
+	require.True(t, de.Equal(de2))
 }

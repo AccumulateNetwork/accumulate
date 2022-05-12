@@ -6,41 +6,38 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"io"
 )
 
-type LiteDataEntry struct {
-	AccountId [32]byte
-	*DataEntry
+func NewFactomDataEntry() *FactomDataEntry {
+	return new(FactomDataEntry)
 }
 
-func NewLiteDataEntry() *LiteDataEntry {
-	lde := new(LiteDataEntry)
-	lde.DataEntry = new(DataEntry)
-	return lde
-}
-
-//ComputeLiteEntryHashFromEntry will compute the entry hash from an entry.
+//ComputeFactomEntryHashForAccount will compute the entry hash from an entry.
 //If accountId is nil, then entry will be used to construct an account id,
 //and it assumes the entry will be the first entry in the chain
-func ComputeLiteEntryHashFromEntry(accountId []byte, entry *DataEntry) ([]byte, error) {
-	lde := LiteDataEntry{}
+func ComputeFactomEntryHashForAccount(accountId []byte, entry [][]byte) ([]byte, error) {
+	lde := FactomDataEntry{}
 	if entry == nil {
 		return nil, fmt.Errorf("cannot compute lite entry hash, missing entry")
 	}
-	lde.DataEntry = entry
+	if len(entry) > 0 {
+		lde.Data = entry[0]
+		lde.ExtIds = entry[1:]
+	}
 
 	if accountId == nil && entry != nil {
 		//if we don't know the chain id, we compute one off of the entry
-		copy(lde.AccountId[:], ComputeLiteDataAccountId(entry))
+		copy(lde.AccountId[:], ComputeLiteDataAccountId(&lde))
 	} else {
 		copy(lde.AccountId[:], accountId)
 	}
-	return lde.Hash()
+	return lde.Hash(), nil
 }
 
-// ComputeLiteEntryHash returns the Entry hash of data for a lite chain
+// ComputeFactomEntryHash returns the Entry hash of data for a Factom data entry
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry-hash
-func ComputeLiteEntryHash(data []byte) []byte {
+func ComputeFactomEntryHash(data []byte) []byte {
 	sum := sha512.Sum512(data)
 	saltedSum := make([]byte, len(sum)+len(data))
 	i := copy(saltedSum, sum[:])
@@ -49,24 +46,27 @@ func ComputeLiteEntryHash(data []byte) []byte {
 	return h[:]
 }
 
-func (e *LiteDataEntry) Hash() ([]byte, error) {
+func (e *FactomDataEntry) Hash() []byte {
 	d, err := e.MarshalBinary()
 	if err != nil {
-		return nil, err
+		// TransactionPayload.MarshalBinary should never return an error, but
+		// better a panic then a silently ignored error.
+		panic(err)
 	}
-	return ComputeLiteEntryHash(d), nil
+	return ComputeFactomEntryHash(d)
 }
 
-// MarshalBinary marshal the LiteDataEntry in accordance to
+func (e *FactomDataEntry) GetData() [][]byte {
+	return append([][]byte{e.Data}, e.ExtIds...)
+}
+
+// MarshalBinary marshal the FactomDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry
-func (e *LiteDataEntry) MarshalBinary() ([]byte, error) {
-	if e.DataEntry == nil {
-		return nil, fmt.Errorf("no entry specified")
-	}
+func (e *FactomDataEntry) MarshalBinary() ([]byte, error) {
 	var b bytes.Buffer
 
 	d := [32]byte{}
-	if bytes.Equal(e.AccountId[:], d[:]) {
+	if e.AccountId == ([32]byte{}) {
 		return nil, fmt.Errorf("missing ChainID")
 	}
 
@@ -76,23 +76,19 @@ func (e *LiteDataEntry) MarshalBinary() ([]byte, error) {
 
 	// Payload
 	var ex bytes.Buffer
-	n := len(e.Data)
-	if n == 0 {
-		return nil, fmt.Errorf("no data content provided")
-	}
 
 	//ExtId's are data entries 1..N if applicable
-	for i := 1; i < n; i++ {
-		n := len(e.Data[i])
+	for _, data := range e.ExtIds {
+		n := len(data)
 		binary.BigEndian.PutUint16(d[:], uint16(n))
 		ex.Write(d[:2])
-		ex.Write(e.Data[i])
+		ex.Write(data)
 	}
 	binary.BigEndian.PutUint16(d[:], uint16(ex.Len()))
 	b.Write(d[:2])
 	b.Write(ex.Bytes())
 
-	b.Write(e.Data[0])
+	b.Write(e.Data)
 
 	return b.Bytes(), nil
 }
@@ -105,9 +101,9 @@ const LiteEntryHeaderSize = 1 + // version
 // LiteEntryMaxTotalSize is the maximum encoded length of an Entry.
 const LiteEntryMaxTotalSize = TransactionSizeMax + LiteEntryHeaderSize
 
-// UnmarshalBinary unmarshal the LiteDataEntry in accordance to
+// UnmarshalBinary unmarshal the FactomDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry
-func (e *LiteDataEntry) UnmarshalBinary(data []byte) error {
+func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
 
 	if len(data) < LiteEntryHeaderSize || len(data) > LiteEntryMaxTotalSize {
 		return fmt.Errorf("malformed entry header")
@@ -123,24 +119,28 @@ func (e *LiteDataEntry) UnmarshalBinary(data []byte) error {
 
 	j := LiteEntryHeaderSize
 
-	if e.DataEntry == nil {
-		e.DataEntry = new(DataEntry)
-	}
-
 	//reset the extId's if present
 	e.Data = nil
-	extIds := [][]byte{}
+	e.ExtIds = [][]byte{}
 	for n := 0; n < int(totalExtIdSize); {
 		extIdSize := binary.BigEndian.Uint16(data[j : j+2])
 		if extIdSize > totalExtIdSize {
 			return fmt.Errorf("malformed extId")
 		}
 		j += 2
-		extIds = append(extIds, data[j:j+int(extIdSize)])
+		e.ExtIds = append(e.ExtIds, data[j:j+int(extIdSize)])
 		j += n
 	}
 
-	e.Data = append(e.Data, data[j:])
-	e.Data = append(e.Data, extIds...)
+	e.Data = data[j:]
 	return nil
+}
+
+func (e *FactomDataEntry) UnmarshalBinaryFrom(reader io.Reader) error {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+
+	return e.UnmarshalBinary(data)
 }
