@@ -355,7 +355,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 		// Wait for synthetic transactions to be delivered
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
 			return status.Delivered
-		}, id[:])
+		}, id[:]) //nolint:rangevarref
 		statuses = append(statuses, st...)
 		transactions = append(transactions, txn...)
 	}
