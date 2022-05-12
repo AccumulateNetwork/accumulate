@@ -606,8 +606,8 @@ func verifySyntheticSignature(net *config.Network, _ *database.Batch, transactio
 	if md.Nested() {
 		return errors.New(errors.StatusBadRequest, "a synthetic signature cannot be nested within another signature")
 	}
-	if !transaction.Body.Type().IsSynthetic() {
-		return fmt.Errorf("synthetic signatures (%s) are not allowed for non-synthetic transactions", transaction.Body.Type())
+	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
+		return fmt.Errorf("synthetic or system signatures are not allowed for non-synthetic or non-system transactions")
 	}
 
 	// if !isInitiator {
