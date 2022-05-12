@@ -275,6 +275,10 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 	if ledger == nil {
 		initSig.SequenceNumber = s.Version
 	} else {
+		if protocol.IsDnUrl(subnetUrl) {
+			print("")
+		}
+
 		subnetLedger := ledger.Subnet(subnetUrl)
 		subnetLedger.Produced++
 		initSig.SequenceNumber = subnetLedger.Produced

@@ -262,7 +262,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 		subnet = protocol.Directory
 	} else {
 		var ok bool
-		subnet, ok = protocol.ParseBvnUrl(sourceNet)
+		subnet, ok = protocol.ParseSubnetUrl(sourceNet)
 		if !ok {
 			return false, errors.Format(errors.StatusUnknown, "%v is not a valid subnet URL", sourceNet)
 		}
@@ -310,7 +310,10 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 			"seq-got", synthSig.SequenceNumber,
 			"seq-want", subnetLedger.Received+1,
 			"source", synthSig.SourceNetwork,
-			"destination", synthSig.DestinationNetwork)
+			"destination", synthSig.DestinationNetwork,
+			"type", transaction.Body.Type(),
+			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
+		)
 	}
 
 	// Update the received number
