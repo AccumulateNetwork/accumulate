@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -44,7 +43,7 @@ func loadNetworkConfiguration(file string) (ret Network, err error) {
 	if err != nil {
 		return ret, err
 	}
-	data, _ := ioutil.ReadAll(jsonFile)
+	data, _ := io.ReadAll(jsonFile)
 	err = json.Unmarshal(data, &ret)
 	return ret, err
 }

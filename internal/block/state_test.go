@@ -3,6 +3,7 @@ package block_test
 import (
 	"fmt"
 	"math/big"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -37,7 +38,10 @@ func TestStateSaveAndRestore(t *testing.T) {
 		x := sim.Subnet(subnet.ID)
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		require.NoError(t, x.Executor.SaveSnapshot(batch, filename(subnet.ID)))
+		f, err := os.Create(filename(subnet.ID))
+		require.NoError(t, err)
+		require.NoError(t, x.Executor.SaveSnapshot(batch, f))
+		require.NoError(t, f.Close())
 	}
 
 	// Create a new network
