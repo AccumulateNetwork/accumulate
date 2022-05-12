@@ -63,7 +63,7 @@ func (a *Account) state(fullTxnState, preserveChains bool) (*accountState, error
 
 	// Load transaction state
 	for i, h := range obj.Pending.Hashes {
-		state, err := a.batch.Transaction(h[:]).state(fullTxnState)
+		state, err := a.batch.Transaction(h[:]).state(fullTxnState) //nolint:rangevarref
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func (s *merkleState) MerkleHash() []byte {
 	var right []byte
 	for _, left := range cascade {
 		if right == nil {
-			left := left // Copy
+			left := left // See docs/developer/rangevarref.md
 			right = left[:]
 		} else {
 			right = hash.Combine(left[:], right)

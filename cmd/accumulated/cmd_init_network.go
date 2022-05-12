@@ -95,6 +95,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			}
 			for _, v := range bvn.Nodes {
 				if strings.EqualFold(dnn.IP, v.IP) {
+					bvn := bvn // See docs/developer/rangevarref.md
 					bvns = append(bvns, &bvn)
 					found = true
 					break
