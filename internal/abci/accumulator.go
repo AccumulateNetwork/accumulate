@@ -474,8 +474,11 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer batch.Discard()
 	resp.Data = batch.BptRoot()
 
-	// Truncate Tendermint's block store to the latest snapshot
-	resp.RetainHeight = int64(app.lastSnapshot)
+	// Keep this disabled until we have real snapshot support through Tendermint
+	if false {
+		// Truncate Tendermint's block store to the latest snapshot
+		resp.RetainHeight = int64(app.lastSnapshot)
+	}
 
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
