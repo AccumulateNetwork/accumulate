@@ -162,7 +162,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
 		WithBody(&WriteData{
-			Entry: DataEntry{Data: [][]byte{
+			Entry: &AccumulateDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -191,7 +191,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }
 
 func TestRemoteSignatures_SameBVN(t *testing.T) {
@@ -219,7 +219,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
 		WithBody(&WriteData{
-			Entry: DataEntry{Data: [][]byte{
+			Entry: &AccumulateDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -248,7 +248,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }
 
 func TestRemoteSignatures_Initiate(t *testing.T) {
@@ -289,7 +289,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -322,7 +322,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }
 
 func TestRemoteSignatures_Singlesig(t *testing.T) {
@@ -361,7 +361,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -379,5 +379,5 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }

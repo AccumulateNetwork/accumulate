@@ -20,7 +20,7 @@ func (d *Data) Height() int64 {
 }
 
 // Put adds an entry to the chain.
-func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
+func (d *Data) Put(hash []byte, entry protocol.DataEntry) error {
 	// Write data entry
 	data, err := entry.MarshalBinary()
 	if err != nil {
@@ -42,14 +42,13 @@ func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
 }
 
 // Get looks up an entry by it's hash.
-func (d *Data) Get(hash []byte) (*protocol.DataEntry, error) {
+func (d *Data) Get(hash []byte) (protocol.DataEntry, error) {
 	data, err := d.batch.store.Get(d.record.Data(hash))
 	if err != nil {
 		return nil, err
 	}
 
-	entry := new(protocol.DataEntry)
-	err = entry.UnmarshalBinary(data)
+	entry, err := protocol.UnmarshalDataEntry(data)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +57,7 @@ func (d *Data) Get(hash []byte) (*protocol.DataEntry, error) {
 }
 
 // GetLatest looks up the latest entry.
-func (d *Data) GetLatest() ([]byte, *protocol.DataEntry, error) {
+func (d *Data) GetLatest() ([]byte, protocol.DataEntry, error) {
 	height := d.chain.Height()
 	if height == 0 {
 		return nil, nil, errors.NotFound("chain is empty")
@@ -82,7 +81,7 @@ func (d *Data) GetHashes(start, end int64) ([][]byte, error) {
 }
 
 // Entry looks up an entry by its height.
-func (d *Data) Entry(height int64) (*protocol.DataEntry, error) {
+func (d *Data) Entry(height int64) (protocol.DataEntry, error) {
 	hash, err := d.chain.Entry(height)
 	if err != nil {
 		return nil, err
