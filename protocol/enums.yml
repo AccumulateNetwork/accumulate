@@ -209,12 +209,12 @@ TransactionType:
   DirectoryAnchor:
     value: 0x61
     description: anchors one network to another
-  MirrorSystemRecords:
-    value: 0x62
-    description: mirrors records from one network to another
   PartitionAnchor:
-    value: 0x63
+    value: 0x62
     description: system transaction for partition data
+  MirrorSystemRecords:
+    value: 0x63
+    description: mirrors records from one network to another
 
 AccountType:
   Unknown:
