@@ -3399,7 +3399,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.LocalBlock = u.LocalBlock
 	v.DirectoryBlock = u.DirectoryBlock
-	if u.Proof != (protocol.Receipt{}) {
+	if u.Proof.Equal(&protocol.Receipt{}) {
 		v.Proof = u.Proof
 	} else {
 		v.Proof = u.Receipt
@@ -3816,7 +3816,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
-	if u.Proof != (protocol.Receipt{}) {
+	if u.Proof.Equal(&protocol.Receipt{}) {
 		v.GeneralReceipt.Proof = u.Proof
 	} else {
 		v.GeneralReceipt.Proof = u.Receipt
