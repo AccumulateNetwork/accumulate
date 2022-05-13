@@ -1,0 +1,59 @@
+# System transaction bodies
+
+SystemAnchor:
+  fields:
+  - name: Source
+    description: is the principal of the transaction that produced this transaction
+    type: url
+    pointer: true
+  - name: Major
+    description: indicates whether the anchor is a major block anchor
+    type: bool
+  - name: StateRoot
+    description: is the root of the source's state tree (BPT)
+    type: chain
+  - name: RootAnchor
+    description: is the anchor of the source's root anchor chain
+    type: chain
+  - name: RootIndex
+    description: is the index of the root anchor chain anchor
+    type: uvarint
+  - name: Block
+    description: is the index of the block
+    type: uvarint
+
+PartitionAnchor:
+  union: { type: transaction }
+  embeddings:
+    - SystemAnchor
+  fields:
+    - name: AcmeBurnt
+      description: is the amount of acme tokens burnt in the transaction
+      type: bigint
+
+DirectoryAnchor:
+  union: { type: transaction }
+  embeddings:
+    - SystemAnchor
+  fields:
+    - name: AcmeOraclePrice
+      type: uvarint
+    - name: OperatorUpdates
+      description: anchor-based synchronization updates from bvn
+      type: KeyPageOperation
+      repeatable: true
+      marshal-as: union
+    - name: Receipts
+      description: are receipts for anchors from other subnets that were included in the block
+      type: Receipt
+      repeatable: true
+      marshal-as: reference
+
+
+MirrorSystemRecords:
+  union: { type: transaction }
+  fields:
+    - name: Objects
+      repeatable: true
+      type: AnchoredAccount
+      marshal-as: reference

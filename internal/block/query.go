@@ -964,14 +964,13 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		minorEntry.BlockIndex = idxEntry.BlockIndex
 		minorEntry.BlockTime = idxEntry.BlockTime
 
-		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < query.TxFetchModeOmit || req.FilterSynthAnchorsOnlyBlocks) {
+		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < query.TxFetchModeOmit || req.FilterSystemAnchorsOnlyBlocks) {
 			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, idxEntry.BlockIndex).Get()
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
 			minorEntry.TxCount = uint64(0)
-			internalTxCount := uint64(0)
-			synthAnchorCount := uint64(0)
+			systemTxCount := uint64(0)
 			var lastTxid []byte
 			for _, updIdx := range chainUpdatesIndex.Entries {
 				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
@@ -982,23 +981,20 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				if req.TxFetchMode <= query.TxFetchModeIds {
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
-				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
+				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSystemAnchorsOnlyBlocks {
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
 						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt.IsInternal() {
-							internalTxCount++
+						if txt.IsSystem() {
+							systemTxCount++
 						} else if req.TxFetchMode == query.TxFetchModeExpand {
 							minorEntry.Transactions = append(minorEntry.Transactions, qr)
-						}
-						if txt == protocol.TransactionTypeSyntheticAnchor && req.FilterSynthAnchorsOnlyBlocks {
-							synthAnchorCount++
 						}
 					}
 				}
 				lastTxid = updIdx.Entry
 			}
-			if minorEntry.TxCount > (internalTxCount + synthAnchorCount) {
+			if minorEntry.TxCount > systemTxCount {
 				resp.Entries = append(resp.Entries, minorEntry)
 			}
 		} else {

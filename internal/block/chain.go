@@ -15,8 +15,8 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 	switch opts.Network.Type {
 	case config.Directory:
 		return newExecutor(opts, db,
-			SyntheticAnchor{Network: &opts.Network},
-			SyntheticMirror{},
+			PartitionAnchor{Network: &opts.Network},
+			MirrorSystemRecords{},
 			SyntheticForwardTransaction{},
 
 			// for data accounts
@@ -57,12 +57,12 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 			UpdateValidatorKey{},
 
 			// Synthetics...
-			SyntheticAnchor{Network: &opts.Network},
+			DirectoryAnchor{Network: &opts.Network},
+			MirrorSystemRecords{},
 			SyntheticBurnTokens{},
 			SyntheticCreateIdentity{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
-			SyntheticMirror{},
 			SyntheticWriteData{},
 			SyntheticForwardTransaction{},
 

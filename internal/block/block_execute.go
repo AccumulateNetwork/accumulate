@@ -81,7 +81,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Type().IsInternal() && delivery.Transaction.Type() != protocol.TransactionTypeSyntheticAnchor {
+		if !delivery.Transaction.Type().IsSystem() {
 			kv := []interface{}{
 				"module", "block-executor",
 				"block", block.Index,
