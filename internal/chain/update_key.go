@@ -67,8 +67,8 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("no valid signatures found for %v", status.Initiator)
 	}
 
-	sigHash := sigs.EntryHashes()[0][:]
-	sigOrTxn, err := st.batch.Transaction(sigHash).GetState()
+	e := sigs.Entries()[0]
+	sigOrTxn, err := st.batch.Transaction(e.SignatureHash[:]).GetState()
 	if err != nil {
 		return nil, fmt.Errorf("load first signature from %v: %w", status.Initiator, err)
 	}
@@ -76,8 +76,12 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		// This should be impossible
 		return nil, fmt.Errorf("invalid signature state")
 	}
+	keysig, ok := sigOrTxn.Signature.(protocol.KeySignature)
+	if !ok {
+		return nil, fmt.Errorf("signature is not a key signature")
+	}
 
-	_, entry, ok := page.EntryByKeyHash(sigOrTxn.Signature.GetPublicKeyHash())
+	_, entry, ok := page.EntryByKeyHash(keysig.GetPublicKeyHash())
 	if !ok {
 		return nil, fmt.Errorf("the signing key does not exist on %v", st.OriginUrl)
 	}

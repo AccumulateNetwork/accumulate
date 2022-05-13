@@ -10,13 +10,13 @@ InternalLedger:
       type: url
       pointer: true
     - name: Index
-      type: varint
+      type: uint
     - name: Timestamp
       type: time
     - name: PendingOracle
-      type: uvarint
+      type: uint
     - name: ActiveOracle
-      type: uvarint
+      type: uint
     - name: AcmeBurnt
       type: bigint
     - name: OperatorUpdates
@@ -38,7 +38,7 @@ SyntheticLedger:
 
 ##### Transactions #####
 
-InternalGenesis:
+SystemGenesis:
   union: { type: transaction }
 
 ##### Data Types #####

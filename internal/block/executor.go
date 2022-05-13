@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
+	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -59,7 +61,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	var height int64
+	var height uint64
 	var ledger *protocol.InternalLedger
 	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
@@ -87,7 +89,7 @@ func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	m.logger.Error(msg, keyVals...)
 }
 
-func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) error) error {
+func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) error {
 	var err error
 
 	if !m.isGenesis {
@@ -96,15 +98,15 @@ func (m *Executor) Genesis(block *Block, callback func(st *chain.StateManager) e
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AcmeUrl()
-	txn.Body = new(protocol.InternalGenesis)
+	txn.Body = new(protocol.SystemGenesis)
 
-	st := chain.NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = putSyntheticTransaction(
 		block.Batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		&protocol.InternalSignature{Network: m.Network.NodeUrl()})
+		nil)
 	if err != nil {
 		return err
 	}
@@ -207,8 +209,8 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	return nil
 }
 
-func (m *Executor) InitFromSnapshot(batch *database.Batch, filename string) error {
-	err := batch.LoadState(filename)
+func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
+	err := batch.RestoreSnapshot(file)
 	if err != nil {
 		return fmt.Errorf("load state: %w", err)
 	}
@@ -216,12 +218,12 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, filename string) erro
 	return nil
 }
 
-func (m *Executor) SaveSnapshot(batch *database.Batch, filename string) error {
-	return batch.SaveState(filename, &m.Network)
+func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
+	return batch.SaveSnapshot(file, &m.Network)
 }
 
-func (x *Executor) buildMirror(batch *database.Batch) (*protocol.SyntheticMirror, error) {
-	mirror := new(protocol.SyntheticMirror)
+func (x *Executor) buildMirror(batch *database.Batch) (*protocol.MirrorSystemRecords, error) {
+	mirror := new(protocol.MirrorSystemRecords)
 
 	nodeUrl := x.Network.NodeUrl()
 	rec, err := mirrorRecord(batch, nodeUrl)

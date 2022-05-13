@@ -3,8 +3,18 @@ package protocol
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 )
+
+type DataEntryType uint64
+
+type DataEntry interface {
+	encoding.BinaryValue
+	Type() DataEntryType
+	Hash() []byte
+	GetData() [][]byte
+}
 
 // ComputeEntryHash
 // returns the entry hash given external id's and data associated with an entry
@@ -19,13 +29,17 @@ func ComputeEntryHash(data [][]byte) []byte {
 const TransactionSizeMax = 10240
 const SignatureSizeMax = 1024
 
-func (e *DataEntry) Hash() []byte {
+func (e *AccumulateDataEntry) Hash() []byte {
 	return ComputeEntryHash(e.Data)
 }
 
-//CheckSize is the marshaled size minus the implicit type header,
+func (e *AccumulateDataEntry) GetData() [][]byte {
+	return e.Data
+}
+
+//CheckDataEntrySize is the marshaled size minus the implicit type header,
 //returns error if there is too much or no data
-func (e *DataEntry) CheckSize() (int, error) {
+func CheckDataEntrySize(e DataEntry) (int, error) {
 	b, err := e.MarshalBinary()
 	if err != nil {
 		return 0, err
@@ -41,8 +55,8 @@ func (e *DataEntry) CheckSize() (int, error) {
 }
 
 //Cost will return the number of credits to be used for the data write
-func (e *DataEntry) Cost() (uint64, error) {
-	size, err := e.CheckSize()
+func DataEntryCost(e DataEntry) (uint64, error) {
+	size, err := CheckDataEntrySize(e)
 	if err != nil {
 		return 0, err
 	}

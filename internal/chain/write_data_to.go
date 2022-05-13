@@ -20,6 +20,10 @@ func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
 	}
 
+	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
+		return nil, fmt.Errorf("writing new Factom-formatted data entries is not supported")
+	}
+
 	if _, err := protocol.ParseLiteDataAddress(body.Recipient); err != nil {
 		return nil, fmt.Errorf("only writes to lite data accounts supported: %s: %v", body.Recipient, err)
 	}

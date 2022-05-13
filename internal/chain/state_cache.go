@@ -183,7 +183,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		case err == nil && isCreate:
 			return fmt.Errorf("account %v already exists", account.GetUrl())
 
-		case st.txType.IsSynthetic() || st.txType.IsInternal():
+		case st.txType.IsSynthetic() || st.txType.IsSystem():
 			// Synthetic and internal transactions are allowed to create accounts
 
 			// TODO Make synthetic transactions call Create

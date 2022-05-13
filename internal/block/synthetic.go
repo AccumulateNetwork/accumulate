@@ -31,7 +31,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		sub.Header = tx.Header
 
 		// Don't record txn -> produced synth txn for internal transactions
-		if from.Body.Type().IsInternal() {
+		if from.Body.Type().IsSystem() {
 			continue
 		}
 
@@ -144,7 +144,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Load all of the signatures
-	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 	return validateSyntheticTransactionSignatures(transaction, signatures)
 }
 
-func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature protocol.Signature) error {
+func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.SyntheticSignature) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
 	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
@@ -167,8 +167,12 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 		return fmt.Errorf("store status: %w", err)
 	}
 
+	if signature == nil {
+		return nil
+	}
+
 	// Record the signature against the transaction
-	_, err = obj.AddSignature(signature)
+	_, err = obj.AddSignature(0, signature)
 	if err != nil {
 		return fmt.Errorf("add signature: %w", err)
 	}

@@ -279,7 +279,7 @@ MinorBlocksQuery:
     - name: TxFetchMode
       type: query.TxFetchMode
       optional: true
-    - name: FilterSynthAnchorsOnlyBlocks
+    - name: FilterSystemAnchorsOnlyBlocks
       type: bool
       optional: true
 
@@ -406,13 +406,6 @@ TxResponse:
   - name: Result
     type: any
 
-DataEntry:
-  fields:
-    - name: Data
-      repeatable: true
-      type: bytes
-
-
 DataEntryQuery:
   fields:
     - name: Url
@@ -435,8 +428,8 @@ DataEntryQueryResponse:
     - name: EntryHash
       type: chain
     - name: Entry
-      type: DataEntry
-      marshal-as: reference
+      type: protocol.DataEntry
+      marshal-as: union
 
 ChainEntry:
   non-binary: true

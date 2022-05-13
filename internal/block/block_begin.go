@@ -52,7 +52,7 @@ func (x *Executor) BeginBlock(block *Block) (err error) {
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if ledgerState.Index >= block.Index {
+		if uint64(ledgerState.Index) >= block.Index {
 			panic(fmt.Errorf("Current height is %d but the next block height is %d!", ledgerState.Index, block.Index))
 		}
 
@@ -69,6 +69,7 @@ func (x *Executor) BeginBlock(block *Block) (err error) {
 
 	// Reset the ledger's ACME burnt counter
 	ledgerState.AcmeBurnt = *big.NewInt(0)
+	ledgerState.OperatorUpdates = nil
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
@@ -102,7 +103,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.WriteData{}
-	wd.Entry.Data = append(wd.Entry.Data, data)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
@@ -133,12 +134,12 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return err
 	}
 
-	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
+	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
 	err = putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
-		&protocol.InternalSignature{Network: signerUrl})
+		nil)
 	if err != nil {
 		return err
 	}
@@ -169,16 +170,17 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	}
 
 	// Send the block anchor
-	anchor, err := x.buildBlockAnchor(batch, ledgerState)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
-	}
 
 	switch x.Network.Type {
 	case config.Directory:
 		// DN -> all BVNs
+		anchor, err := x.buildDirectoryAnchor(batch, ledgerState)
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
+		}
+
 		for _, bvn := range x.Network.GetBvnNames() {
-			err = x.sendBlockAnchor(anchor, bvn)
+			err = x.sendBlockAnchor(anchor, anchor.Block, bvn)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknown, err)
 			}
@@ -186,7 +188,12 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 
 	case config.BlockValidator:
 		// BVN -> DN
-		err = x.sendBlockAnchor(anchor, protocol.Directory)
+		anchor, err := x.buildPartitionAnchor(batch, ledgerState)
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
+		}
+
+		err = x.sendBlockAnchor(anchor, anchor.Block, protocol.Directory)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -277,7 +284,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
 		}
-		sigs, err := getAllSignatures(batch, record, status, txn.Header.Initiator[:])
+		sigs, err := GetAllSignatures(batch, record, status, txn.Header.Initiator[:])
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
 		}
@@ -327,7 +334,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
-		_, err = batch.Transaction(hash).AddSignature(proofSig)
+		_, err = batch.Transaction(hash).AddSignature(0, proofSig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", hash[:4], err)
 		}
@@ -342,35 +349,14 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	return nil
 }
 
-func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.SyntheticAnchor, error) {
-	// Load the root chain
+func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.DirectoryAnchor, error) {
+	anchor := new(protocol.DirectoryAnchor)
 	ledger := batch.Account(x.Network.Ledger())
-	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SystemAnchor)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+		return nil, err
 	}
-
-	// Load the list of chain updates
-	updates, err := indexing.BlockChainUpdates(batch, &x.Network, uint64(ledgerState.Index)).Get()
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load block chain updates index: %w", err)
-	}
-
-	stateRoot, err := x.LoadStateRoot(batch)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load state hash: %w", err)
-	}
-
-	anchor := new(protocol.SyntheticAnchor)
-	anchor.Source = x.Network.NodeUrl()
-	anchor.RootIndex = uint64(rootChain.Height()) - 1
-	anchor.RootAnchor = *(*[32]byte)(rootChain.Anchor())
-	anchor.StateRoot = *(*[32]byte)(stateRoot)
-	anchor.Block = uint64(ledgerState.Index)
-	anchor.AcmeBurnt = ledgerState.AcmeBurnt
-	if x.Network.Type == config.Directory {
-		anchor.AcmeOraclePrice = ledgerState.ActiveOracle
-	}
+	anchor.AcmeOraclePrice = ledgerState.ActiveOracle
 
 	if len(ledgerState.OperatorUpdates) > 0 {
 		anchor.OperatorUpdates = ledgerState.OperatorUpdates
@@ -388,6 +374,13 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 
 	anchorUrl := x.Network.NodeUrl(protocol.AnchorPool)
 	record := batch.Account(anchorUrl)
+
+	// Load the list of chain updates
+	updates, err := indexing.BlockChainUpdates(batch, &x.Network, uint64(ledgerState.Index)).Get()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load block chain updates index: %w", err)
+	}
+
 	for _, update := range updates.Entries {
 		// Is it an anchor chain?
 		if update.Type != protocol.ChainTypeAnchor {
@@ -438,7 +431,39 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 	return anchor, nil
 }
 
-func (x *Executor) sendBlockAnchor(anchor *protocol.SyntheticAnchor, subnet string) error {
+func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger) (*protocol.PartitionAnchor, error) {
+	anchor := new(protocol.PartitionAnchor)
+	ledger := batch.Account(x.Network.Ledger())
+	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SystemAnchor)
+	if err != nil {
+		return nil, err
+	}
+	anchor.AcmeBurnt = ledgerState.AcmeBurnt
+	return anchor, nil
+}
+
+func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.InternalLedger, ledger *database.Account, anchor *protocol.SystemAnchor) (*database.Chain, error) {
+	// Load the root chain
+	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+	}
+
+	stateRoot, err := x.LoadStateRoot(batch)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load state hash: %w", err)
+	}
+
+	anchor.Source = x.Network.NodeUrl()
+	anchor.RootIndex = uint64(rootChain.Height()) - 1
+	anchor.RootAnchor = *(*[32]byte)(rootChain.Anchor())
+	anchor.StateRoot = *(*[32]byte)(stateRoot)
+	anchor.Block = uint64(ledgerState.Index)
+
+	return rootChain, nil
+}
+
+func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64, subnet string) error {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.SubnetUrl(subnet).JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
@@ -446,7 +471,7 @@ func (x *Executor) sendBlockAnchor(anchor *protocol.SyntheticAnchor, subnet stri
 	// Create a synthetic origin signature
 	initSig, err := new(signing.Builder).
 		SetUrl(x.Network.NodeUrl()).
-		SetVersion(anchor.Block).
+		SetVersion(block).
 		InitiateSynthetic(txn, x.Router, nil)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
@@ -467,7 +492,7 @@ func (x *Executor) sendBlockAnchor(anchor *protocol.SyntheticAnchor, subnet stri
 	env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}
 	err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "send anchor for block %d: %w", anchor.Block, err)
+		return errors.Format(errors.StatusUnknown, "send anchor for block %d: %w", block, err)
 	}
 
 	return nil
