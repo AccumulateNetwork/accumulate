@@ -2,17 +2,21 @@ package main
 
 import (
 	"bufio"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var extraFlags []string
@@ -25,7 +29,8 @@ func main() {
 var cmd = &cobra.Command{
 	Use: "devnet",
 	Run: func(*cobra.Command, []string) {
-		if !runScript() {
+		_, err := initClient("http://localhost:26660/v2")
+		if err != nil {
 			os.Exit(1)
 		}
 	},
@@ -33,7 +38,7 @@ var cmd = &cobra.Command{
 
 var resetColor = color.New(color.Reset)
 
-unc assertInModuleRoot() {
+func assertInModuleRoot() {
 	cwd, err := os.Getwd()
 	checkf(err, "getwd")
 
@@ -97,28 +102,52 @@ func launch() *exec.Cmd {
 	return runCmd
 }
 
-func runScript() bool {
-	// Build tools
-	assertInModuleRoot()
-	build("./cmd/accumulate")
-	build("./cmd/accumulated")
+func stop(runCmd *exec.Cmd) {
+	err := runCmd.Process.Signal(os.Interrupt)
+	if err != nil {
+		fmt.Printf("Error: interrupt devnet: %v\n", err)
+	}
 
-	// Launch the devnet
-	runCmd := launch()
-	defer func() { _ = runCmd.Process.Kill() }()
+	go func() {
+		time.Sleep(time.Minute)
+		_ = runCmd.Process.Kill()
+	}()
 
+	err = runCmd.Wait()
+	if err != nil {
+		fmt.Printf("Error: wait for devnet: %v\n", err)
+	}
 }
 
 // Init new client from server URL input using client.go
 func initClient(server string) (string, error) {
 
+	// build Accumulate deamon
+	assertInModuleRoot()
+	build("./cmd/accumulated")
+
+	// Launch the devnet
+	runCmd := launch()
+
 	// Create new client on localhost
-	c := "http://127.0.1.1:26660/v2"
-	client, err := client.New(c)
+	client, err := client.New("http://127.0.1.1:26660/v2")
 	checkf(err, "creating client")
 	client.DebugRequest = true
 
-	return c, err
+	// run key generation in gorooutine
+	go func() {
+		pub, priv, err := ed25519.GenerateKey(nil)
+
+		addr, err = protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
+
+		if err != nil {
+			fmt.Printf("Error: generating keys: %v\n", err)
+		}
+	}()
+
+	stop(runCmd)
+
+	return "", nil
 }
 
 func fatalf(format string, args ...interface{}) {
