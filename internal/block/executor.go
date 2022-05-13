@@ -40,6 +40,78 @@ type ExecutorOptions struct {
 	isGenesis bool
 }
 
+// NewNodeExecutor creates a new Executor for a node.
+func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
+	executors := []TransactionExecutor{
+		// User transactions
+		AddCredits{},
+		BurnTokens{},
+		CreateDataAccount{},
+		CreateIdentity{},
+		CreateKeyBook{},
+		CreateKeyPage{},
+		CreateToken{},
+		CreateTokenAccount{},
+		IssueTokens{},
+		SendTokens{},
+		UpdateKeyPage{},
+		WriteData{},
+		WriteDataTo{},
+		UpdateAccountAuth{},
+		UpdateKey{},
+
+		// Synthetic
+		SyntheticBurnTokens{},
+		SyntheticCreateIdentity{},
+		SyntheticDepositCredits{},
+		SyntheticDepositTokens{},
+		SyntheticWriteData{},
+
+		// Forwarding
+		SyntheticForwardTransaction{},
+
+		// Validator management
+		AddValidator{},
+		RemoveValidator{},
+		UpdateValidatorKey{},
+
+		// System
+		MirrorSystemRecords{},
+	}
+
+	switch opts.Network.Type {
+	case config.Directory:
+		executors = append(executors,
+			PartitionAnchor{},
+			DirectoryAnchor{},
+		)
+
+	case config.BlockValidator:
+		executors = append(executors,
+			DirectoryAnchor{},
+		)
+
+	default:
+		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.Type)
+	}
+
+	// This is a no-op in dev
+	executors = addTestnetExecutors(executors)
+
+	return newExecutor(opts, db, executors...)
+}
+
+// NewGenesisExecutor creates a transaction executor that can be used to set up
+// the genesis state.
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
+	return newExecutor(ExecutorOptions{
+		Network:   network,
+		Logger:    logger,
+		Router:    router,
+		isGenesis: true,
+	}, db)
+}
+
 func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts

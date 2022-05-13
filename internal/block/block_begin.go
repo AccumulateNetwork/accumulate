@@ -199,6 +199,12 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 			}
 		}
 
+		// DN -> self
+		err = x.sendBlockAnchor(anchor, anchor.Block, protocol.Directory)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+
 	case config.BlockValidator:
 		// BVN -> DN
 		anchor, err := x.buildPartitionAnchor(batch, ledger)
