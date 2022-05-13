@@ -98,7 +98,7 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AcmeUrl()
-	txn.Body = new(protocol.InternalGenesis)
+	txn.Body = new(protocol.SystemGenesis)
 
 	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
@@ -222,8 +222,8 @@ func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) erro
 	return batch.SaveSnapshot(file, &m.Network)
 }
 
-func (x *Executor) buildMirror(batch *database.Batch) (*protocol.SyntheticMirror, error) {
-	mirror := new(protocol.SyntheticMirror)
+func (x *Executor) buildMirror(batch *database.Batch) (*protocol.MirrorSystemRecords, error) {
+	mirror := new(protocol.MirrorSystemRecords)
 
 	nodeUrl := x.Network.NodeUrl()
 	rec, err := mirrorRecord(batch, nodeUrl)
