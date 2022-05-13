@@ -305,6 +305,9 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 		// and the source BVN should be queried to retrieve the missing
 		// synthetic transactions
 
+		// TODO If a synthetic transaction fails, the ledger update is
+		// discarded, resulting in an incorrect 'out of sequence' error
+
 		x.logger.Error("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
 			"seq-got", synthSig.SequenceNumber,
