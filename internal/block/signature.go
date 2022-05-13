@@ -467,7 +467,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
 	// Don't charge fees for internal administrative functions
 	signer := signature.GetSigner()
-	_, isBvn := protocol.ParseBvnUrl(signer)
+	_, isBvn := protocol.ParseSubnetUrl(signer)
 	if isBvn || protocol.IsDnUrl(signer) {
 		return 0, nil
 	}
