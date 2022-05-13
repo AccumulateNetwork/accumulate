@@ -79,7 +79,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	// Process receipts
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
-		if !bytes.Equal(receipt.Result, body.RootAnchor[:]) {
+		if !bytes.Equal(receipt.Anchor, body.RootAnchor[:]) {
 			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 

@@ -341,7 +341,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 		proofSig := new(protocol.ReceiptSignature)
 		proofSig.SourceNetwork = x.Network.NodeUrl()
 		proofSig.TransactionHash = *(*[32]byte)(hash)
-		proofSig.Receipt = *protocol.ReceiptFromManaged(r)
+		proofSig.Proof = *protocol.ReceiptFromManaged(r)
 
 		// Record the proof signature but DO NOT record the key signature! Each
 		// node has a different key, so recording the key signature here would

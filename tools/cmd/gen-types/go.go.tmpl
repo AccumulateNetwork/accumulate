@@ -233,7 +233,7 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 {{- if .Field.Virtual}}
 {{areEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (errVirtualFieldNotEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name))}}
 {{- else if .Field.AlternativeName}}
-if u.{{get .Field}} != {{jsonZeroValue .Field}} {
+if u.{{get .Field}}{{if and .Field.AsReference (not .Field.Pointer)}}.Equal(&{{resolveType .Field false}}{}){{else}} != {{jsonZeroValue .Field}}{{end}} {
 	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (get .Field)}}
 } else {
 	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.AlternativeName) (get .Field)}}
