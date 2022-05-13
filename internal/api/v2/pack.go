@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding"
 	"encoding/hex"
 	"fmt"
 
@@ -144,19 +143,21 @@ func packChainValue(qr *query.ResponseChainEntry) *ChainQueryResponse {
 	entry.State = qr.State
 	resp.Data = entry
 
-	var value encoding.BinaryUnmarshaler
 	switch qr.Type {
 	default:
 		return resp
 	case protocol.ChainTypeData:
-		value = new(protocol.DataEntry)
+		v, err := protocol.UnmarshalDataEntry(entry.Entry)
+		if err == nil {
+			entry.Value = v
+		}
 	case protocol.ChainTypeIndex:
-		value = new(protocol.IndexEntry)
+		v := new(protocol.IndexEntry)
+		if v.UnmarshalBinary(entry.Entry) == nil {
+			entry.Value = v
+		}
 	}
 
-	if value.UnmarshalBinary(entry.Entry) == nil {
-		entry.Value = value
-	}
 	return resp
 }
 
@@ -174,22 +175,27 @@ func packChainValues(qr *query.ResponseChainRange) *MultiResponse {
 		qr.Data = hex.EncodeToString(entry)
 	}
 
-	var newValue func() encoding.BinaryUnmarshaler
+	var unmarshal func(data []byte) (interface{}, error)
 	switch qr.Type {
 	default:
 		return resp
 	case protocol.ChainTypeData:
-		newValue = func() encoding.BinaryUnmarshaler { return new(protocol.DataEntry) }
+		unmarshal = func(data []byte) (interface{}, error) { return protocol.UnmarshalDataEntry(data) }
 	case protocol.ChainTypeIndex:
-		newValue = func() encoding.BinaryUnmarshaler { return new(protocol.IndexEntry) }
+		unmarshal = func(data []byte) (interface{}, error) {
+			v := new(protocol.IndexEntry)
+			err := v.UnmarshalBinary(data)
+			return v, err
+		}
 	}
 
 	resp.OtherItems = make([]interface{}, len(qr.Entries))
 	for i, entry := range qr.Entries {
-		value := newValue()
-		if value.UnmarshalBinary(entry) == nil {
+		value, err := unmarshal(entry)
+		if err == nil {
 			resp.Items[i] = value
 		}
 	}
+
 	return resp
 }

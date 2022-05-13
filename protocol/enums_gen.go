@@ -92,6 +92,15 @@ const ChainTypeData ChainType = 3
 // ChainTypeIndex indexes other chains.
 const ChainTypeIndex ChainType = 4
 
+// DataEntryTypeUnknown .
+const DataEntryTypeUnknown DataEntryType = 0
+
+// DataEntryTypeFactom .
+const DataEntryTypeFactom DataEntryType = 1
+
+// DataEntryTypeAccumulate .
+const DataEntryTypeAccumulate DataEntryType = 2
+
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
@@ -245,11 +254,11 @@ const SignatureTypeReceipt SignatureType = 4
 // SignatureTypeSynthetic is used when sending synthetic transactions.
 const SignatureTypeSynthetic SignatureType = 5
 
-// SignatureTypeInternal is used when executing transactions internally.
-const SignatureTypeInternal SignatureType = 6
+// SignatureTypeSet is used when forwarding multiple signatures.
+const SignatureTypeSet SignatureType = 6
 
-// SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
-const SignatureTypeForwarded SignatureType = 7
+// SignatureTypeRemote is used when forwarding a signature from one subnet to another.
+const SignatureTypeRemote SignatureType = 7
 
 // SignatureTypeBTC represents an BTC signature.
 const SignatureTypeBTC SignatureType = 8
@@ -751,6 +760,70 @@ func (v *ChainType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEnumValue returns the value of the Data Entry Type
+func (v DataEntryType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *DataEntryType) SetEnumValue(id uint64) bool {
+	u := DataEntryType(id)
+	switch u {
+	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Data Entry Type
+func (v DataEntryType) String() string {
+	switch v {
+	case DataEntryTypeUnknown:
+		return "unknown"
+	case DataEntryTypeFactom:
+		return "factom"
+	case DataEntryTypeAccumulate:
+		return "accumulate"
+	default:
+		return fmt.Sprintf("DataEntryType:%d", v)
+	}
+}
+
+// DataEntryTypeByName returns the named Data Entry Type.
+func DataEntryTypeByName(name string) (DataEntryType, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return DataEntryTypeUnknown, true
+	case "factom":
+		return DataEntryTypeFactom, true
+	case "accumulate":
+		return DataEntryTypeAccumulate, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Data Entry Type to JSON as a string.
+func (v DataEntryType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Data Entry Type from JSON as a string.
+func (v *DataEntryType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = DataEntryTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Data Entry Type %q", s)
+	}
+	return nil
+}
+
 // GetEnumValue returns the value of the Error Code
 func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 
@@ -1094,7 +1167,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeInternal, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
 		*v = u
 		return true
 	default:
@@ -1117,10 +1190,10 @@ func (v SignatureType) String() string {
 		return "receipt"
 	case SignatureTypeSynthetic:
 		return "synthetic"
-	case SignatureTypeInternal:
-		return "internal"
-	case SignatureTypeForwarded:
-		return "forwarded"
+	case SignatureTypeSet:
+		return "set"
+	case SignatureTypeRemote:
+		return "remote"
 	case SignatureTypeBTC:
 		return "btc"
 	case SignatureTypeBTCLegacy:
@@ -1149,10 +1222,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeReceipt, true
 	case "synthetic":
 		return SignatureTypeSynthetic, true
-	case "internal":
-		return SignatureTypeInternal, true
-	case "forwarded":
-		return SignatureTypeForwarded, true
+	case "set":
+		return SignatureTypeSet, true
+	case "remote":
+		return SignatureTypeRemote, true
 	case "btc":
 		return SignatureTypeBTC, true
 	case "btclegacy":

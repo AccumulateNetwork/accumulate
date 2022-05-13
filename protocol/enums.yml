@@ -15,6 +15,14 @@ ChainType:
     value: 0x04
     description: indexes other chains
 
+DataEntryType:
+  Unknown:
+    value: 0
+  Factom:
+    value: 1
+  Accumulate:
+    value: 2
+
 ObjectType:
   Unknown:
     value: 0
@@ -45,12 +53,12 @@ SignatureType:
   Synthetic:
     value: 5
     description: is used when sending synthetic transactions
-  Internal:
+  Set:
     value: 6
-    description: is used when executing transactions internally
-  Forwarded:
+    description: is used when forwarding multiple signatures
+  Remote:
     value: 7
-    description: is used when forwarding signatures from one subnet to another
+    description: is used when forwarding a signature from one subnet to another
   BTC:
     value: 8
     description: represents an BTC signature

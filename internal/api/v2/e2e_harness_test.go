@@ -117,14 +117,15 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		WithCurrentTimestamp().
 		WithBody(params.Payload).
 		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
+	sig := env.Signatures[0].(protocol.KeySignature)
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction[0].Header.Principal
-	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
-	req.Signer.Url = env.Signatures[0].GetSigner()
-	req.Signer.PublicKey = env.Signatures[0].(protocol.KeySignature).GetPublicKey()
-	req.Signature = env.Signatures[0].GetSignature()
-	req.KeyPage.Version = env.Signatures[0].GetSignerVersion()
+	req.Signer.Timestamp = sig.GetTimestamp()
+	req.Signer.Url = sig.GetSigner()
+	req.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
+	req.Signature = sig.GetSignature()
+	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Payload = env.Transaction[0].Body
 	return req
 }
@@ -155,14 +156,15 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUr
 		WithCurrentTimestamp().
 		WithBody(params.Payload).
 		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
+	sig := env.Signatures[0].(protocol.KeySignature)
 
 	req := new(api.TxRequest)
 	req.Origin = env.Transaction[0].Header.Principal
-	req.Signer.Timestamp = env.Signatures[0].GetTimestamp()
-	req.Signer.Url = env.Signatures[0].GetSigner()
-	req.Signer.PublicKey = env.Signatures[0].(protocol.KeySignature).GetPublicKey()
-	req.Signature = env.Signatures[0].GetSignature()
-	req.KeyPage.Version = env.Signatures[0].GetSignerVersion()
+	req.Signer.Timestamp = sig.GetTimestamp()
+	req.Signer.Url = sig.GetSigner()
+	req.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
+	req.Signature = sig.GetSignature()
+	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Payload = env.Transaction[0].Body
 
 	resp := new(api.TxResponse)
@@ -175,7 +177,7 @@ func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 
 	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
 	for _, txid := range txr.SyntheticTxids {
-		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}) //nolint:rangevarref
 	}
 }
 
@@ -217,13 +219,14 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 
 	d.T().Helper()
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
+	sig := tx.Signatures[0].(protocol.KeySignature)
 	pl := new(api.TxRequest)
 	pl.Origin = tx.Transaction[0].Header.Principal
-	pl.Signer.Timestamp = tx.Signatures[0].GetTimestamp()
-	pl.Signer.Url = tx.Signatures[0].GetSigner()
-	pl.Signer.PublicKey = tx.Signatures[0].(protocol.KeySignature).GetPublicKey()
-	pl.Signature = tx.Signatures[0].GetSignature()
-	pl.KeyPage.Version = tx.Signatures[0].GetSignerVersion()
+	pl.Signer.Timestamp = sig.GetTimestamp()
+	pl.Signer.Url = sig.GetSigner()
+	pl.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
+	pl.Signature = sig.GetSignature()
+	pl.KeyPage.Version = sig.GetSignerVersion()
 	pl.Payload = data
 
 	data, err = pl.MarshalJSON()
@@ -241,7 +244,7 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 		d.Require().NoError(err)
 
 		for _, txid := range r.SyntheticTxids {
-			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, false, api.QueryOptions{})
+			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, false, api.QueryOptions{}) //nolint:rangevarref
 			d.Require().NoError(err)
 		}
 	}

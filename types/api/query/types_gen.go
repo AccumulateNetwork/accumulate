@@ -420,7 +420,9 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 	u := new(ResponseDataEntry)
 
 	u.EntryHash = v.EntryHash
-	u.Entry = *(&v.Entry).Copy()
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(protocol.DataEntry)
+	}
 
 	return u
 }
@@ -859,7 +861,7 @@ func (v *ResponseDataEntry) Equal(u *ResponseDataEntry) bool {
 	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
-	if !((&v.Entry).Equal(&u.Entry)) {
+	if !(protocol.EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -1866,8 +1868,8 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
-	if !((v.Entry).Equal(new(protocol.DataEntry))) {
-		writer.WriteValue(2, &v.Entry)
+	if !(v.Entry == nil) {
+		writer.WriteValue(2, v.Entry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
@@ -1888,7 +1890,7 @@ func (v *ResponseDataEntry) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if (v.Entry).Equal(new(protocol.DataEntry)) {
+	} else if v.Entry == nil {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -2779,9 +2781,13 @@ func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(1); ok {
 		v.EntryHash = *x
 	}
-	if x := new(protocol.DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Entry = *x
-	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := protocol.UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_ResponseDataEntry)
 	if err != nil {
@@ -3195,11 +3201,11 @@ func (v *ResponseChainRange) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		EntryHash string             `json:"entryHash,omitempty"`
-		Entry     protocol.DataEntry `json:"entry,omitempty"`
+		EntryHash string                                         `json:"entryHash,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
 
@@ -3608,11 +3614,11 @@ func (v *ResponseChainRange) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		EntryHash string             `json:"entryHash,omitempty"`
-		Entry     protocol.DataEntry `json:"entry,omitempty"`
+		EntryHash string                                         `json:"entryHash,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -3621,7 +3627,8 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	} else {
 		v.EntryHash = x
 	}
-	v.Entry = u.Entry
+	v.Entry = u.Entry.Value
+
 	return nil
 }
 

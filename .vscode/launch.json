@@ -37,6 +37,7 @@
         "${workspaceFolder}/.nodes",
         "--truncate",
         "--debug",
+        "-x=bvn0.101"
       ]
     },
     {
@@ -92,11 +93,10 @@
       "args": [
         "run",
         "-w",
-        "${workspaceFolder}/.nodes/dn",
+        "${workspaceFolder}/.nodes/bvn0",
         "-n",
-        "0",
+        "101",
         "--truncate",
-        "--debug",
       ]
     },
     {
@@ -153,6 +153,15 @@
         "transaction_results.yml",
         "user_transactions.yml",
       ]
+    },
+    {
+      "name": "Lint",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/golangci-lint",
+      "cwd": "${workspaceFolder}",
+      "args": ["run"]
     },
     {
       "name": "Run CLI",

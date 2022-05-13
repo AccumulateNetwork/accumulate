@@ -34,7 +34,7 @@ SyntheticWriteData:
   fields:
     - name: Entry
       type: DataEntry
-      marshal-as: reference
+      marshal-as: union
 
 SyntheticDepositTokens:
   union: { type: transaction }
@@ -112,7 +112,7 @@ SyntheticForwardTransaction:
   union: { type: transaction, value: SyntheticForwardTransaction }
   fields:
     - name: Signatures
-      type: ForwardedSignature
+      type: RemoteSignature
       marshal-as: reference
       repeatable: true
     - name: Transaction

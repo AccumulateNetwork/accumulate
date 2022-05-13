@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -36,7 +35,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 	case errors.Is(err, errors.StatusNotFound):
 		// Are we creating a lite data account?
-		computedChainId := protocol.ComputeLiteDataAccountId(&body.Entry)
+		computedChainId := protocol.ComputeLiteDataAccountId(body.Entry)
 		return bytes.HasPrefix(computedChainId, chainId), nil
 
 	default:
@@ -47,7 +46,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 // SignerIsAuthorized returns nil if the transaction is writing to a lite data
 // account.
-func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ *url.URL, _ protocol.Signer) (fallback bool, err error) {
+func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
@@ -83,8 +82,12 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
+	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
+		return nil, fmt.Errorf("writing new Factom-formatted data entries is not supported")
+	}
+
 	//check will return error if there is too much data or no data for the entry
-	_, err := body.Entry.CheckSize()
+	_, err := protocol.CheckDataEntrySize(body.Entry)
 	if err != nil {
 		return nil, err
 	}
@@ -92,13 +95,13 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 	cause := *(*[32]byte)(tx.Transaction.GetHash())
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
 	if err == nil {
-		return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, cause, body.Scratch)
+		return executeWriteLiteDataAccount(st, tx.Transaction, body.Entry, cause, body.Scratch)
 	}
 
-	return executeWriteFullDataAccount(st, tx.Transaction, &body.Entry, cause, body.Scratch)
+	return executeWriteFullDataAccount(st, tx.Transaction, body.Entry, cause, body.Scratch)
 }
 
-func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", txn.Header.Principal)
 	}

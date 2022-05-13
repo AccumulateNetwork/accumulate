@@ -214,7 +214,7 @@ ResponseDataEntry:
       type: chain
     - name: Entry
       type: protocol.DataEntry
-      marshal-as: reference
+      marshal-as: union
 
 ResponseDataEntrySet:
   fields:

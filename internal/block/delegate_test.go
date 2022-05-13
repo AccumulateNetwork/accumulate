@@ -2,10 +2,10 @@ package block_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -67,7 +67,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -85,7 +85,55 @@ func TestDelegatedSignature_Local(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
+	})
+}
+func TestDelegatedSignature_LocalMultisig(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup
+	alice := url.MustParse("alice")
+	key1, otherKey1, otherKey2 := acctesting.GenerateKey(alice), acctesting.GenerateKey(alice, 1), acctesting.GenerateKey(alice, 2)
+	sim.CreateIdentity(alice, key1[32:])
+	sim.CreateKeyBook(alice.JoinPath("other-book"), otherKey1[32:], otherKey2[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.Keys = append(page.Keys, &KeySpec{Owner: alice.JoinPath("other-book")})
+	})
+	updateAccount(sim, alice.JoinPath("other-book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+		page.AcceptThreshold = 2
+	})
+	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
+
+	// Execute
+	envs := sim.MustSubmitAndExecuteBlock(acctesting.NewTransaction().
+		WithPrincipal(alice.JoinPath("data")).
+		WithBody(&WriteData{
+			Entry: &AccumulateDataEntry{Data: [][]byte{
+				[]byte("foo"),
+			}},
+		}).
+		WithSigner(alice.JoinPath("other-book", "1"), 1).
+		WithDelegator(alice.JoinPath("book", "1")).
+		WithTimestampVar(&timestamp).
+		Initiate(SignatureTypeED25519, otherKey1).
+		WithTimestamp(0).
+		Sign(SignatureTypeED25519, otherKey2).
+		Build())
+	sim.WaitForTransactions(delivered, envs...)
+
+	// Validate
+	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+		data, err := batch.Account(alice.JoinPath("data")).Data()
+		require.NoError(t, err)
+		de, err := data.Entry(data.Height() - 1)
+		require.NoError(t, err)
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -119,7 +167,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -138,7 +186,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -171,7 +219,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -189,7 +237,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -224,7 +272,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -242,7 +290,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -279,7 +327,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -297,7 +345,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
@@ -337,7 +385,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -356,13 +404,12 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 		require.NoError(t, err)
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
 }
 
 func TestDelegatedSignature_Multisig(t *testing.T) {
 	var timestamp uint64
-	t.Skip("TODO Implement pending delegated transactions")
 
 	// Initialize
 	sim := simulator.New(t, 3)
@@ -400,11 +447,11 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
 	// Initiate with bob/book/1
-	st, txn := sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+	_, txn := sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -414,51 +461,43 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 			Initiate(SignatureTypeED25519, bobK1).
 			Build(),
 	)...)
-	require.False(t, st[0].Delivered)
-	require.True(t, st[0].Pending)
+	txnHash := txn[0].GetHash()
 
 	// Sign with bob/book/2
-	st, _ = sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+	sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
-			WithTxnHash(txn[0].GetHash()).
+			WithTxnHash(txnHash).
 			WithSigner(bob.JoinPath("book", "2"), 1).
 			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).
 			Sign(SignatureTypeED25519, bobK2).
 			Build(),
 	)...)
-	require.False(t, st[0].Delivered)
-	require.True(t, st[0].Pending)
 
 	// Sign with charlie/book/1
-	st, _ = sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+	sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
-			WithTxnHash(txn[0].GetHash()).
+			WithTxnHash(txnHash).
 			WithSigner(charlie.JoinPath("book", "1"), 1).
 			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).
 			Sign(SignatureTypeED25519, charlieK1).
 			Build(),
 	)...)
-	require.False(t, st[0].Delivered)
-	require.True(t, st[0].Pending)
 
 	// Sign with charlie/book/1
-	st, _ = sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(alice.JoinPath("data")).
-			WithTxnHash(txn[0].GetHash()).
+			WithTxnHash(txnHash).
 			WithSigner(charlie.JoinPath("book", "1"), 1).
 			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).
 			Sign(SignatureTypeED25519, charlieK2).
 			Build(),
 	)...)
-	time.Sleep(10 * time.Second)
-	require.True(t, st[0].Delivered)
-	require.False(t, st[0].Pending)
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
@@ -467,6 +506,21 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		require.NotZero(t, data.Height())
 		de, err := data.Entry(data.Height() - 1)
 		require.NoError(t, err)
-		require.Equal(t, "foo", string(de.Data[0]))
+		require.Equal(t, "foo", string(de.GetData()[0]))
+
+		// alice/book/1 should have one delegated signature each from bob/book/1
+		// and charlie/book/1
+		record := batch.Transaction(txnHash)
+		status, err := record.GetStatus()
+		require.NoError(t, err)
+		sigs, err := block.GetAllSignatures(batch, record, status, nil)
+		require.NoError(t, err)
+		require.Len(t, sigs, 2)
+		require.IsType(t, (*DelegatedSignature)(nil), sigs[0])
+		sig := sigs[0].(*DelegatedSignature)
+		require.Equal(t, "bob/book/1", sig.GetSigner().ShortString())
+		require.IsType(t, (*DelegatedSignature)(nil), sigs[1])
+		sig = sigs[1].(*DelegatedSignature)
+		require.Equal(t, "charlie/book/1", sig.GetSigner().ShortString())
 	})
 }
