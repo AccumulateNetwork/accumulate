@@ -305,6 +305,12 @@ func (u *URL) Routing() uint64 {
 // defined as the SHA-256 hash of the lower case of the operand, the result is
 // H(H(AccountID + H(Query)) + H(Fragment)).
 func (u *URL) Hash() []byte {
+	hash := u.Hash32()
+	return hash[:]
+}
+
+// Hash32 returns Hash as a [32]byte.
+func (u *URL) Hash32() [32]byte {
 	hash := u.AccountID32()
 	if u.Query != "" {
 		hash = concatId(hash, id(u.Query))
@@ -312,7 +318,7 @@ func (u *URL) Hash() []byte {
 	if u.Fragment != "" {
 		hash = concatId(hash, id(u.Fragment))
 	}
-	return hash[:]
+	return hash
 }
 
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,
@@ -331,6 +337,13 @@ func (u *URL) Equal(v *URL) bool {
 func (u *URL) JoinPath(s ...string) *URL {
 	v := u.Copy()
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
+	return v
+}
+
+// WithFragment returns a copy of U with the fragment set.
+func (u *URL) WithFragment(s string) *URL {
+	v := u.Copy()
+	v.Fragment = s
 	return v
 }
 
