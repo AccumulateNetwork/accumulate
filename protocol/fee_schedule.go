@@ -140,7 +140,7 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	if IsDnUrl(tx.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseBvnUrl(tx.Header.Principal); ok {
+	if _, ok := ParseSubnetUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
 
