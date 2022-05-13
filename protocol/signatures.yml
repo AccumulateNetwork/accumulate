@@ -145,7 +145,8 @@ ReceiptSignature:
       description: is the network that produced the transaction
       type: url
       pointer: true
-    - type: Receipt
+    - name: Proof
+      type: Receipt
       marshal-as: reference
     - name: TransactionHash
       type: hash

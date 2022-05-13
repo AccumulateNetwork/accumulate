@@ -57,7 +57,7 @@ AccountRecord:
       marshal-as: reference
       pointer: true
       repeatable: true
-    - name: Receipt
+    - name: Proof
       type: Receipt
       marshal-as: reference
       pointer: true

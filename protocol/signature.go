@@ -699,7 +699,7 @@ func (s *ReceiptSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns the marshalled receipt.
 func (s *ReceiptSignature) GetSignature() []byte {
-	b, _ := s.Receipt.MarshalBinary()
+	b, _ := s.Proof.MarshalBinary()
 	return b
 }
 
@@ -728,7 +728,7 @@ func (s *ReceiptSignature) GetVote() VoteType {
 
 // Verify returns true if this receipt is a valid receipt of the hash.
 func (s *ReceiptSignature) Verify(hash []byte) bool {
-	return bytes.Equal(s.Start, hash) && s.Receipt.Convert().Validate()
+	return bytes.Equal(s.Proof.Start, hash) && s.Proof.Convert().Validate()
 }
 
 /*
