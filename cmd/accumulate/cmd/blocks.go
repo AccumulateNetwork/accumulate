@@ -30,7 +30,7 @@ var blocksCmd = &cobra.Command{
 						printError(cmd, err)
 						return
 					}
-					filterAnBlks, err = parseFilterSynthAnchorOnlyBlocks(args)
+					filterAnBlks, err = parseFilterSystemAnchorOnlyBlocks(args)
 					if err != nil {
 						printError(cmd, err)
 						return
@@ -67,7 +67,7 @@ func parseFetchMode(args []string) (query.TxFetchMode, error) {
 	return query.TxFetchModeExpand, nil
 }
 
-func parseFilterSynthAnchorOnlyBlocks(args []string) (bool, error) {
+func parseFilterSystemAnchorOnlyBlocks(args []string) (bool, error) {
 	if len(args) > 5 {
 		val, err := strconv.ParseBool(args[5])
 		if err != nil {
@@ -117,7 +117,7 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
 	params.TxFetchMode = txFetchMode
-	params.FilterSynthAnchorsOnlyBlocks = filterAnBlks
+	params.FilterSystemAnchorsOnlyBlocks = filterAnBlks
 
 	// Temporary increase timeout, we may get a large result set which takes a while to construct
 	globalTimeout := Client.Timeout

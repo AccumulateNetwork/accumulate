@@ -31,7 +31,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		sub.Header = tx.Header
 
 		// Don't record txn -> produced synth txn for internal transactions
-		if from.Body.Type().IsInternal() {
+		if from.Body.Type().IsSystem() {
 			continue
 		}
 

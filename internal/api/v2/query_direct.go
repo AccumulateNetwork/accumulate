@@ -479,7 +479,7 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
+func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, includeSystemAnchors bool) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -494,11 +494,11 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	}
 
 	req := &query.RequestMinorBlocks{
-		Account:                      u,
-		Start:                        pagination.Start,
-		Limit:                        pagination.Count,
-		TxFetchMode:                  txFetchMode,
-		FilterSynthAnchorsOnlyBlocks: includeSynthAnchors,
+		Account:                       u,
+		Start:                         pagination.Start,
+		Limit:                         pagination.Count,
+		TxFetchMode:                   txFetchMode,
+		FilterSystemAnchorsOnlyBlocks: includeSystemAnchors,
 	}
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
