@@ -125,7 +125,6 @@ func (s *SignatureSet) Add(keyEntryIndex uint64, newSignature protocol.Signature
 	if err != nil {
 		return 0, err
 	}
-
 	s.txn.batch.putValue(s.key(), s.entries)
 	return len(s.entries.Entries), nil
 }
