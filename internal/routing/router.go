@@ -44,7 +44,7 @@ func routeModulo(network *config.Network, account *url.URL) (string, error) {
 
 	// Is it a BVN URL?
 	bvnNames := network.GetBvnNames()
-	if bvn, ok := protocol.ParseBvnUrl(account); ok {
+	if bvn, ok := protocol.ParseSubnetUrl(account); ok {
 		for _, id := range bvnNames {
 			if strings.EqualFold(bvn, id) {
 				return id, nil
