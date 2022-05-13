@@ -249,7 +249,7 @@ func TestAnchorChain(t *testing.T) {
 	})
 
 	// Give it a second for the DN to send its anchor
-	time.Sleep(time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Get the anchor chain manager for DN
 	batch = dn.db.Begin(true)
@@ -725,8 +725,9 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
+	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
 	alice := generateKey()
