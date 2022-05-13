@@ -147,7 +147,7 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
-		if !receipt.Receipt.Convert().Validate() {
+		if !receipt.Proof.Convert().Validate() {
 			//nolint:gosimple
 			out += fmt.Sprintf("  Invalid!!\n")
 		}
