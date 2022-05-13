@@ -237,7 +237,7 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 
 func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// Anchors cannot be pending
-	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypePartitionAnchor {
 		return true, nil
 	}
 
@@ -406,7 +406,7 @@ func recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTran
 	}
 
 	// Don't add internal transactions to chains
-	if transaction.Body.Type().IsInternal() {
+	if transaction.Body.Type().IsSystem() {
 		return status, state, nil
 	}
 

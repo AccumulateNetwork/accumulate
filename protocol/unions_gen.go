@@ -312,10 +312,14 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateToken), nil
 	case TransactionTypeCreateTokenAccount:
 		return new(CreateTokenAccount), nil
-	case TransactionTypeInternalGenesis:
-		return new(InternalGenesis), nil
+	case TransactionTypeDirectoryAnchor:
+		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
+	case TransactionTypeMirrorSystemRecords:
+		return new(MirrorSystemRecords), nil
+	case TransactionTypePartitionAnchor:
+		return new(PartitionAnchor), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
@@ -324,8 +328,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
-	case TransactionTypeSyntheticAnchor:
-		return new(SyntheticAnchor), nil
 	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
 	case TransactionTypeSyntheticCreateIdentity:
@@ -336,10 +338,10 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticForwardTransaction:
 		return new(SyntheticForwardTransaction), nil
-	case TransactionTypeSyntheticMirror:
-		return new(SyntheticMirror), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeSystemGenesis:
+		return new(SystemGenesis), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -390,11 +392,17 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *CreateTokenAccount:
 		b, ok := b.(*CreateTokenAccount)
 		return ok && a.Equal(b)
-	case *InternalGenesis:
-		b, ok := b.(*InternalGenesis)
+	case *DirectoryAnchor:
+		b, ok := b.(*DirectoryAnchor)
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
+		return ok && a.Equal(b)
+	case *MirrorSystemRecords:
+		b, ok := b.(*MirrorSystemRecords)
+		return ok && a.Equal(b)
+	case *PartitionAnchor:
+		b, ok := b.(*PartitionAnchor)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)
@@ -407,9 +415,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SendTokens:
 		b, ok := b.(*SendTokens)
-		return ok && a.Equal(b)
-	case *SyntheticAnchor:
-		b, ok := b.(*SyntheticAnchor)
 		return ok && a.Equal(b)
 	case *SyntheticBurnTokens:
 		b, ok := b.(*SyntheticBurnTokens)
@@ -426,11 +431,11 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *SyntheticForwardTransaction:
 		b, ok := b.(*SyntheticForwardTransaction)
 		return ok && a.Equal(b)
-	case *SyntheticMirror:
-		b, ok := b.(*SyntheticMirror)
-		return ok && a.Equal(b)
 	case *SyntheticWriteData:
 		b, ok := b.(*SyntheticWriteData)
+		return ok && a.Equal(b)
+	case *SystemGenesis:
+		b, ok := b.(*SystemGenesis)
 		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		b, ok := b.(*UpdateAccountAuth)
