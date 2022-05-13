@@ -92,6 +92,15 @@ const ChainTypeData ChainType = 3
 // ChainTypeIndex indexes other chains.
 const ChainTypeIndex ChainType = 4
 
+// DataEntryTypeUnknown .
+const DataEntryTypeUnknown DataEntryType = 0
+
+// DataEntryTypeFactom .
+const DataEntryTypeFactom DataEntryType = 1
+
+// DataEntryTypeAccumulate .
+const DataEntryTypeAccumulate DataEntryType = 2
+
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
@@ -750,6 +759,70 @@ func (v *ChainType) UnmarshalJSON(data []byte) error {
 	*v, ok = ChainTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Chain Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Data Entry Type
+func (v DataEntryType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *DataEntryType) SetEnumValue(id uint64) bool {
+	u := DataEntryType(id)
+	switch u {
+	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Data Entry Type
+func (v DataEntryType) String() string {
+	switch v {
+	case DataEntryTypeUnknown:
+		return "unknown"
+	case DataEntryTypeFactom:
+		return "factom"
+	case DataEntryTypeAccumulate:
+		return "accumulate"
+	default:
+		return fmt.Sprintf("DataEntryType:%d", v)
+	}
+}
+
+// DataEntryTypeByName returns the named Data Entry Type.
+func DataEntryTypeByName(name string) (DataEntryType, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return DataEntryTypeUnknown, true
+	case "factom":
+		return DataEntryTypeFactom, true
+	case "accumulate":
+		return DataEntryTypeAccumulate, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Data Entry Type to JSON as a string.
+func (v DataEntryType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Data Entry Type from JSON as a string.
+func (v *DataEntryType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = DataEntryTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Data Entry Type %q", s)
 	}
 	return nil
 }

@@ -52,7 +52,7 @@ func (x *Executor) BeginBlock(block *Block) (err error) {
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if ledgerState.Index >= block.Index {
+		if uint64(ledgerState.Index) >= block.Index {
 			panic(fmt.Errorf("Current height is %d but the next block height is %d!", ledgerState.Index, block.Index))
 		}
 
@@ -103,7 +103,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	}
 
 	wd := protocol.WriteData{}
-	wd.Entry.Data = append(wd.Entry.Data, data)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
@@ -134,7 +134,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return err
 	}
 
-	st.UpdateData(da, wd.Entry.Hash(), &wd.Entry)
+	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
 	err = putSyntheticTransaction(
 		batch, txn,

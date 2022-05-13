@@ -180,6 +180,115 @@ func UnmarshalAccountJSON(data []byte) (Account, error) {
 	return acnt, nil
 }
 
+// NewDataEntry creates a new DataEntry for the specified DataEntryType.
+func NewDataEntry(typ DataEntryType) (DataEntry, error) {
+	switch typ {
+	case DataEntryTypeAccumulate:
+		return new(AccumulateDataEntry), nil
+	case DataEntryTypeFactom:
+		return new(FactomDataEntry), nil
+	default:
+		return nil, fmt.Errorf("unknown data entry %v", typ)
+	}
+}
+
+//EqualDataEntry is used to compare the values of the union
+func EqualDataEntry(a, b DataEntry) bool {
+	switch a := a.(type) {
+	case *AccumulateDataEntry:
+		b, ok := b.(*AccumulateDataEntry)
+		return ok && a.Equal(b)
+	case *FactomDataEntry:
+		b, ok := b.(*FactomDataEntry)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
+// UnmarshalDataEntryType unmarshals the DataEntryType from the start of a DataEntry.
+func UnmarshalDataEntryType(r io.Reader) (DataEntryType, error) {
+	var typ DataEntryType
+	err := encoding.UnmarshalEnumType(r, &typ)
+	return typ, err
+}
+
+// UnmarshalDataEntry unmarshals a DataEntry.
+func UnmarshalDataEntry(data []byte) (DataEntry, error) {
+	typ, err := UnmarshalDataEntryType(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := NewDataEntry(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	err = v.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalDataEntryFrom unmarshals a DataEntry.
+func UnmarshalDataEntryFrom(rd io.ReadSeeker) (DataEntry, error) {
+	// Get the reader's current position
+	pos, err := rd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the type code
+	typ, err := UnmarshalDataEntryType(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset the reader's position
+	_, err = rd.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new transaction result
+	v, err := NewDataEntry(DataEntryType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the result
+	err = v.UnmarshalBinaryFrom(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalDataEntryJson unmarshals a DataEntry.
+func UnmarshalDataEntryJSON(data []byte) (DataEntry, error) {
+	var typ struct{ Type DataEntryType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	acnt, err := NewDataEntry(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
 // NewTransactionBody creates a new TransactionBody for the specified TransactionType.
 func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	switch typ {

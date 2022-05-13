@@ -64,7 +64,9 @@ func initV1(opts InitOptions) (err error) {
 		}
 	}()
 
-	fmt.Println("Tendermint Initialize")
+	if opts.Logger != nil {
+		opts.Logger.Info("Tendermint initialize")
+	}
 
 	config := opts.Config
 	subnetID := config[0].Accumulate.Network.LocalSubnetID

@@ -54,10 +54,11 @@ func (m *MerkleManager) GetRange(key storage.Key, begin, end int64) (hashes []Ha
 
 	first := (begin) & m.MarkMask // Calculate the offset to the beginning of the range
 	last := first + end - begin   // and to the end of the range
-	if int(last) > len(hl) {
-		fmt.Println("begin end", begin, " ", end)
 
-	}
+	// FIXME Is this supposed to be an error?
+	// if int(last) > len(hl) {
+	// 	fmt.Println("begin end", begin, " ", end)
+	// }
 	return hl[first:last], nil // Return this slice.
 
 }
