@@ -69,6 +69,7 @@ func (x *Executor) BeginBlock(block *Block) (err error) {
 
 	// Reset the ledger's ACME burnt counter
 	ledgerState.AcmeBurnt = *big.NewInt(0)
+	ledgerState.OperatorUpdates = nil
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
