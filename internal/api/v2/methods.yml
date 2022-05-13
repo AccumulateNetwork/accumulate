@@ -98,7 +98,7 @@ QueryMinorBlocks:
   rpc: query-minor-blocks
   input: MinorBlocksQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination, TxFetchMode, FilterSynthAnchorsOnlyBlocks]
+  call-params: [Url, QueryPagination, TxFetchMode, FilterSystemAnchorsOnlyBlocks]
 
 Execute:
   description: submits a transaction
