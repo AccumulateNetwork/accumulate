@@ -50,11 +50,8 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	switch {
 	case txnType.IsUser():
 		err = nil
-	case txnType.IsSynthetic():
+	case txnType.IsSynthetic(), txnType.IsSystem():
 		err = validateSyntheticTransactionSignatures(delivery.Transaction, delivery.Signatures)
-	case txnType.IsInternal():
-		// TODO Validate internal transactions
-		err = nil
 	default:
 		// Should be unreachable
 		return nil, errors.Format(errors.StatusInternalError, "transaction type %v is not user, synthetic, or internal", txnType)
@@ -224,7 +221,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	if !gotED25519Sig {
 		return errors.Format(errors.StatusUnauthenticated, "missing ED25519 signature")
 	}
-	if transaction.Body.Type() == protocol.TransactionTypeSyntheticAnchor {
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypePartitionAnchor {
 		return nil
 	}
 
