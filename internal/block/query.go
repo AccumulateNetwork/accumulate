@@ -1025,7 +1025,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	receipt := new(query.TxReceipt)
 	receipt.Account = entry.Account
 	receipt.Chain = entry.Chain
-	receipt.Receipt.Start = txid
+	receipt.Proof.Start = txid
 
 	account := batch.Account(entry.Account)
 	block, r, err := indexing.ReceiptForChainEntry(&m.Network, batch, account, txid, entry)
@@ -1034,7 +1034,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	}
 
 	receipt.LocalBlock = block
-	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
@@ -1045,7 +1045,7 @@ func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, 
 		return receipt, err
 	}
 
-	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
@@ -1057,7 +1057,7 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	}
 
 	receipt.LocalBlock = block
-	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
