@@ -52,6 +52,7 @@ type FakeNode struct {
 	require   *require.Assertions
 	netValMap genesis.NetworkValidatorMap
 	Genesis   genesis.Genesis
+	kv        *memory.DB
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -61,7 +62,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.Client{}
 	netValMap := make(genesis.NetworkValidatorMap)
-	genList := []genesis.Genesis{}
+	var genList []genesis.Genesis
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -91,21 +92,24 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		}
 	}
 
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, genesis := range genList {
+			genesis.Discard()
+		}
+	}()
 	for _, genesis := range genList {
-		func() {
-			defer genesis.Discard()
-			err := genesis.Execute()
-			if err != nil {
-				panic(fmt.Errorf("could not execute genesis: %v", err))
-			}
-		}()
+		err := genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
 	}
 
 	for _, netName := range subnets {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes := allNodes[netName]
 		for i := range nodes {
-			nodes[i].client.Start(100 * time.Millisecond)
+			nodes[i].CreateInitChain()
 		}
 	}
 
@@ -160,7 +164,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
-	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, errorHandler, isEvil)
+	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey(), fakeTmLogger, n.NextHeight, errorHandler, 100*time.Millisecond, isEvil)
 
 	return n, appChan
 }
@@ -222,16 +226,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	}
 	n.Genesis, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
-
-	state, err := kv.MarshalJSON()
-	n.Require().NoError(err)
-
-	n.app.InitChain(abcitypes.RequestInitChain{
-		Time:          time.Now(),
-		ChainId:       n.network.LocalSubnetID,
-		AppStateBytes: state,
-		InitialHeight: protocol.GenesisBlock + 1,
-	})
+	n.kv = kv
 
 	return n
 }
@@ -528,6 +523,17 @@ func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
+}
+
+func (n *FakeNode) CreateInitChain() {
+	state, err := n.kv.MarshalJSON()
+	n.Require().NoError(err)
+	n.app.InitChain(abcitypes.RequestInitChain{
+		Time:          time.Now(),
+		ChainId:       n.network.LocalSubnetID,
+		AppStateBytes: state,
+		InitialHeight: protocol.GenesisBlock + 1,
+	})
 }
 
 type e2eDUT struct {

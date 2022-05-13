@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"math/big"
 	"path"
 	"time"
@@ -15,11 +13,13 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 type InitOpts struct {
@@ -42,7 +42,6 @@ type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
 
 type genesis struct {
 	opts         InitOpts
-	network      config.Network
 	kvdb         storage.KeyValueStore
 	db           *database.Database
 	block        *block.Block
@@ -67,6 +66,9 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Genesis, error) {
 	}
 
 	// Add validator keys to NetworkValidatorMap when not there
+	if g.opts.NetworkValidatorMap == nil {
+		panic("NetworkValidatorMap is not present")
+	}
 	if _, ok := g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID]; !ok {
 		g.opts.NetworkValidatorMap[g.opts.Network.LocalSubnetID] = g.opts.Validators
 	}
@@ -83,6 +85,172 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Genesis, error) {
 	g.block.Batch = g.db.Begin(true)
 
 	return g, nil
+}
+
+func (g *genesis) Execute() error {
+	err := g.genesisExec.Genesis(g.block, func(st *chain.StateManager) error {
+		g.adiUrl = g.opts.Network.NodeUrl()
+		g.authorityUrl = g.adiUrl.JoinPath(protocol.ValidatorBook)
+
+		g.createADI()
+		g.createValidatorBook()
+
+		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
+		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
+		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
+
+		g.createMainLedger(oraclePrice)
+		g.createSyntheticLedger()
+		g.createAnchorPool()
+
+		err := g.createVoteScratchChain()
+		if err != nil {
+			return err
+		}
+
+		g.createEvidenceChain()
+
+		err = g.createGlobals()
+		if err != nil {
+			return err
+		}
+
+		switch g.opts.Network.Type {
+		case config.Directory:
+			err = g.initDN(oraclePrice)
+			if err != nil {
+				return err
+			}
+			err = g.generateNetworkDefinition()
+			if err != nil {
+				return err
+			}
+		case config.BlockValidator:
+			err = g.initBVN()
+			if err != nil {
+				return err
+			}
+		}
+
+		err = st.Create(g.records...)
+		if err != nil {
+			return fmt.Errorf("failed to create records: %w", err)
+		}
+
+		for _, wd := range g.dataRecords {
+			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
+		}
+		return st.AddDirectoryEntry(g.adiUrl, g.urls...)
+	})
+	if err != nil {
+		return err
+	}
+
+	err = g.block.Batch.Commit()
+	if err != nil {
+		return err
+	}
+
+	batch := g.db.Begin(false)
+	defer batch.Discard()
+	err = g.writeGenesisFile(batch.BptRoot())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (g *genesis) createADI() {
+	// Create the ADI
+	adi := new(protocol.ADI)
+	adi.Url = g.adiUrl
+	adi.AddAuthority(g.authorityUrl)
+	g.WriteRecords(adi)
+}
+
+func (g *genesis) createValidatorBook() {
+	uBook := g.authorityUrl
+	book := new(protocol.KeyBook)
+	book.Url = uBook
+	book.BookType = protocol.BookTypeValidator
+	book.AddAuthority(uBook)
+	book.PageCount = 1
+
+	page := createOperatorPage(uBook, 0, g.opts.Validators, true)
+	g.WriteRecords(book, page)
+}
+
+func (g *genesis) createMainLedger(oraclePrice uint64) {
+	// Create the main ledger
+	ledger := new(protocol.InternalLedger)
+	ledger.Url = g.adiUrl.JoinPath(protocol.Ledger)
+	ledger.ActiveOracle = oraclePrice
+	ledger.PendingOracle = oraclePrice
+	ledger.Index = protocol.GenesisBlock
+	g.WriteRecords(ledger)
+}
+
+func (g *genesis) createSyntheticLedger() {
+	// Create the synth ledger
+	synthLedger := new(protocol.SyntheticLedger)
+	synthLedger.Url = g.adiUrl.JoinPath(protocol.Synthetic)
+	g.WriteRecords(synthLedger)
+}
+
+func (g *genesis) createAnchorPool() {
+	// Create the anchor pool
+	anchors := new(protocol.Anchor)
+	anchors.Url = g.adiUrl.JoinPath(protocol.AnchorPool)
+	anchors.AddAuthority(g.authorityUrl)
+	g.WriteRecords(anchors)
+
+}
+
+func (g *genesis) createVoteScratchChain() error {
+	//create a vote scratch chain
+	wd := new(protocol.WriteData)
+	lci := types.LastCommitInfo{}
+	lciDta, err := json.Marshal(&lci)
+	if err != nil {
+		return err
+	}
+	wd.Entry.Data = append(wd.Entry.Data, lciDta)
+
+	da := new(protocol.DataAccount)
+	da.Scratch = true
+	da.Url = g.adiUrl.JoinPath(protocol.Votes)
+	da.AddAuthority(g.authorityUrl)
+	g.writeDataRecord(da, da.Url, DataRecord{da, &wd.Entry})
+	return nil
+}
+
+func (g *genesis) createEvidenceChain() {
+	//create an evidence scratch chain
+	da := new(protocol.DataAccount)
+	da.Scratch = true
+	da.Url = g.adiUrl.JoinPath(protocol.Evidence)
+	da.AddAuthority(g.authorityUrl)
+	g.records = append(g.records, da)
+	g.urls = append(g.urls, da.Url)
+}
+
+func (g *genesis) createGlobals() error {
+	//create a new Globals account
+	global := new(protocol.DataAccount)
+	global.Url = g.adiUrl.JoinPath(protocol.Globals)
+	wg := new(protocol.WriteData)
+	threshold := new(protocol.NetworkGlobals)
+	threshold.ValidatorThreshold.Numerator = 2
+	threshold.ValidatorThreshold.Denominator = 3
+	dat, err := threshold.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	wg.Entry.Data = append(wg.Entry.Data, dat)
+	global.AddAuthority(g.authorityUrl)
+	g.writeDataRecord(global, global.Url, DataRecord{global, &wg.Entry})
+	return nil
 }
 
 func (g *genesis) initDN(oraclePrice uint64) error {
@@ -157,31 +325,6 @@ func (g *genesis) initBVN() error {
 		}
 	}
 	return nil
-}
-
-func (g *genesis) WriteRecords(record ...protocol.Account) {
-	g.records = append(g.records, record...)
-	for _, rec := range record {
-		g.urls = append(g.urls, rec.GetUrl())
-	}
-}
-
-func (g *genesis) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
-	g.records = append(g.records, account)
-	g.urls = append(g.urls, url)
-	g.dataRecords = append(g.dataRecords, dataRecord)
-}
-
-func (g *genesis) createValidatorBook() {
-	uBook := g.authorityUrl
-	book := new(protocol.KeyBook)
-	book.Url = uBook
-	book.BookType = protocol.BookTypeValidator
-	book.AddAuthority(uBook)
-	book.PageCount = 1
-
-	page := createOperatorPage(uBook, 0, g.opts.Validators, true)
-	g.WriteRecords(book, page)
 }
 
 func (g *genesis) createDNOperatorBook() {
@@ -267,71 +410,17 @@ func (g *genesis) generateNetworkDefinition() error {
 	return nil
 }
 
-func (g *genesis) Execute() error {
-	err := g.genesisExec.Genesis(g.block, func(st *chain.StateManager) error {
-		g.adiUrl = g.opts.Network.NodeUrl()
-		g.authorityUrl = g.adiUrl.JoinPath(protocol.ValidatorBook)
-
-		g.createADI()
-		g.createValidatorBook()
-
-		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
-		// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
-		oraclePrice := uint64(protocol.InitialAcmeOracleValue)
-
-		g.createMainLedger(oraclePrice)
-		g.createSyntheticLedger()
-		g.createAnchorPool()
-
-		err := g.createVoteScratchChain()
-		if err != nil {
-			return err
-		}
-
-		g.createEvidenceChain()
-
-		err = g.createGlobals()
-		if err != nil {
-			return err
-		}
-
-		switch g.opts.Network.Type {
-		case config.Directory:
-			err = g.initDN(oraclePrice)
-			if err != nil {
-				return err
-			}
-			g.generateNetworkDefinition()
-		case config.BlockValidator:
-			err = g.initBVN()
-			if err != nil {
-				return err
-			}
-		}
-
-		err = st.Create(g.records...)
-		if err != nil {
-			return fmt.Errorf("failed to create records: %w", err)
-		}
-
-		for _, wd := range g.dataRecords {
-			st.UpdateData(wd.Account, wd.Entry.Hash(), wd.Entry)
-		}
-		return st.AddDirectoryEntry(g.adiUrl, g.urls...)
-	})
-	if err != nil {
-		return err
+func (g *genesis) WriteRecords(record ...protocol.Account) {
+	g.records = append(g.records, record...)
+	for _, rec := range record {
+		g.urls = append(g.urls, rec.GetUrl())
 	}
+}
 
-	err = g.block.Batch.Commit()
-	if err != nil {
-		return err
-	}
-
-	batch := g.db.Begin(false)
-	defer batch.Discard()
-	g.writeGenesisFile(batch.BptRoot())
-	return nil
+func (g *genesis) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
+	g.records = append(g.records, account)
+	g.urls = append(g.urls, url)
+	g.dataRecords = append(g.dataRecords, dataRecord)
 }
 
 func (g *genesis) writeGenesisFile(appHash []byte) error {
@@ -386,84 +475,4 @@ func (g *genesis) buildNetworkDefinition() *protocol.NetworkDefinition {
 		netDef.Subnets = append(netDef.Subnets, subnetDef)
 	}
 	return netDef
-}
-
-func (g *genesis) createGlobals() error {
-	//create a new Globals account
-	global := new(protocol.DataAccount)
-	global.Url = g.adiUrl.JoinPath(protocol.Globals)
-	wg := new(protocol.WriteData)
-	threshold := new(protocol.NetworkGlobals)
-	threshold.ValidatorThreshold.Numerator = 2
-	threshold.ValidatorThreshold.Denominator = 3
-	dat, err := threshold.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	wg.Entry.Data = append(wg.Entry.Data, dat)
-	global.AddAuthority(g.authorityUrl)
-	g.writeDataRecord(global, global.Url, DataRecord{global, &wg.Entry})
-	return nil
-}
-
-func (g *genesis) createEvidenceChain() {
-	//create an evidence scratch chain
-	da := new(protocol.DataAccount)
-	da.Scratch = true
-	da.Url = g.adiUrl.JoinPath(protocol.Evidence)
-	da.AddAuthority(g.authorityUrl)
-	g.records = append(g.records, da)
-	g.urls = append(g.urls, da.Url)
-}
-
-func (g *genesis) createVoteScratchChain() error {
-	//create a vote scratch chain
-	wd := new(protocol.WriteData)
-	lci := types.LastCommitInfo{}
-	lciDta, err := json.Marshal(&lci)
-	if err != nil {
-		return err
-	}
-	wd.Entry.Data = append(wd.Entry.Data, lciDta)
-
-	da := new(protocol.DataAccount)
-	da.Scratch = true
-	da.Url = g.adiUrl.JoinPath(protocol.Votes)
-	da.AddAuthority(g.authorityUrl)
-	g.writeDataRecord(da, da.Url, DataRecord{da, &wd.Entry})
-	return nil
-}
-
-func (g *genesis) createAnchorPool() {
-	// Create the anchor pool
-	anchors := new(protocol.Anchor)
-	anchors.Url = g.adiUrl.JoinPath(protocol.AnchorPool)
-	anchors.AddAuthority(g.authorityUrl)
-	g.WriteRecords(anchors)
-
-}
-
-func (g *genesis) createSyntheticLedger() {
-	// Create the synth ledger
-	synthLedger := new(protocol.SyntheticLedger)
-	synthLedger.Url = g.adiUrl.JoinPath(protocol.Synthetic)
-	g.WriteRecords(synthLedger)
-}
-
-func (g *genesis) createMainLedger(oraclePrice uint64) {
-	// Create the main ledger
-	ledger := new(protocol.InternalLedger)
-	ledger.Url = g.adiUrl.JoinPath(protocol.Ledger)
-	ledger.ActiveOracle = oraclePrice
-	ledger.PendingOracle = oraclePrice
-	ledger.Index = protocol.GenesisBlock
-	g.WriteRecords(ledger)
-}
-
-func (g *genesis) createADI() {
-	// Create the ADI
-	adi := new(protocol.ADI)
-	adi.Url = g.adiUrl
-	adi.AddAuthority(g.authorityUrl)
-	g.WriteRecords(adi)
 }

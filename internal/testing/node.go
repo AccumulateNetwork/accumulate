@@ -2,7 +2,6 @@ package testing
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"io"
 	"path/filepath"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -180,15 +180,19 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 	}
 
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, genesis := range genList {
+			genesis.Discard()
+		}
+	}()
 	for _, genesis := range genList {
-		func() {
-			defer genesis.Discard()
-			err := genesis.Execute()
-			if err != nil {
-				panic(fmt.Errorf("could not execute genesis: %v", err))
-			}
-		}()
+		err := genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
 	}
+
 	return getSubnetNames(subnets), allDaemons
 }
 

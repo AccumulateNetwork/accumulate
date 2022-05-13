@@ -61,7 +61,7 @@ type txStatus struct {
 	Done          bool
 }
 
-func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, pubKey crypto.PubKey, logger log.Logger, nextHeight func() int64, onError func(err error), isEvil bool) *FakeTendermint {
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, pubKey crypto.PubKey, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration, isEvil bool) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
@@ -84,6 +84,8 @@ func NewFakeTendermint(app <-chan abci.Application, db *database.Database, netwo
 		defer c.appWg.Done()
 		c.app = <-app
 	}()
+
+	go c.execute(interval)
 	return c
 }
 

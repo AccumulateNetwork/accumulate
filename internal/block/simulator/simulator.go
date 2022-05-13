@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -138,9 +139,12 @@ func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{
 func (s *Simulator) InitFromGenesis() {
 	s.Helper()
 
+	netValMap := make(genesis.NetworkValidatorMap)
+	var genList []genesis.Genesis
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
-		InitFromGenesis(s, x.Database, x.Executor)
+		genesis := InitFromGenesis(s, x.Database, x.Executor, netValMap)
+		genList = append(genList, genesis)
 	}
 }
 

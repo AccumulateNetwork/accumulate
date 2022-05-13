@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"io"
 	"io/fs"
 	"net"
@@ -28,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
@@ -596,14 +596,17 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 		}
 	}
 
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, genesis := range genList {
+			genesis.Discard()
+		}
+	}()
 	for _, genesis := range genList {
-		func() {
-			defer genesis.Discard()
-			err := genesis.Execute()
-			if err != nil {
-				panic(fmt.Errorf("could not execute genesis: %v", err))
-			}
-		}()
+		err := genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
 	}
 }
 

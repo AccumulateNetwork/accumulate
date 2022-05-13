@@ -1831,16 +1831,19 @@ func TestNetworkDefinition(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	dn := nodes[subnets[0]][0]
 
-	// Without the sleep, this test fails on Windows and macOS
-	time.Sleep(3 * time.Second)
+	batch := dn.db.Begin(true)
+	defer batch.Discard()
+	networkData, err := batch.Account(protocol.DnUrl().JoinPath(protocol.Network)).Data()
+	require.NoError(t, err)
+	_, entry, err := networkData.GetLatest()
+	require.NoError(t, err)
 
-	// Test getting the data by URL
-	rde := new(query.ResponseDataEntry)
-	dn.QueryAccountAs(protocol.DnUrl().JoinPath(protocol.Network).String(), rde)
+	networkDefs := new(protocol.NetworkDefinition)
+	err = json.Unmarshal(entry.Data[0], &networkDefs)
+	require.NoError(t, err)
 
-	fmt.Println()
-	/*	if !rde.Entry.Equal(&wd.Entry) {
-			t.Fatalf("data query does not match what was entered")
-		}
-	*/
+	require.NotEmpty(t, networkDefs.Subnets)
+	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes[0])
 }
