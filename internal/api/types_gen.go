@@ -21,7 +21,7 @@ type AccountRecord struct {
 	fieldsSet []bool
 	Account   protocol.Account `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Chains    []*ChainState    `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
-	Receipt   *Receipt         `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Proof     *Receipt         `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData []byte
 }
 
@@ -134,8 +134,8 @@ func (v *AccountRecord) Copy() *AccountRecord {
 			u.Chains[i] = (v).Copy()
 		}
 	}
-	if v.Receipt != nil {
-		u.Receipt = (v.Receipt).Copy()
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
 	}
 
 	return u
@@ -298,11 +298,11 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 		}
 	}
 	switch {
-	case v.Receipt == u.Receipt:
+	case v.Proof == u.Proof:
 		// equal
-	case v.Receipt == nil || u.Receipt == nil:
+	case v.Proof == nil || u.Proof == nil:
 		return false
-	case !((v.Receipt).Equal(u.Receipt)):
+	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
 
@@ -474,7 +474,7 @@ var fieldNames_AccountRecord = []string{
 	1: "Type",
 	2: "Account",
 	3: "Chains",
-	4: "Receipt",
+	4: "Proof",
 }
 
 func (v *AccountRecord) MarshalBinary() ([]byte, error) {
@@ -490,8 +490,8 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(3, v)
 		}
 	}
-	if !(v.Receipt == nil) {
-		writer.WriteValue(4, v.Receipt)
+	if !(v.Proof == nil) {
+		writer.WriteValue(4, v.Proof)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountRecord)
@@ -519,9 +519,9 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field Chains is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Receipt is missing")
-	} else if v.Receipt == nil {
-		errs = append(errs, "field Receipt is not set")
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
 	}
 
 	switch len(errs) {
@@ -1107,7 +1107,7 @@ func (v *AccountRecord) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
-		v.Receipt = x
+		v.Proof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
@@ -1408,12 +1408,12 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 		Type    RecordType                                   `json:"type"`
 		Account encoding.JsonUnmarshalWith[protocol.Account] `json:"account,omitempty"`
 		Chains  encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
-		Receipt *Receipt                                     `json:"receipt,omitempty"`
+		Proof   *Receipt                                     `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
-	u.Receipt = v.Receipt
+	u.Proof = v.Proof
 	return json.Marshal(&u)
 }
 
@@ -1473,12 +1473,12 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 		Type    RecordType                                   `json:"type"`
 		Account encoding.JsonUnmarshalWith[protocol.Account] `json:"account,omitempty"`
 		Chains  encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
-		Receipt *Receipt                                     `json:"receipt,omitempty"`
+		Proof   *Receipt                                     `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Account, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
-	u.Receipt = v.Receipt
+	u.Proof = v.Proof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1488,7 +1488,7 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Account = u.Account.Value
 
 	v.Chains = u.Chains
-	v.Receipt = u.Receipt
+	v.Proof = u.Proof
 	return nil
 }
 

@@ -32,11 +32,11 @@ func (r *Receipt) Convert() *managed.Receipt {
 // Note that both this receipt and the root receipt are expected to be good.
 // Returns nil if the receipts cannot be combined.
 func (r *Receipt) Combine(s *Receipt) *Receipt {
-	if !bytes.Equal(r.Result, s.Start) {
+	if !bytes.Equal(r.Anchor, s.Start) {
 		return nil
 	}
 	nr := r.Copy()                // Make a copy of the first Receipt
-	nr.Result = s.Result          // The MDRoot will be the one from the appended receipt
+	nr.Anchor = s.Anchor          // The MDRoot will be the one from the appended receipt
 	for _, n := range s.Entries { // Make a copy and append the Entries of the appended receipt
 		nr.Entries = append(nr.Entries, *n.Copy())
 	}
@@ -46,7 +46,7 @@ func (r *Receipt) Combine(s *Receipt) *Receipt {
 func ReceiptFromManaged(src *managed.Receipt) *Receipt {
 	r := new(Receipt)
 	r.Start = src.Element
-	r.Result = src.MDRoot
+	r.Anchor = src.MDRoot
 	r.Entries = make([]ReceiptEntry, len(src.Nodes))
 	for i, n := range src.Nodes {
 		r.Entries[i] = ReceiptEntry{Right: n.Right, Hash: n.Hash}
