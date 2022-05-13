@@ -605,7 +605,7 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 		return nil, err
 	}
 
-	localReceipt := resp.Receipt.Receipt
+	localReceipt := resp.Receipt.Proof
 	proof.State, err = getAccount(accountToProve.String())
 	if err != nil {
 		return nil, err
@@ -623,14 +623,14 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 		case <-ticker:
 			// Get a proof of the BVN anchor
 			req = new(api.GeneralQuery)
-			req.Url = url2.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
+			req.Url = url2.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
 			resp = new(api.ChainQueryResponse)
 			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
 				return nil, err
 			}
-			dirReceipt := resp.Receipt.Receipt
-			if dirReceipt.Result != nil {
+			dirReceipt := resp.Receipt.Proof
+			if dirReceipt.Anchor != nil {
 				return proof, nil
 			}
 			proof.Proof = localReceipt.Combine(&dirReceipt)

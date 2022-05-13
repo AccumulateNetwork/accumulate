@@ -501,7 +501,7 @@ type Rational struct {
 type Receipt struct {
 	fieldsSet []bool
 	Start     []byte         `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Result    []byte         `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	Anchor    []byte         `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	Entries   []ReceiptEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
@@ -516,8 +516,8 @@ type ReceiptEntry struct {
 type ReceiptSignature struct {
 	fieldsSet []bool
 	// SourceNetwork is the network that produced the transaction.
-	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
-	Receipt
+	SourceNetwork   *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
+	Proof           Receipt  `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	extraData       []byte
 }
@@ -1838,7 +1838,7 @@ func (v *Receipt) Copy() *Receipt {
 	u := new(Receipt)
 
 	u.Start = encoding.BytesCopy(v.Start)
-	u.Result = encoding.BytesCopy(v.Result)
+	u.Anchor = encoding.BytesCopy(v.Anchor)
 	u.Entries = make([]ReceiptEntry, len(v.Entries))
 	for i, v := range v.Entries {
 		u.Entries[i] = *(&v).Copy()
@@ -1866,7 +1866,7 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 	if v.SourceNetwork != nil {
 		u.SourceNetwork = (v.SourceNetwork).Copy()
 	}
-	u.Receipt = *v.Receipt.Copy()
+	u.Proof = *(&v.Proof).Copy()
 	u.TransactionHash = v.TransactionHash
 
 	return u
@@ -3524,7 +3524,7 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	if !(bytes.Equal(v.Start, u.Start)) {
 		return false
 	}
-	if !(bytes.Equal(v.Result, u.Result)) {
+	if !(bytes.Equal(v.Anchor, u.Anchor)) {
 		return false
 	}
 	if len(v.Entries) != len(u.Entries) {
@@ -3559,7 +3559,7 @@ func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 	case !((v.SourceNetwork).Equal(u.SourceNetwork)):
 		return false
 	}
-	if !v.Receipt.Equal(&u.Receipt) {
+	if !((&v.Proof).Equal(&u.Proof)) {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
@@ -7408,7 +7408,7 @@ func (v *Rational) IsValid() error {
 
 var fieldNames_Receipt = []string{
 	1: "Start",
-	2: "Result",
+	2: "Anchor",
 	3: "Entries",
 }
 
@@ -7419,8 +7419,8 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.Start) == 0) {
 		writer.WriteBytes(1, v.Start)
 	}
-	if !(len(v.Result) == 0) {
-		writer.WriteBytes(2, v.Result)
+	if !(len(v.Anchor) == 0) {
+		writer.WriteBytes(2, v.Anchor)
 	}
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
@@ -7445,9 +7445,9 @@ func (v *Receipt) IsValid() error {
 		errs = append(errs, "field Start is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Result is missing")
-	} else if len(v.Result) == 0 {
-		errs = append(errs, "field Result is not set")
+		errs = append(errs, "field Anchor is missing")
+	} else if len(v.Anchor) == 0 {
+		errs = append(errs, "field Anchor is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entries is missing")
@@ -7516,7 +7516,7 @@ func (v *ReceiptEntry) IsValid() error {
 var fieldNames_ReceiptSignature = []string{
 	1: "Type",
 	2: "SourceNetwork",
-	3: "Receipt",
+	3: "Proof",
 	4: "TransactionHash",
 }
 
@@ -7528,7 +7528,9 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(2, v.SourceNetwork)
 	}
-	writer.WriteValue(3, &v.Receipt)
+	if !((v.Proof).Equal(new(Receipt))) {
+		writer.WriteValue(3, &v.Proof)
+	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.TransactionHash)
 	}
@@ -7552,8 +7554,10 @@ func (v *ReceiptSignature) IsValid() error {
 	} else if v.SourceNetwork == nil {
 		errs = append(errs, "field SourceNetwork is not set")
 	}
-	if err := v.Receipt.IsValid(); err != nil {
-		errs = append(errs, err.Error())
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Proof is missing")
+	} else if (v.Proof).Equal(new(Receipt)) {
+		errs = append(errs, "field Proof is not set")
 	}
 
 	switch len(errs) {
@@ -11481,7 +11485,7 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Start = x
 	}
 	if x, ok := reader.ReadBytes(2); ok {
-		v.Result = x
+		v.Anchor = x
 	}
 	for {
 		if x := new(ReceiptEntry); reader.ReadValue(3, x.UnmarshalBinary) {
@@ -11540,7 +11544,9 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.SourceNetwork = x
 	}
-	reader.ReadValue(3, v.Receipt.UnmarshalBinary)
+	if x := new(Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+		v.Proof = *x
+	}
 	if x, ok := reader.ReadHash(4); ok {
 		v.TransactionHash = *x
 	}
@@ -13556,11 +13562,11 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start   *string                         `json:"start,omitempty"`
-		Result  *string                         `json:"result,omitempty"`
+		Anchor  *string                         `json:"anchor,omitempty"`
 		Entries encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Start)
-	u.Result = encoding.BytesToJSON(v.Result)
+	u.Anchor = encoding.BytesToJSON(v.Anchor)
 	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
@@ -13577,18 +13583,14 @@ func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            SignatureType                   `json:"type"`
-		SourceNetwork   *url.URL                        `json:"sourceNetwork,omitempty"`
-		Start           *string                         `json:"start,omitempty"`
-		Result          *string                         `json:"result,omitempty"`
-		Entries         encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
-		TransactionHash string                          `json:"transactionHash,omitempty"`
+		Type            SignatureType `json:"type"`
+		SourceNetwork   *url.URL      `json:"sourceNetwork,omitempty"`
+		Proof           Receipt       `json:"proof,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
-	u.Start = encoding.BytesToJSON(v.Receipt.Start)
-	u.Result = encoding.BytesToJSON(v.Receipt.Result)
-	u.Entries = v.Receipt.Entries
+	u.Proof = v.Proof
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	return json.Marshal(&u)
 }
@@ -15534,11 +15536,11 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Start   *string                         `json:"start,omitempty"`
-		Result  *string                         `json:"result,omitempty"`
+		Anchor  *string                         `json:"anchor,omitempty"`
 		Entries encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Start)
-	u.Result = encoding.BytesToJSON(v.Result)
+	u.Anchor = encoding.BytesToJSON(v.Anchor)
 	u.Entries = v.Entries
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -15548,10 +15550,10 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Start = x
 	}
-	if x, err := encoding.BytesFromJSON(u.Result); err != nil {
-		return fmt.Errorf("error decoding Result: %w", err)
+	if x, err := encoding.BytesFromJSON(u.Anchor); err != nil {
+		return fmt.Errorf("error decoding Anchor: %w", err)
 	} else {
-		v.Result = x
+		v.Anchor = x
 	}
 	v.Entries = u.Entries
 	return nil
@@ -15578,18 +15580,14 @@ func (v *ReceiptEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            SignatureType                   `json:"type"`
-		SourceNetwork   *url.URL                        `json:"sourceNetwork,omitempty"`
-		Start           *string                         `json:"start,omitempty"`
-		Result          *string                         `json:"result,omitempty"`
-		Entries         encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
-		TransactionHash string                          `json:"transactionHash,omitempty"`
+		Type            SignatureType `json:"type"`
+		SourceNetwork   *url.URL      `json:"sourceNetwork,omitempty"`
+		Proof           Receipt       `json:"proof,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
-	u.Start = encoding.BytesToJSON(v.Receipt.Start)
-	u.Result = encoding.BytesToJSON(v.Receipt.Result)
-	u.Entries = v.Receipt.Entries
+	u.Proof = v.Proof
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -15598,17 +15596,7 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.SourceNetwork = u.SourceNetwork
-	if x, err := encoding.BytesFromJSON(u.Start); err != nil {
-		return fmt.Errorf("error decoding Start: %w", err)
-	} else {
-		v.Receipt.Start = x
-	}
-	if x, err := encoding.BytesFromJSON(u.Result); err != nil {
-		return fmt.Errorf("error decoding Result: %w", err)
-	} else {
-		v.Receipt.Result = x
-	}
-	v.Receipt.Entries = u.Entries
+	v.Proof = u.Proof
 	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
