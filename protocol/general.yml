@@ -152,14 +152,6 @@ KeySpecParams:
       pointer: true
       optional: true
 
-AnchoredAccount:
-  fields:
-    - name: Account
-      type: Account
-      marshal-as: union
-    - name: Anchor
-      type: hash
-
 KeySpec:
   fields:
     - name: PublicKeyHash
