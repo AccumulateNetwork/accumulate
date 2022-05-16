@@ -113,8 +113,8 @@ func (t *Types) DecodeFromFile(file string, dec Decoder) error {
 		typ.File = file
 		*t = append(*t, typ)
 
-		if typ.Union.Type != "" && typ.Union.Value == "" {
-			typ.Union.Value = strings.TrimSuffix(name, TitleCase(typ.Union.Type))
+		if typ.Union.Name != "" && typ.Union.Value == "" {
+			typ.Union.Value = strings.TrimSuffix(name, TitleCase(typ.Union.Name))
 		}
 	}
 	return nil
@@ -142,7 +142,9 @@ type Type struct {
 
 // Union specifies that a type is part of a tagged union.
 type Union struct {
-	// Type is the name of the union type.
+	// Name is the name of the union type.
+	Name string
+	// Type is the name of the tag type.
 	Type string
 	// Value is the name of the corresponding enumeration value.
 	Value string
