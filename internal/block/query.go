@@ -953,7 +953,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
-	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchExact, indexing.SearchIndexChainByBlock(req.Start))
+	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 	}
@@ -963,12 +963,13 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
+resultLoop:
 	for resultCnt < req.Limit {
 		err = idxChain.EntryAs(int64(entryIdx), curEntry)
 		switch {
 		case err == nil:
 		case errors.Is(err, storage.ErrNotFound):
-			break
+			break resultLoop
 		default:
 			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 		}
