@@ -15,7 +15,6 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -74,9 +73,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		AddValidator{},
 		RemoveValidator{},
 		UpdateValidatorKey{},
-
-		// System
-		MirrorSystemRecords{},
 	}
 
 	switch opts.Network.Type {
@@ -198,21 +194,6 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 		return err
 	}
 
-	mirror, err := m.buildMirror(block.Batch)
-	if err != nil {
-		return err
-	}
-
-	switch m.Network.Type {
-	case config.Directory:
-		for _, bvn := range m.Network.GetBvnNames() {
-			st.Submit(protocol.SubnetUrl(bvn), mirror)
-		}
-
-	case config.BlockValidator:
-		st.Submit(protocol.DnUrl(), mirror)
-	}
-
 	block.State.MergeTransaction(state)
 
 	err = m.ProduceSynthetic(block.Batch, txn, state.ProducedTxns)
@@ -292,52 +273,4 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Network)
-}
-
-func (x *Executor) buildMirror(batch *database.Batch) (*protocol.MirrorSystemRecords, error) {
-	mirror := new(protocol.MirrorSystemRecords)
-
-	nodeUrl := x.Network.NodeUrl()
-	rec, err := mirrorRecord(batch, nodeUrl)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load %s: %w", nodeUrl, err)
-	}
-	mirror.Objects = append(mirror.Objects, rec)
-
-	md, err := loadDirectoryMetadata(batch, nodeUrl)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load %s directory: %w", nodeUrl, err)
-	}
-
-	for i := uint64(0); i < md.Count; i++ {
-		s, err := loadDirectoryEntry(batch, nodeUrl, i)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load %s directory entry %d: %w", nodeUrl, i, err)
-		}
-
-		u, err := url.Parse(s)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "invalid %s directory entry %d: %w", nodeUrl, i, err)
-		}
-
-		rec, err := mirrorRecord(batch, u)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load %s: %w", u, err)
-		}
-
-		// Only mirror keys
-		switch rec.Account.(type) {
-		case *protocol.ADI,
-			*protocol.KeyBook,
-			*protocol.KeyPage:
-			// Keep
-		default:
-			// Discard
-			continue
-		}
-
-		mirror.Objects = append(mirror.Objects, rec)
-	}
-
-	return mirror, nil
 }
