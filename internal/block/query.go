@@ -963,6 +963,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
+
 resultLoop:
 	for resultCnt < req.Limit {
 		err = idxChain.EntryAs(int64(entryIdx), curEntry)
