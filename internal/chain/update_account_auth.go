@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -17,7 +16,7 @@ func (UpdateAccountAuth) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateAccountAuth
 }
 
-func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateAccountAuth), transaction.Body)
@@ -41,7 +40,7 @@ func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *databa
 			continue
 		}
 
-		return false, delegate.SignerIsAuthorized(batch, transaction, location, signer, true)
+		return false, delegate.SignerIsAuthorized(batch, transaction, signer, false)
 	}
 
 	// Fallback to general authorization

@@ -177,7 +177,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceAdi := url.MustParse("alice")
 
-	firstEntry := DataEntry{}
+	firstEntry := AccumulateDataEntry{}
 	firstEntry.Data = append(firstEntry.Data, []byte{})
 	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
 	firstEntry.Data = append(firstEntry.Data, []byte("Tutorial"))
@@ -199,7 +199,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		// Write data
 		env := acctesting.NewTransaction().
 			WithPrincipal(liteDataAddress).
-			WithBody(&WriteData{Entry: firstEntry}).
+			WithBody(&WriteData{Entry: &firstEntry}).
 			WithSigner(aliceUrl, 1).
 			WithTimestampVar(&timestamp).
 			Initiate(SignatureTypeED25519, alice).
@@ -227,7 +227,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		// Write data
 		env := acctesting.NewTransaction().
 			WithPrincipal(liteDataAddress).
-			WithBody(&WriteData{Entry: firstEntry}).
+			WithBody(&WriteData{Entry: &firstEntry}).
 			WithSigner(aliceAdi.JoinPath("book0", "1"), 1).
 			WithTimestampVar(&timestamp).
 			Initiate(SignatureTypeED25519, alice).
@@ -242,7 +242,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 	})
 }
 
-func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry *DataEntry, status *TransactionStatus) {
+func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataEntry, status *TransactionStatus) {
 	chainId := ComputeLiteDataAccountId(firstEntry)
 	liteDataAddress, err := LiteDataAddress(chainId)
 	require.NoError(t, err)
@@ -254,7 +254,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry *Data
 	require.Equal(t, liteDataAddress.String(), account.Url.String())
 	require.Equal(t, append(partialChainId, account.Tail...), chainId)
 
-	firstEntryHash, err := ComputeLiteEntryHashFromEntry(chainId, firstEntry)
+	firstEntryHash, err := ComputeFactomEntryHashForAccount(chainId, firstEntry.GetData())
 	require.NoError(t, err)
 
 	// Verify the entry hash in the transaction result
@@ -267,7 +267,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry *Data
 	require.NoError(t, err)
 	entry, err := dataChain.Entry(0)
 	require.NoError(t, err)
-	hashFromEntry, err := ComputeLiteEntryHashFromEntry(chainId, entry)
+	hashFromEntry, err := ComputeFactomEntryHashForAccount(chainId, entry.GetData())
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
@@ -276,7 +276,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry *Data
 	ent, err := dataChain.Entry(0)
 	require.NoError(t, err)
 	id := ComputeLiteDataAccountId(ent)
-	newh, err := ComputeLiteEntryHashFromEntry(id, ent)
+	newh, err := ComputeFactomEntryHashForAccount(id, ent.GetData())
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashes[0]), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")

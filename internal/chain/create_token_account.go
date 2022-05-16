@@ -20,13 +20,13 @@ func (CreateTokenAccount) Type() protocol.TransactionType {
 	return protocol.TransactionTypeCreateTokenAccount
 }
 
-func (CreateTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error) {
+func (CreateTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, location, signer)
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, checkAuthz)
 }
 
 func (CreateTokenAccount) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
@@ -144,13 +144,13 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "load anchor pool for directory anchors: %w", err)
 	}
-	_, err = chain.HeightOf(proof.Proof.Result)
+	_, err = chain.HeightOf(proof.Proof.Anchor)
 	if err != nil {
 		code := errors.StatusUnknown
 		if errors.Is(err, errors.StatusNotFound) {
 			code = errors.StatusBadRequest
 		}
-		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Proof.Result[:4], err)
+		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Proof.Anchor[:4], err)
 	}
 
 	return nil

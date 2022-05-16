@@ -3,7 +3,7 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"runtime"
 	"sort"
@@ -150,13 +150,13 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 		return "", DidError
 	}
 
-	errPrint, err := ioutil.ReadAll(e)
+	errPrint, err := io.ReadAll(e)
 	if err != nil {
 		return "", err
 	} else if len(errPrint) != 0 {
 		return "", fmt.Errorf("%s", string(errPrint))
 	}
-	ret, err := ioutil.ReadAll(b)
+	ret, err := io.ReadAll(b)
 	return string(ret), err
 }
 
