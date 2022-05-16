@@ -20,7 +20,8 @@ var blocksCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
 		var txFetchMode query.TxFetchMode
-		var filterAnBlks bool
+		var blockFilterMode query.BlockFilterMode
+
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
 			case "minor":
@@ -30,12 +31,12 @@ var blocksCmd = &cobra.Command{
 						printError(cmd, err)
 						return
 					}
-					filterAnBlks, err = parseFilterSynthAnchorOnlyBlocks(args)
+					blockFilterMode, err = parseBlockFilterMode(args)
 					if err != nil {
 						printError(cmd, err)
 						return
 					}
-					err = GetMinorBlocks(cmd, args[1], args[2], args[3], txFetchMode, filterAnBlks)
+					err = GetMinorBlocks(cmd, args[1], args[2], args[3], txFetchMode, blockFilterMode)
 					if err != nil {
 						printError(cmd, err)
 						return
@@ -67,15 +68,16 @@ func parseFetchMode(args []string) (query.TxFetchMode, error) {
 	return query.TxFetchModeExpand, nil
 }
 
-func parseFilterSynthAnchorOnlyBlocks(args []string) (bool, error) {
+func parseBlockFilterMode(args []string) (query.BlockFilterMode, error) {
 	if len(args) > 5 {
-		val, err := strconv.ParseBool(args[5])
-		if err != nil {
-			return false, err
+		blockFilterMode, ok := query.BlockFilterModeByName(args[5])
+		if ok {
+			return blockFilterMode, nil
+		} else {
+			return query.BlockFilterModeExcludeNone, fmt.Errorf("%s is not a block filter mode. Use excludenone|excludeempty", args[4])
 		}
-		return val, nil
 	}
-	return false, nil
+	return query.BlockFilterModeExcludeNone, nil
 }
 
 var (
@@ -90,14 +92,14 @@ func init() {
 }
 
 func PrintGetMinorBlocks() {
-	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [filter synth-anchors only blocks true|false (optional)] Get minor blocks")
+	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [block filter mode excludenone|excludeempty (optional)] Get minor blocks")
 }
 
 func PrintBlocks() {
 	PrintGetMinorBlocks()
 }
 
-func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode query.TxFetchMode, filterAnBlks bool) error {
+func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) error {
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return err
@@ -117,7 +119,7 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
 	params.TxFetchMode = txFetchMode
-	params.FilterSynthAnchorsOnlyBlocks = filterAnBlks
+	params.BlockFilterMode = blockFilterMode
 
 	// Temporary increase timeout, we may get a large result set which takes a while to construct
 	globalTimeout := Client.Timeout

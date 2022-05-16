@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// BlockFilterModeExcludeNone return all blocks including empty ones.
+const BlockFilterModeExcludeNone BlockFilterMode = 0
+
+// BlockFilterModeExcludeEmpty exclude empty blocks.
+const BlockFilterModeExcludeEmpty BlockFilterMode = 1
+
 // TxFetchModeExpand expand the full transactions in the result set.
 const TxFetchModeExpand TxFetchMode = 0
 
@@ -19,6 +25,66 @@ const TxFetchModeCountOnly TxFetchMode = 2
 
 // TxFetchModeOmit omit all transaction info from the result set.
 const TxFetchModeOmit TxFetchMode = 3
+
+// GetEnumValue returns the value of the Block Filter Mode
+func (v BlockFilterMode) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *BlockFilterMode) SetEnumValue(id uint64) bool {
+	u := BlockFilterMode(id)
+	switch u {
+	case BlockFilterModeExcludeNone, BlockFilterModeExcludeEmpty:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Block Filter Mode
+func (v BlockFilterMode) String() string {
+	switch v {
+	case BlockFilterModeExcludeNone:
+		return "excludeNone"
+	case BlockFilterModeExcludeEmpty:
+		return "excludeEmpty"
+	default:
+		return fmt.Sprintf("BlockFilterMode:%d", v)
+	}
+}
+
+// BlockFilterModeByName returns the named Block Filter Mode.
+func BlockFilterModeByName(name string) (BlockFilterMode, bool) {
+	switch strings.ToLower(name) {
+	case "excludenone":
+		return BlockFilterModeExcludeNone, true
+	case "excludeempty":
+		return BlockFilterModeExcludeEmpty, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Block Filter Mode to JSON as a string.
+func (v BlockFilterMode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Block Filter Mode from JSON as a string.
+func (v *BlockFilterMode) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = BlockFilterModeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Block Filter Mode %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Tx Fetch Mode
 func (v TxFetchMode) GetEnumValue() uint64 { return uint64(v) }

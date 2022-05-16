@@ -265,8 +265,9 @@ RequestMinorBlocks:
     - name: TxFetchMode
       type: TxFetchMode
       marshal-as: enum
-    - name: FilterSynthAnchorsOnlyBlocks
-      type: bool
+    - name: BlockFilterMode
+      type: BlockFilterMode
+      marshal-as: enum
 
 ResponseMinorBlocks:
   fields:

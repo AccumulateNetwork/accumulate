@@ -124,9 +124,9 @@ type MetricsResponse struct {
 type MinorBlocksQuery struct {
 	UrlQuery
 	QueryPagination
-	TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
-	FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
-	extraData                    []byte
+	TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
+	BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode"`
+	extraData       []byte
 }
 
 type MinorQueryResponse struct {
@@ -748,17 +748,17 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url                          *url.URL          `json:"url,omitempty"`
-		Start                        uint64            `json:"start,omitempty"`
-		Count                        uint64            `json:"count,omitempty"`
-		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
-		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+		Url             *url.URL              `json:"url,omitempty"`
+		Start           uint64                `json:"start,omitempty"`
+		Count           uint64                `json:"count,omitempty"`
+		TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty"`
+		BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
 	u.TxFetchMode = v.TxFetchMode
-	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	u.BlockFilterMode = v.BlockFilterMode
 	return json.Marshal(&u)
 }
 
@@ -1359,17 +1359,17 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url                          *url.URL          `json:"url,omitempty"`
-		Start                        uint64            `json:"start,omitempty"`
-		Count                        uint64            `json:"count,omitempty"`
-		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
-		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+		Url             *url.URL              `json:"url,omitempty"`
+		Start           uint64                `json:"start,omitempty"`
+		Count           uint64                `json:"count,omitempty"`
+		TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty"`
+		BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
 	u.TxFetchMode = v.TxFetchMode
-	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	u.BlockFilterMode = v.BlockFilterMode
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1377,7 +1377,7 @@ func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
 	v.TxFetchMode = u.TxFetchMode
-	v.FilterSynthAnchorsOnlyBlocks = u.FilterSynthAnchorsOnlyBlocks
+	v.BlockFilterMode = u.BlockFilterMode
 	return nil
 }
 

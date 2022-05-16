@@ -279,8 +279,8 @@ MinorBlocksQuery:
     - name: TxFetchMode
       type: query.TxFetchMode
       optional: true
-    - name: FilterSynthAnchorsOnlyBlocks
-      type: bool
+    - name: BlockFilterMode
+      type: query.BlockFilterMode
       optional: true
 
 QueryOptions:

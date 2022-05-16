@@ -9,3 +9,6 @@ func (*RequestKeyPageIndex) Type() types.QueryType { return types.QueryTypeKeyPa
 
 // TxFetchMode specifies how much detail of the transactions should be included in the result set
 type TxFetchMode uint64
+
+// BlockFilterMode specifies which blocks should be excluded
+type BlockFilterMode uint64

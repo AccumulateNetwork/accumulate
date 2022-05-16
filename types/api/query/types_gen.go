@@ -76,13 +76,13 @@ type RequestKeyPageIndex struct {
 }
 
 type RequestMinorBlocks struct {
-	fieldsSet                    []bool
-	Account                      *url.URL    `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Start                        uint64      `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Limit                        uint64      `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
-	TxFetchMode                  TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
-	FilterSynthAnchorsOnlyBlocks bool        `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks" validate:"required"`
-	extraData                    []byte
+	fieldsSet       []bool
+	Account         *url.URL        `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start           uint64          `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit           uint64          `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
+	BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode" validate:"required"`
+	extraData       []byte
 }
 
 type RequestTxHistory struct {
@@ -306,7 +306,7 @@ func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
 	u.Start = v.Start
 	u.Limit = v.Limit
 	u.TxFetchMode = v.TxFetchMode
-	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	u.BlockFilterMode = v.BlockFilterMode
 
 	return u
 }
@@ -692,7 +692,7 @@ func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
 	if !(v.TxFetchMode == u.TxFetchMode) {
 		return false
 	}
-	if !(v.FilterSynthAnchorsOnlyBlocks == u.FilterSynthAnchorsOnlyBlocks) {
+	if !(v.BlockFilterMode == u.BlockFilterMode) {
 		return false
 	}
 
@@ -1426,7 +1426,7 @@ var fieldNames_RequestMinorBlocks = []string{
 	2: "Start",
 	3: "Limit",
 	4: "TxFetchMode",
-	5: "FilterSynthAnchorsOnlyBlocks",
+	5: "BlockFilterMode",
 }
 
 func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
@@ -1445,8 +1445,8 @@ func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 	if !(v.TxFetchMode == 0) {
 		writer.WriteEnum(4, v.TxFetchMode)
 	}
-	if !(!v.FilterSynthAnchorsOnlyBlocks) {
-		writer.WriteBool(5, v.FilterSynthAnchorsOnlyBlocks)
+	if !(v.BlockFilterMode == 0) {
+		writer.WriteEnum(5, v.BlockFilterMode)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
@@ -1481,9 +1481,9 @@ func (v *RequestMinorBlocks) IsValid() error {
 		errs = append(errs, "field TxFetchMode is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field FilterSynthAnchorsOnlyBlocks is missing")
-	} else if !v.FilterSynthAnchorsOnlyBlocks {
-		errs = append(errs, "field FilterSynthAnchorsOnlyBlocks is not set")
+		errs = append(errs, "field BlockFilterMode is missing")
+	} else if v.BlockFilterMode == 0 {
+		errs = append(errs, "field BlockFilterMode is not set")
 	}
 
 	switch len(errs) {
@@ -2551,8 +2551,8 @@ func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(TxFetchMode); reader.ReadEnum(4, x) {
 		v.TxFetchMode = *x
 	}
-	if x, ok := reader.ReadBool(5); ok {
-		v.FilterSynthAnchorsOnlyBlocks = x
+	if x := new(BlockFilterMode); reader.ReadEnum(5, x) {
+		v.BlockFilterMode = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
