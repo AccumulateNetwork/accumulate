@@ -2,9 +2,12 @@ package factom
 
 import (
 	"context"
+	"encoding/hex"
 
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -38,4 +41,15 @@ func executeQueueToWriteData(chainId string, queue *Queue) {
 		data := queue.Pop().(*protocol.LiteDataEntry)
 		WriteDataToAccumulate("", data)
 	}
+}
+
+func getAccountFromPrivateString(hexString string) *url.URL {
+	var key cmd.Key
+	privKey, err := hex.DecodeString(hexString)
+	if err == nil && len(privKey) == 64 {
+		key.PrivateKey = privKey
+		key.PublicKey = privKey[32:]
+		key.Type = protocol.SignatureTypeED25519
+	}
+	return protocol.LiteAuthorityForKey(key.PublicKey, key.Type)
 }
