@@ -48,12 +48,3 @@ DirectoryAnchor:
       type: Receipt
       repeatable: true
       marshal-as: reference
-
-
-MirrorSystemRecords:
-  union: { type: transaction }
-  fields:
-    - name: Objects
-      repeatable: true
-      type: AnchoredAccount
-      marshal-as: reference
