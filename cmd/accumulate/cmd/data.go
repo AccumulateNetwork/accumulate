@@ -311,7 +311,9 @@ func WriteData(accountUrl string, args []string) (string, error) {
 func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataEntry {
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
-		entry.Data = append(entry.Data, []byte{})
+		if flagAccount.LiteData != "" {
+			entry.Data = append(entry.Data, []byte(flagAccount.LiteData))
+		}
 	}
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))

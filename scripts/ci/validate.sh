@@ -346,6 +346,15 @@ accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .statu
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
 
+section "Create lite data account with first entry"
+ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "Factom PRO" "Tutorial" --lite-data "first entry" | jq -r .accountUrl)
+accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
+accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
+accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
+accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
+success
+die
+
 section "Create ADI Data Account"
 wait-for cli-tx account create data --scratch keytest keytest-1-0 keytest/data
 accumulate --use-unencrypted-wallet account get keytest/data 1> /dev/null || die "Cannot find keytest/data"
