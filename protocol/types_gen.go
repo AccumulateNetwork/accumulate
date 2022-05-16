@@ -111,13 +111,6 @@ type AnchorMetadata struct {
 	extraData   []byte
 }
 
-type AnchoredAccount struct {
-	fieldsSet []bool
-	Account   Account  `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Anchor    [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	extraData []byte
-}
-
 type AuthorityEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -445,12 +438,6 @@ type MetricsRequest struct {
 
 type MetricsResponse struct {
 	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
-	extraData []byte
-}
-
-type MirrorSystemRecords struct {
-	fieldsSet []bool
-	Objects   []AnchoredAccount `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
 	extraData []byte
 }
 
@@ -918,8 +905,6 @@ func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
 
-func (*MirrorSystemRecords) Type() TransactionType { return TransactionTypeMirrorSystemRecords }
-
 func (*PartitionAnchor) Type() TransactionType { return TransactionTypePartitionAnchor }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
@@ -1163,19 +1148,6 @@ func (v *AnchorMetadata) Copy() *AnchorMetadata {
 }
 
 func (v *AnchorMetadata) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *AnchoredAccount) Copy() *AnchoredAccount {
-	u := new(AnchoredAccount)
-
-	if v.Account != nil {
-		u.Account = (v.Account).CopyAsInterface().(Account)
-	}
-	u.Anchor = v.Anchor
-
-	return u
-}
-
-func (v *AnchoredAccount) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AuthorityEntry) Copy() *AuthorityEntry {
 	u := new(AuthorityEntry)
@@ -1755,19 +1727,6 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 }
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *MirrorSystemRecords) Copy() *MirrorSystemRecords {
-	u := new(MirrorSystemRecords)
-
-	u.Objects = make([]AnchoredAccount, len(v.Objects))
-	for i, v := range v.Objects {
-		u.Objects[i] = *(&v).Copy()
-	}
-
-	return u
-}
-
-func (v *MirrorSystemRecords) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
@@ -2634,17 +2593,6 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 	return true
 }
 
-func (v *AnchoredAccount) Equal(u *AnchoredAccount) bool {
-	if !(EqualAccount(v.Account, u.Account)) {
-		return false
-	}
-	if !(v.Anchor == u.Anchor) {
-		return false
-	}
-
-	return true
-}
-
 func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 	switch {
 	case v.Url == u.Url:
@@ -3422,19 +3370,6 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	}
 	if !(v.Duration == u.Duration) {
 		return false
-	}
-
-	return true
-}
-
-func (v *MirrorSystemRecords) Equal(u *MirrorSystemRecords) bool {
-	if len(v.Objects) != len(u.Objects) {
-		return false
-	}
-	for i := range v.Objects {
-		if !((&v.Objects[i]).Equal(&u.Objects[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -4899,54 +4834,6 @@ func (v *AnchorMetadata) IsValid() error {
 		errs = append(errs, "field Entry is missing")
 	} else if len(v.Entry) == 0 {
 		errs = append(errs, "field Entry is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_AnchoredAccount = []string{
-	1: "Account",
-	2: "Anchor",
-}
-
-func (v *AnchoredAccount) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Account == nil) {
-		writer.WriteValue(1, v.Account)
-	}
-	if !(v.Anchor == ([32]byte{})) {
-		writer.WriteHash(2, &v.Anchor)
-	}
-
-	_, _, err := writer.Reset(fieldNames_AnchoredAccount)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *AnchoredAccount) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
-		errs = append(errs, "field Account is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Anchor is missing")
-	} else if v.Anchor == ([32]byte{}) {
-		errs = append(errs, "field Anchor is not set")
 	}
 
 	switch len(errs) {
@@ -7070,52 +6957,6 @@ func (v *MetricsRequest) IsValid() error {
 		errs = append(errs, "field Duration is missing")
 	} else if v.Duration == 0 {
 		errs = append(errs, "field Duration is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_MirrorSystemRecords = []string{
-	1: "Type",
-	2: "Objects",
-}
-
-func (v *MirrorSystemRecords) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.Objects) == 0) {
-		for _, v := range v.Objects {
-			writer.WriteValue(2, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_MirrorSystemRecords)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *MirrorSystemRecords) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Objects is missing")
-	} else if len(v.Objects) == 0 {
-		errs = append(errs, "field Objects is not set")
 	}
 
 	switch len(errs) {
@@ -10072,33 +9913,6 @@ func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *AnchoredAccount) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *AnchoredAccount) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, func(b []byte) error {
-		x, err := UnmarshalAccount(b)
-		if err == nil {
-			v.Account = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadHash(2); ok {
-		v.Anchor = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_AnchoredAccount)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *AuthorityEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11289,37 +11103,6 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_MetricsRequest)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *MirrorSystemRecords) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *MirrorSystemRecords) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	for {
-		if x := new(AnchoredAccount); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Objects = append(v.Objects, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_MirrorSystemRecords)
 	if err != nil {
 		return err
 	}
@@ -12965,16 +12748,6 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *AnchoredAccount) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Account encoding.JsonUnmarshalWith[Account] `json:"account,omitempty"`
-		Anchor  string                              `json:"anchor,omitempty"`
-	}{}
-	u.Account = encoding.JsonUnmarshalWith[Account]{Value: v.Account, Func: UnmarshalAccountJSON}
-	u.Anchor = encoding.ChainToJSON(v.Anchor)
-	return json.Marshal(&u)
-}
-
 func (v *BTCLegacySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -13490,16 +13263,6 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 		Value interface{} `json:"value,omitempty"`
 	}{}
 	u.Value = encoding.AnyToJSON(v.Value)
-	return json.Marshal(&u)
-}
-
-func (v *MirrorSystemRecords) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type    TransactionType                    `json:"type"`
-		Objects encoding.JsonList[AnchoredAccount] `json:"objects,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Objects = v.Objects
 	return json.Marshal(&u)
 }
 
@@ -14384,26 +14147,6 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	} else {
 		v.Entry = x
-	}
-	return nil
-}
-
-func (v *AnchoredAccount) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Account encoding.JsonUnmarshalWith[Account] `json:"account,omitempty"`
-		Anchor  string                              `json:"anchor,omitempty"`
-	}{}
-	u.Account = encoding.JsonUnmarshalWith[Account]{Value: v.Account, Func: UnmarshalAccountJSON}
-	u.Anchor = encoding.ChainToJSON(v.Anchor)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Account = u.Account.Value
-
-	if x, err := encoding.ChainFromJSON(u.Anchor); err != nil {
-		return fmt.Errorf("error decoding Anchor: %w", err)
-	} else {
-		v.Anchor = x
 	}
 	return nil
 }
@@ -15401,23 +15144,6 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
-	return nil
-}
-
-func (v *MirrorSystemRecords) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type    TransactionType                    `json:"type"`
-		Objects encoding.JsonList[AnchoredAccount] `json:"objects,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Objects = v.Objects
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.Objects = u.Objects
 	return nil
 }
 
