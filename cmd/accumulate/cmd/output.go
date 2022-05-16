@@ -88,12 +88,13 @@ func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) strin
 			out += fmt.Sprintf("  - Signatures            :\n")
 			out += fmt.Sprintf("    - Signer              : %s (%v)\n", page.Signer.Url, page.Signer.Type)
 			for _, sig := range page.Signatures {
-				if sig.Type().IsSystem() {
+				keysig, ok := sig.(protocol.KeySignature)
+				if !ok || sig.Type().IsSystem() {
 					out += fmt.Sprintf("      -                   : %v\n", sig.Type())
-				} else {
-					out += fmt.Sprintf("      -                   : %x (sig)\n", sig.GetSignature())
-					out += fmt.Sprintf("      -                   : %x (key hash)\n", sig.GetPublicKeyHash())
+					continue
 				}
+				out += fmt.Sprintf("      -                   : %x (sig)\n", keysig.GetSignature())
+				out += fmt.Sprintf("      -                   : %x (key hash)\n", keysig.GetPublicKeyHash())
 			}
 		}
 	}
@@ -146,7 +147,7 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
-		if !receipt.Receipt.Convert().Validate() {
+		if !receipt.Proof.Convert().Validate() {
 			//nolint:gosimple
 			out += fmt.Sprintf("  Invalid!!\n")
 		}
@@ -282,11 +283,21 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if err != nil {
 			amt = "unknown"
 		}
-
+		params := api2.UrlQuery{}
+		params.Url = ata.Url.RootIdentity()
+		qres := new(QueryResponse)
+		litIdentity := new(protocol.LiteIdentity)
+		qres.Data = litIdentity
+		err = queryAs("query", &params, &qres)
+		if err != nil {
+			return "", err
+		}
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
+		out += fmt.Sprintf("\tCreditBalance\t:\t%d\n", litIdentity.CreditBalance)
+		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(litIdentity.LastUsedOn*uint64(time.Microsecond))))
 
 		return out, nil
 	case protocol.AccountTypeLiteIdentity.String():

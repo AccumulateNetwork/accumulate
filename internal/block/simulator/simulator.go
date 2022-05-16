@@ -160,6 +160,10 @@ func (s *Simulator) InitFromSnapshot(filename func(string) string) {
 func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) {
 	s.Helper()
 
+	if statusChan != nil {
+		defer close(statusChan)
+	}
+
 	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
@@ -183,10 +187,6 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 	// Wait for all subnets to complete
 	err := errg.Wait()
 	require.NoError(tb{s}, err)
-
-	if statusChan != nil {
-		close(statusChan)
-	}
 }
 
 // ExecuteBlocks executes a number of blocks. This is useful for things like
@@ -235,16 +235,9 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	status, err := s.SubmitAndExecuteBlock(envelopes...)
 	require.NoError(tb{s}, err)
 
-	ids := map[[32]byte]bool{}
-	for _, env := range envelopes {
-		for _, d := range NormalizeEnvelope(s, env) {
-			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
-		}
-	}
-
 	var didFail bool
 	for _, status := range status {
-		if status.Code == 0 || !ids[status.For] {
+		if status.Code == 0 {
 			continue
 		}
 
@@ -257,8 +250,7 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	return envelopes
 }
 
-// SubmitAndExecuteBlock executes a block with the envelopes and fails the test if
-// any envelope fails.
+// SubmitAndExecuteBlock executes a block with the envelopes.
 func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
 	s.Helper()
 
@@ -267,12 +259,30 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	ch := make(chan *protocol.TransactionStatus)
-	go s.ExecuteBlock(ch)
+	ids := map[[32]byte]bool{}
+	for _, env := range envelopes {
+		for _, d := range NormalizeEnvelope(s, env) {
+			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
+		}
+	}
+
+	ch1 := make(chan *protocol.TransactionStatus)
+	ch2 := make(chan *protocol.TransactionStatus)
+	go func() {
+		s.ExecuteBlock(ch1)
+		s.ExecuteBlock(ch2)
+	}()
 
 	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
-	for s := range ch {
-		status = append(status, s)
+	for s := range ch1 {
+		if ids[s.For] {
+			status = append(status, s)
+		}
+	}
+	for s := range ch2 {
+		if ids[s.For] {
+			status = append(status, s)
+		}
 	}
 
 	return status, nil
@@ -345,7 +355,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 		// Wait for synthetic transactions to be delivered
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
 			return status.Delivered
-		}, id[:])
+		}, id[:]) //nolint:rangevarref
 		statuses = append(statuses, st...)
 		transactions = append(transactions, txn...)
 	}

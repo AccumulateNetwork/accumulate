@@ -32,24 +32,29 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	}
 
 	// Process signatures
+	shouldProcessTransaction := !delivery.Transaction.Body.Type().IsUser()
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
 		for _, signature := range delivery.Signatures {
+			if signature.RoutingLocation().LocalTo(delivery.Transaction.Header.Principal) {
+				shouldProcessTransaction = true
+			}
+
 			s, err := x.ProcessSignature(batch, delivery, signature)
+			if err, ok := err.(*errors.Error); ok {
+				status := new(protocol.TransactionStatus)
+				status.Code = protocol.ErrorCodeInvalidSignature.GetEnumValue()
+				status.Message = err.Message
+				status.Error = err
+				status.Result = new(protocol.EmptyResult)
+				return status, nil
+			}
 			if err != nil {
 				return nil, err
 			}
 			block.State.MergeSignature(s)
-
-			fwd, err := x.prepareToForward(delivery, s, signature)
-			if err != nil {
-				return nil, err
-			}
-			if fwd != nil {
-				delivery.Remote = append(delivery.Remote, fwd)
-			}
 		}
 
 		err = batch.Commit()
@@ -58,19 +63,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		}
 	}
 
-	// Process remote signatures
-	if len(delivery.Remote) > 0 {
-		err := x.ProcessRemoteSignatures(block, delivery)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(delivery.Remote) == len(delivery.Signatures) {
-		// All signatures are remote
-		status = &protocol.TransactionStatus{Remote: true}
-
-	} else {
+	if shouldProcessTransaction {
 		// Process the transaction
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
@@ -88,8 +81,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Type().IsInternal() && delivery.Transaction.Type() != protocol.TransactionTypePartitionAnchor &&
-			delivery.Transaction.Type() != protocol.TransactionTypeDirectoryAnchor {
+		if !delivery.Transaction.Type().IsSystem() {
 			kv := []interface{}{
 				"module", "block-executor",
 				"block", block.Index,
@@ -110,6 +102,14 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				x.Logger.Debug("Transaction succeeded", kv...)
 			}
 		}
+
+	} else {
+		status = &protocol.TransactionStatus{Remote: true}
+	}
+
+	err = x.ProcessRemoteSignatures(block, delivery)
+	if err != nil {
+		return nil, err
 	}
 
 	block.State.MergeTransaction(&delivery.State)

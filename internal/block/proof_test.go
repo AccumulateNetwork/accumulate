@@ -37,17 +37,15 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req := new(query.RequestByUrl)
 	req.Url = types.String(aliceUrl.String())
 	acctResp := sim.Query(aliceUrl, req, true).(*query.ResponseAccount)
-	localReceipt := acctResp.Receipt.Receipt
-
+	localReceipt := acctResp.Receipt.Proof
 	// Execute enough blocks to ensure the block is anchored
 	sim.ExecuteBlocks(10)
 
 	// Get a proof of the BVN anchor
 	req = new(query.RequestByUrl)
-	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Result))
+	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
-	dirReceipt := chainResp.Receipt.Receipt
-
+	dirReceipt := chainResp.Receipt.Proof
 	fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
 	require.NoError(t, err)
 	t.Log(fullReceipt)

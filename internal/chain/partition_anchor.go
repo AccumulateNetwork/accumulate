@@ -3,15 +3,12 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Process the anchor from BVN -> DN
 
-type PartitionAnchor struct {
-	Network *config.Network
-}
+type PartitionAnchor struct{}
 
 func (PartitionAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypePartitionAnchor
@@ -34,7 +31,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Verify the source URL and get the subnet name
-	name, ok := protocol.ParseBvnUrl(body.Source)
+	name, ok := protocol.ParseSubnetUrl(body.Source)
 	if !ok {
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
@@ -45,11 +42,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	if err != nil {
 		return nil, fmt.Errorf("unable to load acme ledger")
 	}
-	var ledgerState *protocol.InternalLedger
-	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-	if err != nil {
-		return nil, fmt.Errorf("unable to load main ledger: %w", err)
-	}
+
 	issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
 	err = st.Update(issuerState)
 	if err != nil {

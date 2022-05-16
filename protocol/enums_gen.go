@@ -92,6 +92,15 @@ const ChainTypeData ChainType = 3
 // ChainTypeIndex indexes other chains.
 const ChainTypeIndex ChainType = 4
 
+// DataEntryTypeUnknown .
+const DataEntryTypeUnknown DataEntryType = 0
+
+// DataEntryTypeFactom .
+const DataEntryTypeFactom DataEntryType = 1
+
+// DataEntryTypeAccumulate .
+const DataEntryTypeAccumulate DataEntryType = 2
+
 // ErrorCodeOK indicates the request succeeded.
 const ErrorCodeOK ErrorCode = 0
 
@@ -245,11 +254,11 @@ const SignatureTypeReceipt SignatureType = 4
 // SignatureTypeSynthetic is used when sending synthetic transactions.
 const SignatureTypeSynthetic SignatureType = 5
 
-// SignatureTypeSystem is used when executing transactions internally.
-const SignatureTypeSystem SignatureType = 6
+// SignatureTypeSet is used when forwarding multiple signatures.
+const SignatureTypeSet SignatureType = 6
 
-// SignatureTypeForwarded is used when forwarding signatures from one subnet to another.
-const SignatureTypeForwarded SignatureType = 7
+// SignatureTypeRemote is used when forwarding a signature from one subnet to another.
+const SignatureTypeRemote SignatureType = 7
 
 // SignatureTypeBTC represents an BTC signature.
 const SignatureTypeBTC SignatureType = 8
@@ -344,29 +353,29 @@ const TransactionTypeSyntheticWriteData TransactionType = 50
 // TransactionTypeSyntheticDepositTokens deposits tokens into token accounts.
 const TransactionTypeSyntheticDepositTokens TransactionType = 51
 
-// TransactionTypeDirectoryAnchor anchors one network to another.
-const TransactionTypeDirectoryAnchor TransactionType = 52
-
 // TransactionTypeSyntheticDepositCredits deposits credits into a credit holder.
-const TransactionTypeSyntheticDepositCredits TransactionType = 53
+const TransactionTypeSyntheticDepositCredits TransactionType = 52
 
 // TransactionTypeSyntheticBurnTokens returns tokens to a token issuer's pool of issuable tokens.
-const TransactionTypeSyntheticBurnTokens TransactionType = 54
+const TransactionTypeSyntheticBurnTokens TransactionType = 53
 
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
-const TransactionTypeSyntheticForwardTransaction TransactionType = 55
+const TransactionTypeSyntheticForwardTransaction TransactionType = 54
 
-// TransactionTypeMirrorSystemRecords mirrors records from one network to another.
-const TransactionTypeMirrorSystemRecords TransactionType = 56
-
-// TransactionTypePartitionAnchor system transaction for partition data.
-const TransactionTypePartitionAnchor TransactionType = 57
+// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
+const TransactionTypeSegWitDataEntry TransactionType = 57
 
 // TransactionTypeSystemGenesis initializes system chains.
 const TransactionTypeSystemGenesis TransactionType = 96
 
-// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
-const TransactionTypeSegWitDataEntry TransactionType = 57005
+// TransactionTypeDirectoryAnchor anchors one network to another.
+const TransactionTypeDirectoryAnchor TransactionType = 97
+
+// TransactionTypePartitionAnchor system transaction for partition data.
+const TransactionTypePartitionAnchor TransactionType = 98
+
+// TransactionTypeMirrorSystemRecords mirrors records from one network to another.
+const TransactionTypeMirrorSystemRecords TransactionType = 99
 
 // VoteTypeAccept vote yea in favor of proposal.
 const VoteTypeAccept VoteType = 0
@@ -754,6 +763,70 @@ func (v *ChainType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEnumValue returns the value of the Data Entry Type
+func (v DataEntryType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *DataEntryType) SetEnumValue(id uint64) bool {
+	u := DataEntryType(id)
+	switch u {
+	case DataEntryTypeUnknown, DataEntryTypeFactom, DataEntryTypeAccumulate:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Data Entry Type
+func (v DataEntryType) String() string {
+	switch v {
+	case DataEntryTypeUnknown:
+		return "unknown"
+	case DataEntryTypeFactom:
+		return "factom"
+	case DataEntryTypeAccumulate:
+		return "accumulate"
+	default:
+		return fmt.Sprintf("DataEntryType:%d", v)
+	}
+}
+
+// DataEntryTypeByName returns the named Data Entry Type.
+func DataEntryTypeByName(name string) (DataEntryType, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return DataEntryTypeUnknown, true
+	case "factom":
+		return DataEntryTypeFactom, true
+	case "accumulate":
+		return DataEntryTypeAccumulate, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Data Entry Type to JSON as a string.
+func (v DataEntryType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Data Entry Type from JSON as a string.
+func (v *DataEntryType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = DataEntryTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Data Entry Type %q", s)
+	}
+	return nil
+}
+
 // GetEnumValue returns the value of the Error Code
 func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 
@@ -1097,7 +1170,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSystem, SignatureTypeForwarded, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated:
 		*v = u
 		return true
 	default:
@@ -1120,10 +1193,10 @@ func (v SignatureType) String() string {
 		return "receipt"
 	case SignatureTypeSynthetic:
 		return "synthetic"
-	case SignatureTypeSystem:
-		return "system"
-	case SignatureTypeForwarded:
-		return "forwarded"
+	case SignatureTypeSet:
+		return "set"
+	case SignatureTypeRemote:
+		return "remote"
 	case SignatureTypeBTC:
 		return "btc"
 	case SignatureTypeBTCLegacy:
@@ -1152,10 +1225,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeReceipt, true
 	case "synthetic":
 		return SignatureTypeSynthetic, true
-	case "system":
-		return SignatureTypeSystem, true
-	case "forwarded":
-		return SignatureTypeForwarded, true
+	case "set":
+		return SignatureTypeSet, true
+	case "remote":
+		return SignatureTypeRemote, true
 	case "btc":
 		return SignatureTypeBTC, true
 	case "btclegacy":
@@ -1261,7 +1334,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeDirectoryAnchor, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeMirrorSystemRecords, TransactionTypePartitionAnchor, TransactionTypeSystemGenesis, TransactionTypeSegWitDataEntry:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSegWitDataEntry, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeMirrorSystemRecords:
 		*v = u
 		return true
 	default:
@@ -1320,22 +1393,22 @@ func (v TransactionType) String() string {
 		return "syntheticWriteData"
 	case TransactionTypeSyntheticDepositTokens:
 		return "syntheticDepositTokens"
-	case TransactionTypeDirectoryAnchor:
-		return "directoryAnchor"
 	case TransactionTypeSyntheticDepositCredits:
 		return "syntheticDepositCredits"
 	case TransactionTypeSyntheticBurnTokens:
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
-	case TransactionTypeMirrorSystemRecords:
-		return "mirrorSystemRecords"
-	case TransactionTypePartitionAnchor:
-		return "partitionAnchor"
-	case TransactionTypeSystemGenesis:
-		return "systemGenesis"
 	case TransactionTypeSegWitDataEntry:
 		return "segWitDataEntry"
+	case TransactionTypeSystemGenesis:
+		return "systemGenesis"
+	case TransactionTypeDirectoryAnchor:
+		return "directoryAnchor"
+	case TransactionTypePartitionAnchor:
+		return "partitionAnchor"
+	case TransactionTypeMirrorSystemRecords:
+		return "mirrorSystemRecords"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1394,22 +1467,22 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticWriteData, true
 	case "syntheticdeposittokens":
 		return TransactionTypeSyntheticDepositTokens, true
-	case "directoryanchor":
-		return TransactionTypeDirectoryAnchor, true
 	case "syntheticdepositcredits":
 		return TransactionTypeSyntheticDepositCredits, true
 	case "syntheticburntokens":
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
-	case "mirrorsystemrecords":
-		return TransactionTypeMirrorSystemRecords, true
-	case "partitionanchor":
-		return TransactionTypePartitionAnchor, true
-	case "systemgenesis":
-		return TransactionTypeSystemGenesis, true
 	case "segwitdataentry":
 		return TransactionTypeSegWitDataEntry, true
+	case "systemgenesis":
+		return TransactionTypeSystemGenesis, true
+	case "directoryanchor":
+		return TransactionTypeDirectoryAnchor, true
+	case "partitionanchor":
+		return TransactionTypePartitionAnchor, true
+	case "mirrorsystemrecords":
+		return TransactionTypeMirrorSystemRecords, true
 	default:
 		return 0, false
 	}

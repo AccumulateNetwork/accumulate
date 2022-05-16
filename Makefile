@@ -8,6 +8,7 @@ GIT_COMMIT = $(shell git rev-parse HEAD)
 VERSION = gitlab.com/accumulatenetwork/accumulate.Version=$(GIT_DESCRIBE)
 COMMIT = gitlab.com/accumulatenetwork/accumulate.Commit=$(GIT_COMMIT)
 
+# TODO Add mainnet to tags
 LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
 FLAGS = $(BUILDFLAGS) -tags production -ldflags $(LDFLAGS)
 

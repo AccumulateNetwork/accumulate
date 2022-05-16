@@ -15,6 +15,14 @@ ChainType:
     value: 0x04
     description: indexes other chains
 
+DataEntryType:
+  Unknown:
+    value: 0
+  Factom:
+    value: 1
+  Accumulate:
+    value: 2
+
 ObjectType:
   Unknown:
     value: 0
@@ -45,12 +53,12 @@ SignatureType:
   Synthetic:
     value: 5
     description: is used when sending synthetic transactions
-  System:
+  Set:
     value: 6
-    description: is used when executing transactions internally
-  Forwarded:
+    description: is used when forwarding multiple signatures
+  Remote:
     value: 7
-    description: is used when forwarding signatures from one subnet to another
+    description: is used when forwarding a signature from one subnet to another
   BTC:
     value: 8
     description: represents an BTC signature
@@ -189,32 +197,32 @@ TransactionType:
   SyntheticDepositTokens:
     value: 0x33
     description: deposits tokens into token accounts
-  DirectoryAnchor:
-    value: 0x34
-    description: anchors one network to another
   SyntheticDepositCredits:
-    value: 0x35
+    value: 0x34
     description: deposits credits into a credit holder
   SyntheticBurnTokens:
-    value: 0x36
+    value: 0x35
     description: returns tokens to a token issuer's pool of issuable tokens
   SyntheticForwardTransaction:
-    value: 0x37
+    value: 0x36
     description: forwards a transaction from one subnet to another
-  MirrorSystemRecords:
-    value: 0x38
-    description: mirrors records from one network to another
-  PartitionAnchor:
-    value: 0x39
-    description: system transaction for partition data
   SegWitDataEntry:
-    value: 0xDEAD
+    value: 0x39
     description: is a surrogate transaction segregated witness for a WriteData transaction
 
-  ##### INTERNAL TRANSACTIONS #####
+  ##### SYSTEM TRANSACTIONS #####
   SystemGenesis:
     value: 0x60
     description: initializes system chains
+  DirectoryAnchor:
+    value: 0x61
+    description: anchors one network to another
+  PartitionAnchor:
+    value: 0x62
+    description: system transaction for partition data
+  MirrorSystemRecords:
+    value: 0x63
+    description: mirrors records from one network to another
 
 AccountType:
   Unknown:

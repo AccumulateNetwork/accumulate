@@ -11,9 +11,7 @@ import (
 
 // Process the anchor from DN -> BVN
 
-type DirectoryAnchor struct {
-	Network *config.Network
-}
+type DirectoryAnchor struct{}
 
 func (DirectoryAnchor) Type() protocol.TransactionType {
 	return protocol.TransactionTypeDirectoryAnchor
@@ -40,7 +38,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid source: not the DN")
 	}
 
-	if body.AcmeOraclePrice != 0 {
+	if body.AcmeOraclePrice != 0 && st.Network.Type != config.Directory {
 		var ledgerState *protocol.InternalLedger
 		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
@@ -71,7 +69,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 {
+	if len(body.OperatorUpdates) > 0 && st.Network.Type != config.Directory {
 		result, err := executeOperatorUpdates(st, body)
 		if err != nil {
 			return result, err
@@ -80,7 +78,8 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 	// Process receipts
 	for i, receipt := range body.Receipts {
-		if !bytes.Equal(receipt.Result, body.RootAnchor[:]) {
+		receipt := receipt // See docs/developer/rangevarref.md
+		if !bytes.Equal(receipt.Anchor, body.RootAnchor[:]) {
 			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 

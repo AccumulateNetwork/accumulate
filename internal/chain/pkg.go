@@ -24,7 +24,7 @@ type SignerValidator interface {
 
 	// SignerIsAuthorized checks if the signature is authorized for the
 	// transaction.
-	SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer) (fallback bool, err error)
+	SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error)
 
 	// TransactionIsReady checks if the transaction is ready to be executed.
 	TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error)
@@ -45,7 +45,7 @@ type TransactionExecutorCleanup interface {
 
 type AuthDelegate interface {
 	GetAccountAuthoritySet(*database.Batch, protocol.Account) (*protocol.AccountAuth, error)
-	SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, location *url.URL, signer protocol.Signer, ignoreAuthSet bool) error
+	SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error
 	AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error)
 	SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error)
 }
