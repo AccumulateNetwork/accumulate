@@ -253,7 +253,7 @@ func (m *JrpcMethods) QueryMinorBlocks(_ context.Context, params json.RawMessage
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
+	return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination, req.TxFetchMode, req.FilterSystemAnchorsOnlyBlocks))
 }
 
 // QueryTx queries a transaction by ID.
