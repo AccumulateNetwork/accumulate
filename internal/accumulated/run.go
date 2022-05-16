@@ -228,6 +228,14 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to start JSON-RPC: HTTPS is not supported")
 	}
 
+	if d.Config.Accumulate.API.ConnectionLimit > 0 {
+		pool := make(chan struct{}, d.Config.Accumulate.API.ConnectionLimit)
+		for i := 0; i < d.Config.Accumulate.API.ConnectionLimit; i++ {
+			pool <- struct{}{}
+		}
+		l = &rateLimitedListener{Listener: l, Pool: pool}
+	}
+
 	go func() {
 		err := d.api.Serve(l)
 		if err != nil {

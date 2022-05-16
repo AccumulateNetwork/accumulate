@@ -111,6 +111,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
+	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	switch node {
@@ -169,6 +170,7 @@ type API struct {
 	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
+	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
 }
 
 type Website struct {
