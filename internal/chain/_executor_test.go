@@ -168,7 +168,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 	_, perr = exec.DeliverTx(env)
 	require.NotNil(t, perr)
 
-	// Execute the block
+	// Commit the block
 	_, err = exec.ForceCommit()
 	require.NoError(t, err)
 
@@ -273,7 +273,7 @@ func TestExecutor_DeliverTx(t *testing.T) {
 		require.NoError(t, perr.Message)
 	}
 
-	// Execute the block
+	// Commit the block
 	_, err = exec.ForceCommit()
 	require.NoError(t, err)
 
