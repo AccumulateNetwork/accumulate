@@ -146,6 +146,19 @@ func (s *Simulator) InitFromGenesis() {
 		genesis := InitFromGenesis(s, x.Database, x.Executor, netValMap)
 		genList = append(genList, genesis)
 	}
+
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, genesis := range genList {
+			genesis.Discard()
+		}
+	}()
+	for _, genesis := range genList {
+		err := genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
+	}
 }
 
 func (s *Simulator) InitFromSnapshot(filename func(string) string) {

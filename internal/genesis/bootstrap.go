@@ -231,7 +231,7 @@ func (g *genesis) createEvidenceChain() {
 	da.Scratch = true
 	da.Url = g.adiUrl.JoinPath(protocol.Evidence)
 	da.AddAuthority(g.authorityUrl)
-	g.records = append(g.records, da)
+	g.WriteRecords(da)
 	g.urls = append(g.urls, da.Url)
 }
 
@@ -275,7 +275,7 @@ func (g *genesis) initDN(oraclePrice uint64) error {
 	acme.Url = protocol.AcmeUrl()
 	acme.Precision = 8
 	acme.Symbol = "ACME"
-	g.records = append(g.records, acme)
+	g.WriteRecords(acme)
 
 	if protocol.IsTestNet {
 		// On the TestNet, set the issued amount to the faucet balance
@@ -306,7 +306,7 @@ func (g *genesis) initBVN() error {
 		liteToken.Url = protocol.FaucetUrl
 		liteToken.TokenUrl = protocol.AcmeUrl()
 		liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
-		g.records = append(g.records, liteId, liteToken)
+		g.WriteRecords(liteId, liteToken)
 	}
 	if g.opts.FactomAddressesFile != "" {
 		factomAddresses, err := LoadFactomAddressesAndBalances(g.opts.FactomAddressesFile)
@@ -320,7 +320,7 @@ func (g *genesis) initBVN() error {
 				lite.Url = factomAddress.Address
 				lite.TokenUrl = protocol.AcmeUrl()
 				lite.Balance = *big.NewInt(5 * factomAddress.Balance)
-				g.records = append(g.records, lite)
+				g.WriteRecords(lite)
 			}
 		}
 	}
