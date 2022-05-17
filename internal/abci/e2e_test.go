@@ -1433,7 +1433,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(n.network.OperatorPage(0), 1).
+			WithSigner(n.network.ValidatorPage(0), 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
