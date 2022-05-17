@@ -134,20 +134,38 @@ func initClient(server string) (string, error) {
 	checkf(err, "creating client")
 	client.DebugRequest = true
 
+	maxGoroutines := 10
+	guard := make(chan struct{}, maxGoroutines)
+
 	// run key generation in gorooutine
-	go func() {
-		pub, priv, err := ed25519.GenerateKey(nil)
+	for i := 0; i < 30; i++ {
 
-		addr, err = protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
+		guard <- struct{}{} // would block if guard channel is already filled
 
-		if err != nil {
-			fmt.Printf("Error: generating keys: %v\n", err)
-		}
-	}()
+		go func(n int) {
+			createAccount(n)
+			<-guard
+		}(i)
+	}
 
 	stop(runCmd)
 
 	return "", nil
+}
+
+// helper function to generate key and create account
+func createAccount(i int) {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		fmt.Printf("Error: generating keys: %v\n", err)
+	}
+
+	acc, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
+	if err != nil {
+		fmt.Printf("Error: creating Lite Token account: %v\n", err)
+	}
+
+	fmt.Printf("Account %d: %s\n", i, acc)
 }
 
 func fatalf(format string, args ...interface{}) {
