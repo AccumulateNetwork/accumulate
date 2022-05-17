@@ -76,10 +76,10 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 
 	if opts.Prove {
 		receipt := new(Receipt)
-		rec.Receipt = receipt
+		rec.Proof = receipt
 		block, mr, err := indexing.ReceiptForAccountState(m.Network, batch, account)
 		if err != nil {
-			receipt.Error = errors.Wrap(errors.StatusUnknown, err)
+			receipt.Error = errors.Wrap(errors.StatusUnknown, err).(*errors.Error)
 		} else {
 			receipt.LocalBlock = block
 			receipt.Proof = *protocol.ReceiptFromManaged(mr)

@@ -120,7 +120,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		res.Count = uint64(txh.End - txh.Start)
 		res.Total = uint64(txh.Total)
 		for i, tx := range txh.Transactions {
-			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
+			queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status) //nolint:rangevarref
 			if err != nil {
 				return nil, err
 			}
@@ -183,7 +183,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		qr.Type = "pending"
 		qr.Items = make([]interface{}, len(res.Transactions))
 		for i, txid := range res.Transactions {
-			qr.Items[i] = hex.EncodeToString(txid[:])
+			qr.Items[i] = hex.EncodeToString(txid[:]) //nolint:rangevarref
 		}
 		return qr, nil
 
@@ -368,7 +368,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
-		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status)
+		queryRes, err := packTxResponse(&tx, nil, tx.Envelope, tx.Status) //nolint:rangevarref
 		if err != nil {
 			return nil, err
 		}
@@ -449,7 +449,7 @@ func responseDataSetFromProto(protoDataSet *query.ResponseDataEntrySet, paginati
 	for _, entry := range protoDataSet.DataEntries {
 		de := DataEntryQueryResponse{}
 		de.EntryHash = entry.EntryHash
-		de.Entry.Data = entry.Entry.Data
+		de.Entry = entry.Entry
 		respDataSet.Items = append(respDataSet.Items, &de)
 	}
 	return respDataSet, nil
@@ -479,7 +479,7 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, includeSynthAnchors bool) (*MultiResponse, error) {
+func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -494,11 +494,11 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	}
 
 	req := &query.RequestMinorBlocks{
-		Account:                      u,
-		Start:                        pagination.Start,
-		Limit:                        pagination.Count,
-		TxFetchMode:                  txFetchMode,
-		FilterSynthAnchorsOnlyBlocks: includeSynthAnchors,
+		Account:         u,
+		Start:           pagination.Start,
+		Limit:           pagination.Count,
+		TxFetchMode:     txFetchMode,
+		BlockFilterMode: blockFilterMode,
 	}
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
@@ -519,7 +519,7 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	mres.Items = make([]interface{}, 0)
 	mres.Start = pagination.Start
 	mres.Count = pagination.Count
-	mres.Total = res.Total
+	mres.Total = res.TotalBlocks
 	for _, entry := range res.Entries {
 		queryRes, err := packMinorQueryResponse(entry)
 		if err != nil {

@@ -132,7 +132,7 @@ func (cm *connectionManager) SelectConnection(subnetId string, allowFollower boo
 func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext, allowFollower bool) []ConnectionContext {
 	var healthyNodes = make([]ConnectionContext, 0)
 	for _, connCtx := range nodeList {
-		if allowFollower || connCtx.GetNodeType() != config.Follower && connCtx.IsHealthy() {
+		if (allowFollower || connCtx.GetNodeType() != config.Follower) && connCtx.IsHealthy() {
 			healthyNodes = append(healthyNodes, connCtx)
 		}
 	}

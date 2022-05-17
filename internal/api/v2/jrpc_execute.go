@@ -94,12 +94,12 @@ func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
 	txrq := new(TxRequest)
 	txrq.Origin = txn.Header.Principal
 	txrq.Signer.SignatureType = sig.Type()
-	txrq.Signer.Timestamp = sig.GetTimestamp()
+	txrq.Signer.Timestamp = keySig.GetTimestamp()
 	txrq.Signer.PublicKey = keySig.GetPublicKey()
 	txrq.Signer.Url = protocol.FaucetUrl.RootIdentity()
-	txrq.Signer.Version = sig.GetSignerVersion()
+	txrq.Signer.Version = keySig.GetSignerVersion()
 	txrq.Signer.UseSimpleHash = true
-	txrq.Signature = sig.GetSignature()
+	txrq.Signature = keySig.GetSignature()
 
 	body, err := txn.Body.MarshalBinary()
 	if err != nil {

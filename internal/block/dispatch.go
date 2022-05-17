@@ -104,7 +104,9 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			}
 
 			for _, r := range rset.Results {
-				if r.Code != 0 {
+				if r.Error != nil {
+					errs <- r.Error
+				} else if r.Code != 0 {
 					errs <- protocol.NewError(protocol.ErrorCode(r.Code), errors.New(r.Message))
 				}
 			}

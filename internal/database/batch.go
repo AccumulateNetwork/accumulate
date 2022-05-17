@@ -311,6 +311,7 @@ func (b *Batch) Commit() error {
 	}
 
 	b.done = true
+
 	if b.parent != nil {
 		for k, v := range b.values {
 			if !v.dirty {
