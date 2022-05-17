@@ -35,7 +35,7 @@ type InitOpts struct {
 
 type DataRecord struct {
 	Account *protocol.DataAccount
-	Entry   *protocol.DataEntry
+	Entry   protocol.DataEntry
 }
 
 type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
@@ -157,7 +157,6 @@ func (g *genesis) Execute() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -211,17 +210,17 @@ func (g *genesis) createVoteScratchChain() error {
 	//create a vote scratch chain
 	wd := new(protocol.WriteData)
 	lci := types.LastCommitInfo{}
-	lciDta, err := json.Marshal(&lci)
+	data, err := json.Marshal(&lci)
 	if err != nil {
 		return err
 	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{lciData}}
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
 	da := new(protocol.DataAccount)
 	da.Scratch = true
 	da.Url = g.adiUrl.JoinPath(protocol.Votes)
 	da.AddAuthority(g.authorityUrl)
-	g.writeDataRecord(da, da.Url, DataRecord{da, &wd.Entry})
+	g.writeDataRecord(da, da.Url, DataRecord{da, wd.Entry})
 	return nil
 }
 
@@ -396,16 +395,16 @@ func (g *genesis) generateNetworkDefinition() error {
 	}
 	networkDefs := g.buildNetworkDefinition()
 	wd := new(protocol.WriteData)
-	d, err := json.Marshal(&networkDefs)
+	data, err := json.Marshal(&networkDefs)
 	if err != nil {
 		return err
 	}
-	wd.Entry.Data = append(wd.Entry.Data, d)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
 	da := new(protocol.DataAccount)
 	da.Url = g.adiUrl.JoinPath(protocol.Network)
 	da.AddAuthority(g.authorityUrl)
-	g.writeDataRecord(da, da.Url, DataRecord{da, &wd.Entry})
+	g.writeDataRecord(da, da.Url, DataRecord{da, wd.Entry})
 	return nil
 }
 

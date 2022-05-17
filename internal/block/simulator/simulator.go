@@ -2,7 +2,6 @@ package simulator
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"sync"
 
 	"github.com/rs/zerolog"
@@ -15,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
