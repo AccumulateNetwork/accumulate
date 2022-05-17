@@ -40,18 +40,18 @@ type InitOptions struct {
 // Init creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func Init(opts InitOptions) (genInit genesis.Genesis, err error) {
+func Init(opts InitOptions) (genesis genesis.Genesis, err error) {
 	switch opts.Version {
 	case 0:
 		fallthrough
 	case 1:
-		genInit, err = initV1(opts)
+		genesis, err = initV1(opts)
 	case 2:
 		//todo: err = initV2(opts)
 	default:
 		return nil, fmt.Errorf("unknown version to init")
 	}
-	return genInit, err
+	return genesis, err
 }
 
 // initV1 creates the initial configuration for a set of nodes, using

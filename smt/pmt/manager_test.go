@@ -23,7 +23,7 @@ func TestSanity(t *testing.T) {
 	bpt := NewBPTManager(batch)          // Create a BPT manager
 	bpt.InsertKV(fakeKey, fakeValue)     // Insert a key, value pair
 	require.NoError(t, bpt.Bpt.Update()) // Push the update
-	require.NoError(t, batch.Commit())   // Execute the batch
+	require.NoError(t, batch.Commit())   // Commit the batch
 	rootHash1 := bpt.Bpt.RootHash        // Remember the root hash
 	nodeHash1 := bpt.Bpt.Root.Hash       //
 

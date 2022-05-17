@@ -413,7 +413,3 @@ func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
 		}
 	}
 }
-
-func (c *FakeTendermint) Start(interval time.Duration) {
-	go c.execute(interval)
-}
