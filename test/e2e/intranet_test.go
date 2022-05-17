@@ -67,7 +67,7 @@ func TestOracleDistribution(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(protocol.PriceOracle()).
 			WithTimestampVar(&timestamp).
-			WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage after AC-1402 is merged
+			WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
 			WithBody(&WriteData{Entry: &AccumulateDataEntry{Data: [][]byte{data}}}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Build(),

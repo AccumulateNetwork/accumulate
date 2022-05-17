@@ -63,7 +63,6 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.Client{}
 	netValMap := make(genesis.NetworkValidatorMap)
-	var genList []genesis.Genesis
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -89,28 +88,23 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
-			genList = append(genList, nodes[i].Genesis)
 		}
 	}
 
 	// Execute genesis after the entire network is known
-	defer func() {
-		for _, genesis := range genList {
-			genesis.Discard()
-		}
-	}()
-	for _, genesis := range genList {
-		err := genesis.Execute()
-		if err != nil {
-			panic(fmt.Errorf("could not execute genesis: %v", err))
-		}
-	}
-
-	for _, netName := range subnets {
-		netName = strings.TrimPrefix(netName, evilNodePrefix)
-		nodes := allNodes[netName]
-		for i := range nodes {
-			nodes[i].CreateInitChain()
+	if doGenesis {
+		for _, netName := range subnets {
+			netName = strings.TrimPrefix(netName, evilNodePrefix)
+			nodes := allNodes[netName]
+			for i := range nodes {
+				genesis := nodes[i].Genesis
+				err := genesis.Execute()
+				if err != nil {
+					panic(fmt.Errorf("could not execute genesis: %v", err))
+				}
+				nodes[i].CreateInitChain()
+				genesis.Discard()
+			}
 		}
 	}
 
