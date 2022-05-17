@@ -39,11 +39,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 		union, ok := unions[typ.Union.Type]
 		if !ok {
 			union = new(UnionSpec)
-			if typ.Union.Name == "" {
-				union.Name = typ.Union.Type
-			} else {
-				union.Name = typ.Union.Name
-			}
+			union.Name = typ.Union.Name
 			union.Type = typ.Union.Type
 			ttypes.Unions = append(ttypes.Unions, union)
 			unions[typ.Union.Type] = union
