@@ -180,6 +180,115 @@ func UnmarshalAccountJSON(data []byte) (Account, error) {
 	return acnt, nil
 }
 
+// NewDataEntry creates a new DataEntry for the specified DataEntryType.
+func NewDataEntry(typ DataEntryType) (DataEntry, error) {
+	switch typ {
+	case DataEntryTypeAccumulate:
+		return new(AccumulateDataEntry), nil
+	case DataEntryTypeFactom:
+		return new(FactomDataEntry), nil
+	default:
+		return nil, fmt.Errorf("unknown data entry %v", typ)
+	}
+}
+
+//EqualDataEntry is used to compare the values of the union
+func EqualDataEntry(a, b DataEntry) bool {
+	switch a := a.(type) {
+	case *AccumulateDataEntry:
+		b, ok := b.(*AccumulateDataEntry)
+		return ok && a.Equal(b)
+	case *FactomDataEntry:
+		b, ok := b.(*FactomDataEntry)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
+// UnmarshalDataEntryType unmarshals the DataEntryType from the start of a DataEntry.
+func UnmarshalDataEntryType(r io.Reader) (DataEntryType, error) {
+	var typ DataEntryType
+	err := encoding.UnmarshalEnumType(r, &typ)
+	return typ, err
+}
+
+// UnmarshalDataEntry unmarshals a DataEntry.
+func UnmarshalDataEntry(data []byte) (DataEntry, error) {
+	typ, err := UnmarshalDataEntryType(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	v, err := NewDataEntry(typ)
+	if err != nil {
+		return nil, err
+	}
+
+	err = v.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalDataEntryFrom unmarshals a DataEntry.
+func UnmarshalDataEntryFrom(rd io.ReadSeeker) (DataEntry, error) {
+	// Get the reader's current position
+	pos, err := rd.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the type code
+	typ, err := UnmarshalDataEntryType(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset the reader's position
+	_, err = rd.Seek(pos, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a new transaction result
+	v, err := NewDataEntry(DataEntryType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the result
+	err = v.UnmarshalBinaryFrom(rd)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalDataEntryJson unmarshals a DataEntry.
+func UnmarshalDataEntryJSON(data []byte) (DataEntry, error) {
+	var typ struct{ Type DataEntryType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	acnt, err := NewDataEntry(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
+
 // NewTransactionBody creates a new TransactionBody for the specified TransactionType.
 func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	switch typ {
@@ -203,10 +312,12 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateToken), nil
 	case TransactionTypeCreateTokenAccount:
 		return new(CreateTokenAccount), nil
-	case TransactionTypeInternalGenesis:
-		return new(InternalGenesis), nil
+	case TransactionTypeDirectoryAnchor:
+		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
+	case TransactionTypePartitionAnchor:
+		return new(PartitionAnchor), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
@@ -215,8 +326,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
-	case TransactionTypeSyntheticAnchor:
-		return new(SyntheticAnchor), nil
 	case TransactionTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
 	case TransactionTypeSyntheticCreateIdentity:
@@ -227,10 +336,10 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticDepositTokens), nil
 	case TransactionTypeSyntheticForwardTransaction:
 		return new(SyntheticForwardTransaction), nil
-	case TransactionTypeSyntheticMirror:
-		return new(SyntheticMirror), nil
 	case TransactionTypeSyntheticWriteData:
 		return new(SyntheticWriteData), nil
+	case TransactionTypeSystemGenesis:
+		return new(SystemGenesis), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -281,11 +390,14 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *CreateTokenAccount:
 		b, ok := b.(*CreateTokenAccount)
 		return ok && a.Equal(b)
-	case *InternalGenesis:
-		b, ok := b.(*InternalGenesis)
+	case *DirectoryAnchor:
+		b, ok := b.(*DirectoryAnchor)
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
+		return ok && a.Equal(b)
+	case *PartitionAnchor:
+		b, ok := b.(*PartitionAnchor)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)
@@ -298,9 +410,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SendTokens:
 		b, ok := b.(*SendTokens)
-		return ok && a.Equal(b)
-	case *SyntheticAnchor:
-		b, ok := b.(*SyntheticAnchor)
 		return ok && a.Equal(b)
 	case *SyntheticBurnTokens:
 		b, ok := b.(*SyntheticBurnTokens)
@@ -317,11 +426,11 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *SyntheticForwardTransaction:
 		b, ok := b.(*SyntheticForwardTransaction)
 		return ok && a.Equal(b)
-	case *SyntheticMirror:
-		b, ok := b.(*SyntheticMirror)
-		return ok && a.Equal(b)
 	case *SyntheticWriteData:
 		b, ok := b.(*SyntheticWriteData)
+		return ok && a.Equal(b)
+	case *SystemGenesis:
+		b, ok := b.(*SystemGenesis)
 		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		b, ok := b.(*UpdateAccountAuth)
@@ -685,16 +794,16 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
 		return new(ETHSignature), nil
-	case SignatureTypeForwarded:
-		return new(ForwardedSignature), nil
-	case SignatureTypeInternal:
-		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
 		return new(RCD1Signature), nil
 	case SignatureTypeReceipt:
 		return new(ReceiptSignature), nil
+	case SignatureTypeRemote:
+		return new(RemoteSignature), nil
+	case SignatureTypeSet:
+		return new(SignatureSet), nil
 	case SignatureTypeSynthetic:
 		return new(SyntheticSignature), nil
 	default:
@@ -720,12 +829,6 @@ func EqualSignature(a, b Signature) bool {
 	case *ETHSignature:
 		b, ok := b.(*ETHSignature)
 		return ok && a.Equal(b)
-	case *ForwardedSignature:
-		b, ok := b.(*ForwardedSignature)
-		return ok && a.Equal(b)
-	case *InternalSignature:
-		b, ok := b.(*InternalSignature)
-		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
 		b, ok := b.(*LegacyED25519Signature)
 		return ok && a.Equal(b)
@@ -734,6 +837,12 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	case *ReceiptSignature:
 		b, ok := b.(*ReceiptSignature)
+		return ok && a.Equal(b)
+	case *RemoteSignature:
+		b, ok := b.(*RemoteSignature)
+		return ok && a.Equal(b)
+	case *SignatureSet:
+		b, ok := b.(*SignatureSet)
 		return ok && a.Equal(b)
 	case *SyntheticSignature:
 		b, ok := b.(*SyntheticSignature)

@@ -101,7 +101,6 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 		if len(delivery.Signatures) == 0 {
 			return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "transaction %X is unsigned", delivery.Transaction.GetHash())
 		}
-
 	}
 
 	return txnList, nil
@@ -111,7 +110,6 @@ type Delivery struct {
 	parent      *Delivery
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
-	Remote      []*protocol.ForwardedSignature
 	State       ProcessTransactionState
 }
 
@@ -121,6 +119,7 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 	e.Signatures = make([]protocol.Signature, len(fwd.Signatures))
 	e.Transaction = fwd.Transaction
 	for i, sig := range fwd.Signatures {
+		sig := sig // See docs/developer/rangevarref.md
 		e.Signatures[i] = &sig
 	}
 
@@ -133,7 +132,7 @@ func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *
 	e.Signatures = []protocol.Signature{
 		&protocol.ReceiptSignature{
 			SourceNetwork:   source,
-			Receipt:         *receipt,
+			Proof:           *receipt,
 			TransactionHash: hash,
 		},
 	}
@@ -149,17 +148,6 @@ func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *
 // SyntheticForwardedTransaction.
 func (d *Delivery) IsForwarded() bool {
 	return d.parent != nil && d.parent.Transaction.Body.Type() == protocol.TransactionTypeSyntheticForwardTransaction
-}
-
-// VerifySignatures verifies each signature.
-func (d *Delivery) VerifySignatures() bool {
-	for _, v := range d.Signatures {
-		if !v.Verify(d.Transaction.GetHash()) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // LoadTransaction attempts to load the transaction from the database.
@@ -207,7 +195,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	// If any signature is local or forwarded, the transaction must exist
 	// locally
 	for _, signature := range d.Signatures {
-		if signature.Type() == protocol.SignatureTypeForwarded || signature.GetSigner().LocalTo(principal) {
+		if signature.RoutingLocation().LocalTo(principal) {
 			return nil, fmt.Errorf("load transaction: local signature: %w", err)
 		}
 	}

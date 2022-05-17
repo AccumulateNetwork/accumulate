@@ -255,7 +255,7 @@ func GetTX(hash string) (string, error) {
 
 	errg := new(errgroup.Group)
 	for _, txid := range res.SyntheticTxids {
-		txid := txid // Do not capture the loop variable in the closure
+		txid := txid // See docs/developer/rangevarref.md
 		errg.Go(func() error {
 			res, err := getTX(txid[:], TxWaitSynth, true)
 			if err != nil {
@@ -365,7 +365,7 @@ func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) (*api2.Tran
 	}
 	if queryRes.SyntheticTxids != nil {
 		for _, txid := range queryRes.SyntheticTxids {
-			_, err := waitForTxn(txid[:], wait, true)
+			_, err := waitForTxn(txid[:], wait, true) //nolint:rangevarref
 			if err != nil {
 				return nil, err
 			}

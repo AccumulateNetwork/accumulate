@@ -260,6 +260,7 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 	page.AcceptThreshold = 1
+	page.Version = 1
 	page.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		hash := sha256.Sum256(key.Bytes())

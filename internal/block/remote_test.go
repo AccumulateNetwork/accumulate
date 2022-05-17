@@ -126,6 +126,14 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 			Initiate(SignatureTypeED25519, bob).
 			Build(),
 	)
+	sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(bobUrl.JoinPath("account")).
+			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
+			WithTxnHash(envs[0].Transaction[0].GetHash()).
+			Sign(SignatureTypeED25519, charlie).
+			Build(),
+	)
 	sim.WaitForTransactions(delivered, envs...)
 }
 
@@ -154,7 +162,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
 		WithBody(&WriteData{
-			Entry: DataEntry{Data: [][]byte{
+			Entry: &AccumulateDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -183,7 +191,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }
 
 func TestRemoteSignatures_SameBVN(t *testing.T) {
@@ -211,7 +219,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(bobUrl.JoinPath("account")).
 		WithBody(&WriteData{
-			Entry: DataEntry{Data: [][]byte{
+			Entry: &AccumulateDataEntry{Data: [][]byte{
 				[]byte("foo"),
 			}},
 		}).
@@ -240,7 +248,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }
 
 func TestRemoteSignatures_Initiate(t *testing.T) {
@@ -254,7 +262,10 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
 	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
-	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
+	bobKey := acctesting.GenerateKey(t.Name(), bobUrl)
+	charlieKey1 := acctesting.GenerateKey(t.Name(), charlieUrl, 1)
+	charlieKey2 := acctesting.GenerateKey(t.Name(), charlieUrl, 2)
+	charlieKey3 := acctesting.GenerateKey(t.Name(), charlieUrl, 3)
 
 	// Force the accounts onto different BVNs
 	sim.SetRouteFor(aliceUrl, "BVN0")
@@ -262,20 +273,31 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	sim.SetRouteFor(charlieUrl, "BVN2")
 
 	// Setup
-	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey)
+	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey1)
+
+	updateAccount(sim, charlieUrl.JoinPath("book", "1"), func(p *KeyPage) {
+		hash2 := sha256.Sum256(charlieKey2[32:])
+		hash3 := sha256.Sum256(charlieKey3[32:])
+		p.Keys = append(p.Keys,
+			&KeySpec{PublicKeyHash: hash2[:]},
+			&KeySpec{PublicKeyHash: hash3[:]})
+		p.AcceptThreshold = 2
+	})
 
 	// Initiate with the remote authority
 	envs := sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
 			WithTimestampVar(&timestamp).
 			WithSigner(charlieUrl.JoinPath("book", "1"), 1).
-			Initiate(SignatureTypeED25519, charlieKey).
+			Initiate(SignatureTypeED25519, charlieKey1).
+			Sign(SignatureTypeED25519, charlieKey2).
+			Sign(SignatureTypeED25519, charlieKey3).
 			Build(),
 	)
 	sim.WaitForTransactions(pending, envs...)
@@ -300,7 +322,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }
 
 func TestRemoteSignatures_Singlesig(t *testing.T) {
@@ -339,7 +361,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(bobUrl.JoinPath("account")).
 			WithBody(&WriteData{
-				Entry: DataEntry{Data: [][]byte{
+				Entry: &AccumulateDataEntry{Data: [][]byte{
 					[]byte("foo"),
 				}},
 			}).
@@ -357,5 +379,5 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	require.NoError(t, err)
 	de, err := data.Entry(data.Height() - 1)
 	require.NoError(t, err)
-	require.Equal(t, "foo", string(de.Data[0]))
+	require.Equal(t, "foo", string(de.GetData()[0]))
 }

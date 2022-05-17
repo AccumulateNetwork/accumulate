@@ -1,6 +1,8 @@
 package database_test
 
 import (
+	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -33,23 +35,28 @@ func TestState(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Save to a file
-	filename := filepath.Join(t.TempDir(), "state.bpt")
+	f, err := os.Create(filepath.Join(t.TempDir(), "state.bpt"))
+	require.NoError(t, err)
+	defer f.Close()
+
 	bvn := sim.SubnetFor(aliceUrl)
 	var blockHash, bptRoot []byte
-	var err error
 	_ = bvn.Database.View(func(b *database.Batch) error {
 		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Network)
 		require.NoError(t, err)
-		require.NoError(t, b.SaveState(filename, &bvn.Executor.Network))
+		require.NoError(t, b.SaveSnapshot(f, &bvn.Executor.Network))
 		bptRoot = b.BptRoot()
 		return nil
 	})
+
+	_, err = f.Seek(0, io.SeekStart)
+	require.NoError(t, err)
 
 	// Load the file into a new database
 	db := database.OpenInMemory(nil)
 	var blockHash2, bptRoot2 []byte
 	require.NoError(t, db.Update(func(b *database.Batch) error {
-		require.NoError(t, b.LoadState(filename))
+		require.NoError(t, b.RestoreSnapshot(f))
 		blockHash2, err = b.GetMinorRootChainAnchor(&bvn.Executor.Network)
 		require.NoError(t, err)
 		bptRoot2 = b.BptRoot()

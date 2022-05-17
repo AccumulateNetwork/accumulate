@@ -6,7 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 
 	"github.com/mdp/qrterminal"
@@ -194,7 +194,7 @@ func QrAccount(s string) (string, error) {
 		QuietZone:      2,
 	})
 
-	r, err := ioutil.ReadAll(b)
+	r, err := io.ReadAll(b)
 	return string(r), err
 }
 
@@ -239,6 +239,12 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
+	var accstate *protocol.AccountStateProof
+	accstate, err = GetAccountStateProof(u, accountUrl)
+	if err != nil {
+		return "", fmt.Errorf("unable to prove account state: %x", err)
+	}
+	tac.TokenIssuerProof = accstate
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch

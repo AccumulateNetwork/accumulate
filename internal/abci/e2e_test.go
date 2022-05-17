@@ -92,8 +92,8 @@ func TestEvilNode(t *testing.T) {
 	_, de, err := evData.GetLatest()
 	require.NoError(t, err)
 	var ev []types2.Evidence
-	require.NotEqual(t, de.Data, nil, "no data")
-	err = json.Unmarshal(de.Data[0], &ev)
+	require.NotEqual(t, de.GetData(), nil, "no data")
+	err = json.Unmarshal(de.GetData()[0], &ev)
 	require.NoError(t, err)
 	require.Greaterf(t, len(ev), 0, "no evidence data")
 	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
@@ -174,7 +174,6 @@ func TestAnchorChain(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
-	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -228,49 +227,6 @@ func TestAnchorChain(t *testing.T) {
 
 	// 	assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	// }
-
-	//set price of acme to $445.00 / token
-	price := 445.00
-	dn.MustExecuteAndWait(func(send func(*Tx)) {
-		ao := new(protocol.AcmeOracle)
-		ao.Price = uint64(price * protocol.AcmeOraclePrecision)
-		wd := new(protocol.WriteData)
-		d, err := json.Marshal(&ao)
-		require.NoError(t, err)
-		wd.Entry.Data = append(wd.Entry.Data, d)
-
-		originUrl := protocol.PriceOracleAuthority
-
-		send(newTxn(originUrl).
-			WithSigner(dn.network.OperatorPage(0), 1).
-			WithBody(wd).
-			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
-			Build())
-	})
-
-	// Give it a second for the DN to send its anchor
-	time.Sleep(time.Second)
-
-	// Get the anchor chain manager for DN
-	batch = dn.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(dn.network.NodeUrl(protocol.Ledger))
-	// Check each anchor
-	var ledgerState *protocol.InternalLedger
-	require.NoError(t, ledger.GetStateAs(&ledgerState))
-	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
-
-	time.Sleep(2 * time.Second)
-	// Get the anchor chain manager for BVN
-	batch = n.db.Begin(true)
-	defer batch.Discard()
-	ledger = batch.Account(n.network.NodeUrl(protocol.Ledger))
-
-	// Check each anchor
-	ledgerState = new(protocol.InternalLedger)
-	require.NoError(t, ledger.GetStateAs(&ledgerState))
-	require.Equal(t, ledgerState.ActiveOracle, expected)
 
 	// // TODO Once block indexing has been implemented, verify that the following chains got modified
 	// assert.Subset(t, accounts, []string{
@@ -351,7 +307,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 	//this test exercises WriteDataTo and SyntheticWriteData validators
 
-	firstEntry := protocol.DataEntry{}
+	firstEntry := protocol.AccumulateDataEntry{}
 
 	firstEntry.Data = append(firstEntry.Data, []byte{})
 	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
@@ -376,7 +332,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		wdt := new(protocol.WriteDataTo)
 		wdt.Recipient = liteDataAddress
-		wdt.Entry = firstEntry
+		wdt.Entry = &firstEntry
 		send(newTxn("FooBar").
 			WithSigner(url.MustParse("FooBar/book0/1"), 1).
 			WithBody(wdt).
@@ -392,7 +348,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.Equal(t, liteDataAddress.String(), r.Url.String())
 	require.Equal(t, append(partialChainId, r.Tail...), chainId)
 
-	firstEntryHash, err := protocol.ComputeLiteEntryHashFromEntry(chainId, &firstEntry)
+	firstEntryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId, firstEntry.Data)
 	require.NoError(t, err)
 
 	batch = n.db.Begin(false)
@@ -413,7 +369,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 	entry, err := dataChain.Entry(0)
 	require.NoError(t, err)
-	hashFromEntry, err := protocol.ComputeLiteEntryHashFromEntry(chainId, entry)
+	hashFromEntry, err := protocol.ComputeFactomEntryHashForAccount(chainId, entry.GetData())
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
@@ -422,7 +378,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	ent, err := dataChain.Entry(0)
 	require.NoError(t, err)
 	id := protocol.ComputeLiteDataAccountId(ent)
-	newh, err := protocol.ComputeLiteEntryHashFromEntry(id, ent)
+	newh, err := protocol.ComputeFactomEntryHashForAccount(id, ent.GetData())
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashes[0]), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
@@ -430,8 +386,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 }
 
 func TestCreateAdiDataAccount(t *testing.T) {
-
-	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
+	t.Run("Data Account with Default Key Book and no Manager Key Book", func(t *testing.T) {
 		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
@@ -457,7 +412,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 	})
 
-	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
+	t.Run("Data Account with Custom Key Book and Manager Key Book Url", func(t *testing.T) {
 		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 		n := nodes[subnets[1]][0]
@@ -469,6 +424,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/foo/book1/1"), 1e9))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/mgr/book1/2"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -482,6 +439,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(cda).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				WithSigner(url.MustParse("FooBar/foo/book1/1"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
+				WithSigner(url.MustParse("FooBar/mgr/book1/2"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
 				Build())
 		})
 
@@ -520,9 +481,11 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		wd := new(protocol.WriteData)
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-			wd.Entry.Data = append(wd.Entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
+			entry := new(protocol.AccumulateDataEntry)
+			wd.Entry = entry
+			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
 			for i := 0; i < 10; i++ {
-				wd.Entry.Data = append(wd.Entry.Data, []byte(fmt.Sprintf("test id %d", i)))
+				entry.Data = append(entry.Data, []byte(fmt.Sprintf("test id %d", i)))
 			}
 
 			send(newTxn("FooBar/oof").
@@ -539,7 +502,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		rde := new(query.ResponseDataEntry)
 		n.QueryAccountAs("FooBar/oof#data", rde)
 
-		if !rde.Entry.Equal(&wd.Entry) {
+		if !protocol.EqualDataEntry(rde.Entry, wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
@@ -547,14 +510,14 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		rde2 := new(query.ResponseDataEntry)
 		n.QueryAccountAs(fmt.Sprintf("FooBar/oof#data/%X", wd.Entry.Hash()), rde2)
 
-		if !rde.Entry.Equal(&rde2.Entry) {
+		if !protocol.EqualDataEntry(rde.Entry, rde2.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry set
 		rde3 := new(query.ResponseDataEntrySet)
 		n.QueryAccountAs("FooBar/oof#data/0:1", rde3)
-		if !rde.Entry.Equal(&rde3.DataEntries[0].Entry) {
+		if !protocol.EqualDataEntry(rde.Entry, rde3.DataEntries[0].Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
@@ -602,27 +565,57 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
-		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(batch, "FooBar/book1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/book1/1"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
 			tac.Url = n.ParseUrl("FooBar/Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.Authorities = []*url.URL{n.ParseUrl("foo/book1")}
+			tac.Authorities = []*url.URL{n.ParseUrl("FooBar/book1")}
 			send(newTxn("FooBar").
 				WithSigner(url.MustParse("FooBar/book0/1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				WithSigner(url.MustParse("FooBar/book1/1"), 1).
+				Sign(protocol.SignatureTypeED25519, pageKey).
+				Build())
+		})
+	})
+
+	t.Run("Remote Key Book", func(t *testing.T) {
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+		n := nodes[subnets[1]][0]
+
+		aliceKey, bobKey := generateKey(), generateKey()
+		batch := n.db.Begin(true)
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+		require.NoError(t, batch.Commit())
+
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			tac := new(protocol.CreateTokenAccount)
+			tac.Url = n.ParseUrl("alice/tokens")
+			tac.TokenUrl = protocol.AcmeUrl()
+			tac.Authorities = []*url.URL{n.ParseUrl("bob/book0")}
+			send(newTxn("alice").
+				WithSigner(url.MustParse("alice/book0/1"), 1).
+				WithBody(tac).
+				Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+				WithSigner(url.MustParse("bob/book0/1"), 1).
+				Sign(protocol.SignatureTypeED25519, bobKey).
 				Build())
 		})
 
-		u := n.ParseUrl("foo/book1")
+		// Wait for the remote signature to settle
+		time.Sleep(time.Second)
 
-		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		r := n.GetTokenAccount("alice/tokens")
+		require.Equal(t, "alice/tokens", r.Url.ShortString())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
-		require.Equal(t, u.String(), r.KeyBook().String())
+		require.Equal(t, "bob/book0", r.KeyBook().ShortString())
 	})
 }
 
@@ -688,8 +681,9 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
+	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
 	alice := generateKey()
@@ -1436,7 +1430,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd := new(protocol.WriteData)
 	d, err := ng.MarshalBinary()
 	require.NoError(t, err)
-	wd.Entry.Data = append(wd.Entry.Data, d)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
 			WithSigner(n.network.OperatorPage(0), 1).

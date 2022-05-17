@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -125,7 +126,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	var ledger *protocol.InternalLedger
 	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
-		n.height = ledger.Index
+		n.height = int64(ledger.Index)
 	} else {
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
@@ -154,10 +155,17 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Executor: mgr,
+		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
-		Network:  *n.network,
-		Address:  n.key.PubKey().Address(),
+		Config: &config.Config{Accumulate: config.Accumulate{
+			Network: *n.network,
+			Snapshots: config.Snapshots{
+				Directory: "snapshots",
+				Frequency: 0, // Do not take snapshots
+			},
+		}},
+		Address: n.key.PubKey().Address(),
 	})
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()
@@ -232,6 +240,7 @@ func (n *FakeNode) NextHeight() int64 {
 }
 
 func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
+	n.t.Helper()
 	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
 	n.Require().NoError(err)
 	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
@@ -253,6 +262,7 @@ func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
 }
 
 func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
+	n.t.Helper()
 	r := n.QueryAccount(url)
 	data, err := json.Marshal(r.Data)
 	n.Require().NoError(err)
@@ -369,8 +379,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 func convertIds32(ids ...[32]byte) [][]byte {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
-		// Make a copy to avoid capturing the loop variable
-		id := id
+		id := id // See docs/developer/rangevarref.md
 		ids2[i] = id[:]
 	}
 	return ids2
@@ -428,54 +437,63 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 }
 
 func (n *FakeNode) GetDataAccount(url string) *protocol.DataAccount {
+	n.t.Helper()
 	acct := new(protocol.DataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
+	n.t.Helper()
 	acct := new(protocol.TokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteIdentity(url string) *protocol.LiteIdentity {
+	n.t.Helper()
 	acct := new(protocol.LiteIdentity)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
+	n.t.Helper()
 	acct := new(protocol.LiteTokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteDataAccount(url string) *protocol.LiteDataAccount {
+	n.t.Helper()
 	acct := new(protocol.LiteDataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetADI(url string) *protocol.ADI {
+	n.t.Helper()
 	adi := new(protocol.ADI)
 	n.QueryAccountAs(url, adi)
 	return adi
 }
 
 func (n *FakeNode) GetKeyBook(url string) *protocol.KeyBook {
+	n.t.Helper()
 	book := new(protocol.KeyBook)
 	n.QueryAccountAs(url, book)
 	return book
 }
 
 func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
+	n.t.Helper()
 	mss := new(protocol.KeyPage)
 	n.QueryAccountAs(url, mss)
 	return mss
 }
 
 func (n *FakeNode) GetOraclePrice() uint64 {
+	n.t.Helper()
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
@@ -485,6 +503,7 @@ func (n *FakeNode) GetOraclePrice() uint64 {
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
+	n.t.Helper()
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss

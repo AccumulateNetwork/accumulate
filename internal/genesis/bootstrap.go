@@ -86,18 +86,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		type DataRecord struct {
 			Account *protocol.DataAccount
-			Entry   *protocol.DataEntry
+			Entry   protocol.DataEntry
 		}
 		var dataRecords []DataRecord
 
 		//create a vote scratch chain
 		wd := new(protocol.WriteData)
 		lci := types.LastCommitInfo{}
-		d, err := json.Marshal(&lci)
+		data, err := json.Marshal(&lci)
 		if err != nil {
 			return err
 		}
-		wd.Entry.Data = append(wd.Entry.Data, d)
+		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
 		da := new(protocol.DataAccount)
 		da.Scratch = true
@@ -106,7 +106,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
-		dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+		dataRecords = append(dataRecords, DataRecord{da, wd.Entry})
 
 		//create an evidence scratch chain
 		da = new(protocol.DataAccount)
@@ -124,16 +124,15 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		threshold := new(protocol.NetworkGlobals)
 		threshold.ValidatorThreshold.Numerator = 2
 		threshold.ValidatorThreshold.Denominator = 3
-		var dat []byte
-		dat, err = threshold.MarshalBinary()
+		data, err = threshold.MarshalBinary()
 		if err != nil {
 			return err
 		}
-		wg.Entry.Data = append(wg.Entry.Data, dat)
+		wg.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 		global.AddAuthority(uOpBook)
 		records = append(records, global)
 		urls = append(urls, global.Url)
-		dataRecords = append(dataRecords, DataRecord{global, &wg.Entry})
+		dataRecords = append(dataRecords, DataRecord{global, wg.Entry})
 
 		switch opts.Network.Type {
 		case config.Directory:
@@ -143,19 +142,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			oracle := new(protocol.AcmeOracle)
 			oracle.Price = oraclePrice
 			wd := new(protocol.WriteData)
-			d, err = json.Marshal(&oracle)
+			data, err = json.Marshal(&oracle)
 			if err != nil {
 				return err
 			}
-			wd.Entry.Data = append(wd.Entry.Data, d)
-
+			wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
 			da.AddAuthority(uOpBook)
 
 			records = append(records, da)
 			urls = append(urls, da.Url)
-			dataRecords = append(dataRecords, DataRecord{da, &wd.Entry})
+			dataRecords = append(dataRecords, DataRecord{da, wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
 			acme.AddAuthority(uOpBook)

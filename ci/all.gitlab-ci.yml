@@ -66,6 +66,7 @@ validate docker:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0
   - cd nodes
+  - docker-compose up tools
   - docker-compose up -d
   script:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
@@ -87,7 +88,7 @@ lint:
     - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:lint\r${SECTION}Lint"
-    - go run github.com/golangci/golangci-lint/cmd/golangci-lint run --verbose --timeout=10m ./...
+    - go run ./tools/cmd/golangci-lint run --verbose --timeout=10m
     - echo -e "${SECTION}section_end:`date +%s`:lint\r${SECTION}"
 
     - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
