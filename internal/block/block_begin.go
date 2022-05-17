@@ -293,6 +293,9 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction: %w", err)
 		}
 		txn := state.Transaction
+		if txn.Body.Type() == protocol.TransactionTypeSystemGenesis {
+			continue // Genesis is added to subnet/synthetic#chain/main, but it's not a real synthetic transaction
+		}
 
 		if !bytes.Equal(hash, txn.GetHash()) {
 			return false, errors.Format(errors.StatusInternalError, "%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
