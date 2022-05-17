@@ -316,8 +316,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
-	case TransactionTypeMirrorSystemRecords:
-		return new(MirrorSystemRecords), nil
 	case TransactionTypePartitionAnchor:
 		return new(PartitionAnchor), nil
 	case TransactionTypeRemote:
@@ -397,9 +395,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
-		return ok && a.Equal(b)
-	case *MirrorSystemRecords:
-		b, ok := b.(*MirrorSystemRecords)
 		return ok && a.Equal(b)
 	case *PartitionAnchor:
 		b, ok := b.(*PartitionAnchor)
