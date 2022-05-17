@@ -48,11 +48,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
-		uOpBook := uAdi.JoinPath(protocol.OperatorBook)
+		uOper := uAdi.JoinPath(protocol.OperatorBook)
 
 		adi := new(protocol.ADI)
 		adi.Url = uAdi
-		adi.AddAuthority(uOpBook)
+		adi.AddAuthority(uOper)
 		records = append(records, adi)
 
 		// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
@@ -75,7 +75,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the anchor pool
 		anchors := new(protocol.Anchor)
 		anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
-		anchors.AddAuthority(uOpBook)
+		anchors.AddAuthority(uOper)
 		records = append(records, anchors)
 
 		// Create records and directory entries
@@ -102,7 +102,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da := new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Votes)
-		da.AddAuthority(uOpBook)
+		da.AddAuthority(uOper)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -112,7 +112,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		da = new(protocol.DataAccount)
 		da.Scratch = true
 		da.Url = uAdi.JoinPath(protocol.Evidence)
-		da.AddAuthority(uOpBook)
+		da.AddAuthority(uOper)
 
 		records = append(records, da)
 		urls = append(urls, da.Url)
@@ -129,7 +129,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			return err
 		}
 		wg.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-		global.AddAuthority(uOpBook)
+		global.AddAuthority(uOper)
 		records = append(records, global)
 		urls = append(urls, global.Url)
 		dataRecords = append(dataRecords, DataRecord{global, wg.Entry})
@@ -149,14 +149,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 			da := new(protocol.DataAccount)
 			da.Url = uAdi.JoinPath(protocol.Oracle)
-			da.AddAuthority(uOpBook)
+			da.AddAuthority(uOper)
 
 			records = append(records, da)
 			urls = append(urls, da.Url)
 			dataRecords = append(dataRecords, DataRecord{da, wd.Entry})
 
 			acme := new(protocol.TokenIssuer)
-			acme.AddAuthority(uOpBook)
+			acme.AddAuthority(uOper)
 			acme.Url = protocol.AcmeUrl()
 			acme.Precision = 8
 			acme.Symbol = "ACME"
