@@ -6,12 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+var Keyname string
+
+func init() {
+	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
+}
 
 var dataCmd = &cobra.Command{
 	Use:   "data",
@@ -39,10 +47,18 @@ var dataCmd = &cobra.Command{
 			}
 		case "write":
 			if len(args) > 2 {
-				out, err = WriteData(args[1], args[2:])
-				if err != nil {
-					fmt.Println("Usage:")
-					PrintDataWrite()
+				if Keyname != "" {
+					out, err = WriteAnyData(args[1], args[2:], Keyname)
+					if err != nil {
+						fmt.Println("Usage:")
+						PrintDataWrite()
+					}
+				} else {
+					out, err = WriteData(args[1], args[2:])
+					if err != nil {
+						fmt.Println("Usage:")
+						PrintDataWrite()
+					}
 				}
 			} else {
 				PrintDataWrite()
@@ -85,6 +101,8 @@ func PrintDataAccountCreate() {
 
 func PrintDataWrite() {
 	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] --sign-data [keyname] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+
 }
 
 func PrintDataWriteTo() {
@@ -308,6 +326,37 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 
+func WriteAnyData(accountUrl string, args []string, keyname string) (string, error) {
+	u, err := url.Parse(accountUrl)
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(u, args)
+	if err != nil {
+		return "", err
+	}
+
+	if len(args) < 1 {
+		return "", fmt.Errorf("expecting account url")
+	}
+	key, err := GetWallet().Get(BucketKeys, []byte(keyname))
+	if err != nil {
+		return "", fmt.Errorf("Key does not exist in the wallet %v", err)
+	}
+	wd := protocol.WriteData{}
+	wd.Entry, err = prepareAnyData(args, false, key, signer)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
+	res, err := dispatchTxAndWait(&wd, nil, u, signer)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
+
+	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
+}
+
 func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataEntry {
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
@@ -328,6 +377,47 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 		entry.Data = append(entry.Data, data)
 	}
 	return entry
+}
+
+func prepareAnyData(args []string, isFirstLiteEntry bool, key []byte, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
+	entry := new(protocol.AccumulateDataEntry)
+
+	if isFirstLiteEntry {
+		entry.Data = append(entry.Data, []byte{})
+	}
+	for i := 0; i < len(args); i++ {
+		data := make([]byte, len(args[i]))
+
+		//attempt to hex decode it
+		n, err := hex.Decode(data, []byte(args[i]))
+		if err != nil {
+			//if it is not a hex string, then just store the data as-is
+			copy(data, args[i])
+		} else {
+			//clip the padding
+			data = data[:n]
+		}
+
+		entry.Data = append(entry.Data, data)
+
+	}
+	tstamp := time.Now().String()
+	salt := []byte(tstamp)
+	entry.Data = append(entry.Data, salt)
+	fullDat := []byte{}
+	for _, d := range entry.Data {
+		fullDat = append(fullDat, d...)
+	}
+	sig, err := signer.Sign(fullDat)
+	if err != nil {
+		return nil, err
+	}
+	sign, err := sig.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	entry.Data = append(entry.Data, sign)
+	return entry, nil
 }
 
 func WriteDataTo(accountUrl string, args []string) (string, error) {
