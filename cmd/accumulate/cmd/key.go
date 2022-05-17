@@ -205,7 +205,7 @@ func parseKey(s string) (*Key, error) {
 			priv = pvkey.PrivKey.Bytes()
 		}
 		// TODO Check the key type
-		return &Key{PrivateKey: pub, PublicKey: priv, Type: protocol.SignatureTypeED25519}, nil
+		return &Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}, nil
 	}
 
 	return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
