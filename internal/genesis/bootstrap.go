@@ -281,11 +281,11 @@ func (g *genesis) initDN(oraclePrice uint64) error {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	daOracle := new(protocol.DataAccount)
 	daOracle.Url = g.adiUrl.JoinPath(protocol.Oracle)
-	daOracle.AddAuthority(g.adiUrl)
+	daOracle.AddAuthority(g.authorityUrl)
 	g.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle, wd.Entry})
 
 	acme := new(protocol.TokenIssuer)
-	acme.AddAuthority(g.adiUrl)
+	acme.AddAuthority(g.authorityUrl)
 	acme.Url = protocol.AcmeUrl()
 	acme.Precision = 8
 	acme.Symbol = "ACME"
