@@ -215,7 +215,7 @@ func (g *genesis) createVoteScratchChain() error {
 	if err != nil {
 		return err
 	}
-	wd.Entry.Data = append(wd.Entry.Data, lciDta)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{lciData}}
 
 	da := new(protocol.DataAccount)
 	da.Scratch = true
@@ -243,13 +243,13 @@ func (g *genesis) createGlobals() error {
 	threshold := new(protocol.NetworkGlobals)
 	threshold.ValidatorThreshold.Numerator = 2
 	threshold.ValidatorThreshold.Denominator = 3
-	dat, err := threshold.MarshalBinary()
+	data, err := threshold.MarshalBinary()
 	if err != nil {
 		return err
 	}
-	wg.Entry.Data = append(wg.Entry.Data, dat)
+	wg.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	global.AddAuthority(g.authorityUrl)
-	g.writeDataRecord(global, global.Url, DataRecord{global, &wg.Entry})
+	g.writeDataRecord(global, global.Url, DataRecord{global, wg.Entry})
 	return nil
 }
 
@@ -259,16 +259,15 @@ func (g *genesis) initDN(oraclePrice uint64) error {
 	oracle := new(protocol.AcmeOracle)
 	oracle.Price = oraclePrice
 	wd := new(protocol.WriteData)
-	d, err := json.Marshal(&oracle)
+	data, err := json.Marshal(&oracle)
 	if err != nil {
 		return err
 	}
-	wd.Entry.Data = append(wd.Entry.Data, d)
-
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	daOracle := new(protocol.DataAccount)
 	daOracle.Url = g.adiUrl.JoinPath(protocol.Oracle)
 	daOracle.AddAuthority(g.adiUrl)
-	g.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle, &wd.Entry})
+	g.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle, wd.Entry})
 
 	acme := new(protocol.TokenIssuer)
 	acme.AddAuthority(g.adiUrl)

@@ -408,7 +408,7 @@ func IsValidAdiUrl(u *url.URL) error {
 
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
-	_, ok := ParseBvnUrl(u)
+	_, ok := ParseSubnetUrl(u)
 	return ok || BelongsToDn(u)
 }
 
@@ -436,9 +436,12 @@ func IsBvnUrl(u *url.URL) bool {
 	return strings.HasPrefix(u.Hostname(), "bvn-")
 }
 
-// ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
+// ParseSubnetUrl extracts the BVN subnet name from a BVN URL, if the URL is a
 // valid BVN ADI URL.
-func ParseBvnUrl(u *url.URL) (string, bool) {
+func ParseSubnetUrl(u *url.URL) (string, bool) {
+	if IsDnUrl(u) {
+		return Directory, true
+	}
 	if !strings.HasPrefix(u.Authority, "bvn-") {
 		return "", false
 	}

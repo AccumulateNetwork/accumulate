@@ -467,7 +467,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
 	// Don't charge fees for internal administrative functions
 	signer := signature.GetSigner()
-	_, isBvn := protocol.ParseBvnUrl(signer)
+	_, isBvn := protocol.ParseSubnetUrl(signer)
 	if isBvn || protocol.IsDnUrl(signer) {
 		return 0, nil
 	}
@@ -606,8 +606,8 @@ func verifySyntheticSignature(net *config.Network, _ *database.Batch, transactio
 	if md.Nested() {
 		return errors.New(errors.StatusBadRequest, "a synthetic signature cannot be nested within another signature")
 	}
-	if !transaction.Body.Type().IsSynthetic() {
-		return fmt.Errorf("synthetic signatures are not allowed for non-synthetic transactions")
+	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
+		return fmt.Errorf("synthetic or system signatures are not allowed for non-synthetic or non-system transactions")
 	}
 
 	// if !isInitiator {
@@ -627,15 +627,15 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 		return errors.New(errors.StatusBadRequest, "a receipt signature cannot be nested within another signature")
 	}
 
-	if !transaction.Body.Type().IsSynthetic() {
-		return fmt.Errorf("receipt signatures are not allowed for non-synthetic transactions")
+	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
+		return fmt.Errorf("receipt signatures are not allowed for non-synthetic or non-system transactions")
 	}
 
 	if !md.Initiated {
 		return fmt.Errorf("receipt signatures must not be the initiator")
 	}
 
-	if !receipt.Receipt.Convert().Validate() {
+	if !receipt.Proof.Convert().Validate() {
 		return fmt.Errorf("invalid receipt")
 	}
 

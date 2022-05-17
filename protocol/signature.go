@@ -415,7 +415,7 @@ func (s *RCD1Signature) GetVote() VoteType {
  * BTC Signature
  */
 
-func SignBTC(sig *BTCSignature, privateKey, txnHash []byte) {
+func SignBTC(sig *BTCSignature, privateKey, txnHash []byte) error {
 	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -423,9 +423,10 @@ func SignBTC(sig *BTCSignature, privateKey, txnHash []byte) {
 	sig.PublicKey = pubKey.SerializeCompressed()
 	sign, err := pvkey.Sign(hash[:])
 	if err != nil {
-		fmt.Println("Unable to sign the txn invalid privatekey")
+		return err
 	}
 	sig.Signature = sign.Serialize()
+	return nil
 }
 
 // GetSigner returns Signer.
@@ -503,7 +504,7 @@ func (e *BTCSignature) Verify(txnHash []byte) bool {
  * BTCLegacy Signature
  */
 
-func SignBTCLegacy(sig *BTCLegacySignature, privateKey, txnHash []byte) {
+func SignBTCLegacy(sig *BTCLegacySignature, privateKey, txnHash []byte) error {
 	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -511,9 +512,10 @@ func SignBTCLegacy(sig *BTCLegacySignature, privateKey, txnHash []byte) {
 	sig.PublicKey = pubKey.SerializeUncompressed()
 	sign, err := pvkey.Sign(hash[:])
 	if err != nil {
-		fmt.Println("Unable to sign the txn invalid privatekey")
+		return err
 	}
 	sig.Signature = sign.Serialize()
+	return nil
 }
 
 // GetSigner returns Signer.
@@ -591,7 +593,7 @@ func (e *BTCLegacySignature) Verify(txnHash []byte) bool {
  * ETH Signature
  */
 
-func SignETH(sig *ETHSignature, privateKey, txnHash []byte) {
+func SignETH(sig *ETHSignature, privateKey, txnHash []byte) error {
 	data := sig.Metadata().Hash()
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -599,9 +601,10 @@ func SignETH(sig *ETHSignature, privateKey, txnHash []byte) {
 	sig.PublicKey = pubKey.SerializeUncompressed()
 	sign, err := pvkey.Sign(hash[:])
 	if err != nil {
-		fmt.Println("Unable to sign the txn invalid privatekey")
+		return err
 	}
 	sig.Signature = sign.Serialize()
+	return nil
 }
 
 // GetSigner returns Signer.
@@ -696,7 +699,7 @@ func (s *ReceiptSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns the marshalled receipt.
 func (s *ReceiptSignature) GetSignature() []byte {
-	b, _ := s.Receipt.MarshalBinary()
+	b, _ := s.Proof.MarshalBinary()
 	return b
 }
 
@@ -725,7 +728,7 @@ func (s *ReceiptSignature) GetVote() VoteType {
 
 // Verify returns true if this receipt is a valid receipt of the hash.
 func (s *ReceiptSignature) Verify(hash []byte) bool {
-	return bytes.Equal(s.Start, hash) && s.Receipt.Convert().Validate()
+	return bytes.Equal(s.Proof.Start, hash) && s.Proof.Convert().Validate()
 }
 
 /*

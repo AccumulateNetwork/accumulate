@@ -63,21 +63,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 	}
 
 	for k, v := range values {
-		// The statement below takes a copy of K. This is necessary because K is
-		// `var k [32]byte`, a fixed-length array, and arrays in go are
-		// pass-by-value. This means that range variable K is overwritten on
-		// each loop iteration. Without this statement, `k[:]` creates a slice
-		// that points to the range variable, so every call to `txn.Set` gets a
-		// slice pointing to the same memory. Since the transaction defers the
-		// actual write until `txn.Execute` is called, it saves the slice. And
-		// since all of the slices are pointing to the same variable, and that
-		// variable is overwritten on each iteration, the slices held by `txn`
-		// all point to the same value. When the transaction is committed, every
-		// value is written to the last key. Taking a copy solves this because
-		// each loop iteration creates a new copy, and `k[:]` references that
-		// copy instead of the original. See also:
-		// https://github.com/golang/go/wiki/CommonMistakes#using-reference-to-loop-iterator-variable
-		k := k
+		k := k // See docs/developer/rangevarref.md
 		err := b.txn.Set(k[:], v)
 		if err != nil {
 			return err

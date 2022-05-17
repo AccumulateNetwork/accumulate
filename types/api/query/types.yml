@@ -119,9 +119,10 @@ GeneralReceipt:
       type: uvarint
     - name: DirectoryBlock
       type: uvarint
-    - name: Receipt
+    - name: Proof
       type: protocol.Receipt
       marshal-as: reference
+      alternative: Receipt
     - name: Error
       type: string
 
@@ -213,7 +214,7 @@ ResponseDataEntry:
       type: chain
     - name: Entry
       type: protocol.DataEntry
-      marshal-as: reference
+      marshal-as: union
 
 ResponseDataEntrySet:
   fields:
@@ -265,7 +266,7 @@ RequestMinorBlocks:
     - name: TxFetchMode
       type: TxFetchMode
       marshal-as: enum
-    - name: FilterSynthAnchorsOnlyBlocks
+    - name: FilterSystemAnchorsOnlyBlocks
       type: bool
 
 ResponseMinorBlocks:

@@ -204,7 +204,7 @@ func TestManagerSeries(t *testing.T) {
 			for i := 0; i < 3; i++ { // Add stuff in 3 passes
 				for j := 0; j < 3; j++ { // Add more stuff in 3 more passes
 					for k, v := range SetOfValues { // Update any existing entries
-						SetOfValues[k] = sha256.Sum256(v[:]) // Update the value by hashing it
+						SetOfValues[k] = sha256.Sum256(v[:]) //nolint:rangevarref // Update the value by hashing it
 					}
 
 					for k := 0; k < d; k++ { // Now add d new entries

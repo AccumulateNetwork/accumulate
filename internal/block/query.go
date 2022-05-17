@@ -309,7 +309,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 			res := &query.ResponseDataEntry{
-				Entry: *entry,
+				Entry: entry,
 			}
 			copy(res.EntryHash[:], entryHash)
 			return []byte("data-entry"), res, nil
@@ -339,7 +339,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					if err != nil {
 						return nil, nil, err
 					}
-					er.Entry = *entry
+					er.Entry = entry
 					res.DataEntries = append(res.DataEntries, er)
 				}
 				return []byte("data-entry-set"), res, nil
@@ -357,7 +357,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 					res := &query.ResponseDataEntry{}
 					copy(res.EntryHash[:], entry.Hash())
-					res.Entry = *entry
+					res.Entry = entry
 					return []byte("data-entry"), res, nil
 				} else {
 					entry, err := data.Entry(int64(index))
@@ -368,7 +368,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					_, err = protocol.ParseLiteDataAddress(u)
 					if err != nil {
 						copy(res.EntryHash[:], entry.Hash())
-						res.Entry = *entry
+						res.Entry = entry
 						return []byte("data-entry"), res, nil
 					}
 					firstentry, err := data.Entry(int64(0))
@@ -376,9 +376,9 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 						return nil, nil, err
 					}
 					id := protocol.ComputeLiteDataAccountId(firstentry)
-					newh, _ := protocol.ComputeLiteEntryHashFromEntry(id, entry)
+					newh, _ := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
 					copy(res.EntryHash[:], newh)
-					res.Entry = *entry
+					res.Entry = entry
 					return []byte("data-entry"), res, nil
 				}
 			}
@@ -567,6 +567,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 	qr.TxSynthTxIds = make(types.Bytes, 0, len(synth.Hashes)*32)
 	for _, synth := range synth.Hashes {
+		synth := synth // See docs/developer/rangevarref.md
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
@@ -662,7 +663,7 @@ func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*query.Res
 	}
 
 	copy(qr.EntryHash[:], entryHash)
-	qr.Entry = *entry
+	qr.Entry = entry
 	return &qr, nil
 }
 
@@ -680,7 +681,7 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 		return nil, err
 	}
 
-	qr.Entry = *entry
+	qr.Entry = entry
 	return &qr, nil
 }
 
@@ -707,7 +708,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 			if err != nil {
 				return nil, err
 			}
-			er.Entry = *entry
+			er.Entry = entry
 		}
 
 		qr.DataEntries = append(qr.DataEntries, er)
@@ -963,14 +964,13 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		minorEntry.BlockIndex = idxEntry.BlockIndex
 		minorEntry.BlockTime = idxEntry.BlockTime
 
-		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < query.TxFetchModeOmit || req.FilterSynthAnchorsOnlyBlocks) {
+		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < query.TxFetchModeOmit || req.FilterSystemAnchorsOnlyBlocks) {
 			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, idxEntry.BlockIndex).Get()
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
 			minorEntry.TxCount = uint64(0)
-			internalTxCount := uint64(0)
-			synthAnchorCount := uint64(0)
+			systemTxCount := uint64(0)
 			var lastTxid []byte
 			for _, updIdx := range chainUpdatesIndex.Entries {
 				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
@@ -981,23 +981,20 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				if req.TxFetchMode <= query.TxFetchModeIds {
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
-				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSynthAnchorsOnlyBlocks {
+				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSystemAnchorsOnlyBlocks {
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
 						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt.IsInternal() {
-							internalTxCount++
+						if txt.IsSystem() {
+							systemTxCount++
 						} else if req.TxFetchMode == query.TxFetchModeExpand {
 							minorEntry.Transactions = append(minorEntry.Transactions, qr)
-						}
-						if txt == protocol.TransactionTypeSyntheticAnchor && req.FilterSynthAnchorsOnlyBlocks {
-							synthAnchorCount++
 						}
 					}
 				}
 				lastTxid = updIdx.Entry
 			}
-			if minorEntry.TxCount > (internalTxCount + synthAnchorCount) {
+			if minorEntry.TxCount > systemTxCount {
 				resp.Entries = append(resp.Entries, minorEntry)
 			}
 		} else {
@@ -1028,7 +1025,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	receipt := new(query.TxReceipt)
 	receipt.Account = entry.Account
 	receipt.Chain = entry.Chain
-	receipt.Receipt.Start = txid
+	receipt.Proof.Start = txid
 
 	account := batch.Account(entry.Account)
 	block, r, err := indexing.ReceiptForChainEntry(&m.Network, batch, account, txid, entry)
@@ -1037,7 +1034,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	}
 
 	receipt.LocalBlock = block
-	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
@@ -1048,7 +1045,7 @@ func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, 
 		return receipt, err
 	}
 
-	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 
@@ -1060,7 +1057,7 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	}
 
 	receipt.LocalBlock = block
-	receipt.Receipt = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *protocol.ReceiptFromManaged(r)
 	return receipt, nil
 }
 

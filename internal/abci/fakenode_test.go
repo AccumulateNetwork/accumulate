@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -155,7 +156,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	var ledger *protocol.InternalLedger
 	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
-		n.height = ledger.Index
+		n.height = int64(ledger.Index)
 	} else {
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
@@ -184,10 +185,17 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Executor: mgr,
+		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
-		Network:  *n.network,
-		Address:  n.key.PubKey().Address(),
+		Config: &config.Config{Accumulate: config.Accumulate{
+			Network: *n.network,
+			Snapshots: config.Snapshots{
+				Directory: "snapshots",
+				Frequency: 0, // Do not take snapshots
+			},
+		}},
+		Address: n.key.PubKey().Address(),
 	})
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()
@@ -394,8 +402,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 func convertIds32(ids ...[32]byte) [][]byte {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
-		// Make a copy to avoid capturing the loop variable
-		id := id
+		id := id // See docs/developer/rangevarref.md
 		ids2[i] = id[:]
 	}
 	return ids2

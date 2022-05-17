@@ -119,6 +119,7 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 	e.Signatures = make([]protocol.Signature, len(fwd.Signatures))
 	e.Transaction = fwd.Transaction
 	for i, sig := range fwd.Signatures {
+		sig := sig // See docs/developer/rangevarref.md
 		e.Signatures[i] = &sig
 	}
 
@@ -131,7 +132,7 @@ func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *
 	e.Signatures = []protocol.Signature{
 		&protocol.ReceiptSignature{
 			SourceNetwork:   source,
-			Receipt:         *receipt,
+			Proof:           *receipt,
 			TransactionHash: hash,
 		},
 	}

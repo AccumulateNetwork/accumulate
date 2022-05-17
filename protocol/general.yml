@@ -78,9 +78,24 @@ IndexEntry:
       type: time
       pointer: true
 
-DataEntry:
+AccumulateDataEntry:
+  union: { type: dataEntry }
   fields:
+    - name: Version
+      type: uint
     - name: Data
+      repeatable: true
+      type: bytes
+
+FactomDataEntry:
+  non-binary: true
+  union: { type: dataEntry }
+  fields:
+    - name: AccountId
+      type: hash
+    - name: Data
+      type: bytes
+    - name: ExtIds
       repeatable: true
       type: bytes
 
@@ -93,7 +108,7 @@ Receipt:
   fields:
     - name: Start
       type: bytes
-    - name: Result
+    - name: Anchor
       type: bytes
     - name: Entries
       repeatable: true
@@ -136,14 +151,6 @@ KeySpecParams:
       type: url
       pointer: true
       optional: true
-
-AnchoredAccount:
-  fields:
-    - name: Account
-      type: Account
-      marshal-as: union
-    - name: Anchor
-      type: hash
 
 KeySpec:
   fields:

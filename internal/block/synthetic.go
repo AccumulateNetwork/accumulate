@@ -31,7 +31,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		sub.Header = tx.Header
 
 		// Don't record txn -> produced synth txn for internal transactions
-		if from.Body.Type().IsInternal() {
+		if from.Body.Type().IsSystem() {
 			continue
 		}
 
@@ -214,7 +214,7 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 		if !ok {
 			continue
 		}
-		receipts[*(*[32]byte)(receipt.Start)] = receipt
+		receipts[*(*[32]byte)(receipt.Proof.Start)] = receipt
 	}
 
 	// Get the first
@@ -227,16 +227,16 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 	sourceNet := rsig.SourceNetwork
 
 	// Join the remaining receipts
-	receipt := &rsig.Receipt
+	receipt := &rsig.Proof
 	for len(receipts) > 0 {
-		hash = *(*[32]byte)(rsig.Result)
+		hash = *(*[32]byte)(rsig.Proof.Anchor)
 		rsig, ok := receipts[hash]
 		delete(receipts, hash)
 		if !ok {
 			continue
 		}
 
-		r := receipt.Combine(&rsig.Receipt)
+		r := receipt.Combine(&rsig.Proof)
 		if r != nil {
 			receipt = r
 			sourceNet = rsig.SourceNetwork
