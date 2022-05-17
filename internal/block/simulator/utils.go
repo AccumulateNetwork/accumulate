@@ -19,11 +19,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitFromGenesis(t TB, db *database.Database, exec *Executor, netValMap genesis.NetworkValidatorMap) genesis.Genesis {
+func InitGenesis(t TB, db *database.Database, exec *Executor, netValMap genesis.NetworkValidatorMap) genesis.Genesis {
 	t.Helper()
-
-	batch := db.Begin(true)
-	defer batch.Discard()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
@@ -38,12 +35,6 @@ func InitFromGenesis(t TB, db *database.Database, exec *Executor, netValMap gene
 		},
 	})
 	require.NoError(tb{t}, err)
-
-	state, err := temp.MarshalJSON()
-	require.NoError(tb{t}, err)
-
-	require.NoError(tb{t}, exec.InitFromGenesis(batch, state))
-	require.NoError(tb{t}, batch.Commit())
 	return genesis
 }
 

@@ -56,6 +56,7 @@ type genesis struct {
 type Genesis interface {
 	Execute() error
 	Discard()
+	GetDBState() ([]byte, error)
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) (Genesis, error) {
@@ -158,6 +159,21 @@ func (g *genesis) Execute() error {
 		return err
 	}
 	return nil
+}
+
+func (g *genesis) GetDBState() ([]byte, error) {
+	memDb, ok := g.kvdb.(*memory.DB)
+
+	var state []byte
+	var err error
+	if ok {
+		state, err = memDb.MarshalJSON()
+		if err != nil {
+			return nil, nil
+		}
+	}
+
+	return state, err
 }
 
 func (g *genesis) createADI() {
@@ -422,16 +438,11 @@ func (g *genesis) writeDataRecord(account *protocol.DataAccount, url *url.URL, d
 }
 
 func (g *genesis) writeGenesisFile(appHash []byte) error {
-	memDb, ok := g.kvdb.(*memory.DB)
-
-	var state []byte
-	var err error
-	if ok {
-		state, err = memDb.MarshalJSON()
-		if err != nil {
-			return err
-		}
+	state, err := g.GetDBState()
+	if err != nil {
+		return err
 	}
+
 	genDoc := &tmtypes.GenesisDoc{
 		ChainID:         g.opts.Network.LocalSubnetID,
 		GenesisTime:     g.opts.GenesisTime,

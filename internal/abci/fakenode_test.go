@@ -534,7 +534,7 @@ func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 
 func (n *FakeNode) CreateInitChain() {
 	state, err := n.kv.MarshalJSON()
-	n.Require().NoError(err)
+	n.require.NoError(err)
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
 		ChainId:       n.network.LocalSubnetID,

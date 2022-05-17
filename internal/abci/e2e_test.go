@@ -174,7 +174,6 @@ func TestAnchorChain(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
-	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -1799,7 +1798,7 @@ func TestNetworkDefinition(t *testing.T) {
 	require.NoError(t, err)
 
 	networkDefs := new(protocol.NetworkDefinition)
-	err = json.Unmarshal(entry.Data[0], &networkDefs)
+	err = json.Unmarshal(entry.GetData()[0], &networkDefs)
 	require.NoError(t, err)
 
 	require.NotEmpty(t, networkDefs.Subnets)
