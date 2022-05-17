@@ -467,7 +467,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
 	// Don't charge fees for internal administrative functions
 	signer := signature.GetSigner()
-	_, isBvn := protocol.ParseBvnUrl(signer)
+	_, isBvn := protocol.ParseSubnetUrl(signer)
 	if isBvn || protocol.IsDnUrl(signer) {
 		return 0, nil
 	}
@@ -635,7 +635,7 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 		return fmt.Errorf("receipt signatures must not be the initiator")
 	}
 
-	if !receipt.Receipt.Convert().Validate() {
+	if !receipt.Proof.Convert().Validate() {
 		return fmt.Errorf("invalid receipt")
 	}
 

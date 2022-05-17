@@ -87,7 +87,7 @@ func (s *sigSetData) Add(newEntry SigSetEntry, newSignature protocol.Signature) 
 	case protocol.IsDnUrl(newSignature.GetSigner()):
 		newEntry.System = true
 	default:
-		_, ok := protocol.ParseBvnUrl(newSignature.GetSigner())
+		_, ok := protocol.ParseSubnetUrl(newSignature.GetSigner())
 		newEntry.System = ok
 	}
 
@@ -125,7 +125,6 @@ func (s *SignatureSet) Add(keyEntryIndex uint64, newSignature protocol.Signature
 	if err != nil {
 		return 0, err
 	}
-
 	s.txn.batch.putValue(s.key(), s.entries)
 	return len(s.entries.Entries), nil
 }

@@ -144,13 +144,13 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "load anchor pool for directory anchors: %w", err)
 	}
-	_, err = chain.HeightOf(proof.Proof.Result)
+	_, err = chain.HeightOf(proof.Proof.Anchor)
 	if err != nil {
 		code := errors.StatusUnknown
 		if errors.Is(err, errors.StatusNotFound) {
 			code = errors.StatusBadRequest
 		}
-		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Proof.Result[:4], err)
+		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Proof.Anchor[:4], err)
 	}
 
 	return nil

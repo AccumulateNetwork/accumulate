@@ -15,7 +15,6 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -38,6 +37,75 @@ type ExecutorOptions struct {
 	Network config.Network
 
 	isGenesis bool
+}
+
+// NewNodeExecutor creates a new Executor for a node.
+func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
+	executors := []TransactionExecutor{
+		// User transactions
+		AddCredits{},
+		BurnTokens{},
+		CreateDataAccount{},
+		CreateIdentity{},
+		CreateKeyBook{},
+		CreateKeyPage{},
+		CreateToken{},
+		CreateTokenAccount{},
+		IssueTokens{},
+		SendTokens{},
+		UpdateKeyPage{},
+		WriteData{},
+		WriteDataTo{},
+		UpdateAccountAuth{},
+		UpdateKey{},
+
+		// Synthetic
+		SyntheticBurnTokens{},
+		SyntheticCreateIdentity{},
+		SyntheticDepositCredits{},
+		SyntheticDepositTokens{},
+		SyntheticWriteData{},
+
+		// Forwarding
+		SyntheticForwardTransaction{},
+
+		// Validator management
+		AddValidator{},
+		RemoveValidator{},
+		UpdateValidatorKey{},
+	}
+
+	switch opts.Network.Type {
+	case config.Directory:
+		executors = append(executors,
+			PartitionAnchor{},
+			DirectoryAnchor{},
+		)
+
+	case config.BlockValidator:
+		executors = append(executors,
+			DirectoryAnchor{},
+		)
+
+	default:
+		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.Type)
+	}
+
+	// This is a no-op in dev
+	executors = addTestnetExecutors(executors)
+
+	return newExecutor(opts, db, executors...)
+}
+
+// NewGenesisExecutor creates a transaction executor that can be used to set up
+// the genesis state.
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
+	return newExecutor(ExecutorOptions{
+		Network:   network,
+		Logger:    logger,
+		Router:    router,
+		isGenesis: true,
+	}, db)
 }
 
 func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
@@ -126,21 +194,6 @@ func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) 
 		return err
 	}
 
-	mirror, err := m.buildMirror(block.Batch)
-	if err != nil {
-		return err
-	}
-
-	switch m.Network.Type {
-	case config.Directory:
-		for _, bvn := range m.Network.GetBvnNames() {
-			st.Submit(protocol.SubnetUrl(bvn), mirror)
-		}
-
-	case config.BlockValidator:
-		st.Submit(protocol.DnUrl(), mirror)
-	}
-
 	block.State.MergeTransaction(state)
 
 	err = m.ProduceSynthetic(block.Batch, txn, state.ProducedTxns)
@@ -220,52 +273,4 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Network)
-}
-
-func (x *Executor) buildMirror(batch *database.Batch) (*protocol.MirrorSystemRecords, error) {
-	mirror := new(protocol.MirrorSystemRecords)
-
-	nodeUrl := x.Network.NodeUrl()
-	rec, err := mirrorRecord(batch, nodeUrl)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load %s: %w", nodeUrl, err)
-	}
-	mirror.Objects = append(mirror.Objects, rec)
-
-	md, err := loadDirectoryMetadata(batch, nodeUrl)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load %s directory: %w", nodeUrl, err)
-	}
-
-	for i := uint64(0); i < md.Count; i++ {
-		s, err := loadDirectoryEntry(batch, nodeUrl, i)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load %s directory entry %d: %w", nodeUrl, i, err)
-		}
-
-		u, err := url.Parse(s)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "invalid %s directory entry %d: %w", nodeUrl, i, err)
-		}
-
-		rec, err := mirrorRecord(batch, u)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load %s: %w", u, err)
-		}
-
-		// Only mirror keys
-		switch rec.Account.(type) {
-		case *protocol.ADI,
-			*protocol.KeyBook,
-			*protocol.KeyPage:
-			// Keep
-		default:
-			// Discard
-			continue
-		}
-
-		mirror.Objects = append(mirror.Objects, rec)
-	}
-
-	return mirror, nil
 }

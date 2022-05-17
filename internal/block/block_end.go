@@ -207,7 +207,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 	height := synthChain.Height()
 	offset := height - int64(len(block.State.ProducedTxns))
 	for i, txn := range block.State.ProducedTxns {
-		if txn.Type() == protocol.TransactionTypeDirectoryAnchor || txn.Type() == protocol.TransactionTypePartitionAnchor || txn.Type() == protocol.TransactionTypeMirrorSystemRecords {
+		if txn.Body.Type().IsSystem() {
 			// Do not generate a receipt for the anchor
 			continue
 		}
@@ -226,7 +226,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = m.Network.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
+		sig.Proof = *protocol.ReceiptFromManaged(receipt)
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
 			return err

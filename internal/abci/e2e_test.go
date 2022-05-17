@@ -174,7 +174,6 @@ func TestAnchorChain(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	n := nodes[subnets[1]][0]
-	dn := nodes[subnets[0]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -228,49 +227,6 @@ func TestAnchorChain(t *testing.T) {
 
 	// 	assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	// }
-
-	//set price of acme to $445.00 / token
-	price := 445.00
-	dn.MustExecuteAndWait(func(send func(*Tx)) {
-		ao := new(protocol.AcmeOracle)
-		ao.Price = uint64(price * protocol.AcmeOraclePrecision)
-		wd := new(protocol.WriteData)
-		d, err := json.Marshal(&ao)
-		require.NoError(t, err)
-		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
-
-		originUrl := protocol.PriceOracleAuthority
-
-		send(newTxn(originUrl).
-			WithSigner(dn.network.OperatorPage(0), 1).
-			WithBody(wd).
-			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
-			Build())
-	})
-
-	// Give it a second for the DN to send its anchor
-	time.Sleep(time.Second)
-
-	// Get the anchor chain manager for DN
-	batch = dn.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(dn.network.NodeUrl(protocol.Ledger))
-	// Check each anchor
-	var ledgerState *protocol.InternalLedger
-	require.NoError(t, ledger.GetStateAs(&ledgerState))
-	expected := uint64(price * protocol.AcmeOraclePrecision)
-	require.Equal(t, int(expected), int(ledgerState.ActiveOracle))
-
-	time.Sleep(2 * time.Second)
-	// Get the anchor chain manager for BVN
-	batch = n.db.Begin(true)
-	defer batch.Discard()
-	ledger = batch.Account(n.network.NodeUrl(protocol.Ledger))
-
-	// Check each anchor
-	ledgerState = new(protocol.InternalLedger)
-	require.NoError(t, ledger.GetStateAs(&ledgerState))
-	require.Equal(t, ledgerState.ActiveOracle, expected)
 
 	// // TODO Once block indexing has been implemented, verify that the following chains got modified
 	// assert.Subset(t, accounts, []string{
@@ -725,8 +681,9 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
+	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
 
 	alice := generateKey()

@@ -108,7 +108,7 @@ Receipt:
   fields:
     - name: Start
       type: bytes
-    - name: Result
+    - name: Anchor
       type: bytes
     - name: Entries
       repeatable: true
@@ -151,14 +151,6 @@ KeySpecParams:
       type: url
       pointer: true
       optional: true
-
-AnchoredAccount:
-  fields:
-    - name: Account
-      type: Account
-      marshal-as: union
-    - name: Anchor
-      type: hash
 
 KeySpec:
   fields:

@@ -262,7 +262,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 		subnet = protocol.Directory
 	} else {
 		var ok bool
-		subnet, ok = protocol.ParseBvnUrl(sourceNet)
+		subnet, ok = protocol.ParseSubnetUrl(sourceNet)
 		if !ok {
 			return false, errors.Format(errors.StatusUnknown, "%v is not a valid subnet URL", sourceNet)
 		}
@@ -275,14 +275,14 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Is the result a valid DN anchor?
-	_, err = anchorChain.HeightOf(receipt.Result)
+	_, err = anchorChain.HeightOf(receipt.Anchor)
 	switch {
 	case err == nil:
 		// Ready
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
-		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Result[:4], subnet, err)
+		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Anchor[:4], subnet, err)
 	}
 
 	// Get the synthetic signature
@@ -305,12 +305,18 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 		// and the source BVN should be queried to retrieve the missing
 		// synthetic transactions
 
+		// TODO If a synthetic transaction fails, the ledger update is
+		// discarded, resulting in an incorrect 'out of sequence' error
+
 		x.logger.Error("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
 			"seq-got", synthSig.SequenceNumber,
 			"seq-want", subnetLedger.Received+1,
 			"source", synthSig.SourceNetwork,
-			"destination", synthSig.DestinationNetwork)
+			"destination", synthSig.DestinationNetwork,
+			"type", transaction.Body.Type(),
+			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
+		)
 	}
 
 	// Update the received number
@@ -380,7 +386,7 @@ func recordPendingTransaction(net *config.Network, batch *database.Batch, transa
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Result), *(*[32]byte)(transaction.GetHash()))
+	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), *(*[32]byte)(transaction.GetHash()))
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
