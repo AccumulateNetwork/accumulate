@@ -96,6 +96,13 @@ func Wrap(code Status, err error) error {
 	return e
 }
 
+func FormatWithCause(code Status, cause error, format string, args ...interface{}) *Error {
+	e := makeError(code)
+	e.Message = fmt.Sprintf(format, args...)
+	e.setCause(convert(cause))
+	return e
+}
+
 func Format(code Status, format string, args ...interface{}) *Error {
 	err := fmt.Errorf(format, args...)
 

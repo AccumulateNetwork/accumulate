@@ -1,9 +1,9 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -41,10 +41,13 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 func (t *Transaction) GetState() (*SigOrTxn, error) {
 	v := new(SigOrTxn)
 	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		return v, nil
 	}
-	return v, nil
+	if !errors.Is(err, errors.StatusNotFound) {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.id[:8])
 }
 
 // PutState stores the transaction state.
