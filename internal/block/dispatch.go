@@ -83,31 +83,42 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		subnet, batch := subnet, batch // Don't capture loop variables
 		go func() {
 			defer wg.Done()
-			resp, err := d.Router.Submit(ctx, subnet, batch, false, false)
-			if err != nil {
-				errs <- err
-				return
-			}
+			for _, tx := range batch.Transaction {
+				txenv := new(protocol.Envelope)
+				txenv = batch
+				txenv.Transaction = make([]*protocol.Transaction, 0)
+				txenv.Transaction = append(txenv.Transaction, tx)
+				resp, err := d.Router.Submit(ctx, subnet, txenv, false, false)
+				if err != nil {
+					errs <- err
+					return
+				}
 
-			if resp == nil {
-				//Guard put here to prevent nil responses.
-				errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
-				return
-			}
+				if err != nil {
+					errs <- err
+					return
+				}
 
-			// Parse the results
-			rset := new(protocol.TransactionResultSet)
-			err = rset.UnmarshalBinary(resp.Data)
-			if err != nil {
-				errs <- err
-				return
-			}
+				if resp == nil {
+					//Guard put here to prevent nil responses.
+					errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
+					return
+				}
 
-			for _, r := range rset.Results {
-				if r.Error != nil {
-					errs <- r.Error
-				} else if r.Code != 0 {
-					errs <- protocol.NewError(protocol.ErrorCode(r.Code), errors.New(r.Message))
+				// Parse the results
+				rset := new(protocol.TransactionResultSet)
+				err = rset.UnmarshalBinary(resp.Data)
+				if err != nil {
+					errs <- err
+					return
+				}
+
+				for _, r := range rset.Results {
+					if r.Error != nil {
+						errs <- r.Error
+					} else if r.Code != 0 {
+						errs <- protocol.NewError(protocol.ErrorCode(r.Code), errors.New(r.Message))
+					}
 				}
 			}
 		}()
