@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"crypto/sha256"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 )
@@ -67,5 +68,20 @@ func (w *WriteDataTo) GetHash() []byte {
 		hasher.AddHash((*[32]byte)(w.Entry.Hash()))
 	}
 	hasher.AddUrl(w.Recipient)
+	return hasher.MerkleHash()
+}
+
+func (w *SyntheticWriteData) GetHash() []byte {
+	header, err := w.SyntheticOrigin.MarshalBinary()
+	if err != nil {
+		// This should not happen
+		panic(fmt.Errorf("failed to marshal header: %w", err))
+	}
+
+	hasher := new(hash.Hasher)
+	hasher.AddBytes(header)
+	if w.Entry != nil {
+		hasher.AddHash((*[32]byte)(w.Entry.Hash()))
+	}
 	return hasher.MerkleHash()
 }
