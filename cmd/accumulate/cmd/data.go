@@ -47,18 +47,10 @@ var dataCmd = &cobra.Command{
 			}
 		case "write":
 			if len(args) > 2 {
-				if Keyname != "" {
-					out, err = WriteAnyData(args[1], args[2:], Keyname)
-					if err != nil {
-						fmt.Println("Usage:")
-						PrintDataWrite()
-					}
-				} else {
-					out, err = WriteData(args[1], args[2:])
-					if err != nil {
-						fmt.Println("Usage:")
-						PrintDataWrite()
-					}
+				out, err = WriteData(args[1], args[2:])
+				if err != nil {
+					fmt.Println("Usage:")
+					PrintDataWrite()
 				}
 			} else {
 				PrintDataWrite()
@@ -314,46 +306,23 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", fmt.Errorf("expecting account url")
 	}
-
 	wd := protocol.WriteData{}
-	wd.Entry = prepareData(args, false)
-
-	res, err := dispatchTxAndWait(&wd, nil, u, signer)
-	if err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
-}
-
-func WriteAnyData(accountUrl string, args []string, keyname string) (string, error) {
-	u, err := url.Parse(accountUrl)
-	if err != nil {
-		return "", err
-	}
-
-	args, signer, err := prepareSigner(u, args)
-	if err != nil {
-		return "", err
-	}
-
-	if len(args) < 1 {
-		return "", fmt.Errorf("expecting account url")
-	}
-	key, err := GetWallet().Get(BucketKeys, []byte(keyname))
-	if err != nil {
-		return "", fmt.Errorf("Key does not exist in the wallet %v", err)
-	}
-	wd := protocol.WriteData{}
-	wd.Entry, err = prepareAnyData(args, false, key, signer)
-	if err != nil {
-		return PrintJsonRpcError(err)
+	if Keyname != "" {
+		key, err := GetWallet().Get(BucketKeys, []byte(Keyname))
+		if err != nil {
+			return "", fmt.Errorf("Key does not exist in the wallet %v", err)
+		}
+		wd.Entry, err = prepareAnyData(args, false, key, signer)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+	} else {
+		wd.Entry = prepareData(args, false)
 	}
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 
