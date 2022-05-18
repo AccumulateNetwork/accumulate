@@ -111,6 +111,10 @@ type Delivery struct {
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
 	State       ProcessTransactionState
+
+	// For synthetic transactions
+	SequenceNumber uint64
+	SourceNetwork  *url.URL
 }
 
 func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Delivery {
@@ -144,6 +148,17 @@ func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *
 	return e
 }
 
+func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
+	e := new(Delivery)
+	e.parent = d
+	e.Transaction = &protocol.Transaction{
+		Body: &protocol.RemoteTransaction{
+			Hash: hash,
+		},
+	}
+	return e
+}
+
 // IsForwarded returns true if the transaction was delivered within a
 // SyntheticForwardedTransaction.
 func (d *Delivery) IsForwarded() bool {
@@ -153,11 +168,12 @@ func (d *Delivery) IsForwarded() bool {
 // LoadTransaction attempts to load the transaction from the database.
 func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// Check the transaction status
-	status, err := batch.Transaction(d.Transaction.GetHash()).GetStatus()
+	record := batch.Transaction(d.Transaction.GetHash())
+	status, err := record.GetStatus()
 	switch {
 	case err != nil:
 		// Unknown error
-		return nil, fmt.Errorf("load transaction status: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
 
 	case status.Delivered:
 		// Transaction has already been delivered
@@ -170,14 +186,14 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	}
 
 	// Load previous transaction state
-	txState, err := batch.Transaction(d.Transaction.GetHash()).GetState()
+	txState, err := record.GetState()
 	if err == nil {
 		// Loaded existing the transaction from the database
 		d.Transaction = txState.Transaction
 		return status, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		// Unknown error
-		return nil, fmt.Errorf("load transaction: unknown error: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load transaction: %w", err)
 	}
 
 	// Did the envelope include the full body?
@@ -189,16 +205,58 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	// must exist locally
 	principal := d.Transaction.Header.Principal
 	if principal == nil {
-		return nil, fmt.Errorf("load transaction: no principal: %w", err)
+		return nil, errors.NotFound("load transaction: no principal: transaction not found")
 	}
 
 	// If any signature is local or forwarded, the transaction must exist
 	// locally
 	for _, signature := range d.Signatures {
 		if signature.RoutingLocation().LocalTo(principal) {
-			return nil, fmt.Errorf("load transaction: local signature: %w", err)
+			return nil, errors.NotFound("load transaction: local signature: transaction not found")
 		}
 	}
 
 	return status, nil
+}
+
+func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol.TransactionStatus) error {
+	// Get the sequence number from the first signature?
+	if len(d.Signatures) > 0 {
+		if signature, ok := d.Signatures[0].(*protocol.SyntheticSignature); ok {
+			d.SequenceNumber = signature.SequenceNumber
+			d.SourceNetwork = signature.SourceNetwork
+			return nil
+		}
+	}
+
+	// Load the initiator signature set
+	sigset, err := batch.Transaction(d.Transaction.GetHash()).ReadSignatures(status.Initiator)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load transaction: load initiator: %w", err)
+	}
+
+	var sigHash []byte
+	for _, e := range sigset.Entries() {
+		if e.Type == protocol.SignatureTypeSynthetic {
+			sigHash = e.SignatureHash[:]
+			break
+		}
+	}
+	if sigHash == nil {
+		return errors.NotFound("load transaction: missing synthetic origin signature")
+	}
+
+	state, err := batch.Transaction(sigHash).GetState()
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load transaction: load synthetic origin signature: %w", err)
+	}
+
+	signature, ok := state.Signature.(*protocol.SyntheticSignature)
+	if !ok {
+		return errors.Format(errors.StatusInternalError, "load transaction: synthetic origin signature record is invalid")
+	}
+
+	d.SequenceNumber = signature.SequenceNumber
+	d.SourceNetwork = signature.SourceNetwork
+	return nil
 }

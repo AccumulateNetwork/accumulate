@@ -15,6 +15,29 @@ type Block struct {
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+	status, additional, err := x.executeEnvelope(block, delivery)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Process additional transactions. This is intentionally non-recursive.
+	for len(additional) > 0 {
+		var next []*chain.Delivery
+		for _, delivery := range additional {
+			_, additional, err := x.executeEnvelope(block, delivery)
+			if err != nil {
+				return nil, errors.Wrap(errors.StatusUnknown, err)
+			}
+
+			next = append(next, additional...)
+		}
+		additional, next = next, nil
+	}
+
+	return status, nil
+}
+
+func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, []*chain.Delivery, error) {
 	status, err := delivery.LoadTransaction(block.Batch)
 	switch {
 	case err == nil:
@@ -22,13 +45,20 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 	case !errors.Is(err, errors.StatusDelivered):
 		// Unknown error
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 
 	default:
 		// Transaction has already been delivered
 		status := status.Copy()
 		status.Code = protocol.ErrorCodeAlreadyDelivered.GetEnumValue()
-		return status, nil
+		return status, nil, nil
+	}
+
+	if delivery.Transaction.Body.Type().IsSynthetic() {
+		err = delivery.LoadSyntheticMetadata(block.Batch, status)
+		if err != nil {
+			return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		}
 	}
 
 	// Process signatures
@@ -49,17 +79,17 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				status.Message = err.Message
 				status.Error = err
 				status.Result = new(protocol.EmptyResult)
-				return status, nil
+				return status, nil, nil
 			}
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			block.State.MergeSignature(s)
 		}
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
 		}
 	}
 
@@ -69,14 +99,14 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		defer batch.Discard()
 
 		var state *chain.ProcessTransactionState
-		status, state, err = x.ProcessTransaction(batch, delivery.Transaction)
+		status, state, err = x.ProcessTransaction(batch, delivery)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
 		}
 
 		delivery.State.Merge(state)
@@ -109,7 +139,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 	err = x.ProcessRemoteSignatures(block, delivery)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	block.State.MergeTransaction(&delivery.State)
@@ -121,23 +151,17 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		err = x.ProduceSynthetic(batch, delivery.Transaction, delivery.State.ProducedTxns)
 		if err != nil {
-			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+			return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 		}
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
 		}
 	}
 
-	// Process additional transactions
-	for _, delivery := range delivery.State.AdditionalTransactions {
-		// Discard the status of additional transactions
-		_, err = x.ExecuteEnvelope(block, delivery)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return status, nil
+	// Let the caller process additional transactions. It would be easier to do
+	// this here, recursively, but it's possible that could cause a stack
+	// overflow.
+	return status, delivery.State.AdditionalTransactions, nil
 }
