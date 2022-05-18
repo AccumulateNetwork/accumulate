@@ -35,6 +35,7 @@ func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
+		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
 

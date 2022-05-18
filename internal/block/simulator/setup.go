@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -21,9 +21,7 @@ func writeAccountState(t TB, batch *database.Batch, account protocol.Account) {
 
 	identity, ok := account.GetUrl().Parent()
 	if ok {
-		require.NoError(tb{t}, chain.AddDirectoryEntry(func(account *url.URL, key ...interface{}) chain.Value {
-			return batch.Account(account).Index(key...)
-		}, identity, account.GetUrl()))
+		require.NoError(tb{t}, indexing.Directory(batch, identity).Put(account.GetUrl()))
 	}
 }
 
@@ -141,4 +139,13 @@ func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.
 		writeAccountState(s, batch, account)
 		return nil
 	})
+}
+
+func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
+	var account T
+	_ = sim.SubnetFor(accountUrl).Database.View(func(batch *database.Batch) error {
+		require.NoError(tb{sim}, batch.Account(accountUrl).GetStateAs(&account))
+		return nil
+	})
+	return account
 }
