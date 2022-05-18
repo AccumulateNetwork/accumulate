@@ -75,14 +75,3 @@ SyntheticForwardTransaction:
       marshal-as: reference
       pointer: true
       optional: true
-
-SegWitDataEntry:
-  union: { type: transaction }
-  embeddings:
-    - SyntheticOrigin
-  fields:
-    - name: EntryUrl
-      type: url
-      pointer: true
-    - name: EntryHash
-      type: chain
