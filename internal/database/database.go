@@ -5,6 +5,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -102,24 +103,23 @@ func (d *Database) Close() error {
 
 // Account returns an Account for the given URL.
 func (b *Batch) Account(u *url.URL) *Account {
-	return &Account{b, account(u)}
+	return &Account{b, account(u), u}
 }
 
 // AccountByID returns an Account for the given ID.
 //
-// Deprecated: Use Account.
-func (b *Batch) AccountByID(id []byte) *Account {
-	return &Account{b, accountByID(id)}
-}
-
-//
 // This is still needed in one place, so the deprecation warning is disabled in
 // order to pass static analysis.
-
-// AccountByKey returns an Account for the given storage key. This is used for
-// creating snapshots from the BPT.
-func (b *Batch) AccountByKey(key storage.Key) *Account {
-	return &Account{b, accountBucket{objectBucket(key)}}
+//
+// Deprecated: Use Account.
+func (b *Batch) AccountByID(id []byte) (*Account, error) {
+	a := &Account{b, accountByID(id), nil}
+	state, err := a.GetState()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	a.url = state.GetUrl()
+	return a, nil
 }
 
 // Import imports values from another database.
