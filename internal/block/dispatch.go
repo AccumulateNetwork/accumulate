@@ -84,8 +84,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		go func() {
 			defer wg.Done()
 			for _, tx := range batch.Transaction {
-				txenv := new(protocol.Envelope)
-				txenv = batch
+				txenv := batch
 				txenv.Transaction = make([]*protocol.Transaction, 0)
 				txenv.Transaction = append(txenv.Transaction, tx)
 				resp, err := d.Router.Submit(ctx, subnet, txenv, false, false)
