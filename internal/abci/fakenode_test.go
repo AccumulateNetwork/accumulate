@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -200,6 +201,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
+		Keys: [][]byte{n.key.Bytes()},
 	})
 	n.Require().NoError(err)
 
@@ -396,21 +398,18 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)
-	record := batch.Account(u)
-	require.True(n.t, u.RootIdentity().Equal(u))
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err := record.Index("Directory", "Metadata").GetAs(md)
+	dir := indexing.Directory(batch, u)
+	count, err := dir.Count()
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
 	require.NoError(n.t, err)
 
-	chains := make([]string, md.Count)
+	chains := make([]string, count)
 	for i := range chains {
-		data, err := record.Index("Directory", uint64(i)).Get()
+		data, err := dir.Get(uint64(i))
 		require.NoError(n.t, err)
-		chains[i] = string(data)
+		chains[i] = data.String()
 	}
 	return chains
 }

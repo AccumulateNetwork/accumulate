@@ -9,6 +9,7 @@ ChainType:
     value: 0x02
     description: holds chain anchors
   Data:
+    # DEPRECATED
     value: 0x03
     description: holds data entry hashes
   Index:
@@ -206,9 +207,6 @@ TransactionType:
   SyntheticForwardTransaction:
     value: 0x36
     description: forwards a transaction from one subnet to another
-  SegWitDataEntry:
-    value: 0x39
-    description: is a surrogate transaction segregated witness for a WriteData transaction
 
   ##### SYSTEM TRANSACTIONS #####
   SystemGenesis:

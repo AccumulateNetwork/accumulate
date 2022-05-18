@@ -182,16 +182,6 @@ func (r *Account) Index(key ...interface{}) *Value {
 	return &Value{r.batch, r.key.Index(key...)}
 }
 
-// Data returns a data chain manager for the data chain.
-func (r *Account) Data() (*Data, error) {
-	chain, err := r.Chain(protocol.DataChain, protocol.ChainTypeData)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Data{r.batch, r.key, chain}, nil
-}
-
 func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.HashSet, error) {
 	v := new(protocol.HashSet)
 	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
