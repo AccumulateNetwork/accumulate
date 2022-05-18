@@ -298,20 +298,12 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 		}
 	case "data":
-		data, err := batch.Account(u).Data()
-		if err != nil {
-			return nil, nil, err
-		}
 		switch len(fragment) {
 		case 1:
-			entryHash, entry, err := data.GetLatest()
+			res, err := m.queryDataByUrl(batch, u)
 			if err != nil {
 				return nil, nil, err
 			}
-			res := &query.ResponseDataEntry{
-				Entry: entry,
-			}
-			copy(res.EntryHash[:], entryHash)
 			return []byte("data-entry"), res, nil
 		case 2:
 			queryParam := fragment[1]
@@ -325,22 +317,9 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if err != nil {
 					return nil, nil, err
 				}
-				entryHashes, err := data.GetHashes(int64(start), int64(end))
+				res, err := m.queryDataSet(batch, u, int64(start), int64(end-start), true)
 				if err != nil {
 					return nil, nil, err
-				}
-				res := &query.ResponseDataEntrySet{}
-				res.Total = uint64(data.Height())
-				for _, entryHash := range entryHashes {
-					er := query.ResponseDataEntry{}
-					copy(er.EntryHash[:], entryHash)
-
-					entry, err := data.Get(entryHash)
-					if err != nil {
-						return nil, nil, err
-					}
-					er.Entry = entry
-					res.DataEntries = append(res.DataEntries, er)
 				}
 				return []byte("data-entry-set"), res, nil
 			} else {
@@ -350,34 +329,29 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					if err != nil {
 						return nil, nil, err
 					}
-					entry, err := data.Get(entryHash)
+					res, err := m.queryDataByEntryHash(batch, u, entryHash)
+					if err != nil {
+						return nil, nil, err
+					}
+					return []byte("data-entry"), res, nil
+				} else {
+					entryHash, err := indexing.Data(batch, u).Entry(uint64(index))
+					if err != nil {
+						return nil, nil, err
+					}
+
+					txnHash, err := indexing.Data(batch, u).Transaction(entryHash)
+					if err != nil {
+						return nil, nil, err
+					}
+
+					entry, err := indexing.GetDataEntry(batch, txnHash)
 					if err != nil {
 						return nil, nil, err
 					}
 
 					res := &query.ResponseDataEntry{}
-					copy(res.EntryHash[:], entry.Hash())
-					res.Entry = entry
-					return []byte("data-entry"), res, nil
-				} else {
-					entry, err := data.Entry(int64(index))
-					if err != nil {
-						return nil, nil, err
-					}
-					res := &query.ResponseDataEntry{}
-					_, err = protocol.ParseLiteDataAddress(u)
-					if err != nil {
-						copy(res.EntryHash[:], entry.Hash())
-						res.Entry = entry
-						return []byte("data-entry"), res, nil
-					}
-					firstentry, err := data.Entry(int64(0))
-					if err != nil {
-						return nil, nil, err
-					}
-					id := protocol.ComputeLiteDataAccountId(firstentry)
-					newh, _ := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
-					copy(res.EntryHash[:], newh)
+					res.EntryHash = *(*[32]byte)(entryHash)
 					res.Entry = entry
 					return []byte("data-entry"), res, nil
 				}
@@ -484,16 +458,17 @@ func getTransaction(chain *database.Chain, s string) (int64, []byte, error) {
 }
 
 func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.URL, start uint64, limit uint64) (*query.DirectoryQueryResult, error) {
-	md, err := loadDirectoryMetadata(batch, account)
+	dir := indexing.Directory(batch, account)
+	mdCount, err := dir.Count()
 	if err != nil {
 		return nil, err
 	}
 
 	count := limit
-	if start+count > md.Count {
-		count = md.Count - start
+	if start+count > mdCount {
+		count = mdCount - start
 	}
-	if count > md.Count { // when uint64 0-x is really big number
+	if count > mdCount { // when uint64 0-x is really big number
 		count = 0
 	}
 
@@ -501,12 +476,13 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 	resp.Entries = make([]string, count)
 
 	for i := uint64(0); i < count; i++ {
-		resp.Entries[i], err = loadDirectoryEntry(batch, account, start+i)
+		u, err := dir.Get(start + i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
+		resp.Entries[i] = u.String()
 	}
-	resp.Total = md.Count
+	resp.Total = mdCount
 
 	return resp, nil
 }
@@ -652,18 +628,17 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*query.ResponseDataEntry, error) {
 	qr := query.ResponseDataEntry{}
 
-	data, err := batch.Account(u).Data()
+	_, entryHash, txnHash, err := indexing.Data(batch, u).GetLatest()
 	if err != nil {
 		return nil, err
 	}
 
-	entryHash, entry, err := data.GetLatest()
+	qr.Entry, err = indexing.GetDataEntry(batch, txnHash)
 	if err != nil {
 		return nil, err
 	}
 
 	copy(qr.EntryHash[:], entryHash)
-	qr.Entry = entry
 	return &qr, nil
 }
 
@@ -671,48 +646,53 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 	qr := query.ResponseDataEntry{}
 	copy(qr.EntryHash[:], entryHash)
 
-	data, err := batch.Account(u).Data()
+	txnHash, err := indexing.Data(batch, u).Transaction(entryHash)
 	if err != nil {
 		return nil, err
 	}
 
-	entry, err := data.Get(entryHash)
+	qr.Entry, err = indexing.GetDataEntry(batch, txnHash)
 	if err != nil {
 		return nil, err
 	}
 
-	qr.Entry = entry
 	return &qr, nil
 }
 
 func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, limit int64, expand bool) (*query.ResponseDataEntrySet, error) {
+	data := indexing.Data(batch, u)
+	count, err := data.Count()
+	if err != nil {
+		return nil, err
+	}
+
 	qr := query.ResponseDataEntrySet{}
+	qr.Total = count
 
-	data, err := batch.Account(u).Data()
-	if err != nil {
-		return nil, err
-	}
+	for i := uint64(0); i < uint64(limit) && i+uint64(start) < count; i++ {
+		entryHash, err := data.Entry(uint64(start) + i)
+		if err != nil {
+			return nil, err
+		}
 
-	entryHashes, err := data.GetHashes(start, start+limit)
-	if err != nil {
-		return nil, err
-	}
-
-	qr.Total = uint64(data.Height())
-	for _, entryHash := range entryHashes {
 		er := query.ResponseDataEntry{}
 		copy(er.EntryHash[:], entryHash)
 
 		if expand {
-			entry, err := data.Get(entryHash)
+			txnHash, err := data.Transaction(entryHash)
 			if err != nil {
 				return nil, err
 			}
-			er.Entry = entry
+
+			er.Entry, err = indexing.GetDataEntry(batch, txnHash)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		qr.DataEntries = append(qr.DataEntries, er)
 	}
+
 	return &qr, nil
 }
 

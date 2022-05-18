@@ -24,12 +24,35 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	for len(additional) > 0 {
 		var next []*chain.Delivery
 		for _, delivery := range additional {
-			_, additional, err := x.executeEnvelope(block, delivery)
+			status, additional, err := x.executeEnvelope(block, delivery)
 			if err != nil {
 				return nil, errors.Wrap(errors.StatusUnknown, err)
 			}
 
 			next = append(next, additional...)
+			if err != nil {
+				return nil, err
+			}
+
+			if status.Code != 0 && status.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
+				var statusErr error
+				if status.Error != nil {
+					statusErr = status.Error
+				} else {
+					statusErr = protocol.Errorf(protocol.ErrorCode(status.Code), "%s", status.Message)
+				}
+				x.logger.Error("Additional transaction failed",
+					"block", block.Index,
+					"type", delivery.Transaction.Body.Type(),
+					"pending", status.Pending,
+					"delivered", status.Delivered,
+					"remote", status.Remote,
+					"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+					"principal", delivery.Transaction.Header.Principal,
+					"code", status.Code,
+					"error", statusErr,
+				)
+			}
 		}
 		additional, next = next, nil
 	}
@@ -111,11 +134,10 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Type().IsSystem() {
+		if !delivery.Transaction.Body.Type().IsSystem() {
 			kv := []interface{}{
-				"module", "block-executor",
 				"block", block.Index,
-				"type", delivery.Transaction.Type(),
+				"type", delivery.Transaction.Body.Type(),
 				"pending", status.Pending,
 				"delivered", status.Delivered,
 				"remote", status.Remote,

@@ -46,6 +46,18 @@ type ChainUpdate struct {
 	extraData   []byte
 }
 
+type DataIndex struct {
+	fieldsSet []bool
+	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	extraData []byte
+}
+
+type DirectoryIndex struct {
+	fieldsSet []bool
+	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	extraData []byte
+}
+
 type PendingTransactionsIndex struct {
 	fieldsSet    []bool
 	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
@@ -128,6 +140,26 @@ func (v *ChainUpdate) Copy() *ChainUpdate {
 }
 
 func (v *ChainUpdate) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataIndex) Copy() *DataIndex {
+	u := new(DataIndex)
+
+	u.Count = v.Count
+
+	return u
+}
+
+func (v *DataIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DirectoryIndex) Copy() *DirectoryIndex {
+	u := new(DirectoryIndex)
+
+	u.Count = v.Count
+
+	return u
+}
+
+func (v *DirectoryIndex) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PendingTransactionsIndex) Copy() *PendingTransactionsIndex {
 	u := new(PendingTransactionsIndex)
@@ -234,6 +266,22 @@ func (v *ChainUpdate) Equal(u *ChainUpdate) bool {
 		return false
 	}
 	if !(bytes.Equal(v.Entry, u.Entry)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DataIndex) Equal(u *DataIndex) bool {
+	if !(v.Count == u.Count) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DirectoryIndex) Equal(u *DirectoryIndex) bool {
+	if !(v.Count == u.Count) {
 		return false
 	}
 
@@ -511,6 +559,84 @@ func (v *ChainUpdate) IsValid() error {
 	}
 }
 
+var fieldNames_DataIndex = []string{
+	1: "Count",
+}
+
+func (v *DataIndex) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Count == 0) {
+		writer.WriteUint(1, v.Count)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DataIndex)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *DataIndex) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Count is missing")
+	} else if v.Count == 0 {
+		errs = append(errs, "field Count is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DirectoryIndex = []string{
+	1: "Count",
+}
+
+func (v *DirectoryIndex) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Count == 0) {
+		writer.WriteUint(1, v.Count)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DirectoryIndex)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *DirectoryIndex) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Count is missing")
+	} else if v.Count == 0 {
+		errs = append(errs, "field Count is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_PendingTransactionsIndex = []string{
 	1: "Transactions",
 }
@@ -760,6 +886,46 @@ func (v *ChainUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainUpdate)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *DataIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DataIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Count = x
+	}
+
+	seen, err := reader.Reset(fieldNames_DataIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *DirectoryIndex) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DirectoryIndex) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Count = x
+	}
+
+	seen, err := reader.Reset(fieldNames_DirectoryIndex)
 	if err != nil {
 		return err
 	}
