@@ -8,7 +8,7 @@
 //  • [CheckTx]
 //  • [DeliverTx]
 //  • EndBlock
-//  • Execute
+//  • Commit
 package abci
 
 // Version is the version of the ABCI applications.

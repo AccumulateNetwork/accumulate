@@ -122,9 +122,11 @@ func (g *genesis) Execute() error {
 			if err != nil {
 				return err
 			}
-			err = g.generateNetworkDefinition()
-			if err != nil {
-				return err
+			if g.opts.NetworkValidatorMap != nil {
+				err = g.generateNetworkDefinition()
+				if err != nil {
+					return err
+				}
 			}
 		case config.BlockValidator:
 			err = g.initBVN()

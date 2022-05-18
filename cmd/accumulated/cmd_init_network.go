@@ -245,7 +245,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
-		_, err := node.Init(node.InitOptions{ // TODO
+		genesis, err := node.Init(node.InitOptions{
 			WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
 			Port:                directory.Port,
 			Config:              dnConfig,
@@ -255,9 +255,12 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			FactomAddressesFile: factomAddressesFile,
 		})
 		check(err)
+		defer genesis.Discard()
+		err = genesis.Execute() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
+		check(err)
 
 		for i := range bvnSubnet {
-			_, err := node.Init(node.InitOptions{ // TODO
+			genesis, err := node.Init(node.InitOptions{
 				WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:                bvns[i].Port,
 				Config:              bvnConfig[i],
@@ -266,6 +269,9 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				Logger:              logger.With("subnet", bvns[i].Name),
 				FactomAddressesFile: factomAddressesFile,
 			})
+			check(err)
+			defer genesis.Discard()
+			err = genesis.Execute() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
 			check(err)
 		}
 		return
