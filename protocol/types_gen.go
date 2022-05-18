@@ -249,12 +249,6 @@ type DirectoryAnchor struct {
 	extraData []byte
 }
 
-type DirectoryIndexMetadata struct {
-	fieldsSet []bool
-	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	extraData []byte
-}
-
 type DisableAccountAuthOperation struct {
 	fieldsSet []bool
 	// Authority is the authority to enable authorization for.
@@ -541,14 +535,6 @@ type RemoveValidator struct {
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
 	// Owner reserved for future use.
 	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
-	extraData []byte
-}
-
-type SegWitDataEntry struct {
-	fieldsSet []bool
-	SyntheticOrigin
-	EntryUrl  *url.URL `json:"entryUrl,omitempty" form:"entryUrl" query:"entryUrl" validate:"required"`
-	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	extraData []byte
 }
 
@@ -926,8 +912,6 @@ func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
 func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeRemove }
 
 func (*RemoveValidator) Type() TransactionType { return TransactionTypeRemoveValidator }
-
-func (*SegWitDataEntry) Type() TransactionType { return TransactionTypeSegWitDataEntry }
 
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
 
@@ -1410,16 +1394,6 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 
 func (v *DirectoryAnchor) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *DirectoryIndexMetadata) Copy() *DirectoryIndexMetadata {
-	u := new(DirectoryIndexMetadata)
-
-	u.Count = v.Count
-
-	return u
-}
-
-func (v *DirectoryIndexMetadata) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *DisableAccountAuthOperation) Copy() *DisableAccountAuthOperation {
 	u := new(DisableAccountAuthOperation)
 
@@ -1896,20 +1870,6 @@ func (v *RemoveValidator) Copy() *RemoveValidator {
 }
 
 func (v *RemoveValidator) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SegWitDataEntry) Copy() *SegWitDataEntry {
-	u := new(SegWitDataEntry)
-
-	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
-	if v.EntryUrl != nil {
-		u.EntryUrl = (v.EntryUrl).Copy()
-	}
-	u.EntryHash = v.EntryHash
-
-	return u
-}
-
-func (v *SegWitDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SendTokens) Copy() *SendTokens {
 	u := new(SendTokens)
@@ -2948,14 +2908,6 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 	return true
 }
 
-func (v *DirectoryIndexMetadata) Equal(u *DirectoryIndexMetadata) bool {
-	if !(v.Count == u.Count) {
-		return false
-	}
-
-	return true
-}
-
 func (v *DisableAccountAuthOperation) Equal(u *DisableAccountAuthOperation) bool {
 	switch {
 	case v.Authority == u.Authority:
@@ -3568,25 +3520,6 @@ func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
 	case v.Owner == nil || u.Owner == nil:
 		return false
 	case !((v.Owner).Equal(u.Owner)):
-		return false
-	}
-
-	return true
-}
-
-func (v *SegWitDataEntry) Equal(u *SegWitDataEntry) bool {
-	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
-		return false
-	}
-	switch {
-	case v.EntryUrl == u.EntryUrl:
-		// equal
-	case v.EntryUrl == nil || u.EntryUrl == nil:
-		return false
-	case !((v.EntryUrl).Equal(u.EntryUrl)):
-		return false
-	}
-	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
 
@@ -5757,45 +5690,6 @@ func (v *DirectoryAnchor) IsValid() error {
 	}
 }
 
-var fieldNames_DirectoryIndexMetadata = []string{
-	1: "Count",
-}
-
-func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Count == 0) {
-		writer.WriteUint(1, v.Count)
-	}
-
-	_, _, err := writer.Reset(fieldNames_DirectoryIndexMetadata)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *DirectoryIndexMetadata) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Count is missing")
-	} else if v.Count == 0 {
-		errs = append(errs, "field Count is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_DisableAccountAuthOperation = []string{
 	1: "Type",
 	2: "Authority",
@@ -7647,64 +7541,6 @@ func (v *RemoveValidator) IsValid() error {
 		errs = append(errs, "field PubKey is missing")
 	} else if len(v.PubKey) == 0 {
 		errs = append(errs, "field PubKey is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_SegWitDataEntry = []string{
-	1: "Type",
-	2: "SyntheticOrigin",
-	3: "EntryUrl",
-	4: "EntryHash",
-}
-
-func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SyntheticOrigin)
-	if !(v.EntryUrl == nil) {
-		writer.WriteUrl(3, v.EntryUrl)
-	}
-	if !(v.EntryHash == ([32]byte{})) {
-		writer.WriteHash(4, &v.EntryHash)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SegWitDataEntry)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *SegWitDataEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if err := v.SyntheticOrigin.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field EntryUrl is missing")
-	} else if v.EntryUrl == nil {
-		errs = append(errs, "field EntryUrl is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field EntryHash is missing")
-	} else if v.EntryHash == ([32]byte{}) {
-		errs = append(errs, "field EntryHash is not set")
 	}
 
 	switch len(errs) {
@@ -10485,26 +10321,6 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *DirectoryIndexMetadata) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *DirectoryIndexMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUint(1); ok {
-		v.Count = x
-	}
-
-	seen, err := reader.Reset(fieldNames_DirectoryIndexMetadata)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *DisableAccountAuthOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11520,37 +11336,6 @@ func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_RemoveValidator)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *SegWitDataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SegWitDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-	if x, ok := reader.ReadUrl(3); ok {
-		v.EntryUrl = x
-	}
-	if x, ok := reader.ReadHash(4); ok {
-		v.EntryHash = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_SegWitDataEntry)
 	if err != nil {
 		return err
 	}
@@ -13459,26 +13244,6 @@ func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.PubKey = encoding.BytesToJSON(v.PubKey)
 	u.Owner = v.Owner
-	return json.Marshal(&u)
-}
-
-func (v *SegWitDataEntry) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
-		Source    *url.URL        `json:"source,omitempty"`
-		Initiator *url.URL        `json:"initiator,omitempty"`
-		FeeRefund uint64          `json:"feeRefund,omitempty"`
-		EntryUrl  *url.URL        `json:"entryUrl,omitempty"`
-		EntryHash string          `json:"entryHash,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
-	u.Initiator = v.SyntheticOrigin.Initiator
-	u.FeeRefund = v.SyntheticOrigin.FeeRefund
-	u.EntryUrl = v.EntryUrl
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
 }
 
@@ -15497,46 +15262,6 @@ func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 		v.PubKey = x
 	}
 	v.Owner = u.Owner
-	return nil
-}
-
-func (v *SegWitDataEntry) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
-		Source    *url.URL        `json:"source,omitempty"`
-		Initiator *url.URL        `json:"initiator,omitempty"`
-		FeeRefund uint64          `json:"feeRefund,omitempty"`
-		EntryUrl  *url.URL        `json:"entryUrl,omitempty"`
-		EntryHash string          `json:"entryHash,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
-	u.Initiator = v.SyntheticOrigin.Initiator
-	u.FeeRefund = v.SyntheticOrigin.FeeRefund
-	u.EntryUrl = v.EntryUrl
-	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.SyntheticOrigin.Cause = x
-	}
-	v.SyntheticOrigin.Source = u.Source
-	v.SyntheticOrigin.Initiator = u.Initiator
-	v.SyntheticOrigin.FeeRefund = u.FeeRefund
-	v.EntryUrl = u.EntryUrl
-	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
-		return fmt.Errorf("error decoding EntryHash: %w", err)
-	} else {
-		v.EntryHash = x
-	}
 	return nil
 }
 

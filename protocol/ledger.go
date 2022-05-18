@@ -1,8 +1,5 @@
 package protocol
 
-var Received uint64
-var Delivered uint64
-
 // Add records a received or delivered synthetic transaction.
 func (s *SubnetSyntheticLedger) Add(delivered bool, sequenceNumber uint64, hash [32]byte) (dirty bool) {
 	// Update received

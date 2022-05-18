@@ -16,21 +16,17 @@ type DataEntry interface {
 	GetData() [][]byte
 }
 
-// ComputeEntryHash
-// returns the entry hash given external id's and data associated with an entry
-func ComputeEntryHash(data [][]byte) []byte {
-	h := make(hash.Hasher, 0, len(data))
-	for _, data := range data {
-		h.AddBytes(data)
-	}
-	return h.MerkleHash()
-}
-
 const TransactionSizeMax = 10240
 const SignatureSizeMax = 1024
 
+// Hash
+// returns the entry hash given external id's and data associated with an entry
 func (e *AccumulateDataEntry) Hash() []byte {
-	return ComputeEntryHash(e.Data)
+	h := make(hash.Hasher, 0, len(e.Data))
+	for _, data := range e.Data {
+		h.AddBytes(data)
+	}
+	return h.MerkleHash()
 }
 
 func (e *AccumulateDataEntry) GetData() [][]byte {
