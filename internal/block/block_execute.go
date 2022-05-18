@@ -34,7 +34,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				return nil, err
 			}
 
-			if status.Code != 0 {
+			if status.Code != 0 && status.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
 				var statusErr error
 				if status.Error != nil {
 					statusErr = status.Error
