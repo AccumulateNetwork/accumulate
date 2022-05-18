@@ -29,8 +29,11 @@ var creditsCmd = &cobra.Command{
 }
 
 func PrintCredits() {
-	fmt.Println("  accumulate credits [origin lite token account] [lite identity url or key page url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)] [percent slippage (optional)] 		Purchase credits to send to another lite identity or adi key page")
+	fmt.Println("  accumulate credits [origin lite token account] [lite identity url or key page url] [credits desired] [max amount in acme (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)]		Purchase credits to send to another lite identity or adi key page")
+	fmt.Println("\tnote: If the max amount in ACME parameter is provided and the oracle price falls below what\n" +
+		"\tthat value can cover, the transaction will fail. The minimum of the computed credit purchase and the maximum\n" +
+		"\tvalue to spend will be used to satisfy the purchase.")
 }
 
 func AddCredits(origin string, args []string) (string, error) {
@@ -83,23 +86,8 @@ func AddCredits(origin string, args []string) (string, error) {
 			return "", fmt.Errorf("amount must be an integer %v", err)
 		}
 
-		//determine slippage value if applicable
-		slipAmount := big.NewFloat(1.0).SetInt(tstAmt)
-		if len(args) > 3 {
-			slip, err := strconv.ParseFloat(args[3], 64)
-			if err != nil || slip < 0.0 {
-				return "", fmt.Errorf("slippage should be a percentage >= 0.0")
-			}
-			slip /= 100.0
-			slip += 1.0
-			slipAmount.Mul(slipAmount, big.NewFloat(slip))
-		}
-
 		if estAcme.Cmp(tstAmt) > 0 {
-			slipAmount.Int(tstAmt)
-			if estAcme.Cmp(tstAmt) > 0 {
-				return "", fmt.Errorf("amount of credits requested will not be satisfied by amount of acme to be spent")
-			}
+			return "", fmt.Errorf("amount of credits requested will not be satisfied by amount of acme to be spent")
 		}
 	}
 
