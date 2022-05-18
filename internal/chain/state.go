@@ -72,7 +72,7 @@ func (m *StateManager) Commit() (*ProcessTransactionState, error) {
 		return nil, err
 	}
 
-	return &m.state, nil
+	return &m.State, nil
 }
 
 func (m *StateManager) Discard() {
@@ -88,11 +88,11 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 		panic("No destination URL specified!")
 	}
 
-	m.state.DidProduceTxn(url, body)
+	m.State.DidProduceTxn(url, body)
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.state.ValidatorsUpdates = append(m.state.ValidatorsUpdates, ValidatorUpdate{
+	m.State.ValidatorsUpdates = append(m.State.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: true,
 	})
@@ -100,7 +100,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.state.ValidatorsUpdates = append(m.state.ValidatorsUpdates, ValidatorUpdate{
+	m.State.ValidatorsUpdates = append(m.State.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: false,
 	})

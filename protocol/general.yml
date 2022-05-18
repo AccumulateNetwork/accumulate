@@ -99,11 +99,6 @@ FactomDataEntry:
       repeatable: true
       type: bytes
 
-DirectoryIndexMetadata:
-  fields:
-    - name: Count
-      type: uvarint
-
 Receipt:
   fields:
     - name: Start

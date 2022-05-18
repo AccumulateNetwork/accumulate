@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -187,9 +188,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	// Validate
 	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	data, err := batch.Account(bobUrl.JoinPath("account")).Data()
-	require.NoError(t, err)
-	de, err := data.Entry(data.Height() - 1)
+	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -244,9 +243,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	// Validate
 	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	data, err := batch.Account(bobUrl.JoinPath("account")).Data()
-	require.NoError(t, err)
-	de, err := data.Entry(data.Height() - 1)
+	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -318,9 +315,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	// Validate
 	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	data, err := batch.Account(bobUrl.JoinPath("account")).Data()
-	require.NoError(t, err)
-	de, err := data.Entry(data.Height() - 1)
+	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -375,9 +370,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	// Validate
 	batch = sim.SubnetFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	data, err := batch.Account(bobUrl.JoinPath("account")).Data()
-	require.NoError(t, err)
-	de, err := data.Entry(data.Height() - 1)
+	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }

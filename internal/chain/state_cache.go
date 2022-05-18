@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -20,11 +21,10 @@ type stateCache struct {
 	txType protocol.TransactionType
 	txHash types.Bytes32
 
-	state      ProcessTransactionState
+	State      ProcessTransactionState
 	batch      *database.Batch
 	operations []stateOperation
 	chains     map[[32]byte]protocol.Account
-	indices    map[[32]byte]*writeIndex
 
 	Pretend bool
 }
@@ -35,11 +35,8 @@ func newStateCache(net *config.Network, txtype protocol.TransactionType, txid [3
 	c.txType = txtype
 	c.txHash = txid
 	c.batch = batch
-	c.chains = map[[32]byte]protocol.Account{}
-	c.indices = map[[32]byte]*writeIndex{}
 	c.operations = c.operations[:0]
 	c.chains = map[[32]byte]protocol.Account{}
-	c.indices = map[[32]byte]*writeIndex{}
 	_ = c.logger // Get static analsis to shut up
 	return c
 }
@@ -112,47 +109,14 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 }
 
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
-	return AddDirectoryEntry(func(u *url.URL, key ...interface{}) Value {
-		return c.RecordIndex(u, key...)
-	}, directory, u...)
-}
-
-type Value interface {
-	Get() ([]byte, error)
-	Put([]byte) error
-}
-
-func AddDirectoryEntry(getIndex func(*url.URL, ...interface{}) Value, directory *url.URL, u ...*url.URL) error {
-	if len(u) == 0 {
-		return fmt.Errorf("no URLs supplied to register in directory %s", directory.String())
-	}
-
-	mdi := getIndex(directory, "Directory", "Metadata")
-	md := new(protocol.DirectoryIndexMetadata)
-	data, err := mdi.Get()
-	if err == nil {
-		err = md.UnmarshalBinary(data)
-	}
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return fmt.Errorf("failed to load metadata: %v", err)
-	}
-
+	dir := indexing.Directory(c.batch, directory)
 	for _, u := range u {
-		if !u.Equal(directory) {
-			err := getIndex(directory, "Directory", md.Count).Put([]byte(u.String()))
-			if err != nil {
-				return fmt.Errorf("failed to write index: %v", err)
-			}
-			md.Count++
+		err := dir.Put(u)
+		if err != nil {
+			return err
 		}
 	}
-
-	data, err = md.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %v", err)
-	}
-
-	return mdi.Put(data)
+	return nil
 }
 
 func (st *stateCache) Create(accounts ...protocol.Account) error {
@@ -203,7 +167,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		}
 
 		// Add to the account's main chain
-		err = st.state.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+		err = st.State.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 		if err != nil {
 			return fmt.Errorf("failed to update main chain of %q: %v", account.GetUrl(), err)
 		}
