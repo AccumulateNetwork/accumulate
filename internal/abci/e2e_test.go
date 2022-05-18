@@ -1433,7 +1433,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(n.network.OperatorPage(0), 1).
+			WithSigner(n.network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1783,4 +1783,26 @@ func TestAccountAuth(t *testing.T) {
 			Build())
 	})
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
+}
+
+func TestNetworkDefinition(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+
+	batch := dn.db.Begin(true)
+	defer batch.Discard()
+	networkData, err := batch.Account(protocol.DnUrl().JoinPath(protocol.Network)).Data()
+	require.NoError(t, err)
+	_, entry, err := networkData.GetLatest()
+	require.NoError(t, err)
+
+	networkDefs := new(protocol.NetworkDefinition)
+	err = json.Unmarshal(entry.GetData()[0], &networkDefs)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, networkDefs.Subnets)
+	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes[0])
 }

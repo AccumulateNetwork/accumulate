@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
@@ -241,14 +242,15 @@ func initNamedNetwork(*cobra.Command, []string) {
 		nodeReset()
 	}
 
-	check(node.Init(node.InitOptions{
+	_, err = node.Init(node.InitOptions{
 		WorkDir:  flagMain.WorkDir,
 		Port:     lclSubnet.Port,
 		Config:   config,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
 		Logger:   newLogger(),
-	}))
+	})
+	check(err)
 }
 
 func nodeReset() {
@@ -390,7 +392,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodeReset()
 	}
 
-	check(node.Init(node.InitOptions{
+	_, err = node.Init(node.InitOptions{
 		NodeNr:     &nodeNr,
 		Version:    1,
 		WorkDir:    flagMain.WorkDir,
@@ -400,7 +402,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		RemoteIP:   []string{u.Hostname()},
 		ListenIP:   []string{u.Hostname()},
 		Logger:     newLogger(),
-	}))
+	})
+	check(err)
 }
 
 var baseIP net.IP
@@ -563,24 +566,47 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 
 func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
 	logger := newLogger()
-	check(node.Init(node.InitOptions{
-		WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
-		Port:     flagInitDevnet.BasePort,
-		Config:   dnConfig,
-		RemoteIP: dnRemote,
-		ListenIP: dnListen,
-		Logger:   logger.With("subnet", protocol.Directory),
-	}))
+	netValMap := make(genesis.NetworkValidatorMap)
+	genInit, err := node.Init(node.InitOptions{
+		WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
+		Port:                flagInitDevnet.BasePort,
+		Config:              dnConfig,
+		RemoteIP:            dnRemote,
+		ListenIP:            dnListen,
+		NetworkValidatorMap: netValMap,
+		Logger:              logger.With("subnet", protocol.Directory),
+	})
+	check(err)
+	genList := []genesis.Genesis{genInit}
+
 	for bvn := range bvnConfig {
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-		check(node.Init(node.InitOptions{
-			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-			Port:     flagInitDevnet.BasePort,
-			Config:   bvnConfig,
-			RemoteIP: bvnRemote,
-			ListenIP: bvnListen,
-			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
-		}))
+		genesis, err := node.Init(node.InitOptions{
+			WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
+			Port:                flagInitDevnet.BasePort,
+			Config:              bvnConfig,
+			RemoteIP:            bvnRemote,
+			ListenIP:            bvnListen,
+			NetworkValidatorMap: netValMap,
+			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
+		})
+		check(err)
+		if genesis != nil {
+			genList = append(genList, genesis)
+		}
+	}
+
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, genesis := range genList {
+			genesis.Discard()
+		}
+	}()
+	for _, genesis := range genList {
+		err := genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
 	}
 }
 

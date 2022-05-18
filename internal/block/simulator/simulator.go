@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -54,6 +55,7 @@ func New(t TB, bvnCount int) *Simulator {
 	sim.TB = t
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
+
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
 	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
 	for i := 0; i < bvnCount; i++ {
@@ -87,6 +89,7 @@ func New(t TB, bvnCount int) *Simulator {
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database: db,
 			Executor: exec,
+			Subnet:   subnet,
 		}
 	}
 
@@ -138,9 +141,33 @@ func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{
 func (s *Simulator) InitFromGenesis() {
 	s.Helper()
 
-	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.ID)
-		InitFromGenesis(s, x.Database, x.Executor)
+	netValMap := make(genesis.NetworkValidatorMap)
+	for _, x := range s.Executors {
+		x.genesis = InitGenesis(s, x.Database, x.Executor, netValMap)
+	}
+
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, x := range s.Executors {
+			x.genesis.Discard()
+		}
+	}()
+
+	for _, x := range s.Executors {
+		err := x.genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
+
+		state, err := x.genesis.GetDBState()
+		require.NoError(tb{s}, err)
+
+		func() {
+			batch := x.Database.Begin(true)
+			defer batch.Discard()
+			require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, state))
+			require.NoError(tb{s}, batch.Commit())
+		}()
 	}
 }
 
@@ -367,8 +394,10 @@ type ExecEntry struct {
 	mu                      sync.Mutex
 	nextBlock, currentBlock []*protocol.Envelope
 
+	Subnet   *config.Subnet
 	Database *database.Database
 	Executor *block.Executor
+	genesis  genesis.Genesis
 }
 
 // Submit adds the envelopes to the next block's queue.

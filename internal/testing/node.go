@@ -15,6 +15,7 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -72,7 +73,7 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 
 func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	const basePort = 30000
-	dir := t.TempDir()
+	tempDir := t.TempDir()
 
 	count := numValidators + numFollowers
 	subnets := make([]config.Subnet, numBvns+1)
@@ -146,18 +147,26 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
+	netValMap := make(genesis.NetworkValidatorMap)
+	var genList []genesis.Genesis
+
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
-		dir := filepath.Join(dir, subnetId)
-		require.NoError(t, node.Init(node.InitOptions{
+		dir := filepath.Join(tempDir, subnetId)
+		genesis, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
 			Port:                basePort,
 			Config:              allConfigs[subnetId],
 			RemoteIP:            allRemotes[subnetId],
 			ListenIP:            allRemotes[subnetId],
+			NetworkValidatorMap: netValMap,
 			Logger:              initLogger.With("subnet", subnetId),
 			FactomAddressesFile: factomAddressFilePath,
-		}))
+		})
+		require.NoError(t, err)
+		if genesis != nil {
+			genList = append(genList, genesis)
+		}
 
 		daemons := make([]*accumulated.Daemon, count)
 		allDaemons[subnetId] = daemons
@@ -168,6 +177,19 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			daemons[i], err = accumulated.Load(dir, logWriter)
 			require.NoError(t, err)
 			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnetId, "node", i)
+		}
+	}
+
+	// Execute genesis after the entire network is known
+	defer func() {
+		for _, genesis := range genList {
+			genesis.Discard()
+		}
+	}()
+	for _, genesis := range genList {
+		err := genesis.Execute()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
 		}
 	}
 
