@@ -580,10 +580,14 @@ type SubnetSyntheticLedger struct {
 	fieldsSet []bool
 	// Url is the URL of the subnet.
 	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Produced is the sequence number of the latest synthetic transaction produced for the subnet.
+	// Produced is the maximum sequence number of synthetic transactions produced for the subnet.
 	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	// Received is the sequence number of the latest synthetic transaction received from the subnet.
-	Received  uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
+	// Received is the maximum sequence number of synthetic transactions received from the subnet.
+	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
+	// Delivered is the maximum sequence number of delivered synthetic transactions received from the subnet.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	// Pending is the transaction hashes of synthetic transactions received out of order.
+	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
 
@@ -1962,6 +1966,11 @@ func (v *SubnetSyntheticLedger) Copy() *SubnetSyntheticLedger {
 	}
 	u.Produced = v.Produced
 	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = make([][32]byte, len(v.Pending))
+	for i, v := range v.Pending {
+		u.Pending[i] = v
+	}
 
 	return u
 }
@@ -3652,6 +3661,17 @@ func (v *SubnetSyntheticLedger) Equal(u *SubnetSyntheticLedger) bool {
 	}
 	if !(v.Received == u.Received) {
 		return false
+	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !(v.Pending[i] == u.Pending[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -7862,6 +7882,8 @@ var fieldNames_SubnetSyntheticLedger = []string{
 	1: "Url",
 	2: "Produced",
 	3: "Received",
+	4: "Delivered",
+	5: "Pending",
 }
 
 func (v *SubnetSyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -7876,6 +7898,14 @@ func (v *SubnetSyntheticLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Received == 0) {
 		writer.WriteUint(3, v.Received)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(4, v.Delivered)
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteHash(5, &v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_SubnetSyntheticLedger)
@@ -7903,6 +7933,16 @@ func (v *SubnetSyntheticLedger) IsValid() error {
 		errs = append(errs, "field Received is missing")
 	} else if v.Received == 0 {
 		errs = append(errs, "field Received is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
 	}
 
 	switch len(errs) {
@@ -11644,6 +11684,16 @@ func (v *SubnetSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.Received = x
 	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Delivered = x
+	}
+	for {
+		if x, ok := reader.ReadHash(5); ok {
+			v.Pending = append(v.Pending, *x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_SubnetSyntheticLedger)
 	if err != nil {
@@ -13469,6 +13519,25 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	u.Signatures = encoding.JsonUnmarshalListWith[Signature]{Value: v.Signatures, Func: UnmarshalSignatureJSON}
+	return json.Marshal(&u)
+}
+
+func (v *SubnetSyntheticLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url       *url.URL                  `json:"url,omitempty"`
+		Produced  uint64                    `json:"produced,omitempty"`
+		Received  uint64                    `json:"received,omitempty"`
+		Delivered uint64                    `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[string] `json:"pending,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = make(encoding.JsonList[string], len(v.Pending))
+	for i, x := range v.Pending {
+		u.Pending[i] = encoding.ChainToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -15544,6 +15613,40 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	v.Signatures = make([]Signature, len(u.Signatures.Value))
 	for i, x := range u.Signatures.Value {
 		v.Signatures[i] = x
+	}
+	return nil
+}
+
+func (v *SubnetSyntheticLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url       *url.URL                  `json:"url,omitempty"`
+		Produced  uint64                    `json:"produced,omitempty"`
+		Received  uint64                    `json:"received,omitempty"`
+		Delivered uint64                    `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[string] `json:"pending,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = make(encoding.JsonList[string], len(v.Pending))
+	for i, x := range v.Pending {
+		u.Pending[i] = encoding.ChainToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.Produced = u.Produced
+	v.Received = u.Received
+	v.Delivered = u.Delivered
+	v.Pending = make([][32]byte, len(u.Pending))
+	for i, x := range u.Pending {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Pending: %w", err)
+		} else {
+			v.Pending[i] = x
+		}
 	}
 	return nil
 }
