@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -12,6 +13,7 @@ import (
 type Account struct {
 	batch *Batch
 	key   accountBucket
+	url   *url.URL
 }
 
 // ensureMetadata ensures that the account's metadata is up to date.
@@ -61,13 +63,27 @@ func (r *Account) GetObject() (*protocol.Object, error) {
 
 // GetState loads the record state.
 func (r *Account) GetState() (protocol.Account, error) {
-	return r.batch.getAccountState(r.key.State(), nil)
+	state, err := r.batch.getAccountState(r.key.State(), nil)
+	if err == nil {
+		return state, nil
+	}
+	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
 }
 
 // GetStateAs loads the record state and unmarshals into the given value. In
 // most cases `state` should be a double pointer.
 func (r *Account) GetStateAs(state interface{}) error {
-	return r.batch.getAccountStateAs(r.key.State(), nil, state)
+	err := r.batch.getAccountStateAs(r.key.State(), nil, state)
+	if err == nil {
+		return nil
+	}
+	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+	return errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
 }
 
 // PutState stores the record state.
