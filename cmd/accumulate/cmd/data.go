@@ -323,6 +323,7 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 			}
 			entry.Data = append(entry.Data, data)
 		}
+		entry.Data = append(entry.Data, []byte{})
 	}
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
