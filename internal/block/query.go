@@ -941,34 +941,65 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 	}
 
-	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	idxChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	var ledger *protocol.InternalLedger
+	err = ledgerAcc.GetStateAs(&ledger)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
+
+	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
-	idxEntries, err := idxChain.Entries(int64(req.Start), int64(req.Start+req.Limit))
+
+	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 	}
 
-	resp := query.ResponseMinorBlocks{}
-	for _, idxData := range idxEntries {
-		minorEntry := new(query.ResponseMinorEntry)
+	entryIdx := startIndex
 
-		idxEntry := new(protocol.IndexEntry)
-		err := idxEntry.UnmarshalBinary(idxData)
-		if err != nil {
+	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	curEntry := new(protocol.IndexEntry)
+	resultCnt := uint64(0)
+
+resultLoop:
+	for resultCnt < req.Limit {
+		err = idxChain.EntryAs(int64(entryIdx), curEntry)
+		switch {
+		case err == nil:
+		case errors.Is(err, storage.ErrNotFound):
+			break resultLoop
+		default:
 			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
-
 		}
-		minorEntry.BlockIndex = idxEntry.BlockIndex
-		minorEntry.BlockTime = idxEntry.BlockTime
 
-		if idxEntry.BlockIndex > 0 && (req.TxFetchMode < query.TxFetchModeOmit || req.FilterSystemAnchorsOnlyBlocks) {
-			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, idxEntry.BlockIndex).Get()
+		minorEntry := new(query.ResponseMinorEntry)
+		for {
+			if req.BlockFilterMode == query.BlockFilterModeExcludeNone {
+				minorEntry.BlockIndex = req.Start + resultCnt
+
+				// Create new entry, when BlockFilterModeExcludeNone append empty entry when blocks were missing
+				if minorEntry.BlockIndex < curEntry.BlockIndex || curEntry.BlockIndex == 0 {
+					resp.Entries = append(resp.Entries, minorEntry)
+					resultCnt++
+					minorEntry = new(query.ResponseMinorEntry)
+					continue
+				}
+			} else {
+				minorEntry.BlockIndex = curEntry.BlockIndex
+			}
+			break
+		}
+		minorEntry.BlockTime = curEntry.BlockTime
+
+		if req.TxFetchMode < query.TxFetchModeOmit {
+			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, curEntry.BlockIndex).Get()
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
+
 			minorEntry.TxCount = uint64(0)
 			systemTxCount := uint64(0)
 			var lastTxid []byte
@@ -976,14 +1007,14 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
 					continue
 				}
-				minorEntry.TxCount++
 
 				if req.TxFetchMode <= query.TxFetchModeIds {
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
-				if req.TxFetchMode == query.TxFetchModeExpand || req.FilterSystemAnchorsOnlyBlocks {
+				if req.TxFetchMode == query.TxFetchModeExpand {
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
 					if err == nil {
+						minorEntry.TxCount++
 						txt := qr.Envelope.Transaction[0].Body.Type()
 						if txt.IsSystem() {
 							systemTxCount++
@@ -991,15 +1022,19 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, q *query.Query) (*que
 							minorEntry.Transactions = append(minorEntry.Transactions, qr)
 						}
 					}
+				} else {
+					minorEntry.TxCount++
 				}
 				lastTxid = updIdx.Entry
 			}
-			if minorEntry.TxCount > systemTxCount {
-				resp.Entries = append(resp.Entries, minorEntry)
+			if minorEntry.TxCount <= systemTxCount && req.BlockFilterMode == query.BlockFilterModeExcludeEmpty {
+				entryIdx++
+				continue
 			}
-		} else {
-			resp.Entries = append(resp.Entries, minorEntry)
 		}
+		resp.Entries = append(resp.Entries, minorEntry)
+		entryIdx++
+		resultCnt++
 	}
 	return &resp, nil
 }
