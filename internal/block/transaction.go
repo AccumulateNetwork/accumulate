@@ -58,9 +58,14 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Set up the state manager
-	st, err := chain.LoadStateManager(&x.Network, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
-	if err != nil {
-		return x.recordFailedTransaction(batch, delivery, err)
+	var st *chain.StateManager
+	if x.isGenesis {
+		st = chain.NewStateManager(&x.Network, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+	} else {
+		st, err = chain.LoadStateManager(&x.Network, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		if err != nil {
+			return x.recordFailedTransaction(batch, delivery, err)
+		}
 	}
 	defer st.Discard()
 
@@ -340,13 +345,13 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	if !delivery.Transaction.Body.Type().IsSynthetic() {
 		return status, nil
 	}
-	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSegWitDataEntry && delivery.SourceNetwork == nil {
-		// WriteData, WriteDataTo, and SyntheticWriteData are all rewritten to
-		// SegWitDataEntry. Only the last should update the synthetic ledger. If
-		// the original transaction was synthetic, `delivery.SourceNetwork` must
-		// have been set.
-		return status, nil
-	}
+	// if delivery.Transaction.Body.Type() == protocol.TransactionTypeSegWitDataEntry && delivery.SourceNetwork == nil {
+	// 	// WriteData, WriteDataTo, and SyntheticWriteData are all rewritten to
+	// 	// SegWitDataEntry. Only the last should update the synthetic ledger. If
+	// 	// the original transaction was synthetic, `delivery.SourceNetwork` must
+	// 	// have been set.
+	// 	return status, nil
+	// }
 
 	// Update the synthetic ledger
 	var ledger *protocol.SyntheticLedger
@@ -440,7 +445,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 		return nil, nil, fmt.Errorf("add to chain: %v", err)
 	}
 
-	if !delivery.Transaction.Body.Type().IsSynthetic() || delivery.Transaction.Body.Type() == protocol.TransactionTypeSegWitDataEntry {
+	if !delivery.Transaction.Body.Type().IsSynthetic() /*|| delivery.Transaction.Body.Type() == protocol.TransactionTypeSegWitDataEntry*/ {
 		return status, state, nil
 	}
 

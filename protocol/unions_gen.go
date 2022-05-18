@@ -322,8 +322,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
 		return new(RemoveValidator), nil
-	case TransactionTypeSegWitDataEntry:
-		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
 	case TransactionTypeSyntheticBurnTokens:
@@ -404,9 +402,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *RemoveValidator:
 		b, ok := b.(*RemoveValidator)
-		return ok && a.Equal(b)
-	case *SegWitDataEntry:
-		b, ok := b.(*SegWitDataEntry)
 		return ok && a.Equal(b)
 	case *SendTokens:
 		b, ok := b.(*SendTokens)
