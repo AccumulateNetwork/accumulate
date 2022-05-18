@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -51,25 +51,13 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 		}
 	}
 
-	// Add entry to data chain
-	data, err := record.Data()
+	err := indexing.Data(st.batch, op.url).Put(op.hash, st.txHash[:])
 	if err != nil {
-		return nil, fmt.Errorf("failed to load data chain of %q: %v", op.url, err)
-	}
-
-	index := data.Height()
-	err = data.Put(op.hash, op.entry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
-	}
-
-	err = st.state.ChainUpdates.DidAddChainEntry(st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0, 0)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to add entry to data index of %q: %v", op.url, err)
 	}
 
 	// Add TX to main chain
-	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addChainEntryOp struct {
@@ -99,46 +87,5 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 }
 
 func (op *addChainEntryOp) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, st.state.ChainUpdates.AddChainEntry(st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
-}
-
-type writeIndex struct {
-	index *database.Value
-	put   bool
-	value []byte
-}
-
-func (c *stateCache) RecordIndex(u *url.URL, key ...interface{}) *writeIndex {
-	return c.getIndex(c.batch.Account(u).Index(key...))
-}
-
-func (c *stateCache) getIndex(i *database.Value) *writeIndex {
-	op, ok := c.indices[i.Key()]
-	if ok {
-		return op
-	}
-
-	op = &writeIndex{i, false, nil}
-	c.indices[i.Key()] = op
-	c.operations = append(c.operations, op)
-	return op
-}
-
-func (op *writeIndex) Get() ([]byte, error) {
-	if !op.put {
-		return op.index.Get()
-	}
-	return op.value, nil
-}
-
-func (op *writeIndex) Put(data []byte) error {
-	op.value, op.put = data, true
-	return nil
-}
-
-func (op *writeIndex) Execute(st *stateCache) ([]protocol.Account, error) {
-	if !op.put {
-		return nil, nil
-	}
-	return nil, op.index.Put(op.value)
+	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
 }

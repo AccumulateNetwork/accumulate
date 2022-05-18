@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -262,22 +263,22 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
 
 	// Verify the entry hash returned by Entry
-	dataChain, err := batch.Account(liteDataAddress).Data()
-	require.NoError(t, err)
-	entry, err := dataChain.Entry(0)
+	entry, err := indexing.Data(batch, liteDataAddress).GetLatestEntry()
 	require.NoError(t, err)
 	hashFromEntry, err := ComputeFactomEntryHashForAccount(chainId, entry.GetData())
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
-	//sample verification for calculating the hash from lite data entry
-	hashes, err := dataChain.GetHashes(0, 1)
+	//sample verification for calculating the entryHash from lite data entry
+	entryHash, err := indexing.Data(batch, liteDataAddress).Entry(0)
 	require.NoError(t, err)
-	ent, err := dataChain.Entry(0)
+	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
+	require.NoError(t, err)
+	ent, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 	id := ComputeLiteDataAccountId(ent)
 	newh, err := ComputeFactomEntryHashForAccount(id, ent.GetData())
 	require.NoError(t, err)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashes[0]), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
 }
 

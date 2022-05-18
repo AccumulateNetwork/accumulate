@@ -168,13 +168,9 @@ func (m *Executor) EndBlock(block *Block) error {
 // updateOraclePrice reads the oracle from the oracle account and updates the
 // value on the ledger.
 func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
-	data, err := block.Batch.Account(protocol.PriceOracle()).Data()
+	e, err := indexing.Data(block.Batch, protocol.PriceOracle()).GetLatestEntry()
 	if err != nil {
-		return 0, fmt.Errorf("cannot retrieve oracle data entry: %v", err)
-	}
-	_, e, err := data.GetLatest()
-	if err != nil {
-		return 0, fmt.Errorf("cannot retrieve latest oracle data entry: data batch at height %d: %v", data.Height(), err)
+		return 0, fmt.Errorf("cannot retrieve latest oracle data entry: %v", err)
 	}
 
 	o := protocol.AcmeOracle{}
@@ -183,7 +179,7 @@ func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
 	}
 	err = json.Unmarshal(e.GetData()[0], &o)
 	if err != nil {
-		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.GetData())
+		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.GetData()[0])
 	}
 
 	if o.Price == 0 {

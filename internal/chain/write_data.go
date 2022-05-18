@@ -92,18 +92,17 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, err
 	}
 
-	cause := *(*[32]byte)(tx.Transaction.GetHash())
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
 	if err == nil {
-		return executeWriteLiteDataAccount(st, tx.Transaction, body.Entry, cause, body.Scratch)
+		return executeWriteLiteDataAccount(st, body.Entry, body.Scratch)
 	}
 
-	return executeWriteFullDataAccount(st, tx.Transaction, body.Entry, cause, body.Scratch)
+	return executeWriteFullDataAccount(st, body.Entry, body.Scratch)
 }
 
-func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
-		return nil, errors.NotFound("%v not found", txn.Header.Principal)
+		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
 	account, ok := st.Origin.(*protocol.DataAccount)
 	if !ok {
@@ -115,30 +114,10 @@ func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, en
 		return nil, fmt.Errorf("cannot write scratch data to a non-scratch account")
 	}
 
-	// now replace the transaction payload with a segregated witness to the data.
-	// This technique is used to segregate the payload from the stored transaction
-	// by replacing the data payload with a smaller reference to that data via the
-	// entry hash.  While technically, not true segwit since the entry hash is not
-	// signed, the original transaction can be reconstructed by recombining the
-	// signature info stored on the pending chain, the transaction info stored on
-	// the main chain, and the original data payload that resides on the data chain
-	// when the user wishes to validate the signature of the transaction that
-	// produced the data entry
-
-	sw := protocol.SegWitDataEntry{}
-	sw.Cause = cause
-	sw.EntryHash = *(*[32]byte)(entry.Hash())
-	sw.EntryUrl = st.OriginUrl
-
-	//now replace the original data entry payload with the new segwit payload
-	txn.Body = &sw
-
-	//store the entry
-	st.UpdateData(st.Origin, sw.EntryHash[:], entry)
-
 	result := new(protocol.WriteDataResult)
 	result.EntryHash = *(*[32]byte)(entry.Hash())
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
+	st.UpdateData(st.Origin, result.EntryHash[:], entry)
 	return result, nil
 }
