@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1417,12 +1418,13 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 func TestUpdateValidators(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[0]][0]
+	dn := nodes[subnets[0]][0]
 
-	netUrl := n.network.NodeUrl()
-	oprPage := n.network.OperatorPage(0)
-	vldPage := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 1)
-	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
+	network := dn.network
+	netUrl := network.NodeUrl()
+	vldPage := protocol.FormatKeyPageUrl(network.ValidatorBook(), 1)
+	vldKey1, vldKey2, vldKey3, vldKey4 := generateKey(), generateKey(), generateKey(), generateKey()
+	height := uint64(1)
 
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
 	// for 4
@@ -1432,107 +1434,131 @@ func TestUpdateValidators(t *testing.T) {
 	d, err := ng.MarshalBinary()
 	require.NoError(t, err)
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
-	n.MustExecuteAndWait(func(send func(*Tx)) {
+	dn.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(oprPage, 1). // TODO move back to OperatorPage in or after AC-1402
+			WithSigner(network.OperatorPage(1), height).
 			WithBody(wd).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
 
+	// Add keys to operator key page first
+	addOperatorKey(dn, vldKey1, &height)
+	addOperatorKey(dn, vldKey2, &height)
+	addOperatorKey(dn, vldKey3, &height)
+	addOperatorKey(dn, vldKey4, &height)
+
 	// Verify there is one validator (node key)
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey()})
+
 	// Add a validator
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
-		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
+		body.PubKey = vldKey1.PubKey().Bytes()
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(oprPage, 1).
+			WithSigner(network.OperatorPage(1), height).
 			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
 
 	// Verify the validator was added
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyAdd1.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey1.PubKey()})
 
 	// Update a validator
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
 
-		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
-		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
+		body.PubKey = vldKey1.PubKey().Bytes()
+		body.NewPubKey = vldKey4.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(oprPage, 2).
+			WithSigner(network.OperatorPage(1), height).
 			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey()})
 
 	// Add a third validator
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
-		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
+		body.PubKey = vldKey2.PubKey().Bytes()
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(oprPage, 3).
+			WithSigner(network.OperatorPage(1), height).
 			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
-
 	// Verify the validator was added
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey(), vldKey2.PubKey()})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(1), n.GetKeyPage(oprPage.String()).AcceptThreshold)
+	require.Equal(t, uint64(1), dn.GetKeyPage(network.OperatorPage(1).String()).AcceptThreshold)
 
 	// Add a fourth validator, so the page threshold will become 2
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
-		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
+		body.PubKey = vldKey3.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(oprPage, 4).
+			WithSigner(network.OperatorPage(1), height).
 			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
 
 	// Verify the validator was added
-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), n.GetKeyPage(vldPage.String()).AcceptThreshold)
+	require.Equal(t, uint64(2), dn.GetKeyPage(vldPage.String()).AcceptThreshold)
 
 	// Remove a validator
-	txns := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.RemoveValidator)
-		body.PubKey = nodeKeyUpd.PubKey().Bytes()
+		body.PubKey = vldKey4.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(oprPage, 5).
+			WithSigner(network.OperatorPage(1), height).
 			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
 
-	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
-			WithSigner(oprPage, 5).
+			WithSigner(network.OperatorPage(1), height).
 			WithTxnHash(txns[0][:]).
-			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
+			Sign(protocol.SignatureTypeED25519, vldKey2.Bytes()).
 			Build())
 	})
-	n.MustWaitForTxns(convertIds32(envHashes...)...)
+	dn.MustWaitForTxns(convertIds32(envHashes...)...)
 
 	// Verify the validator was removed
-	pubKeys := n.client.Validators()
-	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
+	pubKeys := dn.client.Validators()
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
 
+}
+
+func addOperatorKey(dn *FakeNode, oprKey tmed25519.PrivKey, height *uint64) {
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		keyHash := sha256.Sum256(oprKey.PubKey().Bytes())
+		op.Entry.KeyHash = keyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		oprPage := dn.network.OperatorPage(1)
+		send(newTxn(oprPage.String()).
+			WithSigner(oprPage, *height).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+		atomic.AddUint64(height, 1)
+	})
 }
 
 func TestUpdateOperators(t *testing.T) {

@@ -279,7 +279,7 @@ func (g *genesis) createGlobals() error {
 }
 
 func (g *genesis) initDN(oraclePrice uint64) error {
-	g.createDNOperatorBook()
+	g.createOperatorBook(false)
 
 	oracle := new(protocol.AcmeOracle)
 	oracle.Price = oraclePrice
@@ -319,7 +319,7 @@ func (g *genesis) initBVN() error {
 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
 	}
 
-	g.createBVNOperatorBook(g.adiUrl, g.opts.Validators)
+	g.createOperatorBook(false)
 
 	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
 	if err == nil && subnet == network.LocalSubnetID {
@@ -351,36 +351,26 @@ func (g *genesis) initBVN() error {
 	return nil
 }
 
-func (g *genesis) createDNOperatorBook() {
+func (g *genesis) createOperatorBook(lockPage bool) {
 	book := new(protocol.KeyBook)
 	book.Url = g.adiUrl.JoinPath(protocol.OperatorBook)
-	book.BookType = protocol.BookTypeOperator
-	book.AddAuthority(book.Url)
-	book.PageCount = 1
-
-	page := createOperatorPage(book.Url, 0, g.opts.Validators, false)
-	g.WriteRecords(book, page)
-}
-
-func (g *genesis) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
-	book := new(protocol.KeyBook)
-	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
 	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 2
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
 	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, operators, false)
-	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
-
+	page2 := createOperatorPage(book.Url, 1, g.opts.Validators, false)
+	if lockPage {
+		blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+	}
 	g.WriteRecords(book, page1, page2)
 }
 
