@@ -295,3 +295,6 @@ BookType:
   Validator:
     value: 0x01
     description: Validator key book
+  Operator:
+    value: 0x02
+    description: Operator key book

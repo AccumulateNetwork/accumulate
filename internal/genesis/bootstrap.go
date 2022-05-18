@@ -91,7 +91,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Genesis, error) {
 func (g *genesis) Execute() error {
 	err := g.genesisExec.Genesis(g.block, func(st *chain.StateManager) error {
 		g.adiUrl = g.opts.Network.NodeUrl()
-		g.authorityUrl = g.adiUrl.JoinPath(protocol.ValidatorBook)
+		g.authorityUrl = g.adiUrl.JoinPath(protocol.OperatorBook)
 
 		g.createADI()
 		g.createValidatorBook()
@@ -185,15 +185,25 @@ func (g *genesis) createADI() {
 }
 
 func (g *genesis) createValidatorBook() {
-	uBook := g.authorityUrl
 	book := new(protocol.KeyBook)
-	book.Url = uBook
+	book.Url = g.adiUrl.JoinPath(protocol.ValidatorBook)
 	book.BookType = protocol.BookTypeValidator
-	book.AddAuthority(uBook)
-	book.PageCount = 1
+	book.AddAuthority(g.authorityUrl)
+	book.PageCount = 2
 
-	page := createOperatorPage(uBook, 0, g.opts.Validators, true)
-	g.WriteRecords(book, page)
+	page1 := new(protocol.KeyPage)
+	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
+	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
+	page1.Version = 1
+	page1.Keys = make([]*protocol.KeySpec, 1)
+	spec := new(protocol.KeySpec)
+	spec.Owner = g.authorityUrl
+	page1.Keys[0] = spec
+
+	page2 := createOperatorPage(book.Url, 1, g.opts.Validators, false)
+	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+
+	g.WriteRecords(book, page1, page2)
 }
 
 func (g *genesis) createMainLedger(oraclePrice uint64) {
@@ -344,6 +354,7 @@ func (g *genesis) initBVN() error {
 func (g *genesis) createDNOperatorBook() {
 	book := new(protocol.KeyBook)
 	book.Url = g.adiUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
@@ -354,6 +365,7 @@ func (g *genesis) createDNOperatorBook() {
 func (g *genesis) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 2
 

@@ -89,11 +89,20 @@ func addValidator(st *StateManager, env *Delivery) error {
 	// Update the threshold
 	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
+
 	// Record the update
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
 		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
+
+	if protocol.IsDnUrl(st.Network.NodeUrl()) {
+		operation, err := addToOperatorPage(st, env, key)
+		if err != nil {
+			return err
+		}
+		operatorUpdatesToLedger(st, []protocol.KeyPageOperation{operation})
 	}
 
 	// Add the validator
@@ -211,6 +220,29 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 	}
 
 	return page, nil
+}
+
+func addToOperatorPage(st *StateManager, env *Delivery, key *protocol.KeySpec) (*protocol.AddKeyOperation, error) {
+	pageUrl := st.Network.OperatorPage(0)
+	var page *protocol.KeyPage
+	err := st.LoadUrlAs(pageUrl, &page)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
+	}
+
+	page.Keys = append(page.Keys, key)
+
+	// Record the update
+	didUpdateKeyPage(page)
+	err = st.Update(page)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+	}
+
+	return &protocol.AddKeyOperation{Entry: protocol.KeySpecParams{
+		KeyHash: key.PublicKeyHash,
+		Owner:   key.Owner,
+	}}, nil
 }
 
 func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {

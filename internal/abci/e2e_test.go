@@ -1420,7 +1420,8 @@ func TestUpdateValidators(t *testing.T) {
 	n := nodes[subnets[0]][0]
 
 	netUrl := n.network.NodeUrl()
-	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 1)
+	oprPage := n.network.OperatorPage(0)
+	vldPage := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 1)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
 
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
@@ -1433,7 +1434,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(n.network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
+			WithSigner(oprPage, 1). // TODO move back to OperatorPage in or after AC-1402
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1446,7 +1447,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(validators, 1).
+			WithSigner(oprPage, 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1463,7 +1464,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(validators, 2).
+			WithSigner(oprPage, 2).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1477,7 +1478,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(validators, 3).
+			WithSigner(oprPage, 3).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1487,7 +1488,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(1), n.GetKeyPage(validators.String()).AcceptThreshold)
+	require.Equal(t, uint64(1), n.GetKeyPage(oprPage.String()).AcceptThreshold)
 
 	// Add a fourth validator, so the page threshold will become 2
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1495,7 +1496,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(validators, 4).
+			WithSigner(oprPage, 4).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1505,7 +1506,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), n.GetKeyPage(validators.String()).AcceptThreshold)
+	require.Equal(t, uint64(2), n.GetKeyPage(vldPage.String()).AcceptThreshold)
 
 	// Remove a validator
 	txns := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1513,7 +1514,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.PubKey = nodeKeyUpd.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(validators, 5).
+			WithSigner(oprPage, 5).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
@@ -1521,7 +1522,7 @@ func TestUpdateValidators(t *testing.T) {
 
 	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
-			WithSigner(validators, 5).
+			WithSigner(oprPage, 5).
 			WithTxnHash(txns[0][:]).
 			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
 			Build())
