@@ -312,7 +312,13 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("Key does not exist in the wallet %v", err)
 		}
-		wd.Entry, err = prepareAnyData(args, false, key, signer)
+		argcopy := args
+		argcopy[1] = Keyname
+		argCopy, kSigner, err := prepareSigner(u, argcopy)
+		if err != nil {
+			return "", err
+		}
+		wd.Entry, err = prepareAnyData(argCopy, false, key, kSigner)
 		if err != nil {
 			return PrintJsonRpcError(err)
 		}
