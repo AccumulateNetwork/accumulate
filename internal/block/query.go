@@ -807,7 +807,11 @@ func (m *Executor) Query(batch *database.Batch, q *query.Query, _ int64, prove b
 		}
 
 		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
-		account, err := m.queryAccount(batch, batch.AccountByID(chr.ChainId[:]), false)
+		record, err := batch.AccountByID(chr.ChainId[:])
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+		}
+		account, err := m.queryAccount(batch, record, false)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
