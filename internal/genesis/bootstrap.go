@@ -338,7 +338,7 @@ func createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidato
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
-	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
+	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
 	page2 := createOperatorPage(book.Url, 1, operators, false)
