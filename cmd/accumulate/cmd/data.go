@@ -311,8 +311,8 @@ func WriteData(accountUrl string, args []string) (string, error) {
 func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataEntry {
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
+		data := []byte{}
 		if flagAccount.LiteData != "" {
-			data := []byte{}
 			n, err := hex.Decode(data, []byte(flagAccount.LiteData))
 			if err != nil {
 				//if it is not a hex string, then just store the data as-is
@@ -321,8 +321,8 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 				//clip the padding
 				data = data[:n]
 			}
-			entry.Data = append(entry.Data, data)
 		}
+		entry.Data = append(entry.Data, data)
 	}
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
