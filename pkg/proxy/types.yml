@@ -1,0 +1,26 @@
+
+SeedListRequest:
+  fields:
+    - name: Network
+      type: string
+    - name: count
+      type: int
+
+SeedListResponse:
+  fields:
+    - name: Network
+      type: string
+    - name: addresses
+      type: string
+      repeatable: true
+
+SeedCountRequest:
+  fields:
+    - name: Network
+      type: string
+
+
+SeedCountResponse:
+  fields:
+    - name: Count
+      type: int
