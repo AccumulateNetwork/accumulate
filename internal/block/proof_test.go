@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -35,7 +35,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 
 	// Get a proof of the account state
 	req := new(query.RequestByUrl)
-	req.Url = types.String(aliceUrl.String())
+	req.Url = aliceUrl
 	acctResp := sim.Query(aliceUrl, req, true).(*query.ResponseAccount)
 	localReceipt := acctResp.Receipt.Proof
 	// Execute enough blocks to ensure the block is anchored
@@ -43,7 +43,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 
 	// Get a proof of the BVN anchor
 	req = new(query.RequestByUrl)
-	req.Url = types.String(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
+	req.Url = url.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
 	dirReceipt := chainResp.Receipt.Proof
 	fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
