@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -14,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -25,20 +23,8 @@ type queryDirect struct {
 	Subnet string
 }
 
-type queryRequest interface {
-	encoding.BinaryMarshaler
-	Type() types.QueryType
-}
-
-func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []byte, error) {
+func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byte, error) {
 	var err error
-	req := new(query.Query)
-	req.Type = content.Type()
-	req.Content, err = content.MarshalBinary()
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
-	}
-
 	b, err := req.MarshalBinary()
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
@@ -74,7 +60,7 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 
 func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
 	req := new(query.RequestByUrl)
-	req.Url = types.String(u.String())
+	req.Url = u
 	k, v, err := q.query(req, opts)
 	if err != nil {
 		return nil, err
@@ -194,7 +180,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 
 func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	req := new(query.RequestDirectory)
-	req.Url = types.String(u.String())
+	req.Url = u
 	req.Start = pagination.Start
 	req.Limit = pagination.Count
 	req.ExpandChains = opts.Expand
