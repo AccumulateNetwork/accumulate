@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -143,7 +145,12 @@ func initClient(server string) (string, error) {
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		go func(n int) {
-			createAccount(n)
+			// create accounts and store them
+			acc, _ := createAccount(n)
+
+			// faucet account
+			_, err = client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
+
 			<-guard
 		}(i)
 	}
@@ -153,8 +160,8 @@ func initClient(server string) (string, error) {
 	return "", nil
 }
 
-// helper function to generate key and create account
-func createAccount(i int) {
+// helper function to generate key and create account and return the address
+func createAccount(i int) (*url.URL, error) {
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		fmt.Printf("Error: generating keys: %v\n", err)
@@ -166,6 +173,8 @@ func createAccount(i int) {
 	}
 
 	fmt.Printf("Account %d: %s\n", i, acc)
+
+	return acc, nil
 }
 
 func fatalf(format string, args ...interface{}) {
