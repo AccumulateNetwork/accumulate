@@ -20,7 +20,7 @@ import (
 type dispatcher struct {
 	ExecutorOptions
 	isDirectory bool
-	batches     map[string]*protocol.Envelope
+	batches     map[string][]*protocol.Envelope
 }
 
 // newDispatcher creates a new dispatcher.
@@ -28,7 +28,7 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
 	d.isDirectory = opts.Network.Type == config.Directory
-	d.batches = map[string]*protocol.Envelope{}
+	d.batches = map[string][]*protocol.Envelope{}
 	return d
 }
 
@@ -40,11 +40,12 @@ func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
 
 	batch := d.batches[subnet]
 	if batch == nil {
-		batch = new(protocol.Envelope)
+		batch = make([]*protocol.Envelope, len(deliveries))
 	}
-	for _, delivery := range deliveries {
-		batch.Signatures = append(batch.Signatures, delivery.Signatures...)
-		batch.Transaction = append(batch.Transaction, delivery.Transaction)
+	for i, delivery := range deliveries {
+		batch[i] = new(protocol.Envelope)
+		batch[i].Signatures = append(batch[i].Signatures, delivery.Signatures...)
+		batch[i].Transaction = append(batch[i].Transaction, delivery.Transaction)
 	}
 	d.batches[subnet] = batch
 	return nil
@@ -75,7 +76,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	// Send transactions to each destination in parallel
 	for subnet, batch := range d.batches {
-		if len(batch.Transaction) == 0 {
+		if len(batch) == 0 {
 			continue
 		}
 
@@ -83,11 +84,9 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		subnet, batch := subnet, batch // Don't capture loop variables
 		go func() {
 			defer wg.Done()
-			for _, tx := range batch.Transaction {
-				txenv := batch
-				txenv.Transaction = make([]*protocol.Transaction, 0)
-				txenv.Transaction = append(txenv.Transaction, tx)
-				resp, err := d.Router.Submit(ctx, subnet, txenv, false, false)
+			for _, tx := range batch {
+
+				resp, err := d.Router.Submit(ctx, subnet, tx, false, false)
 				if err != nil {
 					errs <- err
 					return
