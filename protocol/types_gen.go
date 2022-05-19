@@ -229,6 +229,15 @@ type DataAccount struct {
 	extraData []byte
 }
 
+type DataSigningInfo struct {
+	fieldsSet []bool
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Salt      string `json:"salt,omitempty" form:"salt" query:"salt" validate:"required"`
+	Type      string `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	extraData []byte
+}
+
 // DelegatedSignature is used when signing a transaction on behalf of another authority.
 type DelegatedSignature struct {
 	fieldsSet []bool
@@ -1369,6 +1378,19 @@ func (v *DataAccount) Copy() *DataAccount {
 }
 
 func (v *DataAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DataSigningInfo) Copy() *DataSigningInfo {
+	u := new(DataSigningInfo)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Signature = encoding.BytesCopy(v.Signature)
+	u.Salt = v.Salt
+	u.Type = v.Type
+
+	return u
+}
+
+func (v *DataSigningInfo) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DelegatedSignature) Copy() *DelegatedSignature {
 	u := new(DelegatedSignature)
@@ -2890,6 +2912,23 @@ func (v *DataAccount) Equal(u *DataAccount) bool {
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DataSigningInfo) Equal(u *DataSigningInfo) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	if !(v.Salt == u.Salt) {
+		return false
+	}
+	if !(v.Type == u.Type) {
 		return false
 	}
 
@@ -5601,6 +5640,72 @@ func (v *DataAccount) IsValid() error {
 	}
 	if err := v.AccountAuth.IsValid(); err != nil {
 		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DataSigningInfo = []string{
+	1: "PublicKey",
+	2: "Signature",
+	3: "Salt",
+	4: "Type",
+}
+
+func (v *DataSigningInfo) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(1, v.PublicKey)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(2, v.Signature)
+	}
+	if !(len(v.Salt) == 0) {
+		writer.WriteString(3, v.Salt)
+	}
+	if !(len(v.Type) == 0) {
+		writer.WriteString(4, v.Type)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DataSigningInfo)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *DataSigningInfo) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Salt is missing")
+	} else if len(v.Salt) == 0 {
+		errs = append(errs, "field Salt is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Type is missing")
+	} else if len(v.Type) == 0 {
+		errs = append(errs, "field Type is not set")
 	}
 
 	switch len(errs) {
@@ -10364,6 +10469,35 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *DataSigningInfo) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DataSigningInfo) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Salt = x
+	}
+	if x, ok := reader.ReadString(4); ok {
+		v.Type = x
+	}
+
+	seen, err := reader.Reset(fieldNames_DataSigningInfo)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *DelegatedSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12922,6 +13056,20 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DataSigningInfo) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+		Signature *string `json:"signature,omitempty"`
+		Salt      string  `json:"salt,omitempty"`
+		Type      string  `json:"type,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Salt = v.Salt
+	u.Type = v.Type
+	return json.Marshal(&u)
+}
+
 func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      SignatureType                         `json:"type"`
@@ -14471,6 +14619,35 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
 	v.Scratch = u.Scratch
+	return nil
+}
+
+func (v *DataSigningInfo) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+		Signature *string `json:"signature,omitempty"`
+		Salt      string  `json:"salt,omitempty"`
+		Type      string  `json:"type,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.Salt = v.Salt
+	u.Type = v.Type
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	v.Salt = u.Salt
+	v.Type = u.Type
 	return nil
 }
 

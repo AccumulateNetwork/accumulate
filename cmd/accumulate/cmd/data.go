@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -310,6 +311,11 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if Keyname != "" {
 		key, err := GetWallet().Get(BucketKeys, []byte(Keyname))
 		if err != nil {
+			return "", fmt.Errorf("Key %s does not exist in the wallet %v", hex.EncodeToString(key), err)
+		}
+		var privKey *Key
+		privKey, err = resolvePrivateKey(Keyname)
+		if err != nil {
 			return "", fmt.Errorf("Key does not exist in the wallet %v", err)
 		}
 		argcopy := args
@@ -318,7 +324,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		wd.Entry, err = prepareAnyData(argCopy, false, key, kSigner)
+		wd.Entry, err = prepareAnyData(argCopy, false, privKey, kSigner)
 		if err != nil {
 			return PrintJsonRpcError(err)
 		}
@@ -354,7 +360,7 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 	return entry
 }
 
-func prepareAnyData(args []string, isFirstLiteEntry bool, key []byte, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
+func prepareAnyData(args []string, isFirstLiteEntry bool, key *Key, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
 	entry := new(protocol.AccumulateDataEntry)
 
 	if isFirstLiteEntry {
@@ -376,14 +382,15 @@ func prepareAnyData(args []string, isFirstLiteEntry bool, key []byte, signer *si
 		entry.Data = append(entry.Data, data)
 
 	}
-	tstamp := time.Now().String()
-	salt := []byte(tstamp)
-	entry.Data = append(entry.Data, salt)
+	var signData *protocol.DataSigningInfo
+	signData.PublicKey = key.PublicKey
+	signData.Salt = strconv.FormatInt(time.Now().UnixNano(), 10)
 	fullDat := []byte{}
 	for _, d := range entry.Data {
 		fullDat = append(fullDat, d...)
 	}
-	sig, err := signer.Sign(fullDat)
+	saltHash := sha256.Sum256(append(fullDat, []byte(signData.Salt)...))
+	sig, err := signer.Sign(saltHash[:])
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +398,12 @@ func prepareAnyData(args []string, isFirstLiteEntry bool, key []byte, signer *si
 	if err != nil {
 		return nil, err
 	}
-	entry.Data = append(entry.Data, sign)
+	signData.Signature = sign
+	finData, err := signData.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	entry.Data = append(entry.Data, finData)
 	return entry, nil
 }
 

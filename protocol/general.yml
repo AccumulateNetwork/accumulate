@@ -176,3 +176,15 @@ Rational:
       type: uint
     - name: Denominator
       type: uint
+
+DataSigningInfo:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Signature
+      type: bytes
+    - name: Salt
+      type: string
+    - name: Type
+      type: string
+
