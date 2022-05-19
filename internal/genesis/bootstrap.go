@@ -57,11 +57,10 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	}
 	b.genesisExec = exec
 
-	block := new(block.Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = opts.GenesisTime
-	block.Batch = b.db.Begin(true)
-	defer block.Batch.Discard()
+	b.block = new(block.Block)
+	b.block.Index = protocol.GenesisBlock
+	b.block.Time = opts.GenesisTime
+	b.block.Batch = b.db.Begin(true)
 
 	return b, nil
 }
