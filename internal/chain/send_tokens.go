@@ -2,10 +2,10 @@ package chain
 
 import (
 	"fmt"
+	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type SendTokens struct{}
@@ -40,13 +40,13 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	//now check to see if we can transact
 	//really only need to provide one input...
 	//now check to see if the account is good to send tokens from
-	total := types.Amount{}
+	total := new(big.Int)
 	for _, to := range body.To {
-		total.Add(total.AsBigInt(), &to.Amount)
+		total.Add(total, &to.Amount)
 	}
 
-	if !account.DebitTokens(&total.Int) {
-		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
+	if !account.DebitTokens(total) {
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), total)
 	}
 	err := st.Update(account)
 	if err != nil {
