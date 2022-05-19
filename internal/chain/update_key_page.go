@@ -121,6 +121,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		}
 	}
 
+	isDnOprBook := protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.Network.OperatorBook())
+	if isDnOprBook {
+		// Update the threshold
+		ratio := loadOperatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+		page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
+	}
+
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
@@ -128,7 +135,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
-	if protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.NodeUrl().JoinPath(protocol.OperatorBook)) {
+	if isDnOprBook {
 		err = operatorUpdatesToLedger(st, body.Operation)
 		if err != nil {
 			return nil, err
@@ -318,4 +325,29 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	}
 
 	return owners, nil
+}
+
+func loadOperatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
+	acc := st.stateCache.batch.Account(url)
+
+	data, err := acc.Data()
+	if err != nil {
+		st.logger.Error("Failed to get globals data chain", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	_, entry, err := data.GetLatest()
+	if err != nil {
+		st.logger.Error("Failed to get latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	globals := new(protocol.NetworkGlobals)
+	err = globals.UnmarshalBinary(entry.GetData()[0])
+	if err != nil {
+		st.logger.Error("Failed to decode latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	return globals.OperatorAcceptThreshold.GetFloat()
 }

@@ -1422,14 +1422,12 @@ func TestUpdateValidators(t *testing.T) {
 
 	network := dn.network
 	netUrl := network.NodeUrl()
-	vldPage := protocol.FormatKeyPageUrl(network.ValidatorBook(), 1)
 	vldKey1, vldKey2, vldKey3, vldKey4 := generateKey(), generateKey(), generateKey(), generateKey()
 	height := uint64(1)
 
-	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
-	// for 4
+	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2 for 4
 	ng := new(protocol.NetworkGlobals)
-	ng.ValidatorThreshold.Set(5, 12)
+	ng.OperatorAcceptThreshold.Set(5, 12)
 	wd := new(protocol.WriteData)
 	d, err := ng.MarshalBinary()
 	require.NoError(t, err)
@@ -1442,16 +1440,11 @@ func TestUpdateValidators(t *testing.T) {
 			Build())
 	})
 
-	// Add keys to operator key page first
-	addOperatorKey(dn, vldKey1, &height)
-	addOperatorKey(dn, vldKey2, &height)
-	addOperatorKey(dn, vldKey3, &height)
-	addOperatorKey(dn, vldKey4, &height)
-
 	// Verify there is one validator (node key)
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey()})
 
 	// Add a validator
+	addOperatorKey(t, dn, vldKey1, &height)
 	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey1.PubKey().Bytes()
@@ -1466,11 +1459,13 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey1.PubKey()})
 
 	// Update a validator
+	addOperatorKey(t, dn, vldKey2, &height)
+	require.Equal(t, uint64(1), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
 
 		body.PubKey = vldKey1.PubKey().Bytes()
-		body.NewPubKey = vldKey4.PubKey().Bytes()
+		body.NewPubKey = vldKey2.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
@@ -1480,45 +1475,32 @@ func TestUpdateValidators(t *testing.T) {
 	})
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey()})
 
 	// Add a third validator
-	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.AddValidator)
-		body.PubKey = vldKey2.PubKey().Bytes()
-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(network.DefaultOperatorPage(), height).
-			WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
-			Build())
-	})
-	// Verify the validator was added
-	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey(), vldKey2.PubKey()})
+	addOperatorKey(t, dn, vldKey3, &height)
+	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 
-	// Verify the Validator threshold
-	require.Equal(t, uint64(1), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
-
-	// Add a fourth validator, so the page threshold will become 2
-	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey3.PubKey().Bytes()
-
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
+	sign(dn, txns, vldKey2, height)
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
 
-	// Verify the Validator threshold
-	require.Equal(t, uint64(2), dn.GetKeyPage(vldPage.String()).AcceptThreshold)
+	// Add a fourth operator, so the page threshold will become 2.
+	addOperatorKey(t, dn, vldKey4, &height, vldKey2)
+	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 
-	// Remove a validator
-	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		body := new(protocol.RemoveValidator)
+	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
 		body.PubKey = vldKey4.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
@@ -1527,24 +1509,37 @@ func TestUpdateValidators(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
+	sign(dn, txns, vldKey2, height)
 
-	/*	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
-			send(acctesting.NewTransaction().
-				WithSigner(network.DefaultOperatorPage(), height).
-				WithTxnHash(txns[0][:]).
-				Sign(protocol.SignatureTypeED25519, vldKey2.Bytes()).
-				Build())
-		})
-		dn.MustWaitForTxns(convertIds32(envHashes...)...)
-	*/
+	// Verify the validator was added
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey(), vldKey4.PubKey()})
+
+	// Remove validator
+	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
+		body.PubKey = vldKey2.PubKey().Bytes()
+
+		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+	sign(dn, txns, vldKey2, height)
+
 	// Verify the validator was removed
 	pubKeys := dn.client.Validators()
-	require.ElementsMatch(t, pubKeys, []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{dn.key.PubKey(), vldKey3.PubKey(), vldKey4.PubKey()})
 
 }
 
-func addOperatorKey(dn *FakeNode, oprKey tmed25519.PrivKey, height *uint64) {
-	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+func addOperatorKey(t *testing.T, dn *FakeNode, oprKey tmed25519.PrivKey, height *uint64, signKeys ...tmed25519.PrivKey) {
+	// See if we are going to need to sign and have enough keys
+	threshold := dn.GetKeyPage(dn.network.DefaultOperatorPage().String()).AcceptThreshold
+	nrKeys := uint64(len(signKeys))
+	require.Equalf(t, threshold-1, nrKeys, "we need %d extra signing keys but have %d", threshold-1, nrKeys)
+
+	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		op := new(protocol.AddKeyOperation)
 		keyHash := sha256.Sum256(oprKey.PubKey().Bytes())
 		op.Entry.KeyHash = keyHash[:]
@@ -1557,8 +1552,32 @@ func addOperatorKey(dn *FakeNode, oprKey tmed25519.PrivKey, height *uint64) {
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
-		atomic.AddUint64(height, 1)
 	})
+
+	// Execute signing
+	for _, signKey := range signKeys {
+		envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
+			send(acctesting.NewTransaction().
+				WithSigner(dn.network.DefaultOperatorPage(), *height).
+				WithTxnHash(txns[0][:]).
+				Sign(protocol.SignatureTypeED25519, signKey.Bytes()).
+				Build())
+		})
+		dn.MustWaitForTxns(convertIds32(envHashes...)...)
+	}
+
+	atomic.AddUint64(height, 1)
+}
+
+func sign(dn *FakeNode, txns [][32]byte, key tmed25519.PrivKey, height uint64) {
+	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithSigner(dn.network.DefaultOperatorPage(), height).
+			WithTxnHash(txns[0][:]).
+			Sign(protocol.SignatureTypeED25519, key.Bytes()).
+			Build())
+	})
+	dn.MustWaitForTxns(convertIds32(envHashes...)...)
 }
 
 func TestUpdateOperators(t *testing.T) {

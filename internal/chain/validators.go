@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -86,9 +85,6 @@ func addValidator(st *StateManager, env *Delivery) error {
 	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
 	page.Keys = append(page.Keys, key)
 
-	// Update the threshold
-	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
 	err = st.Update(page)
@@ -127,9 +123,13 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	// Remove the key hash from the key page
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
+	/*  This no longer does anything because the signing is now governed by the operator book
+	TODO Remove when sure nothing will be governed by validtor books
 	// Update the threshold
 	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
+	page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
+	*/
+
 	// Record the update
 	didUpdateKeyPage(page)
 	err = st.Update(page)
@@ -210,29 +210,4 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 	}
 
 	return page, nil
-}
-
-func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
-	acc := st.stateCache.batch.Account(url)
-
-	data, err := acc.Data()
-	if err != nil {
-		st.logger.Error("Failed to get globals data chain", "error", err)
-		return protocol.FallbackValidatorThreshold
-	}
-
-	_, entry, err := data.GetLatest()
-	if err != nil {
-		st.logger.Error("Failed to get latest globals entry", "error", err)
-		return protocol.FallbackValidatorThreshold
-	}
-
-	globals := new(protocol.NetworkGlobals)
-	err = globals.UnmarshalBinary(entry.GetData()[0])
-	if err != nil {
-		st.logger.Error("Failed to decode latest globals entry", "error", err)
-		return protocol.FallbackValidatorThreshold
-	}
-
-	return globals.ValidatorThreshold.GetFloat()
 }

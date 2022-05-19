@@ -193,7 +193,7 @@ func (g *genesis) createValidatorBook() {
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = protocol.GetMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
@@ -266,8 +266,8 @@ func (g *genesis) createGlobals() error {
 	global.Url = g.adiUrl.JoinPath(protocol.Globals)
 	wg := new(protocol.WriteData)
 	threshold := new(protocol.NetworkGlobals)
-	threshold.ValidatorThreshold.Numerator = 2
-	threshold.ValidatorThreshold.Denominator = 3
+	threshold.OperatorAcceptThreshold.Numerator = 2
+	threshold.OperatorAcceptThreshold.Denominator = 3
 	data, err := threshold.MarshalBinary()
 	if err != nil {
 		return err
@@ -371,7 +371,7 @@ func (g *genesis) createBVNOperatorBook() {
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = protocol.GetMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
@@ -386,7 +386,7 @@ func (g *genesis) createBVNOperatorBook() {
 func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
+	page.AcceptThreshold = protocol.GetMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
 	for _, operator := range operators {

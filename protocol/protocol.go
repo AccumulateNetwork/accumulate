@@ -467,8 +467,8 @@ func IndexChain(name string, major bool) string {
 	return "minor-" + name + "-index"
 }
 
-func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
-	return uint64(math.Round(ratio * float64(validatorCount)))
+func GetMOfN(count int, ratio float64) uint64 {
+	return uint64(math.Round(ratio * float64(count)))
 }
 
 // AnchorChain returns the name of the intermediate anchor chain for the given
