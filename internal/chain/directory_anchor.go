@@ -91,7 +91,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 		for _, hash := range synth {
 			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
-			st.state.ProcessAdditionalTransaction(d)
+			st.State.ProcessAdditionalTransaction(d)
 		}
 	}
 

@@ -103,29 +103,6 @@ func addChainAnchor(rootChain *database.Chain, account *database.Account, accoun
 	return indexIndex, true, nil
 }
 
-func loadDirectoryMetadata(batch *database.Batch, account *url.URL) (*protocol.DirectoryIndexMetadata, error) {
-	b, err := batch.Account(account).Index("Directory", "Metadata").Get()
-	if err != nil {
-		return nil, err
-	}
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err = md.UnmarshalBinary(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return md, nil
-}
-
-func loadDirectoryEntry(batch *database.Batch, account *url.URL, index uint64) (string, error) {
-	b, err := batch.Account(account).Index("Directory", index).Get()
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)

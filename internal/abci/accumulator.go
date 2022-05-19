@@ -357,7 +357,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Code == 0 {
 			continue
 		}
-		if !envelopes[i].Transaction.Type().IsUser() {
+		if !envelopes[i].Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
