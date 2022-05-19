@@ -256,7 +256,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		})
 		check(err)
 		defer genesis.Discard()
-		err = genesis.Execute() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
+		err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
 		check(err)
 
 		for i := range bvnSubnet {
@@ -271,7 +271,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			})
 			check(err)
 			defer genesis.Discard()
-			err = genesis.Execute() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
+			err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
 			check(err)
 		}
 		return

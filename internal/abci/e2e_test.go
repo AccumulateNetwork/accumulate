@@ -1789,9 +1789,10 @@ func TestNetworkDefinition(t *testing.T) {
 
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
-	networkData, err := batch.Account(protocol.DnUrl().JoinPath(protocol.Network)).Data()
+	_, _, txnHash, err := indexing.Data(batch, protocol.DnUrl().JoinPath(protocol.Network)).GetLatest()
 	require.NoError(t, err)
-	_, entry, err := networkData.GetLatest()
+
+	entry, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 
 	networkDefs := new(protocol.NetworkDefinition)

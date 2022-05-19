@@ -18,12 +18,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitGenesis(t TB, db *database.Database, exec *Executor, netValMap genesis.NetworkValidatorMap) genesis.Genesis {
+func InitGenesis(t TB, db *database.Database, exec *Executor, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
 	t.Helper()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
-	genesis, err := genesis.Init(temp, genesis.InitOpts{
+	bootstrap, err := genesis.Init(temp, genesis.InitOpts{
 		Network:             exec.Network,
 		GenesisTime:         time.Unix(0, 0),
 		NetworkValidatorMap: netValMap,
@@ -35,7 +35,7 @@ func InitGenesis(t TB, db *database.Database, exec *Executor, netValMap genesis.
 		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
-	return genesis
+	return bootstrap
 }
 
 func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {

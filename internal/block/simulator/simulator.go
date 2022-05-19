@@ -144,23 +144,23 @@ func (s *Simulator) InitFromGenesis() {
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.genesis = InitGenesis(s, x.Database, x.Executor, netValMap)
+		x.bootstrap = InitGenesis(s, x.Database, x.Executor, netValMap)
 	}
 
 	// Execute genesis after the entire network is known
 	defer func() {
 		for _, x := range s.Executors {
-			x.genesis.Discard()
+			x.bootstrap.Discard()
 		}
 	}()
 
 	for _, x := range s.Executors {
-		err := x.genesis.Execute()
+		err := x.bootstrap.Bootstrap()
 		if err != nil {
-			panic(fmt.Errorf("could not execute genesis: %v", err))
+			panic(fmt.Errorf("could not execute bootstrap: %v", err))
 		}
 
-		state, err := x.genesis.GetDBState()
+		state, err := x.bootstrap.GetDBState()
 		require.NoError(tb{s}, err)
 
 		func() {
@@ -395,10 +395,10 @@ type ExecEntry struct {
 	mu                      sync.Mutex
 	nextBlock, currentBlock []*protocol.Envelope
 
-	Subnet   *config.Subnet
-	Database *database.Database
-	Executor *block.Executor
-	genesis  genesis.Genesis
+	Subnet    *config.Subnet
+	Database  *database.Database
+	Executor  *block.Executor
+	bootstrap genesis.Bootstrap
 
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to

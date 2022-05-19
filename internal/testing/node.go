@@ -148,12 +148,12 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
 	netValMap := make(genesis.NetworkValidatorMap)
-	var genList []genesis.Genesis
+	var bootstrapList []genesis.Bootstrap
 
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
 		dir := filepath.Join(tempDir, subnetId)
-		genesis, err := node.Init(node.InitOptions{
+		bootstrap, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
 			Port:                basePort,
 			Config:              allConfigs[subnetId],
@@ -164,8 +164,8 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			FactomAddressesFile: factomAddressFilePath,
 		})
 		require.NoError(t, err)
-		if genesis != nil {
-			genList = append(genList, genesis)
+		if bootstrap != nil {
+			bootstrapList = append(bootstrapList, bootstrap)
 		}
 
 		daemons := make([]*accumulated.Daemon, count)
@@ -182,12 +182,12 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 
 	// Execute genesis after the entire network is known
 	defer func() {
-		for _, genesis := range genList {
-			genesis.Discard()
+		for _, bootstrap := range bootstrapList {
+			bootstrap.Discard()
 		}
 	}()
-	for _, genesis := range genList {
-		err := genesis.Execute()
+	for _, bootstrap := range bootstrapList {
+		err := bootstrap.Bootstrap()
 		if err != nil {
 			panic(fmt.Errorf("could not execute genesis: %v", err))
 		}

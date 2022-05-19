@@ -53,7 +53,7 @@ type FakeNode struct {
 	assert    *assert.Assertions
 	require   *require.Assertions
 	netValMap genesis.NetworkValidatorMap
-	Genesis   genesis.Genesis
+	Bootstrap genesis.Bootstrap
 	kv        *memory.DB
 }
 
@@ -98,8 +98,8 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 			netName = strings.TrimPrefix(netName, evilNodePrefix)
 			nodes := allNodes[netName]
 			for i := range nodes {
-				genesis := nodes[i].Genesis
-				err := genesis.Execute()
+				genesis := nodes[i].Bootstrap
+				err := genesis.Bootstrap()
 				if err != nil {
 					panic(fmt.Errorf("could not execute genesis: %v", err))
 				}
@@ -228,7 +228,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		},
 		Keys: [][]byte{n.key.Bytes()},
 	}
-	n.Genesis, err = genesis.Init(kv, opts)
+	n.Bootstrap, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
 	n.kv = kv
 

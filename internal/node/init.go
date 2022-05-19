@@ -40,24 +40,24 @@ type InitOptions struct {
 // Init creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func Init(opts InitOptions) (genesis genesis.Genesis, err error) {
+func Init(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	switch opts.Version {
 	case 0:
 		fallthrough
 	case 1:
-		genesis, err = initV1(opts)
+		bootstrap, err = initV1(opts)
 	case 2:
 		//todo: err = initV2(opts)
 	default:
 		return nil, fmt.Errorf("unknown version to init")
 	}
-	return genesis, err
+	return bootstrap, err
 }
 
 // initV1 creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
+func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(opts.WorkDir)
@@ -71,7 +71,7 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 	configs := opts.Config
 	subnetID := configs[0].Accumulate.Network.LocalSubnetID
 	genVals := make([]types.GenesisValidator, 0, len(configs))
-	genValKeys := make([][]byte, 0, len(config))
+	genValKeys := make([][]byte, 0, len(configs))
 
 	var networkType cfg.NetworkType
 	for i, config := range configs {
@@ -123,8 +123,8 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 
 		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
-				Address: pv.Key.PubKey.Address(),
-				PubKey:  pv.Key.PubKey,
+				Address: pubKey.Address(),
+				PubKey:  pubKey,
 				Power:   1,
 				Name:    nodeDirName,
 			})
@@ -137,9 +137,9 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 		genTime := tmtime.Now()
 
 		db := memory.New(opts.Logger.With("module", "storage"))
-		genInit, err = genesis.Init(db, genesis.InitOpts{
+		bootstrap, err = genesis.Init(db, genesis.InitOpts{
 			Network:             configs[0].Accumulate.Network,
-			Configs:             configs,
+			AllConfigs:          configs,
 			GenesisTime:         genTime,
 			Validators:          genVals,
 			Keys:                genValKeys,
@@ -207,7 +207,7 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 		logMsg = append(logMsg, "validators", nValidators, "followers", nConfig-nValidators)
 	}
 	opts.Logger.Info("Successfully initialized nodes", logMsg...)
-	return genInit, nil
+	return bootstrap, nil
 }
 
 func initFilesWithConfig(config *cfg.Config, chainid *string) error {
