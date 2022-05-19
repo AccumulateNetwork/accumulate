@@ -12,8 +12,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() { acctesting.EnableDebugFeatures() }
-
 func TestOutOfSequenceSynth(t *testing.T) {
 	var timestamp uint64
 
