@@ -67,7 +67,7 @@ func TestOracleDistribution(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(protocol.PriceOracle()).
 			WithTimestampVar(&timestamp).
-			WithSigner(dn.Executor.Network.OperatorPage(1), 1).
+			WithSigner(dn.Executor.Network.DefaultOperatorPage(), 1).
 			WithBody(&WriteData{Entry: &AccumulateDataEntry{Data: [][]byte{data}}}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Build(),

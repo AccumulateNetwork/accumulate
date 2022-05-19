@@ -279,7 +279,7 @@ func (g *genesis) createGlobals() error {
 }
 
 func (g *genesis) initDN(oraclePrice uint64) error {
-	g.createOperatorBook(false)
+	g.createDNOperatorBook()
 
 	oracle := new(protocol.AcmeOracle)
 	oracle.Price = oraclePrice
@@ -319,7 +319,7 @@ func (g *genesis) initBVN() error {
 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
 	}
 
-	g.createOperatorBook(false)
+	g.createBVNOperatorBook()
 
 	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
 	if err == nil && subnet == network.LocalSubnetID {
@@ -351,7 +351,18 @@ func (g *genesis) initBVN() error {
 	return nil
 }
 
-func (g *genesis) createOperatorBook(lockPage bool) {
+func (g *genesis) createDNOperatorBook() {
+	book := new(protocol.KeyBook)
+	book.Url = g.adiUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
+	book.AddAuthority(book.Url)
+	book.PageCount = 1
+
+	page := createOperatorPage(book.Url, 0, g.opts.Validators, false)
+	g.WriteRecords(book, page)
+}
+
+func (g *genesis) createBVNOperatorBook() {
 	book := new(protocol.KeyBook)
 	book.Url = g.adiUrl.JoinPath(protocol.OperatorBook)
 	book.BookType = protocol.BookTypeOperator
@@ -368,9 +379,7 @@ func (g *genesis) createOperatorBook(lockPage bool) {
 	page1.Keys[0] = spec
 
 	page2 := createOperatorPage(book.Url, 1, g.opts.Validators, false)
-	if lockPage {
-		blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
-	}
+	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 	g.WriteRecords(book, page1, page2)
 }
 

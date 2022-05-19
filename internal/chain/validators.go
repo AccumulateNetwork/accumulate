@@ -128,7 +128,6 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 	// Update the threshold
-
 	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update

@@ -1436,7 +1436,7 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	dn.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(network.OperatorPage(1), height).
+			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1456,7 +1456,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey1.PubKey().Bytes()
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(network.OperatorPage(1), height).
+			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1473,7 +1473,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.NewPubKey = vldKey4.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(network.OperatorPage(1), height).
+			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1487,7 +1487,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey2.PubKey().Bytes()
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(network.OperatorPage(1), height).
+			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1496,7 +1496,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey4.PubKey(), vldKey2.PubKey()})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(1), dn.GetKeyPage(network.OperatorPage(1).String()).AcceptThreshold)
+	require.Equal(t, uint64(1), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 
 	// Add a fourth validator, so the page threshold will become 2
 	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1504,7 +1504,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.PubKey = vldKey3.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(network.OperatorPage(1), height).
+			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
@@ -1517,26 +1517,26 @@ func TestUpdateValidators(t *testing.T) {
 	require.Equal(t, uint64(2), dn.GetKeyPage(vldPage.String()).AcceptThreshold)
 
 	// Remove a validator
-	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.RemoveValidator)
 		body.PubKey = vldKey4.PubKey().Bytes()
 
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
-			WithSigner(network.OperatorPage(1), height).
+			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
 
-	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
-		send(acctesting.NewTransaction().
-			WithSigner(network.OperatorPage(1), height).
-			WithTxnHash(txns[0][:]).
-			Sign(protocol.SignatureTypeED25519, vldKey2.Bytes()).
-			Build())
-	})
-	dn.MustWaitForTxns(convertIds32(envHashes...)...)
-
+	/*	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
+			send(acctesting.NewTransaction().
+				WithSigner(network.DefaultOperatorPage(), height).
+				WithTxnHash(txns[0][:]).
+				Sign(protocol.SignatureTypeED25519, vldKey2.Bytes()).
+				Build())
+		})
+		dn.MustWaitForTxns(convertIds32(envHashes...)...)
+	*/
 	// Verify the validator was removed
 	pubKeys := dn.client.Validators()
 	require.ElementsMatch(t, pubKeys, []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
@@ -1551,7 +1551,7 @@ func addOperatorKey(dn *FakeNode, oprKey tmed25519.PrivKey, height *uint64) {
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
 
-		oprPage := dn.network.OperatorPage(1)
+		oprPage := dn.network.DefaultOperatorPage()
 		send(newTxn(oprPage.String()).
 			WithSigner(oprPage, *height).
 			WithBody(body).

@@ -79,6 +79,17 @@ func (n *Network) OperatorPage(index uint64) *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
 }
 
+// DefaultOperatorPage returns the URL of the page of the subnet's operator key book.
+func (n *Network) DefaultOperatorPage() *url.URL {
+	var index uint64
+	if n.Type == Directory {
+		index = 0
+	} else {
+		index = 1
+	}
+	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
+}
+
 // AnchorPool returns the URL of the subnet's anchor pool.
 func (n *Network) AnchorPool() *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.AnchorPool()

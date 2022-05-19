@@ -109,7 +109,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
-	signerUrl := x.Network.OperatorPage(1)
+	signerUrl := x.Network.DefaultOperatorPage()
 	err = batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return err
