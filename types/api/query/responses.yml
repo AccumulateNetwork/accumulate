@@ -1,11 +1,3 @@
-RequestKeyPageIndex:
-  fields:
-    - name: Url
-      type: url
-      pointer: true
-    - name: Key
-      type: bytes
-
 ResponseKeyPageIndex:
   fields:
     - name: Authority
@@ -161,16 +153,6 @@ MultiResponse:
       type: uvarint
       keep-empty: true
 
-RequestTxHistory:
-  fields:
-    - name: Account
-      type: url
-      pointer: true
-    - name: Start
-      type: uint
-    - name: Limit
-      type: uint
-
 DirectoryQueryResult:
   fields:
     - name: Entries
@@ -185,28 +167,6 @@ DirectoryQueryResult:
     - name: Total
       type: uvarint
       keep-empty: true
-
-RequestDataEntry:
-  fields:
-    - name: Url
-      type: url
-      pointer: true
-    - name: EntryHash
-      type: chain
-      optional: true
-
-RequestDataEntrySet:
-  fields:
-    - name: Url
-      type: url
-      pointer: true
-    - name: Start
-      type: uvarint
-    - name: Count
-      type: uvarint
-    - name: ExpandChains
-      type: bool
-      optional: true
 
 ResponseDataEntry:
   fields:
@@ -253,22 +213,6 @@ ResponseAccount:
       marshal-as: reference
       pointer: true
       optional: true
-
-RequestMinorBlocks:
-  fields:
-    - name: Account
-      type: url
-      pointer: true
-    - name: Start
-      type: uint
-    - name: Limit
-      type: uint
-    - name: TxFetchMode
-      type: TxFetchMode
-      marshal-as: enum
-    - name: BlockFilterMode
-      type: BlockFilterMode
-      marshal-as: enum
 
 ResponseMinorBlocks:
   fields:

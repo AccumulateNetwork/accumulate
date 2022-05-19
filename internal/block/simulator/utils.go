@@ -15,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -33,6 +32,7 @@ func InitGenesis(t TB, db *database.Database, exec *Executor, netValMap genesis.
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
+		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
 	return genesis
@@ -145,23 +145,12 @@ func RequireSuccess(t TB, results ...*protocol.TransactionStatus) {
 	}
 }
 
-type queryRequest interface {
-	encoding.BinaryMarshaler
-	Type() types.QueryType
-}
-
-func Query(t TB, db *database.Database, exec *Executor, req queryRequest, prove bool) interface{} {
+func Query(t TB, db *database.Database, exec *Executor, req query.Request, prove bool) interface{} {
 	t.Helper()
-
-	var err error
-	qr := new(query.Query)
-	qr.Type = req.Type()
-	qr.Content, err = req.MarshalBinary()
-	require.NoError(tb{t}, err)
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	key, value, perr := exec.Query(batch, qr, 0, prove)
+	key, value, perr := exec.Query(batch, req, 0, prove)
 	if perr != nil {
 		require.NoError(tb{t}, perr)
 	}

@@ -120,12 +120,6 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	sw := protocol.SegWitDataEntry{}
-	sw.Cause = *(*[32]byte)(txn.GetHash())
-	sw.EntryHash = *(*[32]byte)(wd.Entry.Hash())
-	sw.EntryUrl = txn.Header.Principal
-	txn.Body = &sw
-
 	st := chain.NewStateManager(&x.Network, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 

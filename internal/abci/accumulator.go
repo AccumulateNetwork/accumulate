@@ -25,7 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -179,8 +179,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	}
 
 	resQuery.Key = reqQuery.Data
-	qu := new(apiQuery.Query)
-	err := qu.UnmarshalBinary(reqQuery.Data)
+	qu, err := query.UnmarshalRequest(reqQuery.Data)
 	if err != nil {
 		// sentry.CaptureException(err)
 		app.logger.Debug("Query failed", "error", err)
@@ -204,7 +203,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 
 	default:
 		sentry.CaptureException(customErr)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
+		app.logger.Debug("Query failed", "type", qu.Type().String(), "error", customErr)
 		resQuery.Info = customErr.Error()
 		resQuery.Code = uint32(customErr.Code)
 		return resQuery
@@ -357,7 +356,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Code == 0 {
 			continue
 		}
-		if !envelopes[i].Transaction.Type().IsUser() {
+		if !envelopes[i].Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)

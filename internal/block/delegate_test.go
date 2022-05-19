@@ -9,6 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -81,9 +82,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -129,9 +128,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -182,9 +179,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -233,9 +228,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -286,9 +279,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -341,9 +332,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -400,9 +389,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -501,10 +488,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 
 	// Validate
 	viewSubnetFor(sim, alice, func(batch *database.Batch) {
-		data, err := batch.Account(alice.JoinPath("data")).Data()
-		require.NoError(t, err)
-		require.NotZero(t, data.Height())
-		de, err := data.Entry(data.Height() - 1)
+		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 

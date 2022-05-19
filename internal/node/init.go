@@ -71,6 +71,7 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 	configs := opts.Config
 	subnetID := configs[0].Accumulate.Network.LocalSubnetID
 	genVals := make([]types.GenesisValidator, 0, len(configs))
+	genValKeys := make([][]byte, 0, len(config))
 
 	var networkType cfg.NetworkType
 	for i, config := range configs {
@@ -122,11 +123,12 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 
 		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
-				Address: pubKey.Address(),
-				PubKey:  pubKey,
+				Address: pv.Key.PubKey.Address(),
+				PubKey:  pv.Key.PubKey,
 				Power:   1,
 				Name:    nodeDirName,
 			})
+			genValKeys = append(genValKeys, pv.Key.PrivKey.Bytes())
 		}
 	}
 
@@ -140,6 +142,7 @@ func initV1(opts InitOptions) (genInit genesis.Genesis, err error) {
 			Configs:             configs,
 			GenesisTime:         genTime,
 			Validators:          genVals,
+			Keys:                genValKeys,
 			NetworkValidatorMap: opts.NetworkValidatorMap,
 			Logger:              opts.Logger,
 			Router:              &routing.RouterInstance{Network: &configs[0].Accumulate.Network},
