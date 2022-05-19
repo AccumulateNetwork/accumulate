@@ -52,6 +52,24 @@ type MultiResponse struct {
 	extraData []byte
 }
 
+type RequestByChainId struct {
+	fieldsSet []bool
+	ChainId   [32]byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	extraData []byte
+}
+
+type RequestByTxId struct {
+	fieldsSet []bool
+	TxId      [32]byte `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	extraData []byte
+}
+
+type RequestByUrl struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	extraData []byte
+}
+
 type RequestDataEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -65,6 +83,15 @@ type RequestDataEntrySet struct {
 	Start        uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Count        uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	ExpandChains bool     `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
+	extraData    []byte
+}
+
+type RequestDirectory struct {
+	fieldsSet    []bool
+	Url          *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Start        uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit        uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	ExpandChains bool     `json:"expandChains,omitempty" form:"expandChains" query:"expandChains" validate:"required"`
 	extraData    []byte
 }
 
@@ -83,6 +110,14 @@ type RequestMinorBlocks struct {
 	TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
 	BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode" validate:"required"`
 	extraData       []byte
+}
+
+type RequestSynth struct {
+	fieldsSet      []bool
+	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	extraData      []byte
 }
 
 type RequestTxHistory struct {
@@ -207,6 +242,33 @@ type TxReceipt struct {
 	extraData []byte
 }
 
+type UnknownRequest struct {
+	fieldsSet []bool
+	extraData []byte
+}
+
+func (*RequestByChainId) Type() QueryType { return QueryTypeChainId }
+
+func (*RequestByTxId) Type() QueryType { return QueryTypeTxId }
+
+func (*RequestByUrl) Type() QueryType { return QueryTypeUrl }
+
+func (*RequestDataEntry) Type() QueryType { return QueryTypeData }
+
+func (*RequestDataEntrySet) Type() QueryType { return QueryTypeDataSet }
+
+func (*RequestDirectory) Type() QueryType { return QueryTypeDirectoryUrl }
+
+func (*RequestKeyPageIndex) Type() QueryType { return QueryTypeKeyPageIndex }
+
+func (*RequestMinorBlocks) Type() QueryType { return QueryTypeMinorBlocks }
+
+func (*RequestSynth) Type() QueryType { return QueryTypeSynth }
+
+func (*RequestTxHistory) Type() QueryType { return QueryTypeTxHistory }
+
+func (*UnknownRequest) Type() QueryType { return QueryTypeUnknown }
+
 func (v *ChainState) Copy() *ChainState {
 	u := new(ChainState)
 
@@ -256,6 +318,38 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 
 func (v *GeneralReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *RequestByChainId) Copy() *RequestByChainId {
+	u := new(RequestByChainId)
+
+	u.ChainId = v.ChainId
+
+	return u
+}
+
+func (v *RequestByChainId) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestByTxId) Copy() *RequestByTxId {
+	u := new(RequestByTxId)
+
+	u.TxId = v.TxId
+
+	return u
+}
+
+func (v *RequestByTxId) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestByUrl) Copy() *RequestByUrl {
+	u := new(RequestByUrl)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+
+	return u
+}
+
+func (v *RequestByUrl) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *RequestDataEntry) Copy() *RequestDataEntry {
 	u := new(RequestDataEntry)
 
@@ -283,6 +377,21 @@ func (v *RequestDataEntrySet) Copy() *RequestDataEntrySet {
 }
 
 func (v *RequestDataEntrySet) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestDirectory) Copy() *RequestDirectory {
+	u := new(RequestDirectory)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Start = v.Start
+	u.Limit = v.Limit
+	u.ExpandChains = v.ExpandChains
+
+	return u
+}
+
+func (v *RequestDirectory) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 	u := new(RequestKeyPageIndex)
@@ -312,6 +421,22 @@ func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
 }
 
 func (v *RequestMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestSynth) Copy() *RequestSynth {
+	u := new(RequestSynth)
+
+	if v.Source != nil {
+		u.Source = (v.Source).Copy()
+	}
+	if v.Destination != nil {
+		u.Destination = (v.Destination).Copy()
+	}
+	u.SequenceNumber = v.SequenceNumber
+
+	return u
+}
+
+func (v *RequestSynth) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RequestTxHistory) Copy() *RequestTxHistory {
 	u := new(RequestTxHistory)
@@ -559,6 +684,14 @@ func (v *TxReceipt) Copy() *TxReceipt {
 
 func (v *TxReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *UnknownRequest) Copy() *UnknownRequest {
+	u := new(UnknownRequest)
+
+	return u
+}
+
+func (v *UnknownRequest) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ChainState) Equal(u *ChainState) bool {
 	if !(v.Name == u.Name) {
 		return false
@@ -622,6 +755,35 @@ func (v *GeneralReceipt) Equal(u *GeneralReceipt) bool {
 	return true
 }
 
+func (v *RequestByChainId) Equal(u *RequestByChainId) bool {
+	if !(v.ChainId == u.ChainId) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestByTxId) Equal(u *RequestByTxId) bool {
+	if !(v.TxId == u.TxId) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestByUrl) Equal(u *RequestByUrl) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+
+	return true
+}
+
 func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
 	switch {
 	case v.Url == u.Url:
@@ -651,6 +813,28 @@ func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
 		return false
 	}
 	if !(v.Count == u.Count) {
+		return false
+	}
+	if !(v.ExpandChains == u.ExpandChains) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestDirectory) Equal(u *RequestDirectory) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.Limit == u.Limit) {
 		return false
 	}
 	if !(v.ExpandChains == u.ExpandChains) {
@@ -695,6 +879,30 @@ func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
 		return false
 	}
 	if !(v.BlockFilterMode == u.BlockFilterMode) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestSynth) Equal(u *RequestSynth) bool {
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	switch {
+	case v.Destination == u.Destination:
+		// equal
+	case v.Destination == nil || u.Destination == nil:
+		return false
+	case !((v.Destination).Equal(u.Destination)):
+		return false
+	}
+	if !(v.SequenceNumber == u.SequenceNumber) {
 		return false
 	}
 
@@ -1025,6 +1233,11 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 	return true
 }
 
+func (v *UnknownRequest) Equal(u *UnknownRequest) bool {
+
+	return true
+}
+
 var fieldNames_ChainState = []string{
 	1: "Name",
 	2: "Type",
@@ -1271,20 +1484,154 @@ func (v *MultiResponse) IsValid() error {
 	}
 }
 
+var fieldNames_RequestByChainId = []string{
+	1: "Type",
+	2: "ChainId",
+}
+
+func (v *RequestByChainId) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.ChainId == ([32]byte{})) {
+		writer.WriteHash(2, &v.ChainId)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestByChainId)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestByChainId) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ChainId is missing")
+	} else if v.ChainId == ([32]byte{}) {
+		errs = append(errs, "field ChainId is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RequestByTxId = []string{
+	1: "Type",
+	2: "TxId",
+}
+
+func (v *RequestByTxId) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.TxId == ([32]byte{})) {
+		writer.WriteHash(2, &v.TxId)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestByTxId)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestByTxId) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TxId is missing")
+	} else if v.TxId == ([32]byte{}) {
+		errs = append(errs, "field TxId is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RequestByUrl = []string{
+	1: "Type",
+	2: "Url",
+}
+
+func (v *RequestByUrl) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestByUrl)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestByUrl) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RequestDataEntry = []string{
-	1: "Url",
-	2: "EntryHash",
+	1: "Type",
+	2: "Url",
+	3: "EntryHash",
 }
 
 func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
+		writer.WriteUrl(2, v.Url)
 	}
 	if !(v.EntryHash == ([32]byte{})) {
-		writer.WriteHash(2, &v.EntryHash)
+		writer.WriteHash(3, &v.EntryHash)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestDataEntry)
@@ -1299,6 +1646,9 @@ func (v *RequestDataEntry) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
@@ -1315,27 +1665,29 @@ func (v *RequestDataEntry) IsValid() error {
 }
 
 var fieldNames_RequestDataEntrySet = []string{
-	1: "Url",
-	2: "Start",
-	3: "Count",
-	4: "ExpandChains",
+	1: "Type",
+	2: "Url",
+	3: "Start",
+	4: "Count",
+	5: "ExpandChains",
 }
 
 func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
+		writer.WriteUrl(2, v.Url)
 	}
 	if !(v.Start == 0) {
-		writer.WriteUint(2, v.Start)
+		writer.WriteUint(3, v.Start)
 	}
 	if !(v.Count == 0) {
-		writer.WriteUint(3, v.Count)
+		writer.WriteUint(4, v.Count)
 	}
 	if !(!v.ExpandChains) {
-		writer.WriteBool(4, v.ExpandChains)
+		writer.WriteBool(5, v.ExpandChains)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestDataEntrySet)
@@ -1350,16 +1702,19 @@ func (v *RequestDataEntrySet) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Count is missing")
 	} else if v.Count == 0 {
 		errs = append(errs, "field Count is not set")
@@ -1375,20 +1730,93 @@ func (v *RequestDataEntrySet) IsValid() error {
 	}
 }
 
+var fieldNames_RequestDirectory = []string{
+	1: "Type",
+	2: "Url",
+	3: "Start",
+	4: "Limit",
+	5: "ExpandChains",
+}
+
+func (v *RequestDirectory) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(3, v.Start)
+	}
+	if !(v.Limit == 0) {
+		writer.WriteUint(4, v.Limit)
+	}
+	if !(!v.ExpandChains) {
+		writer.WriteBool(5, v.ExpandChains)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestDirectory)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestDirectory) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Limit is missing")
+	} else if v.Limit == 0 {
+		errs = append(errs, "field Limit is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field ExpandChains is missing")
+	} else if !v.ExpandChains {
+		errs = append(errs, "field ExpandChains is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RequestKeyPageIndex = []string{
-	1: "Url",
-	2: "Key",
+	1: "Type",
+	2: "Url",
+	3: "Key",
 }
 
 func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
+		writer.WriteUrl(2, v.Url)
 	}
 	if !(len(v.Key) == 0) {
-		writer.WriteBytes(2, v.Key)
+		writer.WriteBytes(3, v.Key)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestKeyPageIndex)
@@ -1403,11 +1831,14 @@ func (v *RequestKeyPageIndex) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
 		errs = append(errs, "field Key is not set")
@@ -1424,31 +1855,33 @@ func (v *RequestKeyPageIndex) IsValid() error {
 }
 
 var fieldNames_RequestMinorBlocks = []string{
-	1: "Account",
-	2: "Start",
-	3: "Limit",
-	4: "TxFetchMode",
-	5: "BlockFilterMode",
+	1: "Type",
+	2: "Account",
+	3: "Start",
+	4: "Limit",
+	5: "TxFetchMode",
+	6: "BlockFilterMode",
 }
 
 func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	writer.WriteEnum(1, v.Type())
 	if !(v.Account == nil) {
-		writer.WriteUrl(1, v.Account)
+		writer.WriteUrl(2, v.Account)
 	}
 	if !(v.Start == 0) {
-		writer.WriteUint(2, v.Start)
+		writer.WriteUint(3, v.Start)
 	}
 	if !(v.Limit == 0) {
-		writer.WriteUint(3, v.Limit)
+		writer.WriteUint(4, v.Limit)
 	}
 	if !(v.TxFetchMode == 0) {
-		writer.WriteEnum(4, v.TxFetchMode)
+		writer.WriteEnum(5, v.TxFetchMode)
 	}
 	if !(v.BlockFilterMode == 0) {
-		writer.WriteEnum(5, v.BlockFilterMode)
+		writer.WriteEnum(6, v.BlockFilterMode)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
@@ -1463,26 +1896,29 @@ func (v *RequestMinorBlocks) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field TxFetchMode is missing")
 	} else if v.TxFetchMode == 0 {
 		errs = append(errs, "field TxFetchMode is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field BlockFilterMode is missing")
 	} else if v.BlockFilterMode == 0 {
 		errs = append(errs, "field BlockFilterMode is not set")
@@ -1498,24 +1934,88 @@ func (v *RequestMinorBlocks) IsValid() error {
 	}
 }
 
+var fieldNames_RequestSynth = []string{
+	1: "Type",
+	2: "Source",
+	3: "Destination",
+	4: "SequenceNumber",
+}
+
+func (v *RequestSynth) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Source == nil) {
+		writer.WriteUrl(2, v.Source)
+	}
+	if !(v.Destination == nil) {
+		writer.WriteUrl(3, v.Destination)
+	}
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(4, v.SequenceNumber)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestSynth)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestSynth) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Destination is missing")
+	} else if v.Destination == nil {
+		errs = append(errs, "field Destination is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SequenceNumber is missing")
+	} else if v.SequenceNumber == 0 {
+		errs = append(errs, "field SequenceNumber is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RequestTxHistory = []string{
-	1: "Account",
-	2: "Start",
-	3: "Limit",
+	1: "Type",
+	2: "Account",
+	3: "Start",
+	4: "Limit",
 }
 
 func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	writer.WriteEnum(1, v.Type())
 	if !(v.Account == nil) {
-		writer.WriteUrl(1, v.Account)
+		writer.WriteUrl(2, v.Account)
 	}
 	if !(v.Start == 0) {
-		writer.WriteUint(2, v.Start)
+		writer.WriteUint(3, v.Start)
 	}
 	if !(v.Limit == 0) {
-		writer.WriteUint(3, v.Limit)
+		writer.WriteUint(4, v.Limit)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestTxHistory)
@@ -1530,16 +2030,19 @@ func (v *RequestTxHistory) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
@@ -2322,6 +2825,41 @@ func (v *TxReceipt) IsValid() error {
 	}
 }
 
+var fieldNames_UnknownRequest = []string{
+	1: "Type",
+}
+
+func (v *UnknownRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+
+	_, _, err := writer.Reset(fieldNames_UnknownRequest)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *UnknownRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *ChainState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2459,6 +2997,87 @@ func (v *MultiResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RequestByChainId) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestByChainId) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.ChainId = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestByChainId)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *RequestByTxId) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.TxId = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestByTxId)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *RequestByUrl) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestByUrl) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestByUrl)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2466,10 +3085,17 @@ func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
 func (v *RequestDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUrl(1); ok {
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadHash(2); ok {
+	if x, ok := reader.ReadHash(3); ok {
 		v.EntryHash = *x
 	}
 
@@ -2489,20 +3115,63 @@ func (v *RequestDataEntrySet) UnmarshalBinary(data []byte) error {
 func (v *RequestDataEntrySet) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUrl(1); ok {
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.Start = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
+	if x, ok := reader.ReadUint(4); ok {
 		v.Count = x
 	}
-	if x, ok := reader.ReadBool(4); ok {
+	if x, ok := reader.ReadBool(5); ok {
 		v.ExpandChains = x
 	}
 
 	seen, err := reader.Reset(fieldNames_RequestDataEntrySet)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *RequestDirectory) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestDirectory) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Limit = x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.ExpandChains = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestDirectory)
 	if err != nil {
 		return err
 	}
@@ -2518,10 +3187,17 @@ func (v *RequestKeyPageIndex) UnmarshalBinary(data []byte) error {
 func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUrl(1); ok {
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadBytes(2); ok {
+	if x, ok := reader.ReadBytes(3); ok {
 		v.Key = x
 	}
 
@@ -2541,23 +3217,63 @@ func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
 func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUrl(1); ok {
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
 		v.Account = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.Start = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
+	if x, ok := reader.ReadUint(4); ok {
 		v.Limit = x
 	}
-	if x := new(TxFetchMode); reader.ReadEnum(4, x) {
+	if x := new(TxFetchMode); reader.ReadEnum(5, x) {
 		v.TxFetchMode = *x
 	}
-	if x := new(BlockFilterMode); reader.ReadEnum(5, x) {
+	if x := new(BlockFilterMode); reader.ReadEnum(6, x) {
 		v.BlockFilterMode = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *RequestSynth) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestSynth) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Destination = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.SequenceNumber = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestSynth)
 	if err != nil {
 		return err
 	}
@@ -2573,13 +3289,20 @@ func (v *RequestTxHistory) UnmarshalBinary(data []byte) error {
 func (v *RequestTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUrl(1); ok {
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
 		v.Account = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.Start = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
+	if x, ok := reader.ReadUint(4); ok {
 		v.Limit = x
 	}
 
@@ -3015,6 +3738,30 @@ func (v *TxReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *UnknownRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UnknownRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	seen, err := reader.Reset(fieldNames_UnknownRequest)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *ChainState) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Name   string                     `json:"name,omitempty"`
@@ -3078,23 +3825,135 @@ func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RequestByChainId) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    QueryType `json:"type"`
+		ChainId string    `json:"chainId,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ChainId = encoding.ChainToJSON(v.ChainId)
+	return json.Marshal(&u)
+}
+
+func (v *RequestByTxId) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type QueryType `json:"type"`
+		TxId string    `json:"txId,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.TxId = encoding.ChainToJSON(v.TxId)
+	return json.Marshal(&u)
+}
+
+func (v *RequestByUrl) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type QueryType `json:"type"`
+		Url  *url.URL  `json:"url,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	return json.Marshal(&u)
+}
+
 func (v *RequestDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
+		Type      QueryType `json:"type"`
+		Url       *url.URL  `json:"url,omitempty"`
+		EntryHash string    `json:"entryHash,omitempty"`
 	}{}
+	u.Type = v.Type()
 	u.Url = v.Url
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
 }
 
+func (v *RequestDataEntrySet) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type         QueryType `json:"type"`
+		Url          *url.URL  `json:"url,omitempty"`
+		Start        uint64    `json:"start,omitempty"`
+		Count        uint64    `json:"count,omitempty"`
+		ExpandChains bool      `json:"expandChains,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Start = v.Start
+	u.Count = v.Count
+	u.ExpandChains = v.ExpandChains
+	return json.Marshal(&u)
+}
+
+func (v *RequestDirectory) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type         QueryType `json:"type"`
+		Url          *url.URL  `json:"url,omitempty"`
+		Start        uint64    `json:"start,omitempty"`
+		Limit        uint64    `json:"limit,omitempty"`
+		ExpandChains bool      `json:"expandChains,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Start = v.Start
+	u.Limit = v.Limit
+	u.ExpandChains = v.ExpandChains
+	return json.Marshal(&u)
+}
+
 func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url *url.URL `json:"url,omitempty"`
-		Key *string  `json:"key,omitempty"`
+		Type QueryType `json:"type"`
+		Url  *url.URL  `json:"url,omitempty"`
+		Key  *string   `json:"key,omitempty"`
 	}{}
+	u.Type = v.Type()
 	u.Url = v.Url
 	u.Key = encoding.BytesToJSON(v.Key)
+	return json.Marshal(&u)
+}
+
+func (v *RequestMinorBlocks) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            QueryType       `json:"type"`
+		Account         *url.URL        `json:"account,omitempty"`
+		Start           uint64          `json:"start,omitempty"`
+		Limit           uint64          `json:"limit,omitempty"`
+		TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty"`
+		BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.Start = v.Start
+	u.Limit = v.Limit
+	u.TxFetchMode = v.TxFetchMode
+	u.BlockFilterMode = v.BlockFilterMode
+	return json.Marshal(&u)
+}
+
+func (v *RequestSynth) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type           QueryType `json:"type"`
+		Source         *url.URL  `json:"source,omitempty"`
+		Destination    *url.URL  `json:"destination,omitempty"`
+		SequenceNumber uint64    `json:"sequenceNumber,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.SequenceNumber = v.SequenceNumber
+	return json.Marshal(&u)
+}
+
+func (v *RequestTxHistory) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    QueryType `json:"type"`
+		Account *url.URL  `json:"account,omitempty"`
+		Start   uint64    `json:"start,omitempty"`
+		Limit   uint64    `json:"limit,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.Start = v.Start
+	u.Limit = v.Limit
 	return json.Marshal(&u)
 }
 
@@ -3293,6 +4152,14 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *UnknownRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type QueryType `json:"type"`
+	}{}
+	u.Type = v.Type()
+	return json.Marshal(&u)
+}
+
 func (v *ChainState) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Name   string                     `json:"name,omitempty"`
@@ -3402,15 +4269,79 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *RequestByChainId) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    QueryType `json:"type"`
+		ChainId string    `json:"chainId,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ChainId = encoding.ChainToJSON(v.ChainId)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.ChainId); err != nil {
+		return fmt.Errorf("error decoding ChainId: %w", err)
+	} else {
+		v.ChainId = x
+	}
+	return nil
+}
+
+func (v *RequestByTxId) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type QueryType `json:"type"`
+		TxId string    `json:"txId,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.TxId = encoding.ChainToJSON(v.TxId)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.TxId); err != nil {
+		return fmt.Errorf("error decoding TxId: %w", err)
+	} else {
+		v.TxId = x
+	}
+	return nil
+}
+
+func (v *RequestByUrl) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type QueryType `json:"type"`
+		Url  *url.URL  `json:"url,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	return nil
+}
+
 func (v *RequestDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url       *url.URL `json:"url,omitempty"`
-		EntryHash string   `json:"entryHash,omitempty"`
+		Type      QueryType `json:"type"`
+		Url       *url.URL  `json:"url,omitempty"`
+		EntryHash string    `json:"entryHash,omitempty"`
 	}{}
+	u.Type = v.Type()
 	u.Url = v.Url
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
 	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
@@ -3421,15 +4352,72 @@ func (v *RequestDataEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *RequestDataEntrySet) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type         QueryType `json:"type"`
+		Url          *url.URL  `json:"url,omitempty"`
+		Start        uint64    `json:"start,omitempty"`
+		Count        uint64    `json:"count,omitempty"`
+		ExpandChains bool      `json:"expandChains,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Start = v.Start
+	u.Count = v.Count
+	u.ExpandChains = v.ExpandChains
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Start = u.Start
+	v.Count = u.Count
+	v.ExpandChains = u.ExpandChains
+	return nil
+}
+
+func (v *RequestDirectory) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type         QueryType `json:"type"`
+		Url          *url.URL  `json:"url,omitempty"`
+		Start        uint64    `json:"start,omitempty"`
+		Limit        uint64    `json:"limit,omitempty"`
+		ExpandChains bool      `json:"expandChains,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Start = v.Start
+	u.Limit = v.Limit
+	u.ExpandChains = v.ExpandChains
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Start = u.Start
+	v.Limit = u.Limit
+	v.ExpandChains = u.ExpandChains
+	return nil
+}
+
 func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url *url.URL `json:"url,omitempty"`
-		Key *string  `json:"key,omitempty"`
+		Type QueryType `json:"type"`
+		Url  *url.URL  `json:"url,omitempty"`
+		Key  *string   `json:"key,omitempty"`
 	}{}
+	u.Type = v.Type()
 	u.Url = v.Url
 	u.Key = encoding.BytesToJSON(v.Key)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
 	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
@@ -3437,6 +4425,81 @@ func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Key = x
 	}
+	return nil
+}
+
+func (v *RequestMinorBlocks) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            QueryType       `json:"type"`
+		Account         *url.URL        `json:"account,omitempty"`
+		Start           uint64          `json:"start,omitempty"`
+		Limit           uint64          `json:"limit,omitempty"`
+		TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty"`
+		BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.Start = v.Start
+	u.Limit = v.Limit
+	u.TxFetchMode = v.TxFetchMode
+	u.BlockFilterMode = v.BlockFilterMode
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Account = u.Account
+	v.Start = u.Start
+	v.Limit = u.Limit
+	v.TxFetchMode = u.TxFetchMode
+	v.BlockFilterMode = u.BlockFilterMode
+	return nil
+}
+
+func (v *RequestSynth) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type           QueryType `json:"type"`
+		Source         *url.URL  `json:"source,omitempty"`
+		Destination    *url.URL  `json:"destination,omitempty"`
+		SequenceNumber uint64    `json:"sequenceNumber,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Source = v.Source
+	u.Destination = v.Destination
+	u.SequenceNumber = v.SequenceNumber
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Source = u.Source
+	v.Destination = u.Destination
+	v.SequenceNumber = u.SequenceNumber
+	return nil
+}
+
+func (v *RequestTxHistory) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    QueryType `json:"type"`
+		Account *url.URL  `json:"account,omitempty"`
+		Start   uint64    `json:"start,omitempty"`
+		Limit   uint64    `json:"limit,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.Start = v.Start
+	u.Limit = v.Limit
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Account = u.Account
+	v.Start = u.Start
+	v.Limit = u.Limit
 	return nil
 }
 
@@ -3788,5 +4851,19 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	v.GeneralReceipt.Error = u.Error
 	v.Account = u.Account
 	v.Chain = u.Chain
+	return nil
+}
+
+func (v *UnknownRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type QueryType `json:"type"`
+	}{}
+	u.Type = v.Type()
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	return nil
 }

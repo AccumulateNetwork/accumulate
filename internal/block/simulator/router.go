@@ -33,8 +33,8 @@ func (r router) Route(envs ...*protocol.Envelope) (string, error) {
 }
 
 func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
-	qu := new(query.Query)
-	require.NoError(r, qu.UnmarshalBinary(rawQuery))
+	qu, e := query.UnmarshalRequest(rawQuery)
+	require.NoError(r, e)
 
 	x := r.Subnet(subnet)
 	batch := x.Database.Begin(false)
