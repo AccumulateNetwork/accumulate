@@ -19,6 +19,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -128,7 +129,7 @@ func (s *Simulator) SubnetFor(url *url.URL) *ExecEntry {
 	return s.Subnet(subnet)
 }
 
-func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{} {
+func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
 	s.Helper()
 
 	x := s.SubnetFor(url)
