@@ -10,6 +10,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom-genesis"
 )
 
+const (
+	Key_Name        = "keytest-0-0"
+	Key_Private_Key = "d125672c7f0af6fd82c87c884560c6fcbaf03bcd51ac578057369d7e99274f3c"
+	Key_Public_Key  = "f40e4b1b3bf80938c4e9a541f395af8fd8a3ef39ea779b3bd85ce65fb17deb72"
+)
+
 func main() {
 	url, _ := factom.AccountFromPrivateKey("1bee1f90330115a13d2f3fe2dac2208b2a1118482b6e3b4375e567e5d84c9bf13018938f9ba9b66af0ceb0d33d5632a8b001fddd3e1eeaa9219587e5aa178448")
 	fmt.Println("URL : ", url)
