@@ -64,6 +64,10 @@ func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts 
 	return res, nil
 }
 
+func (r router) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+	return r.Subnet(subnetId).API.RequestAPIv2(ctx, method, params, result)
+}
+
 func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	x := r.Subnet(subnet)
 	if !pretend {

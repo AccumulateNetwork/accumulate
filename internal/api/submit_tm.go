@@ -37,7 +37,7 @@ func (m TendermintSubmitModule) Submit(ctx context.Context, envelope *protocol.E
 	case SubmitModeCheck:
 		data, err = tendermintSubmitRetry(
 			m.Connection,
-			func(client connections.Client, ctx context.Context, tmtx []byte) ([]byte, error) {
+			func(client connections.ABCIClient, ctx context.Context, tmtx []byte) ([]byte, error) {
 				r, err := client.CheckTx(ctx, tmtx)
 				if err != nil {
 					return nil, err
@@ -48,7 +48,7 @@ func (m TendermintSubmitModule) Submit(ctx context.Context, envelope *protocol.E
 	case SubmitModeAsync:
 		data, err = tendermintSubmitRetry(
 			m.Connection,
-			func(client connections.Client, ctx context.Context, tmtx []byte) ([]byte, error) {
+			func(client connections.ABCIClient, ctx context.Context, tmtx []byte) ([]byte, error) {
 				r, err := client.BroadcastTxAsync(ctx, tmtx)
 				if err != nil {
 					return nil, err
@@ -59,7 +59,7 @@ func (m TendermintSubmitModule) Submit(ctx context.Context, envelope *protocol.E
 	case SubmitModeSync:
 		data, err = tendermintSubmitRetry(
 			m.Connection,
-			func(client connections.Client, ctx context.Context, tmtx []byte) ([]byte, error) {
+			func(client connections.ABCIClient, ctx context.Context, tmtx []byte) ([]byte, error) {
 				r, err := client.BroadcastTxSync(ctx, tmtx)
 				if err != nil {
 					return nil, err
@@ -83,13 +83,13 @@ func (m TendermintSubmitModule) Submit(ctx context.Context, envelope *protocol.E
 	return sub, nil
 }
 
-type clientFunc func(client connections.Client, ctx context.Context, tmtx []byte) ([]byte, error)
+type clientFunc func(client connections.ABCIClient, ctx context.Context, tmtx []byte) ([]byte, error)
 
 func tendermintSubmitRetry(conn connections.ConnectionContext, call clientFunc, ctx context.Context, tmtx []byte) ([]byte, error) {
 	var data []byte
 	var err error
 	for errorCnt := 0; errorCnt > 3 && err == nil; errorCnt++ {
-		data, err = call(conn.GetClient(), ctx, tmtx)
+		data, err = call(conn.GetABCIClient(), ctx, tmtx)
 		if err == nil {
 			return data, nil
 		}

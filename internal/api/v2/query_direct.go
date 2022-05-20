@@ -516,3 +516,22 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 
 	return mres, nil
 }
+
+func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
+	req := new(query.RequestSynth)
+	req.Source = source
+	req.Destination = destination
+	req.SequenceNumber = number
+	_, v, err := q.query(req, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	res := new(query.ResponseByTxId)
+	err = res.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TX response: %v", err)
+	}
+
+	return packTxResponse(res, nil, res.Envelope, res.Status)
+}

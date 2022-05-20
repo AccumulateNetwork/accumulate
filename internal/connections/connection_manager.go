@@ -41,6 +41,8 @@ type connectionManager struct {
 	localClient *local.Local
 	logger      log.Logger
 	localHost   string
+
+	apiClientFactory func(string) (APIClient, error)
 }
 
 func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
@@ -52,7 +54,7 @@ func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
 	// Try to query Tendermint with something it should not find
 	qu := new(query.UnknownRequest)
 	qd, _ := qu.MarshalBinary()
-	qryRes, err := connCtx.GetClient().ABCIQueryWithOptions(context.Background(), "/abci_query", qd, rpc.DefaultABCIQueryOptions)
+	qryRes, err := connCtx.GetABCIClient().ABCIQueryWithOptions(context.Background(), "/abci_query", qd, rpc.DefaultABCIQueryOptions)
 	if err != nil || protocol.ErrorCode(qryRes.Response.Code) != protocol.ErrorCodeInvalidQueryType {
 		// FIXME code ErrorCodeInvalidQueryType will emit an error in the log, maybe there is a nicer option to probe the abci API
 		connCtx.ReportError(err)
@@ -82,9 +84,10 @@ type NodeMetrics struct {
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
-func NewConnectionManager(config *config.Config, logger log.Logger) ConnectionInitializer {
+func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFactory func(string) (APIClient, error)) ConnectionInitializer {
 	cm := new(connectionManager)
 	cm.accConfig = &config.Accumulate
+	cm.apiClientFactory = apiClientFactory
 	cm.localHost = cm.reformatAddress(cm.accConfig.Network.LocalAddress)
 	cm.logger = logger
 	cm.buildNodeInventory()
@@ -278,7 +281,7 @@ func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker S
 	for _, connCtxList := range cm.bvnCtxMap {
 		for _, connCtx := range connCtxList {
 			cc := connCtx.(*connectionContext)
-			err := cm.createAbciClient(cc)
+			err := cm.createClient(cc)
 			if err != nil {
 				return err
 			}
@@ -287,7 +290,7 @@ func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker S
 	}
 	for _, connCtx := range cm.dnCtxList {
 		cc := connCtx.(*connectionContext)
-		err := cm.createAbciClient(cc)
+		err := cm.createClient(cc)
 		if err != nil {
 			return err
 		}
@@ -295,7 +298,7 @@ func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker S
 	}
 	for _, connCtx := range cm.fnCtxList {
 		cc := connCtx.(*connectionContext)
-		err := cm.createAbciClient(cc)
+		err := cm.createClient(cc)
 		if err != nil {
 			return err
 		}
@@ -328,28 +331,45 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 			continue
 		}
 
-		cc.setClient(cm2.localClient)
+		api, err := cm.apiClientFactory(cm2.accConfig.API.ListenAddress)
+		if err != nil {
+			return errCreateRPCClient(err)
+		}
+		cc.setClient(cm2.localClient, api)
 		return nil
 	}
 
 	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.Network.LocalSubnetID, cm2.accConfig.Network.LocalAddress)
 }
 
-func (cm *connectionManager) createAbciClient(connCtx *connectionContext) error {
+func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 	switch connCtx.GetNetworkGroup() {
 	case Local:
-		connCtx.setClient(cm.localClient)
-	default:
-		offsetAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.TmRpcPortOffset)
-		if err != nil {
-			return errInvalidAddress(err)
-		}
-		client, err := http.New(offsetAddr.String())
+		// TODO Support local API requests without any TCP call
+		api, err := cm.apiClientFactory(cm.accConfig.API.ListenAddress)
 		if err != nil {
 			return errCreateRPCClient(err)
 		}
-		connCtx.setClient(client)
-		connCtx.SetNodeUrl(offsetAddr)
+		connCtx.setClient(cm.localClient, api)
+	default:
+		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.TmRpcPortOffset)
+		if err != nil {
+			return errInvalidAddress(err)
+		}
+		abci, err := http.New(abciAddr.String())
+		if err != nil {
+			return errCreateRPCClient(err)
+		}
+		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.AccApiPortOffset)
+		if err != nil {
+			return errInvalidAddress(err)
+		}
+		api, err := cm.apiClientFactory(apiAddr.String())
+		if err != nil {
+			return errCreateRPCClient(err)
+		}
+		connCtx.setClient(abci, api)
+		connCtx.SetNodeUrl(abciAddr)
 	}
 	return nil
 }

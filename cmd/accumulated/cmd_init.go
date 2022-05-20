@@ -289,7 +289,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodePort = int(p)
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccRouterJsonPortOffset))
+	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccApiPortOffset))
 	checkf(err, "failed to create API client for %s", args[0])
 
 	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
@@ -586,7 +586,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 
 func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage

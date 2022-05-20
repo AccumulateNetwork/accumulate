@@ -33,7 +33,7 @@ func NewNodeStatusChecker() NodeStatusChecker {
 }
 
 func (sc *nodeStatusChecker) createAccApiClient(connCtx connections.ConnectionContext) (*client.Client, error) {
-	address, err := config.OffsetPort(connCtx.GetAddress(), networks.AccRouterJsonPortOffset)
+	address, err := config.OffsetPort(connCtx.GetAddress(), networks.AccApiPortOffset)
 	if err != nil {
 		return nil, fmt.Errorf("invalid address: %v", err)
 	}
