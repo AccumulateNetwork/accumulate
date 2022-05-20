@@ -138,12 +138,12 @@ func (s *Session) Show(v interface{}) {
 		)
 		for i, key := range v.Keys {
 			switch {
-			case key.Owner == nil:
+			case key.Delegate == nil:
 				str += fmt.Sprintf("    Key %d:        %X\n", i+1, key.PublicKeyHash)
 			case key.PublicKeyHash == nil:
-				str += fmt.Sprintf("    Key %d:        %v\n", i+1, key.Owner)
+				str += fmt.Sprintf("    Key %d:        %v\n", i+1, key.Delegate)
 			default:
-				str += fmt.Sprintf("    Key %d:        %X (%v)\n", i+1, key.PublicKeyHash, key.Owner)
+				str += fmt.Sprintf("    Key %d:        %X (%v)\n", i+1, key.PublicKeyHash, key.Delegate)
 			}
 		}
 	case *protocol.TokenIssuer:
