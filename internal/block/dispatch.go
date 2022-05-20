@@ -39,10 +39,6 @@ func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
 	}
 
 	batch := d.batches[subnet]
-	if batch == nil {
-		batch = make([]*protocol.Envelope, 0)
-	}
-
 	for _, delivery := range deliveries {
 		env := new(protocol.Envelope)
 		env.Signatures = append(env.Signatures, delivery.Signatures...)
