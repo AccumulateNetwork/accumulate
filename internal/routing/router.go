@@ -21,6 +21,7 @@ type Router interface {
 	RouteAccount(*url.URL) (string, error)
 	Route(...*protocol.Envelope) (string, error)
 	Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
+	RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error
 	Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
 }
 
@@ -70,9 +71,9 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, subnetId
 		}
 
 		if async {
-			r1, err = connCtx.GetClient().BroadcastTxAsync(ctx, tx)
+			r1, err = connCtx.GetABCIClient().BroadcastTxAsync(ctx, tx)
 		} else {
-			r1, err = connCtx.GetClient().BroadcastTxSync(ctx, tx)
+			r1, err = connCtx.GetABCIClient().BroadcastTxSync(ctx, tx)
 		}
 		if err == nil {
 			r2 := new(ResponseSubmit)
@@ -100,7 +101,7 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, s
 		if err != nil {
 			return nil, err
 		}
-		r1, err = connCtx.GetClient().CheckTx(ctx, tx)
+		r1, err = connCtx.GetABCIClient().CheckTx(ctx, tx)
 		if err == nil {
 			r2 := new(ResponseSubmit)
 			r2.Code = r1.Code
@@ -184,7 +185,7 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 		if connCtx == nil {
 			return nil, errors.New("connCtx is nil")
 		}
-		client := connCtx.GetClient()
+		client := connCtx.GetABCIClient()
 		if client == nil {
 			return nil, errors.New("connCtx.client is nil")
 		}
@@ -199,6 +200,35 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 		errorCnt++
 		if errorCnt > 1 {
 			return nil, err
+		}
+	}
+}
+
+func (r *RouterInstance) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+	errorCnt := 0
+	for {
+		connCtx, err := r.ConnectionManager.SelectConnection(subnetId, true)
+		if err != nil {
+			return err
+		}
+		if connCtx == nil {
+			return errors.New("connCtx is nil")
+		}
+		client := connCtx.GetAPIClient()
+		if client == nil {
+			return errors.New("connCtx.client is nil")
+		}
+
+		err = client.RequestAPIv2(ctx, method, params, result)
+		if err == nil {
+			return err
+		}
+
+		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		connCtx.ReportError(err)
+		errorCnt++
+		if errorCnt > 1 {
+			return err
 		}
 	}
 }
