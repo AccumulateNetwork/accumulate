@@ -13,7 +13,7 @@ func TestPersistence(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "config"), 0777))
 
 	// Create
-	cfg := Default(BlockValidator, Follower, t.Name())
+	cfg := Default("unittest", BlockValidator, Follower, t.Name())
 	cfg.SetRoot(dir)
 	cfg.Accumulate.API.ListenAddress = "api-listen"
 

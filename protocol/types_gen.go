@@ -436,9 +436,10 @@ type MetricsResponse struct {
 }
 
 type NetworkDefinition struct {
-	fieldsSet []bool
-	Subnets   []SubnetDefinition `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
-	extraData []byte
+	fieldsSet   []bool
+	NetworkName string             `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
+	Subnets     []SubnetDefinition `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
+	extraData   []byte
 }
 
 type NetworkGlobals struct {
@@ -1722,6 +1723,7 @@ func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u := new(NetworkDefinition)
 
+	u.NetworkName = v.NetworkName
 	u.Subnets = make([]SubnetDefinition, len(v.Subnets))
 	for i, v := range v.Subnets {
 		u.Subnets[i] = *(&v).Copy()
@@ -3377,6 +3379,9 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 }
 
 func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
+	if !(v.NetworkName == u.NetworkName) {
+		return false
+	}
 	if len(v.Subnets) != len(u.Subnets) {
 		return false
 	}
@@ -6953,16 +6958,20 @@ func (v *MetricsRequest) IsValid() error {
 }
 
 var fieldNames_NetworkDefinition = []string{
-	1: "Subnets",
+	1: "NetworkName",
+	2: "Subnets",
 }
 
 func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	if !(len(v.NetworkName) == 0) {
+		writer.WriteString(1, v.NetworkName)
+	}
 	if !(len(v.Subnets) == 0) {
 		for _, v := range v.Subnets {
-			writer.WriteValue(1, &v)
+			writer.WriteValue(2, &v)
 		}
 	}
 
@@ -6978,6 +6987,11 @@ func (v *NetworkDefinition) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field NetworkName is missing")
+	} else if len(v.NetworkName) == 0 {
+		errs = append(errs, "field NetworkName is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Subnets is missing")
 	} else if len(v.Subnets) == 0 {
 		errs = append(errs, "field Subnets is not set")
@@ -11134,8 +11148,11 @@ func (v *NetworkDefinition) UnmarshalBinary(data []byte) error {
 func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
+	if x, ok := reader.ReadString(1); ok {
+		v.NetworkName = x
+	}
 	for {
-		if x := new(SubnetDefinition); reader.ReadValue(1, x.UnmarshalBinary) {
+		if x := new(SubnetDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Subnets = append(v.Subnets, *x)
 		} else {
 			break
@@ -13314,8 +13331,10 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Subnets encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
+		NetworkName string                              `json:"networkName,omitempty"`
+		Subnets     encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
 	}{}
+	u.NetworkName = v.NetworkName
 	u.Subnets = v.Subnets
 	return json.Marshal(&u)
 }
@@ -15215,12 +15234,15 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Subnets encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
+		NetworkName string                              `json:"networkName,omitempty"`
+		Subnets     encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
 	}{}
+	u.NetworkName = v.NetworkName
 	u.Subnets = v.Subnets
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.NetworkName = u.NetworkName
 	v.Subnets = u.Subnets
 	return nil
 }

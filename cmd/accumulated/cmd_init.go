@@ -219,7 +219,7 @@ func initNamedNetwork(*cobra.Command, []string) {
 	for i, node := range lclSubnet.Nodes {
 		listenIP[i] = "0.0.0.0"
 		remoteIP[i] = node.IP
-		config[i] = cfg.Default(lclSubnet.Type, node.Type, lclSubnet.Name)
+		config[i] = cfg.Default(lclSubnet.NetworkName, lclSubnet.Type, node.Type, lclSubnet.Name)
 		config[i].Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", node.IP, lclSubnet.Port)
 		config[i].Accumulate.Network.Subnets = subnets
 
@@ -331,9 +331,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.LocalSubnetID)
+	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	config.Accumulate.Network = description.Subnet
+	config.Accumulate.Network = description.Network
 
 	if flagInit.Net != "" {
 		config.Accumulate.Network.LocalAddress = parseHost(flagInit.Net)
@@ -660,9 +660,9 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 
 func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote, listen string) {
 	if netType == cfg.Directory {
-		config = cfg.Default(netType, nodeType, protocol.Directory)
+		config = cfg.Default(cfg.DevNet, netType, nodeType, protocol.Directory)
 	} else {
-		config = cfg.Default(netType, nodeType, fmt.Sprintf("BVN%d", bvn))
+		config = cfg.Default(cfg.DevNet, netType, nodeType, fmt.Sprintf("BVN%d", bvn))
 	}
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
