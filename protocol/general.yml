@@ -142,7 +142,8 @@ KeySpecParams:
   fields:
     - name: KeyHash
       type: bytes
-    - name: Owner
+    - name: Delegate
+      alternative: Owner
       type: url
       pointer: true
       optional: true
@@ -155,7 +156,8 @@ KeySpec:
     - name: LastUsedOn
       type: uvarint
       alternative: Nonce
-    - name: Owner
+    - name: Delegate
+      alternative: Owner
       type: url
       pointer: true
 

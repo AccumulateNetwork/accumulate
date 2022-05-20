@@ -377,14 +377,14 @@ type KeySpec struct {
 	fieldsSet     []bool
 	PublicKeyHash []byte   `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
-	Owner         *url.URL `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
+	Delegate      *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate" validate:"required"`
 	extraData     []byte
 }
 
 type KeySpecParams struct {
 	fieldsSet []bool
 	KeyHash   []byte   `json:"keyHash,omitempty" form:"keyHash" query:"keyHash" validate:"required"`
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
+	Delegate  *url.URL `json:"delegate,omitempty" form:"delegate" query:"delegate"`
 	extraData []byte
 }
 
@@ -1612,8 +1612,8 @@ func (v *KeySpec) Copy() *KeySpec {
 
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
-	if v.Owner != nil {
-		u.Owner = (v.Owner).Copy()
+	if v.Delegate != nil {
+		u.Delegate = (v.Delegate).Copy()
 	}
 
 	return u
@@ -1625,8 +1625,8 @@ func (v *KeySpecParams) Copy() *KeySpecParams {
 	u := new(KeySpecParams)
 
 	u.KeyHash = encoding.BytesCopy(v.KeyHash)
-	if v.Owner != nil {
-		u.Owner = (v.Owner).Copy()
+	if v.Delegate != nil {
+		u.Delegate = (v.Delegate).Copy()
 	}
 
 	return u
@@ -3208,11 +3208,11 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 		return false
 	}
 	switch {
-	case v.Owner == u.Owner:
+	case v.Delegate == u.Delegate:
 		// equal
-	case v.Owner == nil || u.Owner == nil:
+	case v.Delegate == nil || u.Delegate == nil:
 		return false
-	case !((v.Owner).Equal(u.Owner)):
+	case !((v.Delegate).Equal(u.Delegate)):
 		return false
 	}
 
@@ -3224,11 +3224,11 @@ func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
 		return false
 	}
 	switch {
-	case v.Owner == u.Owner:
+	case v.Delegate == u.Delegate:
 		// equal
-	case v.Owner == nil || u.Owner == nil:
+	case v.Delegate == nil || u.Delegate == nil:
 		return false
-	case !((v.Owner).Equal(u.Owner)):
+	case !((v.Delegate).Equal(u.Delegate)):
 		return false
 	}
 
@@ -6473,7 +6473,7 @@ func (v *KeyPage) IsValid() error {
 var fieldNames_KeySpec = []string{
 	1: "PublicKeyHash",
 	2: "LastUsedOn",
-	3: "Owner",
+	3: "Delegate",
 }
 
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
@@ -6486,8 +6486,8 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	if !(v.LastUsedOn == 0) {
 		writer.WriteUint(2, v.LastUsedOn)
 	}
-	if !(v.Owner == nil) {
-		writer.WriteUrl(3, v.Owner)
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(3, v.Delegate)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpec)
@@ -6512,9 +6512,9 @@ func (v *KeySpec) IsValid() error {
 		errs = append(errs, "field LastUsedOn is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Owner is missing")
-	} else if v.Owner == nil {
-		errs = append(errs, "field Owner is not set")
+		errs = append(errs, "field Delegate is missing")
+	} else if v.Delegate == nil {
+		errs = append(errs, "field Delegate is not set")
 	}
 
 	switch len(errs) {
@@ -6529,7 +6529,7 @@ func (v *KeySpec) IsValid() error {
 
 var fieldNames_KeySpecParams = []string{
 	1: "KeyHash",
-	2: "Owner",
+	2: "Delegate",
 }
 
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
@@ -6539,8 +6539,8 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	if !(len(v.KeyHash) == 0) {
 		writer.WriteBytes(1, v.KeyHash)
 	}
-	if !(v.Owner == nil) {
-		writer.WriteUrl(2, v.Owner)
+	if !(v.Delegate == nil) {
+		writer.WriteUrl(2, v.Delegate)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeySpecParams)
@@ -10768,7 +10768,7 @@ func (v *KeySpec) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.LastUsedOn = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
-		v.Owner = x
+		v.Delegate = x
 	}
 
 	seen, err := reader.Reset(fieldNames_KeySpec)
@@ -10791,7 +10791,7 @@ func (v *KeySpecParams) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.KeyHash = x
 	}
 	if x, ok := reader.ReadUrl(2); ok {
-		v.Owner = x
+		v.Delegate = x
 	}
 
 	seen, err := reader.Reset(fieldNames_KeySpecParams)
@@ -12997,23 +12997,27 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 		PublicKey     *string  `json:"publicKey,omitempty"`
 		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
 		Nonce         uint64   `json:"nonce,omitempty"`
+		Delegate      *url.URL `json:"delegate,omitempty"`
 		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
 	u.Nonce = v.LastUsedOn
-	u.Owner = v.Owner
+	u.Delegate = v.Delegate
+	u.Owner = v.Delegate
 	return json.Marshal(&u)
 }
 
 func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	u := struct {
-		KeyHash *string  `json:"keyHash,omitempty"`
-		Owner   *url.URL `json:"owner,omitempty"`
+		KeyHash  *string  `json:"keyHash,omitempty"`
+		Delegate *url.URL `json:"delegate,omitempty"`
+		Owner    *url.URL `json:"owner,omitempty"`
 	}{}
 	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
-	u.Owner = v.Owner
+	u.Delegate = v.Delegate
+	u.Owner = v.Delegate
 	return json.Marshal(&u)
 }
 
@@ -14762,13 +14766,15 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 		PublicKey     *string  `json:"publicKey,omitempty"`
 		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
 		Nonce         uint64   `json:"nonce,omitempty"`
+		Delegate      *url.URL `json:"delegate,omitempty"`
 		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
 	u.Nonce = v.LastUsedOn
-	u.Owner = v.Owner
+	u.Delegate = v.Delegate
+	u.Owner = v.Delegate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14790,17 +14796,23 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	} else {
 		v.LastUsedOn = u.Nonce
 	}
-	v.Owner = u.Owner
+	if u.Delegate != nil {
+		v.Delegate = u.Delegate
+	} else {
+		v.Delegate = u.Owner
+	}
 	return nil
 }
 
 func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	u := struct {
-		KeyHash *string  `json:"keyHash,omitempty"`
-		Owner   *url.URL `json:"owner,omitempty"`
+		KeyHash  *string  `json:"keyHash,omitempty"`
+		Delegate *url.URL `json:"delegate,omitempty"`
+		Owner    *url.URL `json:"owner,omitempty"`
 	}{}
 	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
-	u.Owner = v.Owner
+	u.Delegate = v.Delegate
+	u.Owner = v.Delegate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14809,7 +14821,11 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	} else {
 		v.KeyHash = x
 	}
-	v.Owner = u.Owner
+	if u.Delegate != nil {
+		v.Delegate = u.Delegate
+	} else {
+		v.Delegate = u.Owner
+	}
 	return nil
 }
 
