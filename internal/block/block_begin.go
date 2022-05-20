@@ -215,7 +215,9 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	errs := x.dispatcher.Send(context.Background())
 	go func() {
 		for err := range errs {
-			x.checkDispatchError(err)
+			x.checkDispatchError(err, func(err error) {
+				x.logger.Error("Failed to dispatch transactions", "error", err)
+			})
 		}
 	}()
 
@@ -535,7 +537,7 @@ func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64
 }
 
 // checkDispatchError returns nil if the error can be ignored.
-func (x *Executor) checkDispatchError(err error) {
+func (x *Executor) checkDispatchError(err error, fn func(error)) {
 	if err == nil {
 		return
 	}
@@ -576,5 +578,5 @@ func (x *Executor) checkDispatchError(err error) {
 	}
 
 	// It's a real error
-	x.logger.Error("Failed to dispatch transactions", "error", err)
+	fn(err)
 }

@@ -31,12 +31,16 @@ const (
 	OtherSubnet
 )
 
-// Client is a subset of from TM/rpc/client.ABCIClient.
-type Client interface {
+// ABCIClient is a subset of from TM/rpc/client.ABCIClient.
+type ABCIClient interface {
 	ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
 	CheckTx(ctx context.Context, tx tm.Tx) (*core.ResultCheckTx, error)
 	BroadcastTxAsync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
+}
+
+type APIClient interface {
+	RequestAPIv2(_ context.Context, method string, params, result interface{}) error
 }
 
 type ConnectionContext interface {
@@ -45,7 +49,8 @@ type ConnectionContext interface {
 	GetMetrics() *NodeMetrics
 	GetAddress() string
 	SetNodeUrl(addr *url.URL)
-	GetClient() Client
+	GetABCIClient() ABCIClient
+	GetAPIClient() APIClient
 	IsHealthy() bool
 	ReportError(err error)
 	ReportErrorStatus(status NodeStatus)
@@ -59,7 +64,8 @@ type StatusChecker interface {
 type connectionContext struct {
 	subnetId            string
 	nodeUrl             *url.URL
-	tmClient            Client
+	abciClient          ABCIClient
+	apiClient           APIClient
 	hasClient           chan struct{}
 	connMgr             *connectionManager
 	statusChecker       StatusChecker
@@ -71,16 +77,26 @@ type connectionContext struct {
 	lastErrorExpiryTime time.Time
 }
 
-func (cc *connectionContext) GetClient() Client {
-	if cc.tmClient != nil {
-		return cc.tmClient
+func (cc *connectionContext) GetABCIClient() ABCIClient {
+	c, _ := cc.getClients()
+	return c
+}
+
+func (cc *connectionContext) GetAPIClient() APIClient {
+	_, c := cc.getClients()
+	return c
+}
+
+func (cc *connectionContext) getClients() (ABCIClient, APIClient) {
+	if cc.abciClient != nil {
+		return cc.abciClient, cc.apiClient
 	}
 
 	// Client not there yet? Wait for it.
 	timeout := time.After(10 * time.Second)
 	select {
 	case <-cc.hasClient:
-		return cc.tmClient
+		return cc.abciClient, cc.apiClient
 	case <-timeout:
 		panic(fmt.Sprintf("Could not obtain a client for node %s  ", cc.nodeUrl))
 	}
@@ -153,9 +169,10 @@ func (cc *connectionContext) ReportErrorStatus(status NodeStatus) {
 	cc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
 }
 
-func (cc *connectionContext) setClient(client Client) {
-	shouldClose := cc.tmClient == nil
-	cc.tmClient = client
+func (cc *connectionContext) setClient(abci ABCIClient, api APIClient) {
+	shouldClose := cc.abciClient == nil
+	cc.abciClient = abci
+	cc.apiClient = api
 	if shouldClose {
 		close(cc.hasClient)
 	}

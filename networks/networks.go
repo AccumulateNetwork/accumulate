@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	TmP2pPortOffset         = 0
-	TmRpcPortOffset         = 1
-	TmRpcGrpcPortOffset     = 2
-	AccRouterJsonPortOffset = 4
+	TmP2pPortOffset     = 0
+	TmRpcPortOffset     = 1
+	TmRpcGrpcPortOffset = 2
+	AccApiPortOffset    = 4
 	// AccRouterRestPortOffset = 5
 	TmPrometheusPortOffset = 6
 
