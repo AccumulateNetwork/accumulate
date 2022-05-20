@@ -89,14 +89,13 @@ func (l LogLevel) String() string {
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
-	SetModule("block-executor", "info").
 	SetModule("snapshot", "info").
 	// SetModule("accumulate", "info").
 	// SetModule("main", "info").
 	// SetModule("state", "info").
 	// SetModule("statesync", "info").
 	// SetModule("accumulate", "debug").
-	// SetModule("executor", "info").
+	SetModule("executor", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("disk-monitor", "info").
