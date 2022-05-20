@@ -71,7 +71,7 @@ type bootstrap struct {
 	kvdb         storage.KeyValueStore
 	db           *database.Database
 	block        *block.Block
-	adiUrl       *url.URL
+	nodeUrl      *url.URL
 	authorityUrl *url.URL
 	urls         []*url.URL
 	records      []protocol.Account
@@ -141,8 +141,8 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 }
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
-	b.adiUrl = b.InitOpts.Network.NodeUrl()
-	b.authorityUrl = b.adiUrl.JoinPath(protocol.OperatorBook)
+	b.nodeUrl = b.InitOpts.Network.NodeUrl()
+	b.authorityUrl = b.nodeUrl.JoinPath(protocol.OperatorBook)
 
 	b.createADI()
 	b.createValidatorBook()
@@ -204,7 +204,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		st.State.ProcessAdditionalTransaction(tx.NewChild(txn, sigs))
 	}
 
-	return nil, st.AddDirectoryEntry(b.adiUrl, b.urls...)
+	return nil, st.AddDirectoryEntry(b.nodeUrl, b.urls...)
 }
 
 func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *uint64) ([]protocol.Signature, error) {
@@ -241,14 +241,14 @@ func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *
 func (b *bootstrap) createADI() {
 	// Create the ADI
 	adi := new(protocol.ADI)
-	adi.Url = b.adiUrl
+	adi.Url = b.nodeUrl
 	adi.AddAuthority(b.authorityUrl)
 	b.WriteRecords(adi)
 }
 
 func (b *bootstrap) createValidatorBook() {
 	book := new(protocol.KeyBook)
-	book.Url = b.adiUrl.JoinPath(protocol.ValidatorBook)
+	book.Url = b.nodeUrl.JoinPath(protocol.ValidatorBook)
 	book.BookType = protocol.BookTypeValidator
 	book.AddAuthority(b.authorityUrl)
 	book.PageCount = 2
@@ -271,7 +271,7 @@ func (b *bootstrap) createValidatorBook() {
 func (b *bootstrap) createMainLedger(oraclePrice uint64) {
 	// Create the main ledger
 	ledger := new(protocol.InternalLedger)
-	ledger.Url = b.adiUrl.JoinPath(protocol.Ledger)
+	ledger.Url = b.nodeUrl.JoinPath(protocol.Ledger)
 	ledger.ActiveOracle = oraclePrice
 	ledger.PendingOracle = oraclePrice
 	ledger.Index = protocol.GenesisBlock
@@ -281,14 +281,14 @@ func (b *bootstrap) createMainLedger(oraclePrice uint64) {
 func (b *bootstrap) createSyntheticLedger() {
 	// Create the synth ledger
 	synthLedger := new(protocol.SyntheticLedger)
-	synthLedger.Url = b.adiUrl.JoinPath(protocol.Synthetic)
+	synthLedger.Url = b.nodeUrl.JoinPath(protocol.Synthetic)
 	b.WriteRecords(synthLedger)
 }
 
 func (b *bootstrap) createAnchorPool() {
 	// Create the anchor pool
 	anchors := new(protocol.Anchor)
-	anchors.Url = b.adiUrl.JoinPath(protocol.AnchorPool)
+	anchors.Url = b.nodeUrl.JoinPath(protocol.AnchorPool)
 	anchors.AddAuthority(b.authorityUrl)
 	b.WriteRecords(anchors)
 
@@ -306,7 +306,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 
 	da := new(protocol.DataAccount)
 	da.Scratch = true
-	da.Url = b.adiUrl.JoinPath(protocol.Votes)
+	da.Url = b.nodeUrl.JoinPath(protocol.Votes)
 	da.AddAuthority(b.authorityUrl)
 	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
 	return nil
@@ -316,7 +316,7 @@ func (b *bootstrap) createEvidenceChain() {
 	//create an evidence scratch chain
 	da := new(protocol.DataAccount)
 	da.Scratch = true
-	da.Url = b.adiUrl.JoinPath(protocol.Evidence)
+	da.Url = b.nodeUrl.JoinPath(protocol.Evidence)
 	da.AddAuthority(b.authorityUrl)
 	b.WriteRecords(da)
 	b.urls = append(b.urls, da.Url)
@@ -325,7 +325,7 @@ func (b *bootstrap) createEvidenceChain() {
 func (b *bootstrap) createGlobals() error {
 	//create a new Globals account
 	global := new(protocol.DataAccount)
-	global.Url = b.adiUrl.JoinPath(protocol.Globals)
+	global.Url = b.nodeUrl.JoinPath(protocol.Globals)
 	wd := new(protocol.WriteData)
 	threshold := new(protocol.NetworkGlobals)
 	threshold.OperatorAcceptThreshold.Numerator = 2
@@ -352,7 +352,7 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	daOracle := new(protocol.DataAccount)
-	daOracle.Url = b.adiUrl.JoinPath(protocol.Oracle)
+	daOracle.Url = b.nodeUrl.JoinPath(protocol.Oracle)
 	daOracle.AddAuthority(b.authorityUrl)
 	b.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle.Url, wd.Entry})
 
@@ -415,7 +415,7 @@ func (b *bootstrap) initBVN() error {
 
 func (b *bootstrap) createDNOperatorBook() {
 	book := new(protocol.KeyBook)
-	book.Url = b.adiUrl.JoinPath(protocol.OperatorBook)
+	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
 	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
@@ -426,7 +426,7 @@ func (b *bootstrap) createDNOperatorBook() {
 
 func (b *bootstrap) createBVNOperatorBook() {
 	book := new(protocol.KeyBook)
-	book.Url = b.adiUrl.JoinPath(protocol.OperatorBook)
+	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
 	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 2
@@ -491,7 +491,7 @@ func (b *bootstrap) generateNetworkDefinition() error {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
 	da := new(protocol.DataAccount)
-	da.Url = b.adiUrl.JoinPath(protocol.Network)
+	da.Url = b.nodeUrl.JoinPath(protocol.Network)
 	da.AddAuthority(b.authorityUrl)
 	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
 	return nil
