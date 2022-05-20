@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -136,7 +137,9 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger)
+	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
+		return client.New(server)
+	})
 
 	router := routing.RouterInstance{
 		ConnectionManager: d.connectionManager,

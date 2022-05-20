@@ -3,15 +3,18 @@ package simulator
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -85,9 +88,18 @@ func New(t TB, bvnCount int) *Simulator {
 		}, db)
 		require.NoError(sim, err)
 
+		jrpc, err := api.NewJrpc(api.Options{
+			Logger:        logger,
+			Network:       &network,
+			Router:        sim.Router(),
+			TxMaxWaitTime: time.Hour,
+		})
+		require.NoError(sim, err)
+
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database: db,
 			Executor: exec,
+			API:      acctesting.DirectJrpcClient(jrpc),
 		}
 	}
 
@@ -370,6 +382,7 @@ type ExecEntry struct {
 
 	Database *database.Database
 	Executor *block.Executor
+	API      *client.Client
 
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to
