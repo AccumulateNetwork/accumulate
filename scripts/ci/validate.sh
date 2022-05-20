@@ -347,7 +347,7 @@ accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .statu
 success
 
 section "Create lite data account with first entry"
-ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "Factom PRO" "Tutorial" --lite-data "first entry" | jq -r .accountUrl)
+ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
 accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
