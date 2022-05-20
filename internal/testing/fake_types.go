@@ -78,7 +78,7 @@ func (f *FakeSigner) EntryByKeyHash(keyHash []byte) (int, protocol.KeyEntry, boo
 
 func (f *FakeSigner) EntryByDelegate(owner *url.URL) (int, protocol.KeyEntry, bool) {
 	for i, entry := range f.Keys {
-		if owner.Equal(entry.Owner) {
+		if owner.Equal(entry.Delegate) {
 			return i, entry, true
 		}
 	}
