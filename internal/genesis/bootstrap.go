@@ -39,9 +39,11 @@ type InitOpts struct {
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	b := &bootstrap{
-		InitOpts: opts,
-		kvdb:     kvdb,
-		db:       database.New(kvdb, opts.Logger.With("module", "database")),
+		InitOpts:    opts,
+		kvdb:        kvdb,
+		db:          database.New(kvdb, opts.Logger.With("module", "database")),
+		dataRecords: make([]DataRecord, 0),
+		records:     make([]protocol.Account, 0),
 	}
 	// Add validator keys to NetworkValidatorMap when not there
 	if b.InitOpts.NetworkValidatorMap == nil {
@@ -56,18 +58,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		return nil, err
 	}
 	b.genesisExec = exec
-
-	b.block = new(block.Block)
-	b.block.Index = protocol.GenesisBlock
-	b.block.Time = opts.GenesisTime
-	b.block.Batch = b.db.Begin(true)
-
 	return b, nil
 }
 
 type Bootstrap interface {
 	Bootstrap() error
-	Discard()
 	GetDBState() ([]byte, error)
 }
 
@@ -84,7 +79,13 @@ type bootstrap struct {
 	genesisExec  *block.Executor
 }
 
-func (b bootstrap) Bootstrap() error {
+func (b *bootstrap) Bootstrap() error {
+	b.block = new(block.Block)
+	b.block.Index = protocol.GenesisBlock
+	b.block.Time = b.InitOpts.GenesisTime
+	b.block.Batch = b.db.Begin(true)
+	defer b.block.Batch.Discard()
+
 	err := b.genesisExec.Genesis(b.block, b)
 	if err != nil {
 		return err
@@ -104,7 +105,7 @@ func (b bootstrap) Bootstrap() error {
 	return nil
 }
 
-func (b bootstrap) GetDBState() ([]byte, error) {
+func (b *bootstrap) GetDBState() ([]byte, error) {
 	memDb, ok := b.kvdb.(*memory.DB)
 
 	var state []byte
@@ -119,33 +120,27 @@ func (b bootstrap) GetDBState() ([]byte, error) {
 	return state, err
 }
 
-func (b bootstrap) Discard() {
-	if b.block != nil && b.block.Batch != nil {
-		b.block.Batch.Discard()
-	}
-}
-
 type DataRecord struct {
 	Account *url.URL
 	Entry   protocol.DataEntry
 }
 
-var _ chain.TransactionExecutor = bootstrap{}
-var _ chain.PrincipalValidator = bootstrap{}
+var _ chain.TransactionExecutor = &bootstrap{}
+var _ chain.PrincipalValidator = &bootstrap{}
 
 func (bootstrap) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
 }
 
-func (b bootstrap) AllowMissingPrincipal(*protocol.Transaction) (allow, fallback bool) {
+func (b *bootstrap) AllowMissingPrincipal(*protocol.Transaction) (allow, fallback bool) {
 	return true, false
 }
 
-func (b bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	return b.Validate(st, tx)
 }
 
-func (b bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.adiUrl = b.InitOpts.Network.NodeUrl()
 	b.authorityUrl = b.adiUrl.JoinPath(protocol.ValidatorBook)
 
@@ -212,7 +207,7 @@ func (b bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoco
 	return nil, st.AddDirectoryEntry(b.adiUrl, b.urls...)
 }
 
-func (b bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *uint64) ([]protocol.Signature, error) {
+func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *uint64) ([]protocol.Signature, error) {
 	sig, err := new(signing.Builder).
 		UseSimpleHash().
 		SetUrl(signer).
@@ -243,7 +238,7 @@ func (b bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *u
 
 	return sigs, nil
 }
-func (b bootstrap) createADI() {
+func (b *bootstrap) createADI() {
 	// Create the ADI
 	adi := new(protocol.ADI)
 	adi.Url = b.adiUrl
@@ -251,7 +246,7 @@ func (b bootstrap) createADI() {
 	b.WriteRecords(adi)
 }
 
-func (b bootstrap) createValidatorBook() {
+func (b *bootstrap) createValidatorBook() {
 	uBook := b.authorityUrl
 	book := new(protocol.KeyBook)
 	book.Url = uBook
@@ -263,7 +258,7 @@ func (b bootstrap) createValidatorBook() {
 	b.WriteRecords(book, page)
 }
 
-func (b bootstrap) createMainLedger(oraclePrice uint64) {
+func (b *bootstrap) createMainLedger(oraclePrice uint64) {
 	// Create the main ledger
 	ledger := new(protocol.InternalLedger)
 	ledger.Url = b.adiUrl.JoinPath(protocol.Ledger)
@@ -273,14 +268,14 @@ func (b bootstrap) createMainLedger(oraclePrice uint64) {
 	b.WriteRecords(ledger)
 }
 
-func (b bootstrap) createSyntheticLedger() {
+func (b *bootstrap) createSyntheticLedger() {
 	// Create the synth ledger
 	synthLedger := new(protocol.SyntheticLedger)
 	synthLedger.Url = b.adiUrl.JoinPath(protocol.Synthetic)
 	b.WriteRecords(synthLedger)
 }
 
-func (b bootstrap) createAnchorPool() {
+func (b *bootstrap) createAnchorPool() {
 	// Create the anchor pool
 	anchors := new(protocol.Anchor)
 	anchors.Url = b.adiUrl.JoinPath(protocol.AnchorPool)
@@ -289,7 +284,7 @@ func (b bootstrap) createAnchorPool() {
 
 }
 
-func (b bootstrap) createVoteScratchChain() error {
+func (b *bootstrap) createVoteScratchChain() error {
 	//create a vote scratch chain
 	wd := new(protocol.WriteData)
 	lci := types.LastCommitInfo{}
@@ -307,7 +302,7 @@ func (b bootstrap) createVoteScratchChain() error {
 	return nil
 }
 
-func (b bootstrap) createEvidenceChain() {
+func (b *bootstrap) createEvidenceChain() {
 	//create an evidence scratch chain
 	da := new(protocol.DataAccount)
 	da.Scratch = true
@@ -317,7 +312,7 @@ func (b bootstrap) createEvidenceChain() {
 	b.urls = append(b.urls, da.Url)
 }
 
-func (b bootstrap) createGlobals() error {
+func (b *bootstrap) createGlobals() error {
 	//create a new Globals account
 	global := new(protocol.DataAccount)
 	global.Url = b.adiUrl.JoinPath(protocol.Globals)
@@ -335,7 +330,7 @@ func (b bootstrap) createGlobals() error {
 	return nil
 }
 
-func (b bootstrap) initDN(oraclePrice uint64) error {
+func (b *bootstrap) initDN(oraclePrice uint64) error {
 	b.createDNOperatorBook()
 
 	oracle := new(protocol.AcmeOracle)
@@ -368,7 +363,7 @@ func (b bootstrap) initDN(oraclePrice uint64) error {
 	return nil
 }
 
-func (b bootstrap) initBVN() error {
+func (b *bootstrap) initBVN() error {
 	// Test with `${ID}` not `bvn-${ID}` because the latter will fail
 	// with "bvn-${ID} is reserved"
 	network := b.InitOpts.Network
@@ -408,7 +403,7 @@ func (b bootstrap) initBVN() error {
 	return nil
 }
 
-func (b bootstrap) createDNOperatorBook() {
+func (b *bootstrap) createDNOperatorBook() {
 	book := new(protocol.KeyBook)
 	book.Url = b.adiUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -418,7 +413,7 @@ func (b bootstrap) createDNOperatorBook() {
 	b.WriteRecords(book, page)
 }
 
-func (b bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
+func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -472,7 +467,7 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 	}
 }
 
-func (b bootstrap) generateNetworkDefinition() error {
+func (b *bootstrap) generateNetworkDefinition() error {
 	if b.InitOpts.Network.Type != config.Directory {
 		return fmt.Errorf("generateNetworkDefinition is only allowed for DNs")
 	}
@@ -491,20 +486,20 @@ func (b bootstrap) generateNetworkDefinition() error {
 	return nil
 }
 
-func (b bootstrap) WriteRecords(record ...protocol.Account) {
+func (b *bootstrap) WriteRecords(record ...protocol.Account) {
 	b.records = append(b.records, record...)
 	for _, rec := range record {
 		b.urls = append(b.urls, rec.GetUrl())
 	}
 }
 
-func (b bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
+func (b *bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
 	b.records = append(b.records, account)
 	b.urls = append(b.urls, url)
 	b.dataRecords = append(b.dataRecords, dataRecord)
 }
 
-func (b bootstrap) writeGenesisFile(appHash []byte) error {
+func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	state, err := b.GetDBState()
 	if err != nil {
 		return err
@@ -528,7 +523,7 @@ func (b bootstrap) writeGenesisFile(appHash []byte) error {
 	return nil
 }
 
-func (b bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
+func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 	netDef := new(protocol.NetworkDefinition)
 
 	for _, subnet := range b.InitOpts.Network.Subnets {

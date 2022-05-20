@@ -92,7 +92,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		}
 	}
 
-	// Execute genesis after the entire network is known
+	// Execute bootstrap after the entire network is known
 	if doGenesis {
 		for _, netName := range subnets {
 			netName = strings.TrimPrefix(netName, evilNodePrefix)
@@ -104,7 +104,6 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 					panic(fmt.Errorf("could not execute genesis: %v", err))
 				}
 				nodes[i].CreateInitChain()
-				genesis.Discard()
 			}
 		}
 	}

@@ -85,7 +85,7 @@ func (n *Network) DefaultValidatorPage() *url.URL {
 	if n.Type == Directory {
 		index = 0
 	} else {
-		index = 1
+		index = 0 // 1 in AC-1402
 	}
 	return n.ValidatorPage(index)
 }

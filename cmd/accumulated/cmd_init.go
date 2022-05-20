@@ -596,12 +596,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 		}
 	}
 
-	// Execute genesis after the entire network is known
-	defer func() {
-		for _, genesis := range genList {
-			genesis.Discard()
-		}
-	}()
+	// Execute bootstrap after the entire network is known
 	for _, genesis := range genList {
 		err := genesis.Bootstrap()
 		if err != nil {

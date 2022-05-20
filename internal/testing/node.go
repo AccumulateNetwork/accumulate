@@ -180,12 +180,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 	}
 
-	// Execute genesis after the entire network is known
-	defer func() {
-		for _, bootstrap := range bootstrapList {
-			bootstrap.Discard()
-		}
-	}()
+	// Execute bootstrap after the entire network is known
 	for _, bootstrap := range bootstrapList {
 		err := bootstrap.Bootstrap()
 		if err != nil {

@@ -147,19 +147,12 @@ func (s *Simulator) InitFromGenesis() {
 		x.bootstrap = InitGenesis(s, x.Database, x.Executor, netValMap)
 	}
 
-	// Execute genesis after the entire network is known
-	defer func() {
-		for _, x := range s.Executors {
-			x.bootstrap.Discard()
-		}
-	}()
-
+	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
 		err := x.bootstrap.Bootstrap()
 		if err != nil {
 			panic(fmt.Errorf("could not execute bootstrap: %v", err))
 		}
-
 		state, err := x.bootstrap.GetDBState()
 		require.NoError(tb{s}, err)
 

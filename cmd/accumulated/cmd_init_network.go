@@ -255,7 +255,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			FactomAddressesFile: factomAddressesFile,
 		})
 		check(err)
-		defer genesis.Discard()
 		err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
 		check(err)
 
@@ -270,7 +269,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				FactomAddressesFile: factomAddressesFile,
 			})
 			check(err)
-			defer genesis.Discard()
 			err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
 			check(err)
 		}
