@@ -68,8 +68,8 @@ func MakeLiteSigner(signer Signer) Signer {
 		keys := signer.Keys
 		signer.Keys = make([]*KeySpec, 0, len(keys))
 		for _, key := range keys {
-			if key.Owner != nil {
-				signer.Keys = append(signer.Keys, &KeySpec{Owner: key.Owner})
+			if key.Delegate != nil {
+				signer.Keys = append(signer.Keys, &KeySpec{Delegate: key.Delegate})
 			}
 		}
 		return signer
@@ -170,7 +170,7 @@ func (p *KeyPage) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
 	}
 
 	for i, entry := range p.Keys {
-		if owner.Equal(entry.Owner) {
+		if owner.Equal(entry.Delegate) {
 			return i, entry, true
 		}
 	}
