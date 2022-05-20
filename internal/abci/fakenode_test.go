@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -52,7 +53,7 @@ type FakeNode struct {
 	assert    *assert.Assertions
 	require   *require.Assertions
 	netValMap genesis.NetworkValidatorMap
-	Genesis   genesis.Genesis
+	Bootstrap genesis.Bootstrap
 	kv        *memory.DB
 }
 
@@ -91,19 +92,18 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		}
 	}
 
-	// Execute genesis after the entire network is known
+	// Execute bootstrap after the entire network is known
 	if doGenesis {
 		for _, netName := range subnets {
 			netName = strings.TrimPrefix(netName, evilNodePrefix)
 			nodes := allNodes[netName]
 			for i := range nodes {
-				genesis := nodes[i].Genesis
-				err := genesis.Execute()
+				genesis := nodes[i].Bootstrap
+				err := genesis.Bootstrap()
 				if err != nil {
 					panic(fmt.Errorf("could not execute genesis: %v", err))
 				}
 				nodes[i].CreateInitChain()
-				genesis.Discard()
 			}
 		}
 	}
@@ -225,8 +225,9 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
+		Keys: [][]byte{n.key.Bytes()},
 	}
-	n.Genesis, err = genesis.Init(kv, opts)
+	n.Bootstrap, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
 	n.kv = kv
 
@@ -413,21 +414,18 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)
-	record := batch.Account(u)
-	require.True(n.t, u.RootIdentity().Equal(u))
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err := record.Index("Directory", "Metadata").GetAs(md)
+	dir := indexing.Directory(batch, u)
+	count, err := dir.Count()
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
 	require.NoError(n.t, err)
 
-	chains := make([]string, md.Count)
+	chains := make([]string, count)
 	for i := range chains {
-		data, err := record.Index("Directory", uint64(i)).Get()
+		data, err := dir.Get(uint64(i))
 		require.NoError(n.t, err)
-		chains[i] = string(data)
+		chains[i] = data.String()
 	}
 	return chains
 }

@@ -20,6 +20,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -131,7 +132,7 @@ func (s *Simulator) SubnetFor(url *url.URL) *ExecEntry {
 	return s.Subnet(subnet)
 }
 
-func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{} {
+func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
 	s.Helper()
 
 	x := s.SubnetFor(url)
@@ -143,23 +144,16 @@ func (s *Simulator) InitFromGenesis() {
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.genesis = InitGenesis(s, x.Database, x.Executor, netValMap)
+		x.bootstrap = InitGenesis(s, x.Database, x.Executor, netValMap)
 	}
 
-	// Execute genesis after the entire network is known
-	defer func() {
-		for _, x := range s.Executors {
-			x.genesis.Discard()
-		}
-	}()
-
+	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
-		err := x.genesis.Execute()
+		err := x.bootstrap.Bootstrap()
 		if err != nil {
-			panic(fmt.Errorf("could not execute genesis: %v", err))
+			panic(fmt.Errorf("could not execute bootstrap: %v", err))
 		}
-
-		state, err := x.genesis.GetDBState()
+		state, err := x.bootstrap.GetDBState()
 		require.NoError(tb{s}, err)
 
 		func() {
@@ -394,10 +388,15 @@ type ExecEntry struct {
 	mu                      sync.Mutex
 	nextBlock, currentBlock []*protocol.Envelope
 
-	Subnet   *config.Subnet
-	Database *database.Database
-	Executor *block.Executor
-	genesis  genesis.Genesis
+	Subnet    *config.Subnet
+	Database  *database.Database
+	Executor  *block.Executor
+	bootstrap genesis.Bootstrap
+
+	// SubmitHook can be used to control how envelopes are submitted to the
+	// subnet. It is not safe to change SubmitHook concurrently with calls to
+	// Submit.
+	SubmitHook func([]*protocol.Envelope) []*protocol.Envelope
 }
 
 // Submit adds the envelopes to the next block's queue.
@@ -405,6 +404,11 @@ type ExecEntry struct {
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
 func (s *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+	// Capturing the field in a variable is more concurrency safe than using the
+	// field directly
+	if h := s.SubmitHook; h != nil {
+		envelopes = h(envelopes)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextBlock = append(s.nextBlock, envelopes...)

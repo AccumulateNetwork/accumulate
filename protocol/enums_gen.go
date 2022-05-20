@@ -365,9 +365,6 @@ const TransactionTypeSyntheticBurnTokens TransactionType = 53
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 54
 
-// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
-const TransactionTypeSegWitDataEntry TransactionType = 57
-
 // TransactionTypeSystemGenesis initializes system chains.
 const TransactionTypeSystemGenesis TransactionType = 96
 
@@ -1338,7 +1335,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSegWitDataEntry, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor:
 		*v = u
 		return true
 	default:
@@ -1403,8 +1400,6 @@ func (v TransactionType) String() string {
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
-	case TransactionTypeSegWitDataEntry:
-		return "segWitDataEntry"
 	case TransactionTypeSystemGenesis:
 		return "systemGenesis"
 	case TransactionTypeDirectoryAnchor:
@@ -1475,8 +1470,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
-	case "segwitdataentry":
-		return TransactionTypeSegWitDataEntry, true
 	case "systemgenesis":
 		return TransactionTypeSystemGenesis, true
 	case "directoryanchor":

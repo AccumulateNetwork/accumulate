@@ -577,7 +577,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 		Logger:              logger.With("subnet", protocol.Directory),
 	})
 	check(err)
-	genList := []genesis.Genesis{genInit}
+	genList := []genesis.Bootstrap{genInit}
 
 	for bvn := range bvnConfig {
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
@@ -596,14 +596,9 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 		}
 	}
 
-	// Execute genesis after the entire network is known
-	defer func() {
-		for _, genesis := range genList {
-			genesis.Discard()
-		}
-	}()
+	// Execute bootstrap after the entire network is known
 	for _, genesis := range genList {
-		err := genesis.Execute()
+		err := genesis.Bootstrap()
 		if err != nil {
 			panic(fmt.Errorf("could not execute genesis: %v", err))
 		}

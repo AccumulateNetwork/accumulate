@@ -19,6 +19,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -87,10 +88,8 @@ func TestEvilNode(t *testing.T) {
 
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
-	evData, err := batch.Account(dn.network.NodeUrl(protocol.Evidence)).Data()
-	require.NoError(t, err)
 	// Check each anchor
-	_, de, err := evData.GetLatest()
+	de, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
 	require.NoError(t, err)
 	var ev []types2.Evidence
 	require.NotEqual(t, de.GetData(), nil, "no data")
@@ -366,22 +365,20 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
 
 	// Verify the entry hash returned by Entry
-	dataChain, err := batch.Account(liteDataAddress).Data()
+	entryHash, err := indexing.Data(batch, liteDataAddress).Entry(0)
 	require.NoError(t, err)
-	entry, err := dataChain.Entry(0)
+	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
+	require.NoError(t, err)
+	entry, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 	hashFromEntry, err := protocol.ComputeFactomEntryHashForAccount(chainId, entry.GetData())
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
-	hashes, err := dataChain.GetHashes(0, 1)
+	id := protocol.ComputeLiteDataAccountId(entry)
+	newh, err := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
 	require.NoError(t, err)
-	ent, err := dataChain.Entry(0)
-	require.NoError(t, err)
-	id := protocol.ComputeLiteDataAccountId(ent)
-	newh, err := protocol.ComputeFactomEntryHashForAccount(id, ent.GetData())
-	require.NoError(t, err)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashes[0]), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
 
 }
@@ -1838,9 +1835,10 @@ func TestNetworkDefinition(t *testing.T) {
 
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
-	networkData, err := batch.Account(protocol.DnUrl().JoinPath(protocol.Network)).Data()
+	_, _, txnHash, err := indexing.Data(batch, protocol.DnUrl().JoinPath(protocol.Network)).GetLatest()
 	require.NoError(t, err)
-	_, entry, err := networkData.GetLatest()
+
+	entry, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 
 	networkDefs := new(protocol.NetworkDefinition)

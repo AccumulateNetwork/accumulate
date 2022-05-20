@@ -70,3 +70,13 @@ PendingTransactionsIndex:
   - name: Transactions
     type: chain
     repeatable: true
+
+DirectoryIndex:
+  fields:
+    - name: Count
+      type: uvarint
+
+DataIndex:
+  fields:
+    - name: Count
+      type: uvarint

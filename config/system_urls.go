@@ -79,15 +79,15 @@ func (n *Network) OperatorPage(index uint64) *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
 }
 
-// DefaultOperatorPage returns the URL of the page of the subnet's operator key book.
-func (n *Network) DefaultOperatorPage() *url.URL {
+// DefaultValidatorPage returns the URL of the default page of the subnet operator key book.
+func (n *Network) DefaultValidatorPage() *url.URL {
 	var index uint64
 	if n.Type == Directory {
 		index = 0
 	} else {
 		index = 1
 	}
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
+	return n.ValidatorPage(index)
 }
 
 // AnchorPool returns the URL of the subnet's anchor pool.
