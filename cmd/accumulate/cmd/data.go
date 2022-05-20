@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -313,18 +311,14 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("Key %s does not exist in the wallet %v", hex.EncodeToString(key), err)
 		}
-		var privKey *Key
-		privKey, err = resolvePrivateKey(Keyname)
-		if err != nil {
-			return "", fmt.Errorf("Key does not exist in the wallet %v", err)
-		}
+
 		argcopy := args
 		argcopy[1] = Keyname
 		argCopy, kSigner, err := prepareSigner(u, argcopy)
 		if err != nil {
 			return "", err
 		}
-		wd.Entry, err = prepareAnyData(argCopy, false, privKey, kSigner)
+		wd.Entry, err = prepareAnyData(argCopy, false, kSigner)
 		if err != nil {
 			return PrintJsonRpcError(err)
 		}
@@ -360,7 +354,7 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 	return entry
 }
 
-func prepareAnyData(args []string, isFirstLiteEntry bool, key *Key, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
+func prepareAnyData(args []string, isFirstLiteEntry bool, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
 	entry := new(protocol.AccumulateDataEntry)
 
 	if isFirstLiteEntry {
@@ -382,24 +376,16 @@ func prepareAnyData(args []string, isFirstLiteEntry bool, key *Key, signer *sign
 		entry.Data = append(entry.Data, data)
 
 	}
-	var signData *protocol.DataSigningInfo
-	signData.PublicKey = key.PublicKey
-	signData.Salt = strconv.FormatInt(time.Now().UnixNano(), 10)
 	fullDat := []byte{}
 	for _, d := range entry.Data {
 		fullDat = append(fullDat, d...)
 	}
-	saltHash := sha256.Sum256(append(fullDat, []byte(signData.Salt)...))
-	sig, err := signer.Sign(saltHash[:])
+	sig, err := signer.SetTimestampToNow().Sign(fullDat)
 	if err != nil {
 		return nil, err
 	}
-	sign, err := sig.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	signData.Signature = sign
-	finData, err := signData.MarshalJSON()
+
+	finData, err := sig.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
