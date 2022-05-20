@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -307,18 +308,11 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 	wd := protocol.WriteData{}
 	if Keyname != "" {
-		key, err := GetWallet().Get(BucketKeys, []byte(Keyname))
-		if err != nil {
-			return "", fmt.Errorf("Key %s does not exist in the wallet %v", hex.EncodeToString(key), err)
-		}
-
-		argcopy := args
-		argcopy[1] = Keyname
-		argCopy, kSigner, err := prepareSigner(u, argcopy)
+		_, kSigner, err := prepareSigner(u, []string{Keyname})
 		if err != nil {
 			return "", err
 		}
-		wd.Entry, err = prepareAnyData(argCopy, false, kSigner)
+		wd.Entry, err = prepareAnyData(args, false, kSigner)
 		if err != nil {
 			return PrintJsonRpcError(err)
 		}
@@ -378,21 +372,24 @@ func prepareAnyData(args []string, isFirstLiteEntry bool, signer *signing.Builde
 	}
 	fullDat := []byte{}
 	for _, d := range entry.Data {
-		fullDat = append(fullDat, d...)
+		fullDat = append(fullDat[:], d...)
 	}
-	sig, err := signer.SetTimestampToNow().Sign(fullDat)
+	fullDatHash := sha256.Sum256(fullDat[:])
+	sig, err := signer.SetTimestampToNow().Sign(fullDatHash[:])
+
 	if err != nil {
 		return nil, err
 	}
 
 	finData, err := sig.MarshalBinary()
+
 	if err != nil {
 		return nil, err
 	}
 	dataCopy := [][]byte{}
-	dataCopy[0] = finData
-	for i, v := range entry.Data {
-		dataCopy[i+1] = v
+	dataCopy = append(dataCopy, finData)
+	for _, v := range entry.Data {
+		dataCopy = append(dataCopy, v)
 	}
 	entry.Data = dataCopy
 	return entry, nil
@@ -429,8 +426,20 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	if len(args) < 2 {
 		return "", fmt.Errorf("expecting data")
 	}
+	if Keyname != "" {
 
-	wd.Entry = prepareData(args[1:], false)
+		_, kSigner, err := prepareSigner(u, []string{Keyname})
+		if err != nil {
+			return "", err
+		}
+		wd.Entry, err = prepareAnyData(args, false, kSigner)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+	} else {
+
+		wd.Entry = prepareData(args[1:], false)
+	}
 
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
