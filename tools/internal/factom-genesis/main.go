@@ -2,6 +2,7 @@ package factom
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -26,13 +27,20 @@ const (
 )
 
 func AccountFromPrivateKey(privateKeyHex string) (*url.URL, error) {
+	var privBytes []byte
 	privBytes, err := hex.DecodeString(privateKeyHex)
 	if err != nil {
-		return nil, err
+		fmt.Println(err.Error())
+		privBytes, err = base64.RawStdEncoding.DecodeString(privateKeyHex)
+		if err != nil {
+			fmt.Println(err.Error())
+			return nil, err
+		}
 	}
 	var pvkey privval.FilePVKey
 	err = json.Unmarshal(privBytes, &pvkey)
 	if err != nil {
+		fmt.Println(err.Error())
 		return nil, err
 	}
 	var pub, priv []byte
