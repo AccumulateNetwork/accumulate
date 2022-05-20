@@ -399,11 +399,16 @@ func prepareAnyData(args []string, isFirstLiteEntry bool, key *Key, signer *sign
 		return nil, err
 	}
 	signData.Signature = sign
-	finData, err := signData.MarshalBinary()
+	finData, err := signData.MarshalJSON()
 	if err != nil {
 		return nil, err
 	}
-	entry.Data = append(entry.Data, finData)
+	dataCopy := [][]byte{}
+	dataCopy[0] = finData
+	for i, v := range entry.Data {
+		dataCopy[i+1] = v
+	}
+	entry.Data = dataCopy
 	return entry, nil
 }
 
