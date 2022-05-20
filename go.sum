@@ -62,8 +62,8 @@ cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9
 cloud.google.com/go/storage v1.14.0/go.mod h1:GrKmX003DSIwi9o29oFT7YDnHYwZoctc3fOKtUw0Xmo=
 contrib.go.opencensus.io/exporter/stackdriver v0.13.4/go.mod h1:aXENhDJ1Y4lIg4EUaVTwzvYETVNZk10Pu26tevFKLUc=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106 h1:+PPbYmYZ02KDz3FJfxELkwsw/hq8N03E/K59+0c/WBg=
-github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
+github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040 h1:YR9b2mCxikJzdAfLjhRKgED1+21TyAs0KF5lOQ80h18=
+github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 h1:cTp8I5+VIoKjsnZuH8vjyaysT/ses3EvZeaV/1UkF2M=
 github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
