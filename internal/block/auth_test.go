@@ -369,7 +369,7 @@ func TestAddAuthority(tt *testing.T) {
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestamp(1).
 			WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Owner: bob.JoinPath("book")}},
+				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Delegate: bob.JoinPath("book")}},
 			}}).
 			Initiate(protocol.SignatureTypeED25519, aliceKey).
 			WithSigner(bob.JoinPath("book", "1"), 1).
