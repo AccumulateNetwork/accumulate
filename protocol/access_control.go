@@ -4,9 +4,7 @@ package protocol
 // authorization even if the account allows unauthorized signers.
 func (typ TransactionType) RequireAuthorization() bool {
 	switch typ {
-	case TransactionTypeCreateKeyPage,
-		TransactionTypeUpdateKeyPage,
-		TransactionTypeUpdateAccountAuth:
+	case TransactionTypeUpdateAccountAuth:
 		return true
 	default:
 		return false
