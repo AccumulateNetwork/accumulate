@@ -5,6 +5,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -328,17 +329,9 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 }
 
 func loadOperatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
-	acc := st.stateCache.batch.Account(url)
-
-	data, err := acc.Data()
+	entry, err := indexing.Data(st.batch, url).GetLatestEntry()
 	if err != nil {
-		st.logger.Error("Failed to get globals data chain", "error", err)
-		return protocol.FallbackValidatorThreshold
-	}
-
-	_, entry, err := data.GetLatest()
-	if err != nil {
-		st.logger.Error("Failed to get latest globals entry", "error", err)
+		st.logger.Error("Failed to get latest globals data entry", "error", err)
 		return protocol.FallbackValidatorThreshold
 	}
 

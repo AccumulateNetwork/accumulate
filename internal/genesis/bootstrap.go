@@ -142,7 +142,7 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.adiUrl = b.InitOpts.Network.NodeUrl()
-	b.authorityUrl = b.adiUrl.JoinPath(protocol.ValidatorBook)
+	b.authorityUrl = b.adiUrl.JoinPath(protocol.OperatorBook)
 
 	b.createADI()
 	b.createValidatorBook()
@@ -197,7 +197,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = wd.Account
 		txn.Body = body
-		sigs, err := b.sign(txn, b.Network.DefaultValidatorPage(), &timestamp)
+		sigs, err := b.sign(txn, b.Network.DefaultOperatorPage(), &timestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +247,6 @@ func (b *bootstrap) createADI() {
 }
 
 func (b *bootstrap) createValidatorBook() {
-	uBook := b.authorityUrl
 	book := new(protocol.KeyBook)
 	book.Url = b.adiUrl.JoinPath(protocol.ValidatorBook)
 	book.BookType = protocol.BookTypeValidator
@@ -256,14 +255,14 @@ func (b *bootstrap) createValidatorBook() {
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
-	spec.Owner = g.authorityUrl
+	spec.Owner = b.authorityUrl
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(uBook, 0, b.InitOpts.Validators, true)
+	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, true)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 
 	b.WriteRecords(book, page1, page2)
@@ -434,14 +433,14 @@ func (b *bootstrap) createBVNOperatorBook() {
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetMOfN(len(g.opts.Validators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
 	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, g.opts.Validators, false)
+	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, false)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 	b.WriteRecords(book, page1, page2)
 }
