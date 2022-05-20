@@ -51,15 +51,15 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("fake-tendermint", "info").
 	String()
 
-func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
-	cfg := config.Default(net, node, netId)       //
-	cfg.Mempool.MaxBatchBytes = 1048576           //
-	cfg.Mempool.CacheSize = 1048576               //
-	cfg.Mempool.Size = 50000                      //
-	cfg.Consensus.CreateEmptyBlocks = false       // Empty blocks are annoying to debug
-	cfg.Consensus.TimeoutCommit = time.Second / 5 // Increase block frequency
-	cfg.Accumulate.Website.Enabled = false        // No need for the website
-	cfg.Instrumentation.Prometheus = false        // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+func DefaultConfig(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config {
+	cfg := config.Default(networkName, net, node, netId) //
+	cfg.Mempool.MaxBatchBytes = 1048576                  //
+	cfg.Mempool.CacheSize = 1048576                      //
+	cfg.Mempool.Size = 50000                             //
+	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
+	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
+	cfg.Accumulate.Website.Enabled = false               // No need for the website
+	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Subnets = []config.Subnet{
 		{
 			ID:   "local",
@@ -101,7 +101,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			}
 
 			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), subnetId, i))
-			configs[i] = DefaultConfig(netType, nodeType, subnetId)
+			configs[i] = DefaultConfig("unittest", netType, nodeType, subnetId)
 			remotes[i] = getIP(hash).String()
 			nodes[i] = config.Node{
 				Type:    nodeType,
