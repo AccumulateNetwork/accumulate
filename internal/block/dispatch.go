@@ -40,12 +40,14 @@ func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
 
 	batch := d.batches[subnet]
 	if batch == nil {
-		batch = make([]*protocol.Envelope, len(deliveries))
+		batch = make([]*protocol.Envelope, 0)
 	}
-	for i, delivery := range deliveries {
-		batch[i] = new(protocol.Envelope)
-		batch[i].Signatures = append(batch[i].Signatures, delivery.Signatures...)
-		batch[i].Transaction = append(batch[i].Transaction, delivery.Transaction)
+
+	for _, delivery := range deliveries {
+		env := new(protocol.Envelope)
+		env.Signatures = append(env.Signatures, delivery.Signatures...)
+		env.Transaction = append(env.Transaction, delivery.Transaction)
+		batch = append(batch, env)
 	}
 	d.batches[subnet] = batch
 	return nil
@@ -87,11 +89,6 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			for _, tx := range batch {
 
 				resp, err := d.Router.Submit(ctx, subnet, tx, false, false)
-				if err != nil {
-					errs <- err
-					return
-				}
-
 				if err != nil {
 					errs <- err
 					return
