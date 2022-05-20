@@ -45,10 +45,22 @@ func New(server string) (*Client, error) {
 // RequestAPIv2 makes a JSON RPC request
 func (c *Client) RequestAPIv2(ctx context.Context, method string, params, result interface{}) error {
 	if c.DebugRequest {
-		fmt.Println("accumulated:", c.serverRpc) //nolint:noprint
+		fmt.Println("accuproxy:", c.serverRpc) //nolint:noprint
 	}
 
 	return c.Client.Request(ctx, c.serverRpc, method, params, result)
+}
+
+// GetIp get list of seed ip's.
+func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*SubnetListResponse, error) {
+	var resp SubnetListResponse
+
+	err := c.RequestAPIv2(ctx, "get-subnet-list", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
 }
 
 // GetIp get list of seed ip's.

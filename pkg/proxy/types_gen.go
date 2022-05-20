@@ -15,6 +15,7 @@ import (
 type SeedCountRequest struct {
 	fieldsSet []bool
 	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
 	extraData []byte
 }
 
@@ -27,14 +28,26 @@ type SeedCountResponse struct {
 type SeedListRequest struct {
 	fieldsSet []bool
 	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
 	count     int64  `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	extraData []byte
 }
 
 type SeedListResponse struct {
 	fieldsSet []bool
-	Network   string   `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	addresses []string `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	Addresses []string `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	extraData []byte
+}
+
+type SubnetListRequest struct {
+	fieldsSet []bool
+	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	extraData []byte
+}
+
+type SubnetListResponse struct {
+	fieldsSet []bool
+	Subnets   []string `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
 	extraData []byte
 }
 
@@ -42,6 +55,7 @@ func (v *SeedCountRequest) Copy() *SeedCountRequest {
 	u := new(SeedCountRequest)
 
 	u.Network = v.Network
+	u.Subnet = v.Subnet
 
 	return u
 }
@@ -62,6 +76,7 @@ func (v *SeedListRequest) Copy() *SeedListRequest {
 	u := new(SeedListRequest)
 
 	u.Network = v.Network
+	u.Subnet = v.Subnet
 	u.count = v.count
 
 	return u
@@ -72,10 +87,9 @@ func (v *SeedListRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SeedListResponse) Copy() *SeedListResponse {
 	u := new(SeedListResponse)
 
-	u.Network = v.Network
-	u.addresses = make([]string, len(v.addresses))
-	for i, v := range v.addresses {
-		u.addresses[i] = v
+	u.Addresses = make([]string, len(v.Addresses))
+	for i, v := range v.Addresses {
+		u.Addresses[i] = v
 	}
 
 	return u
@@ -83,8 +97,34 @@ func (v *SeedListResponse) Copy() *SeedListResponse {
 
 func (v *SeedListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SubnetListRequest) Copy() *SubnetListRequest {
+	u := new(SubnetListRequest)
+
+	u.Network = v.Network
+
+	return u
+}
+
+func (v *SubnetListRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SubnetListResponse) Copy() *SubnetListResponse {
+	u := new(SubnetListResponse)
+
+	u.Subnets = make([]string, len(v.Subnets))
+	for i, v := range v.Subnets {
+		u.Subnets[i] = v
+	}
+
+	return u
+}
+
+func (v *SubnetListResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SeedCountRequest) Equal(u *SeedCountRequest) bool {
 	if !(v.Network == u.Network) {
+		return false
+	}
+	if !(v.Subnet == u.Subnet) {
 		return false
 	}
 
@@ -103,6 +143,9 @@ func (v *SeedListRequest) Equal(u *SeedListRequest) bool {
 	if !(v.Network == u.Network) {
 		return false
 	}
+	if !(v.Subnet == u.Subnet) {
+		return false
+	}
 	if !(v.count == u.count) {
 		return false
 	}
@@ -111,14 +154,32 @@ func (v *SeedListRequest) Equal(u *SeedListRequest) bool {
 }
 
 func (v *SeedListResponse) Equal(u *SeedListResponse) bool {
+	if len(v.Addresses) != len(u.Addresses) {
+		return false
+	}
+	for i := range v.Addresses {
+		if !(v.Addresses[i] == u.Addresses[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *SubnetListRequest) Equal(u *SubnetListRequest) bool {
 	if !(v.Network == u.Network) {
 		return false
 	}
-	if len(v.addresses) != len(u.addresses) {
+
+	return true
+}
+
+func (v *SubnetListResponse) Equal(u *SubnetListResponse) bool {
+	if len(v.Subnets) != len(u.Subnets) {
 		return false
 	}
-	for i := range v.addresses {
-		if !(v.addresses[i] == u.addresses[i]) {
+	for i := range v.Subnets {
+		if !(v.Subnets[i] == u.Subnets[i]) {
 			return false
 		}
 	}
@@ -128,6 +189,7 @@ func (v *SeedListResponse) Equal(u *SeedListResponse) bool {
 
 var fieldNames_SeedCountRequest = []string{
 	1: "Network",
+	2: "Subnet",
 }
 
 func (v *SeedCountRequest) MarshalBinary() ([]byte, error) {
@@ -136,6 +198,9 @@ func (v *SeedCountRequest) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Network) == 0) {
 		writer.WriteString(1, v.Network)
+	}
+	if !(len(v.Subnet) == 0) {
+		writer.WriteString(2, v.Subnet)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SeedCountRequest)
@@ -153,6 +218,11 @@ func (v *SeedCountRequest) IsValid() error {
 		errs = append(errs, "field Network is missing")
 	} else if len(v.Network) == 0 {
 		errs = append(errs, "field Network is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Subnet is missing")
+	} else if len(v.Subnet) == 0 {
+		errs = append(errs, "field Subnet is not set")
 	}
 
 	switch len(errs) {
@@ -206,7 +276,8 @@ func (v *SeedCountResponse) IsValid() error {
 
 var fieldNames_SeedListRequest = []string{
 	1: "Network",
-	2: "count",
+	2: "Subnet",
+	3: "count",
 }
 
 func (v *SeedListRequest) MarshalBinary() ([]byte, error) {
@@ -216,8 +287,11 @@ func (v *SeedListRequest) MarshalBinary() ([]byte, error) {
 	if !(len(v.Network) == 0) {
 		writer.WriteString(1, v.Network)
 	}
+	if !(len(v.Subnet) == 0) {
+		writer.WriteString(2, v.Subnet)
+	}
 	if !(v.count == 0) {
-		writer.WriteInt(2, v.count)
+		writer.WriteInt(3, v.count)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SeedListRequest)
@@ -237,6 +311,11 @@ func (v *SeedListRequest) IsValid() error {
 		errs = append(errs, "field Network is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Subnet is missing")
+	} else if len(v.Subnet) == 0 {
+		errs = append(errs, "field Subnet is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field count is missing")
 	} else if v.count == 0 {
 		errs = append(errs, "field count is not set")
@@ -253,20 +332,16 @@ func (v *SeedListRequest) IsValid() error {
 }
 
 var fieldNames_SeedListResponse = []string{
-	1: "Network",
-	2: "addresses",
+	1: "Addresses",
 }
 
 func (v *SeedListResponse) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Network) == 0) {
-		writer.WriteString(1, v.Network)
-	}
-	if !(len(v.addresses) == 0) {
-		for _, v := range v.addresses {
-			writer.WriteString(2, v)
+	if !(len(v.Addresses) == 0) {
+		for _, v := range v.Addresses {
+			writer.WriteString(1, v)
 		}
 	}
 
@@ -282,14 +357,89 @@ func (v *SeedListResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Addresses is missing")
+	} else if len(v.Addresses) == 0 {
+		errs = append(errs, "field Addresses is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SubnetListRequest = []string{
+	1: "Network",
+}
+
+func (v *SubnetListRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Network) == 0) {
+		writer.WriteString(1, v.Network)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SubnetListRequest)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *SubnetListRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Network is missing")
 	} else if len(v.Network) == 0 {
 		errs = append(errs, "field Network is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field addresses is missing")
-	} else if len(v.addresses) == 0 {
-		errs = append(errs, "field addresses is not set")
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SubnetListResponse = []string{
+	1: "Subnets",
+}
+
+func (v *SubnetListResponse) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Subnets) == 0) {
+		for _, v := range v.Subnets {
+			writer.WriteString(1, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_SubnetListResponse)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *SubnetListResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Subnets is missing")
+	} else if len(v.Subnets) == 0 {
+		errs = append(errs, "field Subnets is not set")
 	}
 
 	switch len(errs) {
@@ -311,6 +461,9 @@ func (v *SeedCountRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Network = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Subnet = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SeedCountRequest)
@@ -352,7 +505,10 @@ func (v *SeedListRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(1); ok {
 		v.Network = x
 	}
-	if x, ok := reader.ReadInt(2); ok {
+	if x, ok := reader.ReadString(2); ok {
+		v.Subnet = x
+	}
+	if x, ok := reader.ReadInt(3); ok {
 		v.count = x
 	}
 
@@ -372,12 +528,9 @@ func (v *SeedListResponse) UnmarshalBinary(data []byte) error {
 func (v *SeedListResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
-		v.Network = x
-	}
 	for {
-		if x, ok := reader.ReadString(2); ok {
-			v.addresses = append(v.addresses, x)
+		if x, ok := reader.ReadString(1); ok {
+			v.Addresses = append(v.Addresses, x)
 		} else {
 			break
 		}
@@ -392,27 +545,86 @@ func (v *SeedListResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *SubnetListRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SubnetListRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Network = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SubnetListRequest)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *SubnetListResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SubnetListResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadString(1); ok {
+			v.Subnets = append(v.Subnets, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_SubnetListResponse)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network   string                    `json:"network,omitempty"`
-		addresses encoding.JsonList[string] `json:"addresses,omitempty"`
+		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
-	u.Network = v.Network
-	u.addresses = v.addresses
+	u.Addresses = v.Addresses
+	return json.Marshal(&u)
+}
+
+func (v *SubnetListResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Subnets encoding.JsonList[string] `json:"subnets,omitempty"`
+	}{}
+	u.Subnets = v.Subnets
 	return json.Marshal(&u)
 }
 
 func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network   string                    `json:"network,omitempty"`
-		addresses encoding.JsonList[string] `json:"addresses,omitempty"`
+		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
-	u.Network = v.Network
-	u.addresses = v.addresses
+	u.Addresses = v.Addresses
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Network = u.Network
-	v.addresses = u.addresses
+	v.Addresses = u.Addresses
+	return nil
+}
+
+func (v *SubnetListResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Subnets encoding.JsonList[string] `json:"subnets,omitempty"`
+	}{}
+	u.Subnets = v.Subnets
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Subnets = u.Subnets
 	return nil
 }
