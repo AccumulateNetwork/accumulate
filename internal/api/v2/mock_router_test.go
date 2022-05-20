@@ -54,6 +54,20 @@ func (mr *MockRouterMockRecorder) Query(ctx, subnet, query, opts interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockRouter)(nil).Query), ctx, subnet, query, opts)
 }
 
+// RequestAPIv2 mocks base method.
+func (m *MockRouter) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RequestAPIv2", ctx, subnetId, method, params, result)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RequestAPIv2 indicates an expected call of RequestAPIv2.
+func (mr *MockRouterMockRecorder) RequestAPIv2(ctx, subnetId, method, params, result interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestAPIv2", reflect.TypeOf((*MockRouter)(nil).RequestAPIv2), ctx, subnetId, method, params, result)
+}
+
 // Route mocks base method.
 func (m *MockRouter) Route(arg0 ...*protocol.Envelope) (string, error) {
 	m.ctrl.T.Helper()
