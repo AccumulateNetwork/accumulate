@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 35)
+		m.methods = make(jsonrpc2.MethodMap, 36)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -46,6 +46,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
 	m.methods["query-minor-blocks"] = m.QueryMinorBlocks
+	m.methods["query-synth"] = m.QuerySynth
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
 	m.methods["status"] = m.Status
@@ -254,6 +255,18 @@ func (m *JrpcMethods) QueryMinorBlocks(_ context.Context, params json.RawMessage
 	}
 
 	return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
+}
+
+//
+// WARNING: EXPERIMENTAL!
+func (m *JrpcMethods) QuerySynth(_ context.Context, params json.RawMessage) interface{} {
+	req := new(SyntheticTransactionRequest)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.querier.QuerySynth(req.Source, req.Destination, req.SequenceNumber))
 }
 
 // QueryTx queries a transaction by ID.

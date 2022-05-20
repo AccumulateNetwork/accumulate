@@ -30,3 +30,7 @@ func (NullRouter) Query(ctx context.Context, subnet string, query []byte, opts c
 func (NullRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	return new(routing.ResponseSubmit), nil
 }
+
+func (NullRouter) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+	return errors.StatusNotFound
+}

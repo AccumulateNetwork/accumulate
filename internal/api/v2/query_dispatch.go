@@ -160,3 +160,12 @@ func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPaginatio
 
 	return q.direct(r).QueryMinorBlocks(url, pagination, txFetchMode, blockFilter)
 }
+
+func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
+	r, err := q.Router.RouteAccount(source)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QuerySynth(source, destination, number)
+}

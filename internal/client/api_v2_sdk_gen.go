@@ -384,6 +384,19 @@ func (c *Client) QueryMinorBlocks(ctx context.Context, req *api.MinorBlocksQuery
 	return &resp, nil
 }
 
+//
+// WARNING: EXPERIMENTAL!
+func (c *Client) QuerySynth(ctx context.Context, req *api.SyntheticTransactionRequest) (*api.TransactionQueryResponse, error) {
+	var resp api.TransactionQueryResponse
+
+	err := c.RequestAPIv2(ctx, "query-synth", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // QueryTx queries a transaction by ID.
 func (c *Client) QueryTx(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
 	var resp api.TransactionQueryResponse
