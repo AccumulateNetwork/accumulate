@@ -202,7 +202,7 @@ func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {
 
 	// Load the root index chain entry
 	minor := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(major.RootIndexIndex), minor)
+	err = chain.EntryAs(major.RootIndexIndex, minor)
 	if err != nil {
 		return 0, errors.Format(errors.StatusUnknown, "load entry %d of the root index chain: %w", major.RootIndexIndex, err)
 	}
@@ -386,7 +386,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	}
 
 	// Get transaction hashes
-	hashes, err := chain.Entries(int64(synthStart), int64(synthEnd)+1)
+	hashes, err := chain.Entries(synthStart, synthEnd+1)
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load entries %d through %d of synthetic transaction chain: %w", synthStart, synthEnd, err)
 	}
@@ -544,7 +544,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 			return nil, errors.Format(errors.StatusUnknown, "load range from minor index chain of intermediate anchor chain %s: %w", update.Name, err)
 		}
 
-		rootReceipt, err := rootChain.Receipt(int64(anchorIndex), rootChain.Height()-1)
+		rootReceipt, err := rootChain.Receipt(anchorIndex, rootChain.Height()-1)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "build receipt for the root chain: %w", err)
 		}
@@ -555,7 +555,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 		}
 
 		for i := from; i <= to; i++ {
-			anchorReceipt, err := anchorChain.Receipt(int64(i), int64(to))
+			anchorReceipt, err := anchorChain.Receipt(i, to)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknown, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
 			}
@@ -565,8 +565,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 				return nil, errors.Format(errors.StatusUnknown, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
 			}
 
-			r := protocol.ReceiptFromManaged(receipt)
-			anchor.Receipts = append(anchor.Receipts, *r)
+			anchor.Receipts = append(anchor.Receipts, *receipt)
 		}
 	}
 

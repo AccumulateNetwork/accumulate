@@ -142,7 +142,7 @@ type ResponseByTxId struct {
 	Envelope   *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
 	Status     *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	Produced   []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	Height     int64                       `json:"height" form:"height" query:"height" validate:"required"`
+	Height     uint64                      `json:"height" form:"height" query:"height" validate:"required"`
 	ChainState [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
 	Receipts   []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	Signers    []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
@@ -152,7 +152,7 @@ type ResponseByTxId struct {
 type ResponseChainEntry struct {
 	fieldsSet []bool
 	Type      protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Height    int64              `json:"height" form:"height" query:"height" validate:"required"`
+	Height    uint64             `json:"height" form:"height" query:"height" validate:"required"`
 	Entry     []byte             `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	State     [][]byte           `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Receipt   *GeneralReceipt    `json:"receipt,omitempty" form:"receipt" query:"receipt"`
@@ -2160,7 +2160,7 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 			writer.WriteTxid(4, v)
 		}
 	}
-	writer.WriteInt(5, v.Height)
+	writer.WriteUint(5, v.Height)
 	if !(len(v.ChainState) == 0) {
 		for _, v := range v.ChainState {
 			writer.WriteBytes(6, v)
@@ -2252,7 +2252,7 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(1, v.Type)
 	}
-	writer.WriteInt(2, v.Height)
+	writer.WriteUint(2, v.Height)
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(3, v.Entry)
 	}
@@ -3393,7 +3393,7 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadInt(5); ok {
+	if x, ok := reader.ReadUint(5); ok {
 		v.Height = x
 	}
 	for {
@@ -3437,7 +3437,7 @@ func (v *ResponseChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.ChainType); reader.ReadEnum(1, x) {
 		v.Type = *x
 	}
-	if x, ok := reader.ReadInt(2); ok {
+	if x, ok := reader.ReadUint(2); ok {
 		v.Height = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
@@ -4000,7 +4000,7 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
 		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
 		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height     int64                           `json:"height"`
+		Height     uint64                          `json:"height"`
 		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
 		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
 		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
@@ -4022,7 +4022,7 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 func (v *ResponseChainEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    protocol.ChainType         `json:"type,omitempty"`
-		Height  int64                      `json:"height"`
+		Height  uint64                     `json:"height"`
 		Entry   *string                    `json:"entry,omitempty"`
 		State   encoding.JsonList[*string] `json:"state,omitempty"`
 		Receipt *GeneralReceipt            `json:"receipt,omitempty"`
@@ -4550,7 +4550,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
 		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
 		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height     int64                           `json:"height"`
+		Height     uint64                          `json:"height"`
 		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
 		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
 		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
@@ -4590,7 +4590,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 func (v *ResponseChainEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    protocol.ChainType         `json:"type,omitempty"`
-		Height  int64                      `json:"height"`
+		Height  uint64                     `json:"height"`
 		Entry   *string                    `json:"entry,omitempty"`
 		State   encoding.JsonList[*string] `json:"state,omitempty"`
 		Receipt *GeneralReceipt            `json:"receipt,omitempty"`

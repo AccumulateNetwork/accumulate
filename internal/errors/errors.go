@@ -91,6 +91,9 @@ func Wrap(code Status, err error) error {
 		// can cause strange errors
 		return nil
 	}
+	if code == StatusUnknown && !trackLocation {
+		return err // Optimize
+	}
 	e := makeError(code)
 	e.setCause(convert(err))
 	return e

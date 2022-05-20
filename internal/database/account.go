@@ -14,6 +14,8 @@ type Account struct {
 	batch *Batch
 	key   accountBucket
 	url   *url.URL
+
+	chains map[string]*Chain
 }
 
 // ensureMetadata ensures that the account's metadata is up to date.
@@ -150,6 +152,18 @@ func (r *Account) RemovePending(txid *url.TxID) error {
 }
 
 func (r *Account) chain(name string, writable bool) (*Chain, error) {
+	// if c := r.chains[name]; c != nil && (!writable || c.writable) {
+	// 	return c, nil
+	// }
+	// c, err := newChain(r, r.key.Chain(name), writable)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if r.chains == nil {
+	// 	r.chains = map[string]*Chain{}
+	// }
+	// r.chains[name] = c
+	// return c, nil
 	return newChain(r, r.key.Chain(name), writable)
 }
 
@@ -175,11 +189,6 @@ func (r *Account) ReadChain(name string) (*Chain, error) {
 // ReadIndexChain returns a read-only chain manager for the index chain of the given chain.
 func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
 	return r.chain(protocol.IndexChain(name, major), false)
-}
-
-// Index returns a value that can read or write an index value.
-func (r *Account) Index(key ...interface{}) *Value {
-	return &Value{r.batch, r.key.Index(key...)}
 }
 
 func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.TxIdSet, error) {

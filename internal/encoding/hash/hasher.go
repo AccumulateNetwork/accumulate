@@ -10,6 +10,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
@@ -103,37 +104,36 @@ func (h Hasher) MerkleHash() []byte {
 
 // Receipt returns a receipt for the numbered element. Receipt returns nil if
 // either index is out of bounds.
-func (h Hasher) Receipt(element, anchor int) *managed.Receipt {
-	if element < 0 || element >= len(h) || anchor < 0 || anchor >= len(h) {
+func (h Hasher) Receipt(start, anchor int) *types.Receipt {
+	if start < 0 || start >= len(h) || anchor < 0 || anchor >= len(h) {
 		return nil
 	}
 
 	// Trivial case
 	if len(h) == 1 {
-		return &managed.Receipt{
-			Element: h[0],
-			Anchor:  h[0],
-			MDRoot:  h[0],
+		return &types.Receipt{
+			Start:  h[0],
+			Anchor: h[0],
+			Result: h[0],
 		}
 	}
 
 	// Build a merkle state
-	anchorState := new(managed.MerkleState)
-	anchorState.InitSha256()
+	anchorState := new(types.MerkleState)
 	for _, h := range h[:anchor+1] {
 		anchorState.AddToMerkleTree(h)
 	}
 	anchorState.PadPending()
 
 	// Initialize the receipt
-	r := new(managed.Receipt)
-	r.ElementIndex = int64(element)
-	r.AnchorIndex = int64(anchor)
-	r.Element = h[element]
-	r.MDRoot = h[element]
+	r := new(types.Receipt)
+	r.StartIndex = uint64(start)
+	r.AnchorIndex = uint64(anchor)
+	r.Start = h[start]
+	r.Result = h[start]
 
 	// Build the receipt
-	err := r.BuildReceiptWith(h.getIntermediate, managed.Sha256, anchorState)
+	err := r.Build(h.getIntermediate, anchorState.Pending)
 	if err != nil {
 		// The data is static and in memory so there should never be an error
 		panic(err)
@@ -148,6 +148,13 @@ func Combine(l, r []byte) []byte {
 	_, _ = digest.Write(r)
 	return digest.Sum(nil)
 }
+
+// func Combine32(l, r [32]byte) [32]byte {
+// 	digest := sha256.New()
+// 	_, _ = digest.Write(l[:])
+// 	_, _ = digest.Write(r[:])
+// 	return *(*[32]byte)(digest.Sum(nil))
+// }
 
 // MerkleCascade calculates a Merkle cascade for a hash list. MerkleCascade can
 // add hashes to an existing cascade or calculate a new cascade. If maxHeight is
@@ -179,13 +186,13 @@ func MerkleCascade(cascade, hashList [][]byte, maxHeight int64) [][]byte {
 
 // getIntermediate returns the last two hashes that would be combined to create
 // the local Merkle root at the given index and height. The element must be odd.
-func (h Hasher) getIntermediate(element, height int64) (managed.Hash, managed.Hash, error) {
+func (h Hasher) getIntermediate(element, height uint64) ([]byte, []byte, error) {
 	if element%2 != 1 {
 		return nil, nil, errors.New("element is not odd")
 	}
 
 	// Build a Merkle cascade with the hashes up to element
-	cascade := MerkleCascade(nil, h[:element], height)
+	cascade := MerkleCascade(nil, h[:element], int64(height))
 
 	// If height is greater than the cascade length, there is no intermediate
 	// value

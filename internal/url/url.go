@@ -114,7 +114,41 @@ func (u *URL) Copy() *URL {
 
 // String reassembles the URL into a valid URL string. See net/url.URL.String().
 func (u *URL) String() string {
-	return u.URL().String()
+	var buf strings.Builder
+
+	buf.WriteString("acc://")
+	if u.UserInfo != "" {
+		buf.WriteString(u.UserInfo)
+		buf.WriteByte('@')
+	}
+
+	// TODO If we allow special characters, we'll need to escape them
+	buf.WriteString(u.Authority)
+
+	p := normalizePath(u.Path)
+	for len(p) > 0 {
+		buf.WriteByte('/')
+		i := strings.IndexByte(p[1:], '/') + 1
+		if i <= 0 {
+			buf.WriteString(url.PathEscape(p[1:]))
+			break
+		}
+
+		buf.WriteString(url.PathEscape(p[1:i]))
+		p = p[i:]
+	}
+
+	if u.Query != "" {
+		buf.WriteByte('?')
+		buf.WriteString(url.QueryEscape(u.Query))
+	}
+
+	if u.Fragment != "" {
+		buf.WriteByte('#')
+		buf.WriteString(u.Fragment) // TODO Encode?
+	}
+
+	return buf.String()
 }
 
 // ShortString returns String without the scheme prefix.
@@ -125,18 +159,28 @@ func (u *URL) ShortString() string {
 // RawString concatenates all of the URL parts. Does not percent-encode
 // anything. Primarily used for validation.
 func (u *URL) RawString() string {
-	s := "acc://"
+	var buf strings.Builder
+
+	buf.WriteString("acc://")
 	if u.UserInfo != "" {
-		s += u.UserInfo + "@"
+		buf.WriteString(u.UserInfo)
+		buf.WriteByte('@')
 	}
-	s += u.Authority + u.Path
+
+	buf.WriteString(u.Authority)
+	buf.WriteString(normalizePath(u.Path))
+
 	if u.Query != "" {
-		s += "?" + u.Query
+		buf.WriteByte('?')
+		buf.WriteString(u.Query)
 	}
+
 	if u.Fragment != "" {
-		s += "#" + u.Fragment
+		buf.WriteByte('#')
+		buf.WriteString(u.Fragment)
 	}
-	return s
+
+	return u.URL().String()
 }
 
 // Hostname returns the hostname from the authority component.
@@ -186,9 +230,10 @@ func concatId(ids ...[32]byte) [32]byte {
 	return result
 }
 
-func ensurePath(s string) string {
-	if s == "" || s[0] == '/' {
-		return s
+func normalizePath(s string) string {
+	s = strings.Trim(s, "/")
+	if s == "" {
+		return ""
 	}
 	return "/" + s
 }
@@ -289,7 +334,7 @@ func (u *URL) AccountID() []byte {
 
 // AccountID32 returns AccountID as a [32]byte.
 func (u *URL) AccountID32() [32]byte {
-	return id(u.Hostname() + ensurePath(u.Path))
+	return id(u.Hostname() + normalizePath(u.Path))
 }
 
 // Routing returns the first 8 bytes of the identity account ID as an integer.

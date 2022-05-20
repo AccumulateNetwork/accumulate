@@ -3,6 +3,7 @@ package simulator
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -33,10 +34,11 @@ var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb
+	mkdb func(name string, logger log.Logger) (*database.Database, error)
+
 	Logger    log.Logger
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
-
 	LogLevels string
 
 	routingOverrides map[[32]byte]string
@@ -62,9 +64,22 @@ func (s *Simulator) newLogger() log.Logger {
 }
 
 func New(t TB, bvnCount int) *Simulator {
+	return newSim(t, bvnCount, func(_ string, logger log.Logger) (*database.Database, error) {
+		return database.OpenInMemory(logger), nil
+	})
+}
+
+func NewWithBadger(t TB, bvnCount int, tmpDir string) *Simulator {
+	return newSim(t, bvnCount, func(name string, logger log.Logger) (*database.Database, error) {
+		return database.OpenBadger(filepath.Join(tmpDir, name+"-acc.db"), logger)
+	})
+}
+
+func newSim(t TB, bvnCount int, mkdb func(name string, logger log.Logger) (*database.Database, error)) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
 	sim.TB = t
+	sim.mkdb = mkdb
 	sim.Setup(bvnCount)
 	return sim
 }
@@ -89,7 +104,8 @@ func (sim *Simulator) Setup(bvnCount int) {
 
 		logger := sim.newLogger().With("subnet", subnet.ID)
 		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
-		db := database.OpenInMemory(logger)
+		db, err := sim.mkdb(subnet.ID, logger)
+		require.NoError(sim, err)
 
 		network := config.Network{
 			Type:          subnet.Type,

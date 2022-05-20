@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -51,7 +50,7 @@ func (b *Batch) BptRoot() []byte {
 }
 
 // BptReceipt builds a BPT receipt for the given key.
-func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
+func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*protocol.Receipt, error) {
 	if len(b.bptEntries) > 0 {
 		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted BPT entries")
 	}
@@ -99,7 +98,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		account := &Account{b, accountBucket{objectBucket(key)}, nil}
+		account := &Account{b, accountBucket{objectBucket(key)}, nil, nil}
 
 		/*// Load the main state so we can get the URL
 		a, err := account.GetState()
@@ -182,7 +181,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 			return err
 		}
 
-		account := &Account{b, accountBucket{objectBucket(key)}, nil}
+		account := &Account{b, accountBucket{objectBucket(key)}, nil, nil}
 		err = account.restore(state)
 		if err != nil {
 			return err

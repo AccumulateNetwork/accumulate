@@ -138,7 +138,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Body.Type().IsSystem() {
+		if typ := delivery.Transaction.Body.Type(); typ == protocol.TransactionTypeSystemGenesis || !typ.IsSystem() {
 			kv := []interface{}{
 				"block", block.Index,
 				"type", delivery.Transaction.Body.Type(),
@@ -153,9 +153,9 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 					"code", status.Code,
 					"error", status.Message,
 				)
-				x.Logger.Info("Transaction failed", kv...)
+				x.logger.Info("Transaction failed", kv...)
 			} else {
-				x.Logger.Debug("Transaction succeeded", kv...)
+				x.logger.Debug("Transaction succeeded", kv...)
 			}
 		}
 

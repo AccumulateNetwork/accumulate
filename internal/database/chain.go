@@ -5,32 +5,25 @@ import (
 	"errors"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
 	account  *Account
-	key      storage.Key
 	writable bool
-	merkle   *managed.MerkleManager
+	merkle   *MerkleManager
 }
 
 // newChain creates a new Chain.
 func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) {
 	m := new(Chain)
 	m.account = account
-	m.key = key
 	m.writable = writable
 
 	var err error
-	m.merkle, err = managed.NewMerkleManager(account.batch.store, markPower)
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.merkle.SetKey(key)
+	m.merkle, err = NewManager(account.batch, key, markPower)
 	if err != nil {
 		return nil, err
 	}
@@ -39,17 +32,17 @@ func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) 
 }
 
 // Height returns the height of the chain.
-func (c *Chain) Height() int64 {
-	return c.merkle.MS.Count
+func (c *Chain) Height() uint64 {
+	return c.merkle.state.Count
 }
 
 // Entry loads the entry in the chain at the given height.
-func (c *Chain) Entry(height int64) ([]byte, error) {
+func (c *Chain) Entry(height uint64) ([]byte, error) {
 	return c.merkle.Get(height)
 }
 
 // EntryAs loads and unmarshals the entry in the chain at the given height.
-func (c *Chain) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
+func (c *Chain) EntryAs(height uint64, value encoding.BinaryUnmarshaler) error {
 	data, err := c.Entry(height)
 	if err != nil {
 		return err
@@ -59,7 +52,7 @@ func (c *Chain) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
 }
 
 // Entries returns entries in the given range.
-func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
+func (c *Chain) Entries(start uint64, end uint64) ([][]byte, error) {
 	if end > c.Height() {
 		end = c.Height()
 	}
@@ -72,7 +65,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	// multiple times
 	entries := make([][]byte, 0, end-start)
 	for start < end {
-		h, err := c.merkle.GetRange(c.key, start, end)
+		h, err := c.merkle.GetRange(start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -80,35 +73,35 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 		for i := range h {
 			entries = append(entries, h[i])
 		}
-		start += int64(len(h))
+		start += uint64(len(h))
 	}
 
 	return entries, nil
 }
 
 // State returns the state of the chain at the given height.
-func (c *Chain) State(height int64) (*managed.MerkleState, error) {
+func (c *Chain) State(height uint64) (*MerkleState, error) {
 	return c.merkle.GetAnyState(height)
 }
 
 // CurrentState returns the current state of the chain.
-func (c *Chain) CurrentState() *managed.MerkleState {
-	return c.merkle.MS
+func (c *Chain) CurrentState() *MerkleState {
+	return c.merkle.state
 }
 
 // HeightOf returns the height of the given entry in the chain.
-func (c *Chain) HeightOf(hash []byte) (int64, error) {
+func (c *Chain) HeightOf(hash []byte) (uint64, error) {
 	return c.merkle.GetElementIndex(hash)
 }
 
 // Anchor calculates the anchor of the current Merkle state.
 func (c *Chain) Anchor() []byte {
-	return c.merkle.MS.GetMDRoot()
+	return c.merkle.state.GetMDRoot()
 }
 
 // AnchorAt calculates the anchor of the chain at the given height.
 func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
-	ms, err := c.State(int64(height))
+	ms, err := c.State(uint64(height))
 	if err != nil {
 		return nil, err
 	}
@@ -116,8 +109,8 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 }
 
 // Pending returns the pending roots of the current Merkle state.
-func (c *Chain) Pending() []managed.Hash {
-	return c.merkle.MS.Pending
+func (c *Chain) Pending() [][32]byte {
+	return c.merkle.state.Pending
 }
 
 // AddEntry adds an entry to the chain
@@ -139,7 +132,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 }
 
 // Receipt builds a receipt from one index to another
-func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
+func (c *Chain) Receipt(from, to uint64) (*types.Receipt, error) {
 	if from < 0 {
 		return nil, fmt.Errorf("invalid range: from (%d) < 0", from)
 	}
@@ -157,10 +150,10 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 	}
 
 	var err error
-	r := managed.NewReceipt(c.merkle)
-	r.ElementIndex = from
+	r := new(types.Receipt)
+	r.StartIndex = from
 	r.AnchorIndex = to
-	r.Element, err = c.Entry(from)
+	r.Start, err = c.Entry(from)
 	if err != nil {
 		return nil, err
 	}
@@ -171,11 +164,11 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 
 	// If this is the first element in the Merkle Tree, we are already done
 	if from == 0 && to == 0 {
-		r.MDRoot = r.Element
+		r.Result = r.Start
 		return r, nil
 	}
 
-	err = r.BuildReceipt()
+	err = c.merkle.BuildReceipt(r)
 	if err != nil {
 		return nil, err
 	}

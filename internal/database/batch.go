@@ -7,6 +7,7 @@ import (
 	encoding2 "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -39,16 +40,18 @@ const (
 
 // Batch batches database writes.
 type Batch struct {
-	done        bool
-	writable    bool
-	dirty       bool
-	id          int
-	nextChildId int
-	parent      *Batch
-	logger      logging.OptionalLogger
-	store       storage.KeyValueTxn
-	values      map[storage.Key]cachedValue
-	bptEntries  map[storage.Key][32]byte
+	done          bool
+	writable      bool
+	dirty         bool
+	id            int
+	nextChildId   int
+	parent        *Batch
+	logger        logging.OptionalLogger
+	store         storage.KeyValueTxn
+	values        map[storage.Key]cachedValue
+	accountsByURL map[url.URL]*Account
+	accountsByKey map[storage.Key]*Account
+	bptEntries    map[storage.Key][32]byte
 }
 
 // Begin starts a new batch.
@@ -61,6 +64,8 @@ func (d *Database) Begin(writable bool) *Batch {
 	b.logger.L = d.logger
 	b.store = d.store.Begin(writable)
 	b.values = map[storage.Key]cachedValue{}
+	b.accountsByURL = map[url.URL]*Account{}
+	b.accountsByKey = map[storage.Key]*Account{}
 	b.bptEntries = map[storage.Key][32]byte{}
 	return b
 }
@@ -79,6 +84,8 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.logger = b.logger
 	c.store = b.store.Begin(c.writable)
 	c.values = map[storage.Key]cachedValue{}
+	c.accountsByURL = map[url.URL]*Account{}
+	c.accountsByKey = map[storage.Key]*Account{}
 	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }
@@ -124,6 +131,11 @@ func (b *Batch) Update(fn func(batch *Batch) error) error {
 type TypedValue interface {
 	encoding.BinaryMarshaler
 	CopyAsInterface() interface{}
+}
+
+type TypedValueUnmarshaller interface {
+	TypedValue
+	encoding.BinaryUnmarshaler
 }
 
 type ValueUnmarshalFunc func([]byte) (TypedValue, error)
@@ -252,10 +264,7 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 	return notFound
 }
 
-func (b *Batch) getValuePtr(key storage.Key, value interface {
-	TypedValue
-	encoding.BinaryUnmarshaler
-}, valuePtr interface{}, addNew bool) error {
+func (b *Batch) getValuePtr(key storage.Key, value TypedValueUnmarshaller, valuePtr interface{}, addNew bool) error {
 	var newValue TypedValue
 	if addNew {
 		newValue = value

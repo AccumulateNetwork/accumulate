@@ -37,7 +37,7 @@ func TestSanity(t *testing.T) {
 	assert.Equal(t, nodeHash1, nodeHash2) //
 
 	receipt := bpt.Bpt.GetReceipt(fakeKey)      // Create a receipt
-	receiptRoot := *(*[32]byte)(receipt.MDRoot) //
+	receiptRoot := *(*[32]byte)(receipt.Result) //
 	assert.Equal(t, rootHash1, receiptRoot)     // The MDRoot should match the BPT root hash
 }
 

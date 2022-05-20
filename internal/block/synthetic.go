@@ -340,8 +340,8 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 			continue
 		}
 
-		r := receipt.Combine(&rsig.Proof)
-		if r != nil {
+		r, err := receipt.Combine(&rsig.Proof)
+		if err == nil {
 			receipt = r
 			sourceNet = rsig.SourceNetwork
 		}

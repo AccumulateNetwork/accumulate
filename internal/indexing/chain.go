@@ -51,7 +51,7 @@ type IndexChainSearchFunction func(*protocol.IndexEntry) SearchDirection
 // backwards along the chain depending on the result of the search function.
 func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find IndexChainSearchFunction) (uint64, *protocol.IndexEntry, error) {
 	entry := new(protocol.IndexEntry)
-	err := chain.EntryAs(int64(index), entry)
+	err := chain.EntryAs(index, entry)
 	if err != nil {
 		return 0, nil, fmt.Errorf("entry %d %w", index, err)
 	}
@@ -78,7 +78,7 @@ func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find 
 
 		prevEntry := entry
 		entry = new(protocol.IndexEntry)
-		err := chain.EntryAs(int64(index), entry)
+		err := chain.EntryAs(index, entry)
 		if err != nil {
 			return 0, nil, fmt.Errorf("entry %d %w", index, err)
 		}

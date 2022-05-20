@@ -46,6 +46,7 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 		state.Height = uint64(ms.Count)
 		state.Roots = make([][]byte, len(ms.Pending))
 		for i, h := range ms.Pending {
+			h := h // See docs/developer/rangevarref.md
 			state.Roots[i] = h
 		}
 
@@ -112,7 +113,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		}
 
 		var chainName string
-		var index int64
+		var index uint64
 		for _, chainMeta := range obj.Chains {
 			if chainMeta.Type != protocol.ChainTypeAnchor {
 				continue
@@ -173,8 +174,8 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			res.Type = obj.ChainType(fragment[1])
 			res.Start = start
 			res.End = start + count
-			res.Total = chain.Height()
-			res.Entries, err = chain.Entries(start, start+count)
+			res.Total = int64(chain.Height())
+			res.Entries, err = chain.Entries(uint64(start), uint64(start+count))
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
 			}
@@ -198,7 +199,8 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
-				res.State[i] = h.Copy()
+				h := h // See docs/developer/rangevarref.md
+				res.State[i] = h[:]
 			}
 			return []byte("chain-entry"), res, nil
 		}
@@ -243,7 +245,8 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			res.Height = height
 			res.ChainState = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
-				res.ChainState[i] = h.Copy()
+				h := h // See docs/developer/rangevarref.md
+				res.ChainState[i] = h[:]
 			}
 
 			return []byte("tx"), res, nil
@@ -320,7 +323,8 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				res.Height = height
 				res.ChainState = make([][]byte, len(state.Pending))
 				for i, h := range state.Pending {
-					res.ChainState[i] = h.Copy()
+					h := h // See docs/developer/rangevarref.md
+					res.ChainState[i] = h[:]
 				}
 
 				return []byte("tx"), res, nil
@@ -420,10 +424,10 @@ func parseRange(qv url.Values) (start, count int64, err error) {
 	return start, count, nil
 }
 
-func getChainEntry(chain *database.Chain, s string) (int64, []byte, error) {
+func getChainEntry(chain *database.Chain, s string) (uint64, []byte, error) {
 	var valid bool
 
-	height, err := strconv.ParseInt(s, 10, 64)
+	height, err := strconv.ParseUint(s, 10, 64)
 	if err == nil {
 		valid = true
 		entry, err := chain.Entry(height)
@@ -453,10 +457,10 @@ func getChainEntry(chain *database.Chain, s string) (int64, []byte, error) {
 	return 0, nil, fmt.Errorf("invalid entry: %q is not a number or a hash", s)
 }
 
-func getTransaction(chain *database.Chain, s string) (int64, []byte, error) {
+func getTransaction(chain *database.Chain, s string) (uint64, []byte, error) {
 	var valid bool
 
-	height, err := strconv.ParseInt(s, 10, 64)
+	height, err := strconv.ParseUint(s, 10, 64)
 	if err == nil {
 		valid = true
 		id, err := chain.Entry(height)
@@ -592,7 +596,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
 	qr.Status = status
 	qr.TxId = txState.Transaction.ID()
-	qr.Height = -1
+	// qr.Height = -1
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -660,7 +664,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	thr.End = end
 	thr.Total = uint64(chain.Height())
 
-	txids, err := chain.Entries(int64(start), int64(end))
+	txids, err := chain.Entries(start, end)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
@@ -944,7 +948,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth index chain: %w", err)}
 		}
 		entry := new(protocol.IndexEntry)
-		err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
+		err = chain.EntryAs(q.SequenceNumber-1, entry)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to unmarshal the index entry: %w", err)}
 		}
@@ -952,7 +956,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth main chain: %w", err)}
 		}
-		hash, err := chain.Entry(int64(entry.Source))
+		hash, err := chain.Entry(entry.Source)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the main entry: %w", err)}
 		}
@@ -1000,7 +1004,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 
 resultLoop:
 	for resultCnt < req.Limit {
-		err = idxChain.EntryAs(int64(entryIdx), curEntry)
+		err = idxChain.EntryAs(entryIdx, curEntry)
 		switch {
 		case err == nil:
 		case errors.Is(err, storage.ErrNotFound):
@@ -1103,18 +1107,18 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
-func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index int64) (*query.GeneralReceipt, error) {
+func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index uint64) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
 	_, r, err := indexing.ReceiptForChainIndex(&m.Network, batch, batch.Account(account), name, index)
 	if err != nil {
 		return receipt, err
 	}
 
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1126,7 +1130,7 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1167,7 +1171,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, err
 		if txChainEntry.Chain == protocol.MainChain {
 			// Load the index entry
 			indexEntry := new(protocol.IndexEntry)
-			err = minorIndexChain.EntryAs(int64(txChainEntry.AnchorIndex), indexEntry)
+			err = minorIndexChain.EntryAs(txChainEntry.AnchorIndex, indexEntry)
 			if err != nil {
 				return false, err
 			}

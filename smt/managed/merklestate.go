@@ -91,7 +91,6 @@ func (m *MerkleState) Trim() {
 // We need to be able to add an element to Pending if needed while
 // building receipts
 func (m *MerkleState) Pad() {
-
 	if len(m.Pending) == 0 || m.Pending[len(m.Pending)-1] != nil {
 		m.Pending = append(m.Pending, nil)
 	}

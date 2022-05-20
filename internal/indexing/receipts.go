@@ -6,8 +6,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // LoadIndexEntryFromEnd loads the Nth-to-last entry from an index chain.
@@ -24,14 +24,14 @@ func LoadIndexEntryFromEnd(account *Account, indexChain string, offset uint64) (
 		return nil, errors.Unknown("get account chain %s: %w", indexChain, err)
 	}
 
-	if chain.Height() < int64(offset) {
+	if chain.Height() < offset {
 		return nil, nil
 	}
 	index := uint64(chain.Height()) - offset
 
 	// Load the entry
 	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index), entry)
+	err = chain.EntryAs(index, entry)
 	if err != nil {
 		return nil, errors.Unknown("get account chain %s entry %d: %w", indexChain, index, err)
 	}
@@ -57,7 +57,7 @@ func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLas
 	return
 }
 
-func getRootReceipt(net *config.Network, batch *Batch, from, to int64) (*managed.Receipt, error) {
+func getRootReceipt(net *config.Network, batch *Batch, from, to uint64) (*types.Receipt, error) {
 	localChain, err := batch.Account(net.Ledger()).ReadChain(protocol.MinorRootChain)
 	if err != nil {
 		return nil, errors.Unknown("get minor root chain: %w", err)
@@ -83,7 +83,7 @@ func loadIndexEntry(account *Account, chainName, indexChain string, index uint64
 
 	// Load the entry
 	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index), entry)
+	err = chain.EntryAs(index, entry)
 	if err != nil {
 		return nil, fmt.Errorf("unable to load index entry %d for the index chain of the %s chain: %w", index, chainName, err)
 	}
@@ -93,7 +93,7 @@ func loadIndexEntry(account *Account, chainName, indexChain string, index uint64
 
 // getIndexedChainReceipt locates a chain entry and gets a receipt from that
 // entry to an indexed anchor.
-func getIndexedChainReceipt(account *Account, name string, chainEntry []byte, indexEntry *protocol.IndexEntry) (*managed.Receipt, error) {
+func getIndexedChainReceipt(account *Account, name string, chainEntry []byte, indexEntry *protocol.IndexEntry) (*types.Receipt, error) {
 	// Load the chain
 	chain, err := account.ReadChain(name)
 	if err != nil {
@@ -107,7 +107,7 @@ func getIndexedChainReceipt(account *Account, name string, chainEntry []byte, in
 	}
 
 	// Get the receipt
-	receipt, err := chain.Receipt(entryIndex, int64(indexEntry.Source))
+	receipt, err := chain.Receipt(entryIndex, uint64(indexEntry.Source))
 	if err != nil {
 		return nil, fmt.Errorf("unable to construct a receipt from %d to %d for chain %s: %w", entryIndex, indexEntry.Source, name, err)
 	}
@@ -115,7 +115,7 @@ func getIndexedChainReceipt(account *Account, name string, chainEntry []byte, in
 	return receipt, nil
 }
 
-func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account) (block uint64, receipt *managed.Receipt, err error) {
+func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account) (block uint64, receipt *types.Receipt, err error) {
 	// Get a receipt from the BPT
 	r, err := account.StateReceipt()
 	if err != nil {
@@ -132,7 +132,7 @@ func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account)
 	return rootEntry.BlockIndex, r, nil
 }
 
-func ReceiptForChainEntry(net *config.Network, batch *Batch, account *Account, hash []byte, entry *TransactionChainEntry) (uint64, *managed.Receipt, error) {
+func ReceiptForChainEntry(net *config.Network, batch *Batch, account *Account, hash []byte, entry *TransactionChainEntry) (uint64, *types.Receipt, error) {
 	// Load the index entry
 	accountIndex, err := loadIndexEntry(account, entry.Chain, protocol.IndexChain(entry.Chain, false), entry.ChainIndex)
 	if err != nil {
@@ -153,13 +153,13 @@ func ReceiptForChainEntry(net *config.Network, batch *Batch, account *Account, h
 	}
 
 	// Get a receipt from the root chain
-	rootReceipt, err := getRootReceipt(net, batch, int64(accountIndex.Anchor), int64(rootIndex.Source))
+	rootReceipt, err := getRootReceipt(net, batch, uint64(accountIndex.Anchor), uint64(rootIndex.Source))
 	if err != nil {
 		return 0, nil, err
 	}
 
 	// Finalize the receipt
-	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
+	r, err := types.CombineReceipts(accountReceipt, rootReceipt)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -167,7 +167,7 @@ func ReceiptForChainEntry(net *config.Network, batch *Batch, account *Account, h
 	return rootIndex.BlockIndex, r, nil
 }
 
-func ReceiptForChainIndex(net *config.Network, batch *Batch, account *Account, name string, index int64) (uint64, *managed.Receipt, error) {
+func ReceiptForChainIndex(net *config.Network, batch *Batch, account *Account, name string, index uint64) (uint64, *types.Receipt, error) {
 	indexChain, err := account.ReadIndexChain(name, false)
 	if err != nil {
 		return 0, nil, fmt.Errorf("unable to load %s index chain of %v: %w", name, account, err)
@@ -194,19 +194,19 @@ func ReceiptForChainIndex(net *config.Network, batch *Batch, account *Account, n
 	}
 
 	// Get a receipt from the account's chain
-	accountReceipt, err := chain.Receipt(index, int64(entry.Source))
+	accountReceipt, err := chain.Receipt(index, uint64(entry.Source))
 	if err != nil {
 		return 0, nil, err
 	}
 
 	// Get a receipt from the root chain
-	rootReceipt, err := getRootReceipt(net, batch, int64(entry.Anchor), int64(rootEntry.Source))
+	rootReceipt, err := getRootReceipt(net, batch, uint64(entry.Anchor), uint64(rootEntry.Source))
 	if err != nil {
 		return 0, nil, err
 	}
 
 	// Finalize the receipt
-	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
+	r, err := types.CombineReceipts(accountReceipt, rootReceipt)
 	if err != nil {
 		return 0, nil, err
 	}

@@ -1,0 +1,34 @@
+Receipt:
+  fields:
+    - name: Start
+      type: bytes
+    - name: StartIndex
+      type: uint
+    - name: Anchor
+      type: bytes
+    - name: AnchorIndex
+      type: uint
+    - name: Result
+      type: bytes
+    - name: Entries
+      repeatable: true
+      type: ReceiptEntry
+      marshal-as: reference
+
+ReceiptEntry:
+  fields:
+    - name: Right
+      type: bool
+    - name: Hash
+      type: bytes
+
+MerkleState:
+  fields:
+    - name: Count
+      type: uint
+    - name: Pending
+      type: hash
+      repeatable: true
+    - name: HashList
+      type: hash
+      repeatable: true

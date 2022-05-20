@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -57,7 +58,8 @@ func (a *Account) state(fullTxnState, preserveChains bool) (*accountState, error
 				if len(v) == 0 {
 					continue
 				}
-				ms2.Pending[i] = v
+				v := v // See docs/developer/rangevarref.md
+				ms2.Pending[i] = v[:]
 			}
 		}
 	}
@@ -84,7 +86,7 @@ func (a *Account) stateOfTransactionsOnChain(name string) ([]*transactionState, 
 	// TODO We need to be more selective than this
 	state := make([]*transactionState, chain.Height())
 	for i := range state {
-		hash, err := chain.Entry(int64(i))
+		hash, err := chain.Entry(uint64(i))
 		if err != nil {
 			return nil, fmt.Errorf("load %s chain entry %d: %w", name, i, err)
 		}
@@ -273,7 +275,7 @@ func (a *Account) putBpt() error {
 }
 
 // StateReceipt returns a Merkle receipt for the account state in the BPT.
-func (a *Account) StateReceipt() (*managed.Receipt, error) {
+func (a *Account) StateReceipt() (*types.Receipt, error) {
 	state, err := a.state(false, false)
 	if err != nil {
 		return nil, err
@@ -290,7 +292,7 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 	}
 
 	rState := hasher.Receipt(0, len(hasher)-1)
-	if !bytes.Equal(rState.MDRoot, rBPT.Element) {
+	if !bytes.Equal(rState.Result, rBPT.Start) {
 		return nil, errors.New("bpt entry does not match account state")
 	}
 

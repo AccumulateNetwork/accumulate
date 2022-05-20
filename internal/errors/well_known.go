@@ -6,6 +6,7 @@ func (s Status) Error() string {
 }
 
 func NotFound(format string, args ...interface{}) error {
+	return StatusNotFound
 	e := makeError(StatusNotFound)
 	e.errorf(format, args...)
 	return e

@@ -186,7 +186,7 @@ func (m *Executor) EndBlock(block *Block) error {
 }
 
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
-	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
+	rootReceipt, err := rootChain.Receipt(synthAnchorIndex, rootChain.Height()-1)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "build root chain receipt: %w", err)
 	}
@@ -197,14 +197,14 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 	}
 
 	height := synthChain.Height()
-	offset := height - int64(len(block.State.ProducedTxns))
+	offset := height - uint64(len(block.State.ProducedTxns))
 	for i, txn := range block.State.ProducedTxns {
 		if txn.Body.Type().IsSystem() {
 			// Do not generate a receipt for the anchor
 			continue
 		}
 
-		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
+		synthReceipt, err := synthChain.Receipt(offset+uint64(i), height-1)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "build synth chain receipt: %w", err)
 		}
@@ -218,7 +218,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = m.Network.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Proof = *protocol.ReceiptFromManaged(receipt)
+		sig.Proof = *receipt
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)

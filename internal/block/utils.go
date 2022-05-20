@@ -105,7 +105,7 @@ func addChainAnchor(rootChain *database.Chain, account *database.Account, accoun
 
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
 	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index), entry)
+	err = chain.EntryAs(index, entry)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("entry %d: %w", index, err)
 	}
@@ -115,7 +115,7 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 	}
 
 	prev := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index)-1, prev)
+	err = chain.EntryAs(index-1, prev)
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("entry %d: %w", index-1, err)
 	}

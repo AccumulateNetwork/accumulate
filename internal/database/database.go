@@ -103,7 +103,19 @@ func (d *Database) Close() error {
 
 // Account returns an Account for the given URL.
 func (b *Batch) Account(u *url.URL) *Account {
-	return &Account{b, account(u), u}
+	if a := b.accountsByURL[*u]; a != nil {
+		return a
+	}
+
+	key := account(u)
+	if a := b.accountsByKey[key.Object()]; a != nil {
+		return a
+	}
+
+	a := &Account{b, account(u), u, nil}
+	b.accountsByURL[*u] = a
+	b.accountsByKey[key.Object()] = a
+	return a
 }
 
 // AccountByID returns an Account for the given ID.
@@ -113,7 +125,7 @@ func (b *Batch) Account(u *url.URL) *Account {
 //
 // Deprecated: Use Account.
 func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	a := &Account{b, accountByID(id), nil}
+	a := &Account{b, accountByID(id), nil, nil}
 	state, err := a.GetState()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)

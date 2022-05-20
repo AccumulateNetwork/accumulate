@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -375,6 +376,9 @@ func (r *Reader) ReadAll() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	if rd, ok := r.r.(*bytes.Reader); ok && rd.Len() == 0 {
+		return nil, nil // Optimize
 	}
 	return io.ReadAll(r.r)
 }
