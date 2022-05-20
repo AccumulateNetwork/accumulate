@@ -56,7 +56,6 @@ func New(t TB, bvnCount int) *Simulator {
 	sim.TB = t
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
-
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
 	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
 	for i := 0; i < bvnCount; i++ {
