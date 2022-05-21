@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -308,7 +309,14 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 	wd := protocol.WriteData{}
 	if Keyname != "" {
-		_, kSigner, err := prepareSigner(u, []string{Keyname})
+		keyargs := strings.Split(Keyname, " ")
+		keyargs = append(keyargs, "")
+		keyUrl, err := url.Parse(keyargs[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid url specified for data signing key")
+		}
+		_, kSigner, err := prepareSigner(keyUrl, keyargs[1:])
+
 		if err != nil {
 			return "", err
 		}
@@ -428,7 +436,13 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	}
 	if Keyname != "" {
 
-		_, kSigner, err := prepareSigner(u, []string{Keyname})
+		keyargs := strings.Split(Keyname, " ")
+		keyargs = append(keyargs, "")
+		keyUrl, err := url.Parse(keyargs[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid url specified for data signing key")
+		}
+		_, kSigner, err := prepareSigner(keyUrl, keyargs[1:])
 		if err != nil {
 			return "", err
 		}

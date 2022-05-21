@@ -82,7 +82,7 @@ func testCase2_9c(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
-	_, err := tc.executeTx(t, "data write acc://RedWagon/DataAccount red1 cafef00dbabe8badf00d --sign-data red1")
+	_, err := tc.executeTx(t, "data write acc://RedWagon/DataAccount red1 cafef00dbabe8badf00d --sign-data acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME")
 	require.NoError(t, err)
 
 	//now read back the response
@@ -92,8 +92,6 @@ func testCase2_9c(t *testing.T, tc *testCmd) {
 	var res QueryResponse
 	err = json.Unmarshal([]byte(r), &res)
 	require.NoError(t, err)
-	fmt.Println("response is", res)
-
 	wd := protocol.WriteData{}
 	err = Remarshal(res.Data, &wd)
 	require.NoError(t, err)
@@ -101,7 +99,6 @@ func testCase2_9c(t *testing.T, tc *testCmd) {
 	if len(wd.Entry.GetData()) != 2 {
 		t.Fatal("expected 2 data elements")
 	}
-	fmt.Println("entry is", wd.Entry.GetData())
 	sig, err := protocol.UnmarshalKeySignature(wd.Entry.GetData()[0])
 	require.NoError(t, err)
 
