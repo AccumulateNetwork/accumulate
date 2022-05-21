@@ -152,7 +152,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&LiteIdentity{Url: parseUrl("lite-identity"), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
+		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Delegate: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
 		testdata.NewAcntTest(&KeyBook{Url: parseUrl("adi/book")}),

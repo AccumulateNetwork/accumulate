@@ -57,9 +57,6 @@ const (
 	// SignatureChain is the pending signature chain of a record.
 	SignatureChain = "signature"
 
-	// DataChain is the data chain of a record.
-	DataChain = "data"
-
 	// MajorRootChain is the major anchor root chain of a subnet.
 	MajorRootChain = "major-root"
 
@@ -480,6 +477,12 @@ func ParseAnchorChain(name string) (string, bool) {
 		return "", false
 	}
 	return name[7:], true
+}
+
+// SyntheticIndexChain returns the name of the synthetic transaction index chain
+// for the given subnet.
+func SyntheticIndexChain(name string) string {
+	return "index-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

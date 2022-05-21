@@ -89,14 +89,13 @@ func (l LogLevel) String() string {
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
-	SetModule("block-executor", "info").
 	SetModule("snapshot", "info").
 	// SetModule("accumulate", "info").
 	// SetModule("main", "info").
 	// SetModule("state", "info").
 	// SetModule("statesync", "info").
 	// SetModule("accumulate", "debug").
-	// SetModule("executor", "info").
+	SetModule("executor", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("disk-monitor", "info").
@@ -112,6 +111,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
+	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.Snapshots.Directory = "snapshots"
@@ -186,6 +186,7 @@ type API struct {
 	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
+	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
 }
 
 type Website struct {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -100,12 +101,16 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
 func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
-	return newExecutor(ExecutorOptions{
-		Network:   network,
-		Logger:    logger,
-		Router:    router,
-		isGenesis: true,
-	}, db)
+	return newExecutor(
+		ExecutorOptions{
+			Network:   network,
+			Logger:    logger,
+			Router:    router,
+			isGenesis: true,
+		},
+		db,
+		WriteData{},
+	)
 }
 
 func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
@@ -141,64 +146,42 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		return nil, err
 	}
 
-	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
 }
 
-func (m *Executor) logDebug(msg string, keyVals ...interface{}) {
-	m.logger.Debug(msg, keyVals...)
-}
-
-func (m *Executor) logInfo(msg string, keyVals ...interface{}) {
-	m.logger.Info(msg, keyVals...)
-}
-
-func (m *Executor) logError(msg string, keyVals ...interface{}) {
-	m.logger.Error(msg, keyVals...)
-}
-
-func (m *Executor) Genesis(block *Block, callback func(st *StateManager) error) error {
+func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	var err error
 
 	if !m.isGenesis {
 		panic("Cannot call Genesis on a node txn executor")
 	}
+	m.executors[protocol.TransactionTypeSystemGenesis] = exec
 
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.SystemGenesis)
+	delivery := new(chain.Delivery)
+	delivery.Transaction = txn
 
 	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
-	err = putSyntheticTransaction(
-		block.Batch, txn,
-		&protocol.TransactionStatus{Delivered: true},
-		nil)
+	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
+		Initiator: txn.Header.Principal,
+	})
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = indexing.BlockState(block.Batch, m.Network.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = callback(st)
+	_, err = m.ExecuteEnvelope(block, delivery)
 	if err != nil {
-		return err
-	}
-
-	state, err := st.Commit()
-	if err != nil {
-		return err
-	}
-
-	block.State.MergeTransaction(state)
-
-	err = m.ProduceSynthetic(block.Batch, txn, state.ProducedTxns)
-	if err != nil {
-		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = m.EndBlock(block)

@@ -98,7 +98,15 @@ QueryMinorBlocks:
   rpc: query-minor-blocks
   input: MinorBlocksQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination, TxFetchMode, FilterSystemAnchorsOnlyBlocks]
+  call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
+
+QuerySynth:
+  kind: query
+  experimental: true
+  rpc: query-synth
+  input: SyntheticTransactionRequest
+  output: TransactionQueryResponse
+  call-params: [Source, Destination, SequenceNumber]
 
 Execute:
   description: submits a transaction

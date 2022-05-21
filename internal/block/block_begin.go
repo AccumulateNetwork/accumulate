@@ -120,12 +120,6 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	sw := protocol.SegWitDataEntry{}
-	sw.Cause = *(*[32]byte)(txn.GetHash())
-	sw.EntryHash = *(*[32]byte)(wd.Entry.Hash())
-	sw.EntryUrl = txn.Header.Principal
-	txn.Body = &sw
-
 	st := chain.NewStateManager(&x.Network, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
@@ -221,7 +215,9 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	errs := x.dispatcher.Send(context.Background())
 	go func() {
 		for err := range errs {
-			x.checkDispatchError(err)
+			x.checkDispatchError(err, func(err error) {
+				x.logger.Error("Failed to dispatch transactions", "error", err)
+			})
 		}
 	}()
 
@@ -541,7 +537,7 @@ func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64
 }
 
 // checkDispatchError returns nil if the error can be ignored.
-func (x *Executor) checkDispatchError(err error) {
+func (x *Executor) checkDispatchError(err error, fn func(error)) {
 	if err == nil {
 		return
 	}
@@ -582,5 +578,5 @@ func (x *Executor) checkDispatchError(err error) {
 	}
 
 	// It's a real error
-	x.logger.Error("Failed to dispatch transactions", "error", err)
+	fn(err)
 }

@@ -71,6 +71,7 @@ func initV1(opts InitOptions) (err error) {
 	config := opts.Config
 	subnetID := config[0].Accumulate.Network.LocalSubnetID
 	genVals := make([]types.GenesisValidator, 0, len(config))
+	genValKeys := make([][]byte, 0, len(config))
 
 	var networkType cfg.NetworkType
 	for i, config := range config {
@@ -115,18 +116,14 @@ func initV1(opts InitOptions) (err error) {
 			return fmt.Errorf("failed to load private validator: %v", err)
 		}
 
-		pubKey, err := pv.GetPubKey(context.Background())
-		if err != nil {
-			return fmt.Errorf("failed to get public key: %v", err)
-		}
-
 		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
-				Address: pubKey.Address(),
-				PubKey:  pubKey,
+				Address: pv.Key.PubKey.Address(),
+				PubKey:  pv.Key.PubKey,
 				Power:   1,
 				Name:    nodeDirName,
 			})
+			genValKeys = append(genValKeys, pv.Key.PrivKey.Bytes())
 		}
 	}
 
@@ -140,6 +137,7 @@ func initV1(opts InitOptions) (err error) {
 			Network:             config[0].Accumulate.Network,
 			GenesisTime:         genTime,
 			Validators:          genVals,
+			Keys:                genValKeys,
 			Logger:              opts.Logger,
 			Router:              &routing.RouterInstance{Network: &config[0].Accumulate.Network},
 			FactomAddressesFile: opts.FactomAddressesFile,
@@ -207,7 +205,7 @@ func initV1(opts InitOptions) (err error) {
 		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {

@@ -20,7 +20,7 @@ import (
 type dispatcher struct {
 	ExecutorOptions
 	isDirectory bool
-	batches     map[string]*protocol.Envelope
+	batches     map[string][]*protocol.Envelope
 }
 
 // newDispatcher creates a new dispatcher.
@@ -28,7 +28,7 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
 	d.isDirectory = opts.Network.Type == config.Directory
-	d.batches = map[string]*protocol.Envelope{}
+	d.batches = map[string][]*protocol.Envelope{}
 	return d
 }
 
@@ -39,12 +39,11 @@ func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
 	}
 
 	batch := d.batches[subnet]
-	if batch == nil {
-		batch = new(protocol.Envelope)
-	}
 	for _, delivery := range deliveries {
-		batch.Signatures = append(batch.Signatures, delivery.Signatures...)
-		batch.Transaction = append(batch.Transaction, delivery.Transaction)
+		env := new(protocol.Envelope)
+		env.Signatures = append(env.Signatures, delivery.Signatures...)
+		env.Transaction = append(env.Transaction, delivery.Transaction)
+		batch = append(batch, env)
 	}
 	d.batches[subnet] = batch
 	return nil
@@ -75,7 +74,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 	// Send transactions to each destination in parallel
 	for subnet, batch := range d.batches {
-		if len(batch.Transaction) == 0 {
+		if len(batch) == 0 {
 			continue
 		}
 
@@ -83,31 +82,34 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		subnet, batch := subnet, batch // Don't capture loop variables
 		go func() {
 			defer wg.Done()
-			resp, err := d.Router.Submit(ctx, subnet, batch, false, false)
-			if err != nil {
-				errs <- err
-				return
-			}
+			for _, tx := range batch {
 
-			if resp == nil {
-				//Guard put here to prevent nil responses.
-				errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
-				return
-			}
+				resp, err := d.Router.Submit(ctx, subnet, tx, false, false)
+				if err != nil {
+					errs <- err
+					return
+				}
 
-			// Parse the results
-			rset := new(protocol.TransactionResultSet)
-			err = rset.UnmarshalBinary(resp.Data)
-			if err != nil {
-				errs <- err
-				return
-			}
+				if resp == nil {
+					//Guard put here to prevent nil responses.
+					errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
+					return
+				}
 
-			for _, r := range rset.Results {
-				if r.Error != nil {
-					errs <- r.Error
-				} else if r.Code != 0 {
-					errs <- protocol.NewError(protocol.ErrorCode(r.Code), errors.New(r.Message))
+				// Parse the results
+				rset := new(protocol.TransactionResultSet)
+				err = rset.UnmarshalBinary(resp.Data)
+				if err != nil {
+					errs <- err
+					return
+				}
+
+				for _, r := range rset.Results {
+					if r.Error != nil {
+						errs <- r.Error
+					} else if r.Code != 0 {
+						errs <- protocol.NewError(protocol.ErrorCode(r.Code), errors.New(r.Message))
+					}
 				}
 			}
 		}()

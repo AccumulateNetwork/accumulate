@@ -59,6 +59,12 @@ func TestOracleDistribution(t *testing.T) {
 	dn := sim.Subnet(protocol.Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
 
+	// TODO move back to OperatorPage in or after AC-1402
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.ValidatorPage(0))
+	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
+	require.True(t, ok)
+	timestamp = entry.GetLastUsedOn()
+
 	// Set price of acme to $445.00 / token
 	price := 445.00
 	data, err := json.Marshal(&AcmeOracle{Price: uint64(price * protocol.AcmeOraclePrecision)})
@@ -67,7 +73,7 @@ func TestOracleDistribution(t *testing.T) {
 		acctesting.NewTransaction().
 			WithPrincipal(protocol.PriceOracle()).
 			WithTimestampVar(&timestamp).
-			WithSigner(dn.Executor.Network.OperatorPage(0), 1).
+			WithSigner(signer.Url, signer.Version).
 			WithBody(&WriteData{Entry: &AccumulateDataEntry{Data: [][]byte{data}}}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Build(),

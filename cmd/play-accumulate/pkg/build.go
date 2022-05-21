@@ -45,7 +45,7 @@ func (s *Session) KeyEntry() bldKeyEntry {
 }
 
 func (b bldKeyEntry) WithOwner(owner Urlish) bldKeyEntry {
-	b.Owner = b.s.url(owner)
+	b.Delegate = b.s.url(owner)
 	return b
 }
 
