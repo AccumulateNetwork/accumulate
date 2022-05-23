@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -89,7 +90,15 @@ func TestMissingSynthTxn(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
-	sim := simulator.New(t, 3)
+	sim := new(simulator.Simulator)
+	sim.TB = t
+	sim.LogLevels = config.LogLevel{}.
+		Parse(config.DefaultLogLevels).
+		SetModule("accumulate", "debug").
+		SetModule("executor", "debug").
+		SetModule("synthetic", "debug").
+		String()
+	sim.Setup(3)
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey("Alice")

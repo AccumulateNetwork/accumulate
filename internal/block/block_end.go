@@ -325,7 +325,8 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 				return
 			}
 
-			x.logger.Error("Got response", "subnet", subnet.Url, "resp", spew.Sdump(resp))
+			b, _ := json.Marshal(resp)
+			x.logger.Error("Got response", "subnet", subnet.Url, "resp", json.RawMessage(b))
 
 			// Broadcast each transaction locally
 			for _, resp := range resp {

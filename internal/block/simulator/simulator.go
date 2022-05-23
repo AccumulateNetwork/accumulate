@@ -32,17 +32,24 @@ type Simulator struct {
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
 
+	LogLevels string
+
 	routingOverrides map[[32]byte]string
 }
 
 func (s *Simulator) newLogger() log.Logger {
+	levels := s.LogLevels
+	if levels == "" {
+		levels = acctesting.DefaultLogLevels
+	}
+
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", acctesting.DefaultLogLevels, false)
+		return logging.NewTestLogger(s, "plain", levels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(acctesting.DefaultLogLevels, w)
+	level, writer, err := logging.ParseLogLevel(levels, w)
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
@@ -51,59 +58,63 @@ func (s *Simulator) newLogger() log.Logger {
 
 func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.Setup(bvnCount)
+	return nil
+}
+
+func (s *Simulator) Setup(bvnCount int) {
+	s.Helper()
 
 	// Initialize the simulartor and network
-	sim := new(Simulator)
-	sim.routingOverrides = map[[32]byte]string{}
-	sim.TB = t
-	sim.Logger = sim.newLogger().With("module", "simulator")
-	sim.Executors = map[string]*ExecEntry{}
-	sim.Subnets = make([]config.Subnet, bvnCount+1)
-	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
+	s.routingOverrides = map[[32]byte]string{}
+	s.Logger = s.newLogger().With("module", "simulator")
+	s.Executors = map[string]*ExecEntry{}
+	s.Subnets = make([]config.Subnet, bvnCount+1)
+	s.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
 	for i := 0; i < bvnCount; i++ {
-		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
+		s.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
 	}
 
 	// Initialize each executor
-	for i := range sim.Subnets {
-		subnet := &sim.Subnets[i]
+	for i := range s.Subnets {
+		subnet := &s.Subnets[i]
 		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
 
-		logger := sim.newLogger().With("subnet", subnet.ID)
-		key := acctesting.GenerateKey(t.Name(), subnet.ID)
+		logger := s.newLogger().With("subnet", subnet.ID)
+		key := acctesting.GenerateKey(s.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
 		network := config.Network{
 			Type:          subnet.Type,
 			LocalSubnetID: subnet.ID,
 			LocalAddress:  subnet.ID,
-			Subnets:       sim.Subnets,
+			Subnets:       s.Subnets,
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
 			Logger:  logger,
 			Key:     key,
 			Network: network,
-			Router:  sim.Router(),
+			Router:  s.Router(),
 		}, db)
-		require.NoError(sim, err)
+		require.NoError(s, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
 			Logger:        logger,
 			Network:       &network,
-			Router:        sim.Router(),
+			Router:        s.Router(),
 			TxMaxWaitTime: time.Hour,
 		})
-		require.NoError(sim, err)
+		require.NoError(s, err)
 
-		sim.Executors[subnet.ID] = &ExecEntry{
+		s.Executors[subnet.ID] = &ExecEntry{
 			Database: db,
 			Executor: exec,
 			API:      acctesting.DirectJrpcClient(jrpc),
 		}
 	}
-
-	return sim
 }
 
 func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
