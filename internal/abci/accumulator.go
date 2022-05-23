@@ -143,7 +143,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	defer batch.Discard()
 
 	var height int64
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err = batch.Account(app.Accumulate.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
@@ -465,6 +465,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	app.EventBus.Publish(events.DidCommitBlock{
 		Index: app.block.Index,
 		Time:  app.block.Time,
+		Major: app.block.State.MakeMajorBlock,
 	})
 
 	// Notify the executor that we comitted
