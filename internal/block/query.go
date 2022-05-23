@@ -936,7 +936,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 
 func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, *protocol.Error) {
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
