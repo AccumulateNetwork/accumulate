@@ -116,15 +116,10 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to load private validator: %v", err)
 		}
 
-		pubKey, err := pv.GetPubKey(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("failed to get public key: %v", err)
-		}
-
 		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
-				Address: pubKey.Address(),
-				PubKey:  pubKey,
+				Address: pv.Key.Address,
+				PubKey:  pv.Key.PubKey,
 				Power:   1,
 				Name:    nodeDirName,
 			})
