@@ -116,15 +116,10 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to load private validator: %v", err)
 		}
 
-		pubKey, err := pv.GetPubKey(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("failed to get public key: %v", err)
-		}
-
 		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
-				Address: pubKey.Address(),
-				PubKey:  pubKey,
+				Address: pv.Key.Address,
+				PubKey:  pv.Key.PubKey,
 				Power:   1,
 				Name:    nodeDirName,
 			})
@@ -189,7 +184,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {

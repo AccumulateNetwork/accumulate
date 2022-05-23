@@ -128,7 +128,6 @@ MinorQueryResponse:
       pointer: true
       marshal-as: reference
 
-
 MerkleState:
   non-binary: true
   incomparable: true
@@ -193,7 +192,6 @@ Signer:
     description: tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash
     type: bool
     optional: true
-
 
 TokenSend:
   non-binary: true
@@ -473,3 +471,16 @@ DescriptionResponse:
     - name: Network
       type: config.Network
       marshal-as: reference
+
+SyntheticTransactionRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Source
+      type: url
+      pointer: true
+    - name: Destination
+      type: url
+      pointer: true
+    - name: SequenceNumber
+      type: uint
