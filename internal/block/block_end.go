@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/davecgh/go-spew/spew"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -318,6 +319,8 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 			continue
 		}
 
+		x.logger.Error("Submitting batch", "subnet", subnet.Url, "batch", spew.Sdump(batch))
+
 		sent = true
 		subnet := subnet // See docs/developer/rangevarref.md
 		wg.Add(1)
@@ -331,6 +334,9 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", subnet.Url)
 				return
 			}
+
+			b, _ := json.Marshal(resp)
+			x.logger.Error("Got response", "subnet", subnet.Url, "resp", json.RawMessage(b))
 
 			// Broadcast each transaction locally
 			for _, resp := range resp {
