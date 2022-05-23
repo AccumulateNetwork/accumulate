@@ -77,7 +77,21 @@ RequestKeyPageIndex:
     - name: Key
       type: bytes
 
-RequestMinorBlocks:
+RequestMinorBlocksFromDN:
+  union: { name: request, type: query, value: MinorBlocks }
+  fields:
+    - name: Start
+      type: uint
+    - name: Limit
+      type: uint
+    - name: TxFetchMode
+      type: TxFetchMode
+      marshal-as: enum
+    - name: BlockFilterMode
+      type: BlockFilterMode
+      marshal-as: enum
+
+RequestMinorBlocksByUrl:
   union: { name: request, type: query, value: MinorBlocks }
   fields:
     - name: Account

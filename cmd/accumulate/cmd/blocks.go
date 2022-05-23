@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -36,10 +37,25 @@ var blocksCmd = &cobra.Command{
 						printError(cmd, err)
 						return
 					}
-					err = GetMinorBlocks(cmd, args[1], args[2], args[3], txFetchMode, blockFilterMode)
-					if err != nil {
-						printError(cmd, err)
-						return
+
+					if strings.EqualFold(args[1], "all-networks") {
+						err = GetMinorBlocksFromDN(cmd, args[2], args[3], txFetchMode, blockFilterMode)
+						if err != nil {
+							printError(cmd, err)
+							return
+						}
+					} else {
+						accUrl, err := url.Parse(args[1])
+						if err != nil {
+							printError(cmd, err)
+							return
+						}
+
+						err = GetMinorBlocksByUrl(cmd, accUrl, args[2], args[3], txFetchMode, blockFilterMode)
+						if err != nil {
+							printError(cmd, err)
+							return
+						}
 					}
 				} else {
 					fmt.Println("Usage:")
@@ -93,13 +109,14 @@ func init() {
 
 func PrintGetMinorBlocks() {
 	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [block filter mode excludenone|excludeempty (optional)] Get minor blocks")
+	fmt.Println("  accumulate blocks minor all-networks [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [block filter mode excludenone|excludeempty (optional)] Get minor blocks")
 }
 
 func PrintBlocks() {
 	PrintGetMinorBlocks()
 }
 
-func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) error {
+func GetMinorBlocksByUrl(cmd *cobra.Command, accountUrl *url.URL, s string, e string, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) error {
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return err
@@ -109,13 +126,8 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 		return err
 	}
 
-	u, err := url.Parse(accountUrl)
-	if err != nil {
-		return err
-	}
-
-	params := new(api2.MinorBlocksQuery)
-	params.UrlQuery.Url = u
+	params := new(api2.MinorBlocksByUrlQuery)
+	params.UrlQuery.Url = accountUrl
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
 	params.TxFetchMode = txFetchMode
@@ -128,7 +140,46 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 		Client.Timeout = globalTimeout
 	}()
 
-	res, err := Client.QueryMinorBlocks(context.Background(), params)
+	res, err := Client.QueryMinorBlocksByUrl(context.Background(), params)
+	if err != nil {
+		rpcError, err := PrintJsonRpcError(err)
+		cmd.Println(rpcError)
+		return err
+	}
+
+	out, err := PrintMultiResponse(res)
+	if err != nil {
+		return err
+	}
+
+	printOutput(cmd, out, nil)
+	return nil
+}
+
+func GetMinorBlocksFromDN(cmd *cobra.Command, s string, e string, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) error {
+	start, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	end, err := strconv.Atoi(e)
+	if err != nil {
+		return err
+	}
+
+	params := new(api2.MinorBlocksQuery)
+	params.QueryPagination.Start = uint64(start)
+	params.QueryPagination.Count = uint64(end)
+	params.TxFetchMode = txFetchMode
+	params.BlockFilterMode = blockFilterMode
+
+	// Temporary increase timeout, we may get a large result set which takes a while to construct
+	globalTimeout := Client.Timeout
+	Client.Timeout = minorBlockApiTimeout
+	defer func() {
+		Client.Timeout = globalTimeout
+	}()
+
+	res, err := Client.QueryMinorBlocksFromDN(context.Background(), params)
 	if err != nil {
 		rpcError, err := PrintJsonRpcError(err)
 		cmd.Println(rpcError)

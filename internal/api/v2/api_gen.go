@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 36)
+		m.methods = make(jsonrpc2.MethodMap, 37)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -45,7 +45,8 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
-	m.methods["query-minor-blocks"] = m.QueryMinorBlocks
+	m.methods["query-minor-blocks"] = m.QueryMinorBlocksByUrl
+	m.methods["query-minor-blocks"] = m.QueryMinorBlocksFromDN
 	m.methods["query-synth"] = m.QuerySynth
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
@@ -244,17 +245,30 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 	return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
 }
 
-// QueryMinorBlocks queries an account's minor blocks.
+// QueryMinorBlocksByUrl queries an account's minor blocks.
 //
 // WARNING: EXPERIMENTAL!
-func (m *JrpcMethods) QueryMinorBlocks(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryMinorBlocksByUrl(_ context.Context, params json.RawMessage) interface{} {
+	req := new(MinorBlocksByUrlQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.querier.QueryMinorBlocksByUrl(req.Url, req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
+}
+
+// QueryMinorBlocksFromDN queries an account's minor blocks.
+//
+// WARNING: EXPERIMENTAL!
+func (m *JrpcMethods) QueryMinorBlocksFromDN(_ context.Context, params json.RawMessage) interface{} {
 	req := new(MinorBlocksQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
+	return jrpcFormatResponse(m.querier.QueryMinorBlocksFromDN(req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
 }
 
 //

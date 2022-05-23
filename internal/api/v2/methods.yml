@@ -91,14 +91,23 @@ QueryKeyPageIndex:
   output: ChainQueryResponse
   call-params: [Url, Key]
 
-QueryMinorBlocks:
+QueryMinorBlocksByUrl:
+  description: queries an account's minor blocks
+  kind: query
+  experimental: true
+  rpc: query-minor-blocks
+  input: MinorBlocksByUrlQuery
+  output: MultiResponse
+  call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
+
+QueryMinorBlocksFromDN:
   description: queries an account's minor blocks
   kind: query
   experimental: true
   rpc: query-minor-blocks
   input: MinorBlocksQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
+  call-params: [QueryPagination, TxFetchMode, BlockFilterMode]
 
 QuerySynth:
   kind: query

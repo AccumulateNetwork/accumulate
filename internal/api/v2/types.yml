@@ -267,11 +267,17 @@ DirectoryQuery:
     - QueryPagination
     - QueryOptions
 
+MinorBlocksByUrlQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - MinorBlocksQuery
+    - UrlQuery
+
 MinorBlocksQuery:
   non-binary: true
   incomparable: true
   embeddings:
-    - UrlQuery
     - QueryPagination
   fields:
     - name: TxFetchMode

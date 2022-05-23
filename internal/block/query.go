@@ -863,8 +863,20 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			}
 		}
 		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: fmt.Errorf("no authority of %s holds %X", chr.Url, chr.Key)}
-	case *query.RequestMinorBlocks:
-		resp, pErr := m.queryMinorBlocks(batch, q)
+	case *query.RequestMinorBlocksFromDN:
+		resp, pErr := m.queryMinorBlocksFromDN(batch, q)
+		if pErr != nil {
+			return nil, nil, pErr
+		}
+
+		k = []byte("minor-block")
+		var err error
+		v, err = resp.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+		}
+	case *query.RequestMinorBlocksByUrl:
+		resp, pErr := m.queryMinorBlocksByUrl(batch, q)
 		if pErr != nil {
 			return nil, nil, pErr
 		}
@@ -934,7 +946,112 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 	return k, v, nil
 }
 
-func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, *protocol.Error) {
+func (m *Executor) queryMinorBlocksFromDN(batch *database.Batch, req *query.RequestMinorBlocksFromDN) (*query.ResponseMinorBlocks, *protocol.Error) {
+	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	var ledger *protocol.InternalLedger
+	err := ledgerAcc.GetStateAs(&ledger)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
+
+	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
+	}
+
+	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+	}
+
+	entryIdx := startIndex
+
+	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	curEntry := new(protocol.IndexEntry)
+	resultCnt := uint64(0)
+
+resultLoop:
+	for resultCnt < req.Limit {
+		err = idxChain.EntryAs(int64(entryIdx), curEntry)
+		switch {
+		case err == nil:
+		case errors.Is(err, storage.ErrNotFound):
+			break resultLoop
+		default:
+			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+		}
+
+		minorEntry := new(query.ResponseMinorEntry)
+		for {
+			if req.BlockFilterMode == query.BlockFilterModeExcludeNone {
+				minorEntry.BlockIndex = req.Start + resultCnt
+
+				// Create new entry, when BlockFilterModeExcludeNone append empty entry when blocks were missing
+				if minorEntry.BlockIndex < curEntry.BlockIndex || curEntry.BlockIndex == 0 {
+					resp.Entries = append(resp.Entries, minorEntry)
+					resultCnt++
+					minorEntry = new(query.ResponseMinorEntry)
+					continue
+				}
+			} else {
+				minorEntry.BlockIndex = curEntry.BlockIndex
+			}
+			break
+		}
+		minorEntry.BlockTime = curEntry.BlockTime
+
+		if req.TxFetchMode < query.TxFetchModeOmit {
+			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, curEntry.BlockIndex).Get()
+			if err != nil {
+				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+			}
+
+			minorEntry.TxCount = uint64(0)
+			systemTxCount := uint64(0)
+			var lastTxid []byte
+			for _, updIdx := range chainUpdatesIndex.Entries {
+				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
+					continue
+				}
+
+				if req.TxFetchMode <= query.TxFetchModeIds {
+					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
+				}
+				if req.TxFetchMode == query.TxFetchModeExpand {
+					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false)
+					if err == nil {
+						minorEntry.TxCount++
+						txt := qr.Envelope.Transaction[0].Body.Type()
+						if txt == protocol.TransactionTypeDirectoryAnchor {
+							body, ok := qr.Envelope.Transaction[0].Body.(*protocol.DirectoryAnchor)
+							if !ok {
+								return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+							}
+							fmt.Println("Anchor body:", body)
+						} else if txt.IsSystem() {
+							systemTxCount++
+						} else if req.TxFetchMode == query.TxFetchModeExpand {
+							minorEntry.Transactions = append(minorEntry.Transactions, qr)
+						}
+					}
+				} else {
+					minorEntry.TxCount++
+				}
+				lastTxid = updIdx.Entry
+			}
+			if minorEntry.TxCount <= systemTxCount && req.BlockFilterMode == query.BlockFilterModeExcludeEmpty {
+				entryIdx++
+				continue
+			}
+		}
+		resp.Entries = append(resp.Entries, minorEntry)
+		entryIdx++
+		resultCnt++
+	}
+	return &resp, nil
+}
+
+func (m *Executor) queryMinorBlocksByUrl(batch *database.Batch, req *query.RequestMinorBlocksByUrl) (*query.ResponseMinorBlocks, *protocol.Error) {
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
 	var ledger *protocol.InternalLedger
 	err := ledgerAcc.GetStateAs(&ledger)

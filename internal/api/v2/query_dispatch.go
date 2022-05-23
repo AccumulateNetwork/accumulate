@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -152,13 +153,22 @@ func (q *queryDispatch) QueryDataSet(url *url.URL, pagination QueryPagination, q
 	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
 
-func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilter query.BlockFilterMode) (*MultiResponse, error) {
+func (q *queryDispatch) QueryMinorBlocksByUrl(url *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilter query.BlockFilterMode) (*MultiResponse, error) {
 	r, err := q.Router.RouteAccount(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryMinorBlocks(url, pagination, txFetchMode, blockFilter)
+	return q.direct(r).QueryMinorBlocksByUrl(url, pagination, txFetchMode, blockFilter)
+}
+
+func (q *queryDispatch) QueryMinorBlocksFromDN(pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilter query.BlockFilterMode) (*MultiResponse, error) {
+	r, err := q.Router.RouteAccount(protocol.DnUrl())
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryMinorBlocksFromDN(pagination, txFetchMode, blockFilter)
 }
 
 func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {

@@ -29,7 +29,9 @@ func NewRequest(typ QueryType) (Request, error) {
 	case QueryTypeKeyPageIndex:
 		return new(RequestKeyPageIndex), nil
 	case QueryTypeMinorBlocks:
-		return new(RequestMinorBlocks), nil
+		return new(RequestMinorBlocksByUrl), nil
+	case QueryTypeMinorBlocks:
+		return new(RequestMinorBlocksFromDN), nil
 	case QueryTypeSynth:
 		return new(RequestSynth), nil
 	case QueryTypeTxHistory:
@@ -65,8 +67,11 @@ func EqualRequest(a, b Request) bool {
 	case *RequestKeyPageIndex:
 		b, ok := b.(*RequestKeyPageIndex)
 		return ok && a.Equal(b)
-	case *RequestMinorBlocks:
-		b, ok := b.(*RequestMinorBlocks)
+	case *RequestMinorBlocksByUrl:
+		b, ok := b.(*RequestMinorBlocksByUrl)
+		return ok && a.Equal(b)
+	case *RequestMinorBlocksFromDN:
+		b, ok := b.(*RequestMinorBlocksFromDN)
 		return ok && a.Equal(b)
 	case *RequestSynth:
 		b, ok := b.(*RequestSynth)

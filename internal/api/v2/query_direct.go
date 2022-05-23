@@ -465,21 +465,13 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
-	if pagination.Count == 0 {
-		// TODO Return an empty array plus the total count?
-		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
+func (q *queryDirect) QueryMinorBlocksByUrl(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
+	err := queryMinorBlocksCheckPagination(pagination)
+	if err != nil {
+		return nil, err
 	}
 
-	if pagination.Start > math.MaxInt64 {
-		return nil, errors.New(errors.StatusBadRequest, "start is too large")
-	}
-
-	if pagination.Count > QueryMinorBlocksMaxCount {
-		return nil, fmt.Errorf("count is too large, the ceiling is fixed to %d", QueryMinorBlocksMaxCount)
-	}
-
-	req := &query.RequestMinorBlocks{
+	req := &query.RequestMinorBlocksByUrl{
 		Account:         u,
 		Start:           pagination.Start,
 		Limit:           pagination.Count,
@@ -515,6 +507,65 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	}
 
 	return mres, nil
+}
+
+func (q *queryDirect) QueryMinorBlocksFromDN(pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
+	err := queryMinorBlocksCheckPagination(pagination)
+	if err != nil {
+		return nil, err
+	}
+
+	req := &query.RequestMinorBlocksFromDN{
+		Start:           pagination.Start,
+		Limit:           pagination.Count,
+		TxFetchMode:     txFetchMode,
+		BlockFilterMode: blockFilterMode,
+	}
+	k, v, err := q.query(req, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if k != "minor-block" {
+		return nil, fmt.Errorf("unknown response type: want minor-block, got %q", k)
+	}
+
+	res := new(query.ResponseMinorBlocks)
+	err = res.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+
+	mres := new(MultiResponse)
+	mres.Type = "minorBlock"
+	mres.Items = make([]interface{}, 0)
+	mres.Start = pagination.Start
+	mres.Count = pagination.Count
+	mres.Total = res.TotalBlocks
+	for _, entry := range res.Entries {
+		queryRes, err := packMinorQueryResponse(entry)
+		if err != nil {
+			return nil, err
+		}
+		mres.Items = append(mres.Items, queryRes)
+	}
+
+	return mres, nil
+}
+
+func queryMinorBlocksCheckPagination(pagination QueryPagination) error {
+	if pagination.Count == 0 {
+		// TODO Return an empty array plus the total count?
+		return validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
+	}
+
+	if pagination.Start > math.MaxInt64 {
+		return errors.New(errors.StatusBadRequest, "start is too large")
+	}
+
+	if pagination.Count > QueryMinorBlocksMaxCount {
+		return fmt.Errorf("count is too large, the ceiling is fixed to %d", QueryMinorBlocksMaxCount)
+	}
+	return nil
 }
 
 func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
