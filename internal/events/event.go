@@ -12,6 +12,7 @@ func (DidSaveSnapshot) isEvent() {}
 type DidCommitBlock struct {
 	Index uint64
 	Time  time.Time
+	Major uint64
 }
 
 type DidSaveSnapshot struct {

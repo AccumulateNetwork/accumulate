@@ -35,7 +35,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("cannot purchase credits, transaction oracle must be greater than zero")
 	}
 
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, err

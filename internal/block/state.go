@@ -20,10 +20,10 @@ type BlockMeta struct {
 // BlockState tracks various metrics of a block of transactions as they are
 // executed.
 type BlockState struct {
+	OpenedMajorBlock  bool
+	MakeMajorBlock    uint64
 	Delivered         uint64
 	Signed            uint64
-	SynthSigned       uint64
-	SynthSent         uint64
 	ValidatorsUpdates []chain.ValidatorUpdate
 	ProducedTxns      []*protocol.Transaction
 	ChainUpdates      chain.ChainUpdates
@@ -31,10 +31,9 @@ type BlockState struct {
 
 // Empty returns true if nothing happened during the block.
 func (s *BlockState) Empty() bool {
-	return s.Delivered == 0 &&
+	return !s.OpenedMajorBlock &&
+		s.Delivered == 0 &&
 		s.Signed == 0 &&
-		s.SynthSigned == 0 &&
-		s.SynthSent == 0 &&
 		len(s.ValidatorsUpdates) == 0 &&
 		len(s.ProducedTxns) == 0 &&
 		len(s.ChainUpdates.Entries) == 0
@@ -55,4 +54,7 @@ func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
+	if r.MakeMajorBlock > 0 {
+		s.MakeMajorBlock = r.MakeMajorBlock
+	}
 }
