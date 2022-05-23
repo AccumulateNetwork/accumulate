@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -26,8 +27,9 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Verify the origin
-	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.Type())
+	ledger, ok := st.Origin.(*protocol.AnchorLedger)
+	if !ok {
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
 	}
 
 	// Verify the source URL and get the subnet name
@@ -50,19 +52,41 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name
-	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err = st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(name), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
+	err = st.AddChainEntry(st.OriginUrl, protocol.BPTAnchorChain(name), protocol.ChainTypeAnchor, body.StateTreeAnchor[:], 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	if body.Major {
-		// TODO Handle major blocks?
+	// Did the partition complete a major block?
+	if body.MajorBlockIndex > 0 {
+		found := -1
+		for i, u := range ledger.PendingMajorBlockAnchors {
+			if u.Equal(body.Source) {
+				found = i
+				break
+			}
+		}
+		if found < 0 {
+			return nil, errors.Format(errors.StatusInternalError, "partition %v is not in the pending list", body.Source)
+		}
+		ledger.PendingMajorBlockAnchors = append(ledger.PendingMajorBlockAnchors[:found], ledger.PendingMajorBlockAnchors[found+1:]...)
+		err = st.Update(ledger)
+		if err != nil {
+			return nil, err
+		}
+
+		// If every partition has done the major block thing, do the major block
+		// thing on the DN
+		if len(ledger.PendingMajorBlockAnchors) == 0 {
+			st.logger.Info("Completed major block", "major-index", ledger.MajorBlockIndex, "minor-index", body.MinorBlockIndex)
+			st.State.MakeMajorBlock = ledger.MajorBlockIndex
+		}
 		return nil, nil
 	}
 
