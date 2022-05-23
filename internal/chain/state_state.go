@@ -21,6 +21,7 @@ type ProcessTransactionState struct {
 	ProducedTxns           []*protocol.Transaction
 	AdditionalTransactions []*Delivery
 	ChainUpdates           ChainUpdates
+	MakeMajorBlock         uint64
 }
 
 // DidProduceTxn records a produced transaction.
@@ -36,6 +37,9 @@ func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
 }
 
 func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
+	if r.MakeMajorBlock > 0 {
+		s.MakeMajorBlock = r.MakeMajorBlock
+	}
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)

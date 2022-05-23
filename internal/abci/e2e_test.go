@@ -758,7 +758,7 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
