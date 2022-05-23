@@ -77,6 +77,9 @@ IndexEntry:
       description: is the start time of the block. Only include when indexing the root anchor chain
       type: time
       pointer: true
+    - name: RootIndexIndex
+      description: is the index of the root anchor index chain entry. Only include when indexing the anchor ledger for a major block
+      type: uint
 
 AccumulateDataEntry:
   union: { type: dataEntry }
