@@ -102,7 +102,8 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// make sure they get processed.
 
 	var ledger *protocol.SyntheticLedger
-	err := batch.Account(m.Network.Synthetic()).GetStateAs(&ledger)
+	record := batch.Account(m.Network.Synthetic())
+	err := record.GetStateAs(&ledger)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -119,7 +120,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Update the ledger
-	err = batch.Account(m.Network.Synthetic()).PutState(ledger)
+	err = record.PutState(ledger)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +135,35 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	err = state.AddChainEntry(batch, m.Network.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
+	chain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return nil, err
+	}
+
+	index := chain.Height()
+	err = chain.AddEntry(txn.GetHash(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	err = state.DidAddChainEntry(batch, m.Network.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, txn.GetHash(), uint64(index), 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	subnet, ok := protocol.ParseSubnetUrl(initSig.DestinationNetwork)
+	if !ok {
+		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid subnet")
+	}
+
+	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(subnet), &protocol.IndexEntry{
+		Source: uint64(index),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if indexIndex+1 != uint64(initSig.SequenceNumber) {
+		m.logger.Error("Sequence number does not match index chain index", "seq-num", initSig.SequenceNumber, "index", indexIndex, "source", initSig.SourceNetwork, "destination", initSig.DestinationNetwork)
 	}
 
 	return txn, nil

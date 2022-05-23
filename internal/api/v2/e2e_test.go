@@ -224,15 +224,15 @@ func TestValidate(t *testing.T) {
 			Payload: &UpdateKeyPage{
 				Operation: []protocol.KeyPageOperation{&AddKeyOperation{
 					Entry: KeySpecParams{
-						KeyHash: adiKey2[32:],
-						Owner:   makeUrl(t, "acc://foo/book1"),
+						KeyHash:  adiKey2[32:],
+						Delegate: makeUrl(t, "acc://foo/book1"),
 					},
 				}},
 			},
 		})
 		keyPage := new(KeyPage)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner.String())
+		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Delegate.String())
 	})
 
 	tokenAccountUrl := adiName.JoinPath("/account")

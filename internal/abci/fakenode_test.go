@@ -62,7 +62,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]connections.Client{}
+	clients := map[string]connections.ABCIClient{}
 	netValMap := make(genesis.NetworkValidatorMap)
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {

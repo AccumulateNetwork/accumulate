@@ -482,6 +482,12 @@ func ParseAnchorChain(name string) (string, bool) {
 	return name[7:], true
 }
 
+// SyntheticIndexChain returns the name of the synthetic transaction index chain
+// for the given subnet.
+func SyntheticIndexChain(name string) string {
+	return "index-" + name
+}
+
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key
 // book and the page index. For example, the URL for the first page of id/book
 // is id/book/1.

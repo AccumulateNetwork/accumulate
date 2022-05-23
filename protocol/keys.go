@@ -24,7 +24,7 @@ func (k *KeySpec) GetLastUsedOn() uint64 { return k.LastUsedOn }
 func (k *KeySpec) SetLastUsedOn(timestamp uint64) { k.LastUsedOn = timestamp }
 
 func (k *KeySpecParams) IsEmpty() bool {
-	return len(k.KeyHash) == 0 && k.Owner == nil
+	return len(k.KeyHash) == 0 && k.Delegate == nil
 }
 
 func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {

@@ -194,6 +194,13 @@ type StatusResponse struct {
 	extraData []byte
 }
 
+type SyntheticTransactionRequest struct {
+	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	extraData      []byte
+}
+
 type TokenDeposit struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
