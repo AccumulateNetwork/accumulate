@@ -259,7 +259,7 @@ func (b *bootstrap) createValidatorBook() {
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
-	spec.Owner = b.authorityUrl
+	spec.Delegate = b.authorityUrl
 	page1.Keys[0] = spec
 
 	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, true)
