@@ -61,7 +61,7 @@ func New(t TB, bvnCount int) *Simulator {
 	sim := new(Simulator)
 	sim.TB = t
 	sim.Setup(bvnCount)
-	return nil
+	return sim
 }
 
 func (s *Simulator) Setup(bvnCount int) {
