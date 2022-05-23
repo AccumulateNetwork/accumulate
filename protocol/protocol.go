@@ -57,9 +57,6 @@ const (
 	// SignatureChain is the pending signature chain of a record.
 	SignatureChain = "signature"
 
-	// DataChain is the data chain of a record.
-	DataChain = "data"
-
 	// MajorRootChain is the major anchor root chain of a subnet.
 	MajorRootChain = "major-root"
 
@@ -405,7 +402,7 @@ func IsValidAdiUrl(u *url.URL) error {
 
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
-	_, ok := ParseBvnUrl(u)
+	_, ok := ParseSubnetUrl(u)
 	return ok || BelongsToDn(u)
 }
 
@@ -433,9 +430,12 @@ func IsBvnUrl(u *url.URL) bool {
 	return strings.HasPrefix(u.Hostname(), "bvn-")
 }
 
-// ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
+// ParseSubnetUrl extracts the BVN subnet name from a BVN URL, if the URL is a
 // valid BVN ADI URL.
-func ParseBvnUrl(u *url.URL) (string, bool) {
+func ParseSubnetUrl(u *url.URL) (string, bool) {
+	if IsDnUrl(u) {
+		return Directory, true
+	}
 	if !strings.HasPrefix(u.Authority, "bvn-") {
 		return "", false
 	}
@@ -477,6 +477,12 @@ func ParseAnchorChain(name string) (string, bool) {
 		return "", false
 	}
 	return name[7:], true
+}
+
+// SyntheticIndexChain returns the name of the synthetic transaction index chain
+// for the given subnet.
+func SyntheticIndexChain(name string) string {
+	return "index-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

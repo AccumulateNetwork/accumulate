@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -20,10 +21,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -33,19 +35,21 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block    *block.Block
-	txct     int64
-	timer    time.Time
-	didPanic bool
+	block        *block.Block
+	txct         int64
+	timer        time.Time
+	didPanic     bool
+	lastSnapshot uint64
 
 	onFatal func(error)
 }
 
 type AccumulatorOptions struct {
+	*config.Config
 	Executor *block.Executor
+	EventBus *events.Bus
 	DB       *database.Database
 	Logger   log.Logger
-	Network  config.Network
 	Address  crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
 
@@ -53,8 +57,12 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Network.LocalSubnetID),
+		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.Network.LocalSubnetID),
 	}
+
+	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
+		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
+	})
 
 	if app.Executor == nil {
 		panic("Chain Validator Node not set!")
@@ -136,10 +144,10 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 	var height int64
 	var ledger *protocol.InternalLedger
-	err = batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	err = batch.Account(app.Accumulate.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
-		height = ledger.Index
+		height = int64(ledger.Index)
 	case errors.Is(err, storage.ErrNotFound):
 		// InitChain has not been called yet
 		height = 0
@@ -171,8 +179,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	}
 
 	resQuery.Key = reqQuery.Data
-	qu := new(apiQuery.Query)
-	err := qu.UnmarshalBinary(reqQuery.Data)
+	qu, err := query.UnmarshalRequest(reqQuery.Data)
 	if err != nil {
 		// sentry.CaptureException(err)
 		app.logger.Debug("Query failed", "error", err)
@@ -196,7 +203,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 
 	default:
 		sentry.CaptureException(customErr)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
+		app.logger.Debug("Query failed", "type", qu.Type().String(), "error", customErr)
 		resQuery.Info = customErr.Error()
 		resQuery.Code = uint32(customErr.Code)
 		return resQuery
@@ -251,6 +258,12 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to commit block: %v", err))
 	}
 
+	// Notify the world of the committed block
+	app.EventBus.Publish(events.DidCommitBlock{
+		Index: block.Index,
+		Time:  block.Time,
+	})
+
 	err = app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
 		return err
@@ -270,7 +283,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	app.block = new(block.Block)
 	app.block.IsLeader = bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
-	app.block.Index = req.Header.Height
+	app.block.Index = uint64(req.Header.Height)
 	app.block.Time = req.Header.Time
 	app.block.CommitInfo = &req.LastCommitInfo
 	app.block.Evidence = req.ByzantineValidators
@@ -343,7 +356,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if result.Code == 0 {
 			continue
 		}
-		if !envelopes[i].Transaction.Type().IsUser() {
+		if !envelopes[i].Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
@@ -448,48 +461,25 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		return abci.ResponseCommit{}
 	}
 
+	// Notify the world of the committed block
+	app.EventBus.Publish(events.DidCommitBlock{
+		Index: app.block.Index,
+		Time:  app.block.Time,
+	})
+
 	// Notify the executor that we comitted
+	var resp abci.ResponseCommit
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
+	resp.Data = batch.BptRoot()
 
-	//this will truncate what tendermint stores since we only care about current state
-	//todo: uncomment the next line when we have smt state syncing complete. For now, we are retaining everything for test net
-	// if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
-	// 	resp.RetainHeight = app.Height - app.RetainBlocks + 1
-	// }
+	// Keep this disabled until we have real snapshot support through Tendermint
+	if false {
+		// Truncate Tendermint's block store to the latest snapshot
+		resp.RetainHeight = int64(app.lastSnapshot)
+	}
 
 	duration := time.Since(app.timer)
 	app.logger.Debug("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
-	return abci.ResponseCommit{Data: batch.BptRoot()}
-}
-
-// ListSnapshots implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) ListSnapshots(
-	req abci.RequestListSnapshots) abci.ResponseListSnapshots {
-
-	req.ProtoMessage()
-	return abci.ResponseListSnapshots{}
-}
-
-// OfferSnapshot implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) OfferSnapshot(
-	req abci.RequestOfferSnapshot) abci.ResponseOfferSnapshot {
-	return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ABORT}
-}
-
-// LoadSnapshotChunk implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) LoadSnapshotChunk(
-	req abci.RequestLoadSnapshotChunk) abci.ResponseLoadSnapshotChunk {
-
-	//req.Height
-	//resp := abcitypes.ResponseLoadSnapshotChunk{}
-	//need to get a block of data between markers.
-	//resp.Chunk = app.mm.GetState(req.Height)
-	return abci.ResponseLoadSnapshotChunk{}
-}
-
-// ApplySnapshotChunk implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) ApplySnapshotChunk(
-	req abci.RequestApplySnapshotChunk) abci.ResponseApplySnapshotChunk {
-	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
+	return resp
 }

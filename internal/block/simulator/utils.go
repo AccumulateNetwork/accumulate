@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"encoding"
+	"os"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +15,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -34,6 +34,7 @@ func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
+		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
 
@@ -47,9 +48,12 @@ func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
 func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
 	t.Helper()
 
+	f, err := os.Open(filename)
+	require.NoError(tb{t}, err)
+	defer f.Close()
 	batch := db.Begin(true)
 	defer batch.Discard()
-	require.NoError(tb{t}, exec.InitFromSnapshot(batch, filename))
+	require.NoError(tb{t}, exec.InitFromSnapshot(batch, f))
 	require.NoError(tb{t}, batch.Commit())
 }
 
@@ -91,7 +95,7 @@ func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, env
 
 	// Is the block empty?
 	if block.State.Empty() {
-		return nil, nil
+		return results, nil
 	}
 
 	// Commit the batch
@@ -148,23 +152,12 @@ func RequireSuccess(t TB, results ...*protocol.TransactionStatus) {
 	}
 }
 
-type queryRequest interface {
-	encoding.BinaryMarshaler
-	Type() types.QueryType
-}
-
-func Query(t TB, db *database.Database, exec *Executor, req queryRequest, prove bool) interface{} {
+func Query(t TB, db *database.Database, exec *Executor, req query.Request, prove bool) interface{} {
 	t.Helper()
-
-	var err error
-	qr := new(query.Query)
-	qr.Type = req.Type()
-	qr.Content, err = req.MarshalBinary()
-	require.NoError(tb{t}, err)
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	key, value, perr := exec.Query(batch, qr, 0, prove)
+	key, value, perr := exec.Query(batch, req, 0, prove)
 	if perr != nil {
 		require.NoError(tb{t}, perr)
 	}

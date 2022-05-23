@@ -97,7 +97,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 	// Singlesig ready
 	t.Run("Ready", func(t BatchTest) {
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -110,7 +110,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		signer := t.PutAccountCopy(signer).(*FakeSigner)
 		signer.Threshold = 2
 
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -123,11 +123,11 @@ func TestTransactionIsReady(tt *testing.T) {
 		signer := t.PutAccountCopy(signer).(*FakeSigner)
 		signer.Threshold = 2
 
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		sig2 := sig.Copy()
 		sig2.PublicKey = []byte{2}
-		t.AddSignature(txn.GetHash(), sig2)
+		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -140,7 +140,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		account := t.PutAccountCopy(account).(*FakeAccount)
 		account.AddAuthority(authority2.Url)
 
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -153,12 +153,12 @@ func TestTransactionIsReady(tt *testing.T) {
 		account := t.PutAccountCopy(account).(*FakeAccount)
 		account.AddAuthority(authority2.Url)
 
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		sig2 := sig.Copy()
 		sig2.Signer = signer2.Url
 		sig2.PublicKey = []byte{2}
-		t.AddSignature(txn.GetHash(), sig2)
+		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -186,7 +186,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 		sig := sig.Copy()
 		sig.Signer = unauthSigner.Url
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -202,7 +202,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		entry, _ := account.GetAuthority(authority.Url)
 		entry.Disabled = true
 
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -221,12 +221,12 @@ func TestTransactionIsReady(tt *testing.T) {
 
 		sig1 := sig.Copy()
 		sig1.Signer = url.MustParse("foo/non-authority/signer")
-		t.AddSignature(txn.GetHash(), sig1)
+		t.AddSignature(txn.GetHash(), 0, sig1)
 
 		sig2 := sig.Copy()
 		sig2.Signer = signer2.Url
 		sig2.PublicKey = []byte{2}
-		t.AddSignature(txn.GetHash(), sig2)
+		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -244,7 +244,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		signer.Threshold = 2
 
 		// Signature @ version 1
-		t.AddSignature(txn.GetHash(), sig)
+		t.AddSignature(txn.GetHash(), 0, sig)
 		require.Equal(t, 1, t.GetSignatures(txn.GetHash(), signer.Url).Count())
 
 		// Update the version
@@ -254,7 +254,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		sig2 := sig.Copy()
 		sig2.SignerVersion = 2
 		sig2.PublicKey = []byte{2}
-		t.AddSignature(txn.GetHash(), sig2)
+		t.AddSignature(txn.GetHash(), 1, sig2)
 		require.Equal(t, 1, t.GetSignatures(txn.GetHash(), signer.Url).Count())
 
 		// Transaction is not ready
@@ -278,8 +278,8 @@ func TestTransactionIsReady(tt *testing.T) {
 		sig1_1 := sig.Copy()
 		sig1_2 := sig.Copy()
 		sig1_2.PublicKey = []byte{2}
-		t.AddSignature(txn.GetHash(), sig1_1)
-		t.AddSignature(txn.GetHash(), sig1_2)
+		t.AddSignature(txn.GetHash(), 0, sig1_1)
+		t.AddSignature(txn.GetHash(), 1, sig1_2)
 
 		signer.Version++
 		signer2.Version++
@@ -290,8 +290,8 @@ func TestTransactionIsReady(tt *testing.T) {
 		sig2_1.SignerVersion = 2
 		sig2_2 := sig2_1.Copy()
 		sig2_2.PublicKey = []byte{2}
-		t.AddSignature(txn.GetHash(), sig2_1)
-		t.AddSignature(txn.GetHash(), sig2_2)
+		t.AddSignature(txn.GetHash(), 0, sig2_1)
+		t.AddSignature(txn.GetHash(), 1, sig2_2)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
@@ -349,17 +349,9 @@ func TestAddAuthority(tt *testing.T) {
 		require.False(t, ready)
 
 		// Second signature is accepted
-		state, err := execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
+		_, err = execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
 		require.NoError(t, err)
-		fwdBody := &protocol.SyntheticForwardTransaction{
-			Transaction: tx.Transaction,
-			Signatures: []protocol.ForwardedSignature{{
-				Destination: tx.Transaction.Header.Principal,
-				Signature:   tx.Signatures[1].(protocol.KeySignature),
-				Signers:     state.Signers,
-			}},
-		}
-		fwd := (&chain.Delivery{Transaction: &protocol.Transaction{Body: fwdBody}}).NewForwarded(fwdBody)
+		fwd := forwardSignature(tx.Transaction, tx.Signatures[1])
 		_, err = execAlice.ProcessSignature(t.Batch, fwd, fwd.Signatures[0])
 		require.NoError(t, err)
 
@@ -377,7 +369,7 @@ func TestAddAuthority(tt *testing.T) {
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestamp(1).
 			WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Owner: bob.JoinPath("book")}},
+				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Delegate: bob.JoinPath("book")}},
 			}}).
 			Initiate(protocol.SignatureTypeED25519, aliceKey).
 			WithSigner(bob.JoinPath("book", "1"), 1).
@@ -396,17 +388,9 @@ func TestAddAuthority(tt *testing.T) {
 		require.False(t, ready)
 
 		// Second signature is accepted
-		state, err := execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
+		_, err = execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
 		require.NoError(t, err)
-		fwdBody := &protocol.SyntheticForwardTransaction{
-			Transaction: tx.Transaction,
-			Signatures: []protocol.ForwardedSignature{{
-				Destination: tx.Transaction.Header.Principal,
-				Signature:   tx.Signatures[1].(protocol.KeySignature),
-				Signers:     state.Signers,
-			}},
-		}
-		fwd := (&chain.Delivery{Transaction: &protocol.Transaction{Body: fwdBody}}).NewForwarded(fwdBody)
+		fwd := forwardSignature(tx.Transaction, tx.Signatures[1])
 		_, err = execAlice.ProcessSignature(t.Batch, fwd, fwd.Signatures[0])
 		require.NoError(t, err)
 
@@ -444,17 +428,9 @@ func TestAddAuthority(tt *testing.T) {
 		require.False(t, ready)
 
 		// Second signature is accepted
-		state, err := execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
+		_, err = execBob.ProcessSignature(t.Batch, tx, tx.Signatures[1])
 		require.NoError(t, err)
-		fwdBody := &protocol.SyntheticForwardTransaction{
-			Transaction: tx.Transaction,
-			Signatures: []protocol.ForwardedSignature{{
-				Destination: tx.Transaction.Header.Principal,
-				Signature:   tx.Signatures[1].(protocol.KeySignature),
-				Signers:     state.Signers,
-			}},
-		}
-		fwd := (&chain.Delivery{Transaction: &protocol.Transaction{Body: fwdBody}}).NewForwarded(fwdBody)
+		fwd := forwardSignature(tx.Transaction, tx.Signatures[1])
 		_, err = execAlice.ProcessSignature(t.Batch, fwd, fwd.Signatures[0])
 		require.NoError(t, err)
 
@@ -465,4 +441,77 @@ func TestAddAuthority(tt *testing.T) {
 		require.NoError(t, err)
 		require.True(t, ready)
 	})
+}
+
+// TestCannotDisableAuthForAuthTxns verifies that authorization is always enforced
+// for transactions that modify authorization, such as UpdateKeyPage and
+// UpdateAccountAuth, even when an authority is disabled.
+func TestCannotDisableAuthForAuthTxns(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup
+	alice := url.MustParse("alice")
+	lite := AcmeLiteAddressStdPriv(GenerateKey(t.Name(), "Lite"))
+	mainKey := GenerateKey(t.Name(), alice)
+	unauthKey := GenerateKey(t.Name(), alice, "unauth")
+	sim.CreateIdentity(alice, mainKey[32:])
+	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens"), Balance: *big.NewInt(1e9), TokenUrl: protocol.AcmeUrl()})
+	sim.CreateIdentity(alice.JoinPath("unauth"), unauthKey[32:])
+	updateAccount(sim, alice.JoinPath("tokens"), func(t *protocol.TokenAccount) { t.Authorities[0].Disabled = true })
+	updateAccount(sim, alice.JoinPath("unauth", "book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
+
+	// An unauthorized signer must not be allowed to enable auth
+	_, err := sim.SubmitAndExecuteBlock(
+		NewTransaction().
+			WithPrincipal(alice.JoinPath("tokens")).
+			WithSigner(alice.JoinPath("unauth", "book", "1"), 1).
+			WithBody(&protocol.UpdateAccountAuth{
+				Operations: []protocol.AccountAuthOperation{
+					&protocol.EnableAccountAuthOperation{
+						Authority: alice.JoinPath("book"),
+					},
+				},
+			}).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, unauthKey).
+			Build(),
+	)
+	require.EqualError(t, err, "signature 0: acc://alice/unauth/book/1 is not authorized to sign transactions for acc://alice/tokens")
+
+	// An unauthorized signer should be able to send tokens
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		NewTransaction().
+			WithPrincipal(alice.JoinPath("tokens")).
+			WithSigner(alice.JoinPath("unauth", "book", "1"), 1).
+			WithBody(&protocol.SendTokens{
+				To: []*protocol.TokenRecipient{{
+					Url:    lite,
+					Amount: *big.NewInt(68),
+				}},
+			}).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, unauthKey).
+			Build(),
+	)...)
+}
+
+func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *chain.Delivery {
+	body := &protocol.SyntheticForwardTransaction{
+		Transaction: txn,
+		Signatures: []protocol.RemoteSignature{{
+			Destination: txn.Header.Principal,
+			Signature: &protocol.SignatureSet{
+				Vote:            protocol.VoteTypeAccept,
+				Signer:          sig.GetSigner(),
+				TransactionHash: *(*[32]byte)(txn.GetHash()),
+				Signatures:      []protocol.Signature{sig},
+			},
+		}},
+	}
+	parent := &chain.Delivery{Transaction: &protocol.Transaction{Body: body}}
+	return parent.NewForwarded(body)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"math"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
@@ -67,8 +68,8 @@ func MakeLiteSigner(signer Signer) Signer {
 		keys := signer.Keys
 		signer.Keys = make([]*KeySpec, 0, len(keys))
 		for _, key := range keys {
-			if key.Owner != nil {
-				signer.Keys = append(signer.Keys, &KeySpec{Owner: key.Owner})
+			if key.Delegate != nil {
+				signer.Keys = append(signer.Keys, &KeySpec{Delegate: key.Delegate})
 			}
 		}
 		return signer
@@ -82,7 +83,7 @@ func MakeLiteSigner(signer Signer) Signer {
 
 func (s *UnknownSigner) GetUrl() *url.URL                                   { return s.Url }
 func (s *UnknownSigner) GetVersion() uint64                                 { return s.Version }
-func (*UnknownSigner) GetSignatureThreshold() uint64                        { return 1 }
+func (*UnknownSigner) GetSignatureThreshold() uint64                        { return math.MaxUint64 }
 func (*UnknownSigner) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)  { return -1, nil, false }
 func (*UnknownSigner) EntryByKey(key []byte) (int, KeyEntry, bool)          { return -1, nil, false }
 func (*UnknownSigner) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) { return -1, nil, false }
@@ -164,8 +165,12 @@ func (p *KeyPage) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
 
 // EntryByDelegate finds the entry with a matching owner.
 func (p *KeyPage) EntryByDelegate(owner *url.URL) (int, KeyEntry, bool) {
+	if book, _, ok := ParseKeyPageUrl(owner); ok {
+		return p.EntryByDelegate(book)
+	}
+
 	for i, entry := range p.Keys {
-		if owner.Equal(entry.Owner) {
+		if owner.Equal(entry.Delegate) {
 			return i, entry, true
 		}
 	}

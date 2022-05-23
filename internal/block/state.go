@@ -11,7 +11,7 @@ import (
 // BlockMeta is metadata about a block.
 type BlockMeta struct {
 	IsLeader   bool
-	Index      int64
+	Index      uint64
 	Time       time.Time
 	CommitInfo *types.LastCommitInfo
 	Evidence   []types.Evidence
@@ -41,7 +41,6 @@ func (s *BlockState) Empty() bool {
 }
 
 type ProcessSignatureState struct {
-	Signers []protocol.Signer
 }
 
 func (s *ProcessSignatureState) Merge(r *ProcessSignatureState) {

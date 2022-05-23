@@ -20,14 +20,14 @@ func main() {
 	_ = cmd.Execute()
 }
 
-func run(cmd *cobra.Command, args []string) error {
+func run(_ *cobra.Command, args []string) error {
 	for _, arg := range args {
 		client, err := http.New(arg)
 		if err != nil {
 			return fmt.Errorf("failed to create client: %v", err)
 		}
 
-		arg := arg
+		arg := arg // See docs/developer/rangevarref.md
 		go func() {
 			for {
 				err = client.Start()

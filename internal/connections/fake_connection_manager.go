@@ -25,7 +25,7 @@ func (fcm *fakeConnectionManager) SelectConnection(subnetId string, allowFollowe
 	}
 }
 
-func NewFakeConnectionManager(clients map[string]Client) ConnectionManager {
+func NewFakeConnectionManager(clients map[string]ABCIClient) ConnectionManager {
 	fcm := new(fakeConnectionManager)
 	fcm.ctxMap = make(map[string]ConnectionContext)
 	for subnet, client := range clients {
@@ -33,7 +33,7 @@ func NewFakeConnectionManager(clients map[string]Client) ConnectionManager {
 			subnetId:  subnet,
 			hasClient: make(chan struct{}),
 			metrics:   NodeMetrics{status: Up}}
-		connCtx.setClient(client)
+		connCtx.setClient(client, nil)
 		fcm.ctxMap[subnet] = connCtx
 	}
 	return fcm

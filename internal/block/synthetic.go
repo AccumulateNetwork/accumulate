@@ -31,7 +31,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		sub.Header = tx.Header
 
 		// Don't record txn -> produced synth txn for internal transactions
-		if from.Body.Type().IsInternal() {
+		if from.Body.Type().IsSystem() {
 			continue
 		}
 
@@ -102,7 +102,8 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// make sure they get processed.
 
 	var ledger *protocol.SyntheticLedger
-	err := batch.Account(m.Network.Synthetic()).GetStateAs(&ledger)
+	record := batch.Account(m.Network.Synthetic())
+	err := record.GetStateAs(&ledger)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -119,7 +120,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Update the ledger
-	err = batch.Account(m.Network.Synthetic()).PutState(ledger)
+	err = record.PutState(ledger)
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +135,35 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	err = state.AddChainEntry(batch, m.Network.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, txn.GetHash(), 0, 0)
+	chain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return nil, err
+	}
+
+	index := chain.Height()
+	err = chain.AddEntry(txn.GetHash(), false)
+	if err != nil {
+		return nil, err
+	}
+
+	err = state.DidAddChainEntry(batch, m.Network.Synthetic(), protocol.MainChain, protocol.ChainTypeTransaction, txn.GetHash(), uint64(index), 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	subnet, ok := protocol.ParseSubnetUrl(initSig.DestinationNetwork)
+	if !ok {
+		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid subnet")
+	}
+
+	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(subnet), &protocol.IndexEntry{
+		Source: uint64(index),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if indexIndex+1 != uint64(initSig.SequenceNumber) {
+		m.logger.Error("Sequence number does not match index chain index", "seq-num", initSig.SequenceNumber, "index", indexIndex, "source", initSig.SourceNetwork, "destination", initSig.DestinationNetwork)
 	}
 
 	return txn, nil
@@ -144,7 +171,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Load all of the signatures
-	signatures, err := getAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
 	if err != nil {
 		return err
 	}
@@ -153,7 +180,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 	return validateSyntheticTransactionSignatures(transaction, signatures)
 }
 
-func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature protocol.Signature) error {
+func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.SyntheticSignature) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
 	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
@@ -167,8 +194,12 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 		return fmt.Errorf("store status: %w", err)
 	}
 
+	if signature == nil {
+		return nil
+	}
+
 	// Record the signature against the transaction
-	_, err = obj.AddSignature(signature)
+	_, err = obj.AddSignature(0, signature)
 	if err != nil {
 		return fmt.Errorf("add signature: %w", err)
 	}
@@ -210,7 +241,7 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 		if !ok {
 			continue
 		}
-		receipts[*(*[32]byte)(receipt.Start)] = receipt
+		receipts[*(*[32]byte)(receipt.Proof.Start)] = receipt
 	}
 
 	// Get the first
@@ -223,16 +254,16 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 	sourceNet := rsig.SourceNetwork
 
 	// Join the remaining receipts
-	receipt := &rsig.Receipt
+	receipt := &rsig.Proof
 	for len(receipts) > 0 {
-		hash = *(*[32]byte)(rsig.Result)
+		hash = *(*[32]byte)(rsig.Proof.Anchor)
 		rsig, ok := receipts[hash]
 		delete(receipts, hash)
 		if !ok {
 			continue
 		}
 
-		r := receipt.Combine(&rsig.Receipt)
+		r := receipt.Combine(&rsig.Proof)
 		if r != nil {
 			receipt = r
 			sourceNet = rsig.SourceNetwork

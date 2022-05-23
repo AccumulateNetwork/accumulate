@@ -1,9 +1,9 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -41,10 +41,13 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 func (t *Transaction) GetState() (*SigOrTxn, error) {
 	v := new(SigOrTxn)
 	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		return v, nil
 	}
-	return v, nil
+	if !errors.Is(err, errors.StatusNotFound) {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.id[:8])
 }
 
 // PutState stores the transaction state.
@@ -115,13 +118,13 @@ func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer) (*Signatur
 
 // AddSignature loads the appropriate siganture set and adds the signature to
 // it.
-func (t *Transaction) AddSignature(newSignature protocol.Signature) (int, error) {
+func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.Signature) (int, error) {
 	set, err := t.newSigSet(newSignature.GetSigner(), true)
 	if err != nil {
 		return 0, err
 	}
 
-	return set.Add(newSignature)
+	return set.Add(keyEntryIndex, newSignature)
 }
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {

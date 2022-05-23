@@ -1,23 +1,37 @@
 package block
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // EndBlock implements ./Chain
 func (m *Executor) EndBlock(block *Block) error {
+	// Check for missing synthetic transactions. Load the ledger synchronously,
+	// request transactions asynchronously.
+	var synthLedger *protocol.SyntheticLedger
+	err := block.Batch.Account(m.Network.Synthetic()).GetStateAs(&synthLedger)
+	if err != nil {
+		return err
+	}
+	go m.requestMissingSyntheticTransactions(synthLedger)
+
 	// Load the ledger
 	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
 	var ledgerState *protocol.InternalLedger
-	err := ledger.GetStateAs(&ledgerState)
+	err = ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return err
 	}
@@ -25,7 +39,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Set active oracle from pending
 	ledgerState.ActiveOracle = ledgerState.PendingOracle
 
-	m.logInfo("Committing",
+	m.logger.Debug("Committing",
 		"height", block.Index,
 		"delivered", block.State.Delivered,
 		"signed", block.State.SynthSigned,
@@ -33,23 +47,6 @@ func (m *Executor) EndBlock(block *Block) error {
 		"updated", len(block.State.ChainUpdates.Entries),
 		"submitted", len(block.State.ProducedTxns))
 	t := time.Now()
-
-	// 	err = m.doEndBlock(block, ledgerState)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	// Write the updated ledger
-	// 	err = ledger.PutState(ledgerState)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	m.logInfo("Committed", "height", block.Index, "duration", time.Since(t))
-	// 	return nil
-	// }
-
-	// func (m *Executor) doEndBlock(block *Block, ledgerState *protocol.InternalLedger) error {
 
 	// Load the main chain of the minor root
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
@@ -75,7 +72,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		}
 
 		// Anchor and index the chain
-		m.logDebug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
+		m.logger.Debug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
 		account := block.Batch.Account(u.Account)
 		indexIndex, didIndex, err := addChainAnchor(rootChain, account, u.Account, u.Name, u.Type)
 		if err != nil {
@@ -105,7 +102,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		// If things go south here, don't return and error, instead, just log one
 		newOracleValue, err := m.updateOraclePrice(block)
 		if err != nil {
-			m.logError(fmt.Sprintf("%v", err))
+			m.logger.Error("Failed to update oracle", "error", err)
 		} else {
 			ledgerState.PendingOracle = newOracleValue
 		}
@@ -178,29 +175,25 @@ func (m *Executor) EndBlock(block *Block) error {
 		return err
 	}
 
-	m.logInfo("Committed", "height", block.Index, "duration", time.Since(t))
+	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
 	return nil
 }
 
 // updateOraclePrice reads the oracle from the oracle account and updates the
 // value on the ledger.
 func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
-	data, err := block.Batch.Account(protocol.PriceOracle()).Data()
+	e, err := indexing.Data(block.Batch, protocol.PriceOracle()).GetLatestEntry()
 	if err != nil {
-		return 0, fmt.Errorf("cannot retrieve oracle data entry: %v", err)
-	}
-	_, e, err := data.GetLatest()
-	if err != nil {
-		return 0, fmt.Errorf("cannot retrieve latest oracle data entry: data batch at height %d: %v", data.Height(), err)
+		return 0, fmt.Errorf("cannot retrieve latest oracle data entry: %v", err)
 	}
 
 	o := protocol.AcmeOracle{}
-	if e.Data == nil {
+	if e.GetData() == nil {
 		return 0, fmt.Errorf("no data in oracle data account")
 	}
-	err = json.Unmarshal(e.Data[0], &o)
+	err = json.Unmarshal(e.GetData()[0], &o)
 	if err != nil {
-		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.Data)
+		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.GetData()[0])
 	}
 
 	if o.Price == 0 {
@@ -224,7 +217,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 	height := synthChain.Height()
 	offset := height - int64(len(block.State.ProducedTxns))
 	for i, txn := range block.State.ProducedTxns {
-		if txn.Type() == protocol.TransactionTypeSyntheticAnchor || txn.Type() == protocol.TransactionTypeSyntheticMirror {
+		if txn.Body.Type().IsSystem() {
 			// Do not generate a receipt for the anchor
 			continue
 		}
@@ -243,8 +236,8 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = m.Network.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Receipt = *protocol.ReceiptFromManaged(receipt)
-		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
+		sig.Proof = *protocol.ReceiptFromManaged(receipt)
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
 			return err
 		}
@@ -267,4 +260,97 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	})
 
 	return indexIndex, nil
+}
+
+func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.SyntheticLedger) {
+	// Setup
+	wg := new(sync.WaitGroup)
+	localSubnet := x.Network.NodeUrl()
+	dispatcher := newDispatcher(x.ExecutorOptions)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// For each subnet
+	var sent bool
+	for _, subnet := range ledger.Subnets {
+		// Get the subnet ID
+		id, ok := protocol.ParseSubnetUrl(subnet.Url)
+		if !ok {
+			// If this happens we're kind of screwed
+			panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid subnet URL: %v", subnet.Url))
+		}
+
+		// For each pending synthetic transaction
+		var batch jsonrpc2.BatchRequest
+		for i, hash := range subnet.Pending {
+			// If we know the hash we must have a local copy (so we don't need
+			// to fetch it)
+			if hash != ([32]byte{}) {
+				continue
+			}
+
+			seqNum := subnet.Delivered + uint64(i) + 1
+			x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", subnet.Url)
+
+			// Request the transaction by sequence number
+			batch = append(batch, jsonrpc2.Request{
+				ID:     i + 1,
+				Method: "query-synth",
+				Params: &api.SyntheticTransactionRequest{
+					Source:         subnet.Url,
+					Destination:    localSubnet,
+					SequenceNumber: seqNum,
+				},
+			})
+		}
+
+		if len(batch) == 0 {
+			continue
+		}
+
+		sent = true
+		subnet := subnet // See docs/developer/rangevarref.md
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			// Send the requests
+			var resp []*api.TransactionQueryResponse
+			err := x.Router.RequestAPIv2(ctx, id, "", batch, &resp)
+			if err != nil {
+				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", subnet.Url)
+				return
+			}
+
+			// Broadcast each transaction locally
+			for _, resp := range resp {
+				// Put the synthetic signature first
+				for i, signature := range resp.Signatures {
+					if _, ok := signature.(*protocol.SyntheticSignature); ok && i > 0 {
+						resp.Signatures[0], resp.Signatures[i] = resp.Signatures[i], resp.Signatures[0]
+						break
+					}
+				}
+				err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{
+					Signatures:  resp.Signatures,
+					Transaction: []*protocol.Transaction{resp.Transaction},
+				})
+				if err != nil {
+					x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", subnet.Url)
+					return
+				}
+			}
+		}()
+	}
+
+	if !sent {
+		return
+	}
+
+	wg.Wait()
+	for err := range dispatcher.Send(ctx) {
+		x.checkDispatchError(err, func(err error) {
+			x.logger.Error("Failed to dispatch missing synthetic transactions", "error", err)
+		})
+	}
 }

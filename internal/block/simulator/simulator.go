@@ -3,15 +3,18 @@ package simulator
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -19,6 +22,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -84,9 +88,18 @@ func New(t TB, bvnCount int) *Simulator {
 		}, db)
 		require.NoError(sim, err)
 
+		jrpc, err := api.NewJrpc(api.Options{
+			Logger:        logger,
+			Network:       &network,
+			Router:        sim.Router(),
+			TxMaxWaitTime: time.Hour,
+		})
+		require.NoError(sim, err)
+
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database: db,
 			Executor: exec,
+			API:      acctesting.DirectJrpcClient(jrpc),
 		}
 	}
 
@@ -128,7 +141,7 @@ func (s *Simulator) SubnetFor(url *url.URL) *ExecEntry {
 	return s.Subnet(subnet)
 }
 
-func (s *Simulator) Query(url *url.URL, req queryRequest, prove bool) interface{} {
+func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
 	s.Helper()
 
 	x := s.SubnetFor(url)
@@ -160,6 +173,10 @@ func (s *Simulator) InitFromSnapshot(filename func(string) string) {
 func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) {
 	s.Helper()
 
+	if statusChan != nil {
+		defer close(statusChan)
+	}
+
 	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
@@ -183,10 +200,6 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 	// Wait for all subnets to complete
 	err := errg.Wait()
 	require.NoError(tb{s}, err)
-
-	if statusChan != nil {
-		close(statusChan)
-	}
 }
 
 // ExecuteBlocks executes a number of blocks. This is useful for things like
@@ -235,16 +248,9 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	status, err := s.SubmitAndExecuteBlock(envelopes...)
 	require.NoError(tb{s}, err)
 
-	ids := map[[32]byte]bool{}
-	for _, env := range envelopes {
-		for _, d := range NormalizeEnvelope(s, env) {
-			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
-		}
-	}
-
 	var didFail bool
 	for _, status := range status {
-		if status.Code == 0 || !ids[status.For] {
+		if status.Code == 0 {
 			continue
 		}
 
@@ -257,8 +263,7 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 	return envelopes
 }
 
-// SubmitAndExecuteBlock executes a block with the envelopes and fails the test if
-// any envelope fails.
+// SubmitAndExecuteBlock executes a block with the envelopes.
 func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
 	s.Helper()
 
@@ -267,12 +272,30 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	ch := make(chan *protocol.TransactionStatus)
-	go s.ExecuteBlock(ch)
+	ids := map[[32]byte]bool{}
+	for _, env := range envelopes {
+		for _, d := range NormalizeEnvelope(s, env) {
+			ids[*(*[32]byte)(d.Transaction.GetHash())] = true
+		}
+	}
+
+	ch1 := make(chan *protocol.TransactionStatus)
+	ch2 := make(chan *protocol.TransactionStatus)
+	go func() {
+		s.ExecuteBlock(ch1)
+		s.ExecuteBlock(ch2)
+	}()
 
 	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
-	for s := range ch {
-		status = append(status, s)
+	for s := range ch1 {
+		if ids[s.For] {
+			status = append(status, s)
+		}
+	}
+	for s := range ch2 {
+		if ids[s.For] {
+			status = append(status, s)
+		}
 	}
 
 	return status, nil
@@ -345,7 +368,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 		// Wait for synthetic transactions to be delivered
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
 			return status.Delivered
-		}, id[:])
+		}, id[:]) //nolint:rangevarref
 		statuses = append(statuses, st...)
 		transactions = append(transactions, txn...)
 	}
@@ -359,6 +382,12 @@ type ExecEntry struct {
 
 	Database *database.Database
 	Executor *block.Executor
+	API      *client.Client
+
+	// SubmitHook can be used to control how envelopes are submitted to the
+	// subnet. It is not safe to change SubmitHook concurrently with calls to
+	// Submit.
+	SubmitHook func([]*protocol.Envelope) []*protocol.Envelope
 }
 
 // Submit adds the envelopes to the next block's queue.
@@ -366,6 +395,11 @@ type ExecEntry struct {
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
 func (s *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+	// Capturing the field in a variable is more concurrency safe than using the
+	// field directly
+	if h := s.SubmitHook; h != nil {
+		envelopes = h(envelopes)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextBlock = append(s.nextBlock, envelopes...)

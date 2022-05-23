@@ -9,23 +9,23 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type SyntheticAnchor struct {
-	Network *config.Network
+// Process the anchor from DN -> BVN
+
+type DirectoryAnchor struct{}
+
+func (DirectoryAnchor) Type() protocol.TransactionType {
+	return protocol.TransactionTypeDirectoryAnchor
 }
 
-func (SyntheticAnchor) Type() protocol.TransactionType {
-	return protocol.TransactionTypeSyntheticAnchor
+func (DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	return (DirectoryAnchor{}).Validate(st, tx)
 }
 
-func (SyntheticAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	return (SyntheticAnchor{}).Validate(st, tx)
-}
-
-func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body, ok := tx.Transaction.Body.(*protocol.SyntheticAnchor)
+	body, ok := tx.Transaction.Body.(*protocol.DirectoryAnchor)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticAnchor), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin
@@ -33,26 +33,12 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.Type())
 	}
 
-	// Verify the source URL and get the subnet name
-	name, ok := protocol.ParseBvnUrl(body.Source)
-	var fromDirectory bool
-	switch {
-	case ok:
-	case protocol.IsDnUrl(body.Source):
-		name, fromDirectory = protocol.Directory, true
-	default:
-		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
+	// Verify the source URL is from the DN
+	if !protocol.IsDnUrl(body.Source) {
+		return nil, fmt.Errorf("invalid source: not the DN")
 	}
 
-	// When on a BVN, process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 && fromDirectory {
-		result, err := executeOperatorUpdates(st, body)
-		if err != nil {
-			return result, err
-		}
-	}
-
-	if fromDirectory && body.AcmeOraclePrice != 0 {
+	if body.AcmeOraclePrice != 0 && st.Network.Type != config.Directory {
 		var ledgerState *protocol.InternalLedger
 		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
@@ -65,40 +51,16 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
-	// Return ACME burnt by buying credits to the supply
-	if !fromDirectory {
-		var issuerState *protocol.TokenIssuer
-		err := st.LoadUrlAs(protocol.AcmeUrl(), &issuerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load acme ledger")
-		}
-		var ledgerState *protocol.InternalLedger
-		err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load main ledger: %w", err)
-		}
-		issuerState.Issued.Sub(&issuerState.Issued, &body.AcmeBurnt)
-		err = st.Update(issuerState)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update issuer state: %v", err)
-		}
-	}
-
 	// Add the anchor to the chain - use the subnet name as the chain name
-	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
 		return nil, err
 	}
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(name)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
+	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(protocol.Directory)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
 	if err != nil {
 		return nil, err
-	}
-
-	if !fromDirectory {
-		// The directory does not process receipts
-		return nil, nil
 	}
 
 	if body.Major {
@@ -106,9 +68,18 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, nil
 	}
 
+	// Process OperatorUpdates when present
+	if len(body.OperatorUpdates) > 0 && st.Network.Type != config.Directory {
+		result, err := executeOperatorUpdates(st, body)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	// Process receipts
 	for i, receipt := range body.Receipts {
-		if !bytes.Equal(receipt.Result, body.RootAnchor[:]) {
+		receipt := receipt // See docs/developer/rangevarref.md
+		if !bytes.Equal(receipt.Anchor, body.RootAnchor[:]) {
 			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
@@ -120,14 +91,14 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 		for _, hash := range synth {
 			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
-			st.state.ProcessAdditionalTransaction(d)
+			st.State.ProcessAdditionalTransaction(d)
 		}
 	}
 
 	return nil, nil
 }
 
-func executeOperatorUpdates(st *StateManager, body *protocol.SyntheticAnchor) (protocol.TransactionResult, error) {
+func executeOperatorUpdates(st *StateManager, body *protocol.DirectoryAnchor) (protocol.TransactionResult, error) {
 	for _, opUpd := range body.OperatorUpdates {
 		bookUrl := st.NodeUrl().JoinPath(protocol.OperatorBook)
 

@@ -82,20 +82,20 @@ func (l LogLevel) String() string {
 	s := new(strings.Builder)
 	s.WriteString(l.Default)
 	for _, m := range l.Modules {
-		fmt.Fprintf(s, ";%s=%s", m[0], m[1])
+		fmt.Fprintf(s, ";%s=%s", m[0], m[1]) //nolint:rangevarref
 	}
 	return s.String()
 }
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
-	SetModule("block-executor", "info").
+	SetModule("snapshot", "info").
 	// SetModule("accumulate", "info").
 	// SetModule("main", "info").
 	// SetModule("state", "info").
 	// SetModule("statesync", "info").
 	// SetModule("accumulate", "debug").
-	// SetModule("executor", "info").
+	SetModule("executor", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("disk-monitor", "info").
@@ -111,8 +111,12 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
+	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
+	c.Accumulate.Snapshots.Directory = "snapshots"
+	c.Accumulate.Snapshots.RetainCount = 10
+	c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
@@ -133,10 +137,11 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 
-	Network Network `toml:"network" mapstructure:"network"`
-	Storage Storage `toml:"storage" mapstructure:"storage"`
-	API     API     `toml:"api" mapstructure:"api"`
-	Website Website `toml:"website" mapstructure:"website"`
+	Network   Network   `toml:"network" mapstructure:"network"`
+	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
+	Storage   Storage   `toml:"storage" mapstructure:"storage"`
+	API       API       `toml:"api" mapstructure:"api"`
+	Website   Website   `toml:"website" mapstructure:"website"`
 }
 
 type Network struct {
@@ -157,6 +162,18 @@ type Node struct {
 	Type    NodeType `toml:"type" mapstructure:"type"`
 }
 
+type Snapshots struct {
+	// Directory is the directory to store snapshots in
+	Directory string `toml:"directory" mapstructure:"directory"`
+
+	// RetainCount is the number of snapshots to retain
+	RetainCount int `toml:"retain" mapstructure:"retain"`
+
+	// Frequency is how many major blocks should occur before another snapshot
+	// is taken
+	Frequency int `toml:"frequency" mapstructure:"frequency"`
+}
+
 type Storage struct {
 	Type StorageType  `toml:"type" mapstructure:"type"`
 	Path string       `toml:"path" mapstructure:"path"`
@@ -169,6 +186,7 @@ type API struct {
 	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
+	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
 }
 
 type Website struct {

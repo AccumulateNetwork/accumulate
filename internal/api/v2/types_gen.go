@@ -42,12 +42,6 @@ type ChainQueryResponse struct {
 	extraData []byte
 }
 
-type DataEntry struct {
-	fieldsSet []bool
-	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	extraData []byte
-}
-
 type DataEntryQuery struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -57,8 +51,8 @@ type DataEntryQuery struct {
 
 type DataEntryQueryResponse struct {
 	fieldsSet []bool
-	EntryHash [32]byte  `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
-	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	extraData []byte
 }
 
@@ -124,9 +118,9 @@ type MetricsResponse struct {
 type MinorBlocksQuery struct {
 	UrlQuery
 	QueryPagination
-	TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
-	FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty" form:"filterSynthAnchorsOnlyBlocks" query:"filterSynthAnchorsOnlyBlocks"`
-	extraData                    []byte
+	TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
+	BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode"`
+	extraData       []byte
 }
 
 type MinorQueryResponse struct {
@@ -198,6 +192,13 @@ type SignerMetadata struct {
 type StatusResponse struct {
 	Ok        bool `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
 	extraData []byte
+}
+
+type SyntheticTransactionRequest struct {
+	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	extraData      []byte
 }
 
 type TokenDeposit struct {
@@ -282,19 +283,6 @@ type VersionResponse struct {
 	extraData      []byte
 }
 
-func (v *DataEntry) Copy() *DataEntry {
-	u := new(DataEntry)
-
-	u.Data = make([][]byte, len(v.Data))
-	for i, v := range v.Data {
-		u.Data[i] = encoding.BytesCopy(v)
-	}
-
-	return u
-}
-
-func (v *DataEntry) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *DataEntryQuery) Copy() *DataEntryQuery {
 	u := new(DataEntryQuery)
 
@@ -312,25 +300,14 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 	u := new(DataEntryQueryResponse)
 
 	u.EntryHash = v.EntryHash
-	u.Entry = *(&v.Entry).Copy()
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(protocol.DataEntry)
+	}
 
 	return u
 }
 
 func (v *DataEntryQueryResponse) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *DataEntry) Equal(u *DataEntry) bool {
-	if len(v.Data) != len(u.Data) {
-		return false
-	}
-	for i := range v.Data {
-		if !(bytes.Equal(v.Data[i], u.Data[i])) {
-			return false
-		}
-	}
-
-	return true
-}
 
 func (v *DataEntryQuery) Equal(u *DataEntryQuery) bool {
 	switch {
@@ -352,52 +329,11 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
-	if !((&v.Entry).Equal(&u.Entry)) {
+	if !(protocol.EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
 
 	return true
-}
-
-var fieldNames_DataEntry = []string{
-	1: "Data",
-}
-
-func (v *DataEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Data) == 0) {
-		for _, v := range v.Data {
-			writer.WriteBytes(1, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_DataEntry)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *DataEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Data is missing")
-	} else if len(v.Data) == 0 {
-		errs = append(errs, "field Data is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
 }
 
 var fieldNames_DataEntryQuery = []string{
@@ -455,8 +391,8 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
-	if !((v.Entry).Equal(new(DataEntry))) {
-		writer.WriteValue(2, &v.Entry)
+	if !(v.Entry == nil) {
+		writer.WriteValue(2, v.Entry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
@@ -477,7 +413,7 @@ func (v *DataEntryQueryResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if (v.Entry).Equal(new(DataEntry)) {
+	} else if v.Entry == nil {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -489,30 +425,6 @@ func (v *DataEntryQueryResponse) IsValid() error {
 	default:
 		return errors.New(strings.Join(errs, "; "))
 	}
-}
-
-func (v *DataEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadBytes(1); ok {
-			v.Data = append(v.Data, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_DataEntry)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
 }
 
 func (v *DataEntryQuery) UnmarshalBinary(data []byte) error {
@@ -548,9 +460,13 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(1); ok {
 		v.EntryHash = *x
 	}
-	if x := new(DataEntry); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Entry = *x
-	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := protocol.UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
 	if err != nil {
@@ -606,17 +522,6 @@ func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *DataEntry) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Data encoding.JsonList[*string] `json:"data,omitempty"`
-	}{}
-	u.Data = make(encoding.JsonList[*string], len(v.Data))
-	for i, x := range v.Data {
-		u.Data[i] = encoding.BytesToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
 func (v *DataEntryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
@@ -629,11 +534,11 @@ func (v *DataEntryQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		EntryHash string    `json:"entryHash,omitempty"`
-		Entry     DataEntry `json:"entry,omitempty"`
+		EntryHash string                                         `json:"entryHash,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
 
@@ -748,17 +653,17 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *MinorBlocksQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url                          *url.URL          `json:"url,omitempty"`
-		Start                        uint64            `json:"start,omitempty"`
-		Count                        uint64            `json:"count,omitempty"`
-		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
-		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+		Url             *url.URL              `json:"url,omitempty"`
+		Start           uint64                `json:"start,omitempty"`
+		Count           uint64                `json:"count,omitempty"`
+		TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty"`
+		BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
 	u.TxFetchMode = v.TxFetchMode
-	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	u.BlockFilterMode = v.BlockFilterMode
 	return json.Marshal(&u)
 }
 
@@ -1101,28 +1006,6 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *DataEntry) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Data encoding.JsonList[*string] `json:"data,omitempty"`
-	}{}
-	u.Data = make(encoding.JsonList[*string], len(v.Data))
-	for i, x := range v.Data {
-		u.Data[i] = encoding.BytesToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Data = make([][]byte, len(u.Data))
-	for i, x := range u.Data {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Data: %w", err)
-		} else {
-			v.Data[i] = x
-		}
-	}
-	return nil
-}
-
 func (v *DataEntryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       *url.URL `json:"url,omitempty"`
@@ -1144,11 +1027,11 @@ func (v *DataEntryQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		EntryHash string    `json:"entryHash,omitempty"`
-		Entry     DataEntry `json:"entry,omitempty"`
+		EntryHash string                                         `json:"entryHash,omitempty"`
+		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.Entry = v.Entry
+	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1157,7 +1040,8 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.EntryHash = x
 	}
-	v.Entry = u.Entry
+	v.Entry = u.Entry.Value
+
 	return nil
 }
 
@@ -1359,17 +1243,17 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url                          *url.URL          `json:"url,omitempty"`
-		Start                        uint64            `json:"start,omitempty"`
-		Count                        uint64            `json:"count,omitempty"`
-		TxFetchMode                  query.TxFetchMode `json:"txFetchMode,omitempty"`
-		FilterSynthAnchorsOnlyBlocks bool              `json:"filterSynthAnchorsOnlyBlocks,omitempty"`
+		Url             *url.URL              `json:"url,omitempty"`
+		Start           uint64                `json:"start,omitempty"`
+		Count           uint64                `json:"count,omitempty"`
+		TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty"`
+		BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
 	u.TxFetchMode = v.TxFetchMode
-	u.FilterSynthAnchorsOnlyBlocks = v.FilterSynthAnchorsOnlyBlocks
+	u.BlockFilterMode = v.BlockFilterMode
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1377,7 +1261,7 @@ func (v *MinorBlocksQuery) UnmarshalJSON(data []byte) error {
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
 	v.TxFetchMode = u.TxFetchMode
-	v.FilterSynthAnchorsOnlyBlocks = u.FilterSynthAnchorsOnlyBlocks
+	v.BlockFilterMode = u.BlockFilterMode
 	return nil
 }
 

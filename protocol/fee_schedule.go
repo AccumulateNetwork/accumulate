@@ -140,16 +140,16 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	if IsDnUrl(tx.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseBvnUrl(tx.Header.Principal); ok {
+	if _, ok := ParseSubnetUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
 
 	// Don't charge for synthetic and internal transactions
-	if !tx.Type().IsUser() {
+	if !tx.Body.Type().IsUser() {
 		return 0, nil
 	}
 
-	fee, err := BaseTransactionFee(tx.Type())
+	fee, err := BaseTransactionFee(tx.Body.Type())
 	if err != nil {
 		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}

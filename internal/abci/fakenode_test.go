@@ -25,7 +25,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -57,7 +59,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]connections.Client{}
+	clients := map[string]connections.ABCIClient{}
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -125,7 +127,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	var ledger *protocol.InternalLedger
 	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
-		n.height = ledger.Index
+		n.height = int64(ledger.Index)
 	} else {
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
@@ -154,10 +156,17 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Executor: mgr,
+		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
-		Network:  *n.network,
-		Address:  n.key.PubKey().Address(),
+		Config: &config.Config{Accumulate: config.Accumulate{
+			Network: *n.network,
+			Snapshots: config.Snapshots{
+				Directory: "snapshots",
+				Frequency: 0, // Do not take snapshots
+			},
+		}},
+		Address: n.key.PubKey().Address(),
 	})
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()
@@ -192,6 +201,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
+		Keys: [][]byte{n.key.Bytes()},
 	})
 	n.Require().NoError(err)
 
@@ -371,8 +381,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 func convertIds32(ids ...[32]byte) [][]byte {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
-		// Make a copy to avoid capturing the loop variable
-		id := id
+		id := id // See docs/developer/rangevarref.md
 		ids2[i] = id[:]
 	}
 	return ids2
@@ -389,21 +398,18 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)
-	record := batch.Account(u)
-	require.True(n.t, u.RootIdentity().Equal(u))
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err := record.Index("Directory", "Metadata").GetAs(md)
+	dir := indexing.Directory(batch, u)
+	count, err := dir.Count()
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
 	require.NoError(n.t, err)
 
-	chains := make([]string, md.Count)
+	chains := make([]string, count)
 	for i := range chains {
-		data, err := record.Index("Directory", uint64(i)).Get()
+		data, err := dir.Get(uint64(i))
 		require.NoError(n.t, err)
-		chains[i] = string(data)
+		chains[i] = data.String()
 	}
 	return chains
 }

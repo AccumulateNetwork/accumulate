@@ -205,9 +205,9 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	var res *api.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
-	wdt.Entry = *prepareData(args, true)
+	wdt.Entry = prepareData(args, true)
 
-	accountId := protocol.ComputeLiteDataAccountId(&wdt.Entry)
+	accountId := protocol.ComputeLiteDataAccountId(wdt.Entry)
 	addr, err := protocol.LiteDataAddress(accountId)
 	if err != nil {
 		return "", fmt.Errorf("invalid lite data address created from name(s)")
@@ -219,13 +219,14 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
 
-	lde := protocol.LiteDataEntry{}
+	lde := protocol.FactomDataEntry{}
 	copy(lde.AccountId[:], accountId)
-	lde.DataEntry = &wdt.Entry
-	entryHash, err := lde.Hash()
-	if err != nil {
-		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
+	data := wdt.Entry.GetData()
+	if len(data) > 0 {
+		lde.Data = data[0]
+		lde.ExtIds = data[1:]
 	}
+	entryHash := lde.Hash()
 
 	res, err = dispatchTxAndWait(&wdt, nil, u, signer)
 	if err != nil {
@@ -297,7 +298,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 
 	wd := protocol.WriteData{}
-	wd.Entry = *prepareData(args, false)
+	wd.Entry = prepareData(args, false)
 
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
@@ -307,8 +308,8 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 
-func prepareData(args []string, isFirstLiteEntry bool) *protocol.DataEntry {
-	entry := new(protocol.DataEntry)
+func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataEntry {
+	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
 		entry.Data = append(entry.Data, []byte{})
 	}
@@ -361,7 +362,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting data")
 	}
 
-	wd.Entry = *prepareData(args[1:], false)
+	wd.Entry = prepareData(args[1:], false)
 
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
@@ -377,8 +378,12 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	lde := protocol.LiteDataEntry{}
+	lde := protocol.FactomDataEntry{}
 	copy(lde.AccountId[:], append(accountId, lda.Tail...))
-	lde.DataEntry = &wd.Entry
+	data := wd.Entry.GetData()
+	if len(data) > 0 {
+		lde.Data = data[0]
+		lde.ExtIds = data[1:]
+	}
 	return ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash()).Print()
 }

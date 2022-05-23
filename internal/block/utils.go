@@ -103,48 +103,6 @@ func addChainAnchor(rootChain *database.Chain, account *database.Account, accoun
 	return indexIndex, true, nil
 }
 
-func loadDirectoryMetadata(batch *database.Batch, account *url.URL) (*protocol.DirectoryIndexMetadata, error) {
-	b, err := batch.Account(account).Index("Directory", "Metadata").Get()
-	if err != nil {
-		return nil, err
-	}
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err = md.UnmarshalBinary(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return md, nil
-}
-
-func loadDirectoryEntry(batch *database.Batch, account *url.URL, index uint64) (string, error) {
-	b, err := batch.Account(account).Index("Directory", index).Get()
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredAccount, error) {
-	var arec protocol.AnchoredAccount
-
-	rec := batch.Account(u)
-	state, err := rec.GetState()
-	if err != nil {
-		return arec, fmt.Errorf("failed to load %q: %v", u, err)
-	}
-
-	chain, err := rec.ReadChain(protocol.MainChain)
-	if err != nil {
-		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
-	}
-
-	arec.Account = state
-	copy(arec.Anchor[:], chain.Anchor())
-	return arec, nil
-}
-
 func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)
@@ -167,10 +125,16 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 
 func (*Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	switch account := account.(type) {
-	case *protocol.LiteDataAccount:
+	case *protocol.LiteIdentity:
 		return &protocol.AccountAuth{
 			Authorities: []protocol.AuthorityEntry{
 				{Url: account.Url},
+			},
+		}, nil
+	case *protocol.LiteTokenAccount:
+		return &protocol.AccountAuth{
+			Authorities: []protocol.AuthorityEntry{
+				{Url: account.Url.RootIdentity()},
 			},
 		}, nil
 

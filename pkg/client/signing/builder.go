@@ -126,7 +126,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeETH,
 		protocol.SignatureTypeBTCLegacy:
 
-	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic, protocol.SignatureTypeInternal:
+	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
 		panic(fmt.Errorf("invalid attempt to generate signature of type %v!", s.Type))
 
@@ -182,7 +182,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 	}
 }
 
-func (s *Builder) sign(sig protocol.KeySignature, hash []byte) error {
+func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
@@ -205,7 +205,8 @@ func (s *Builder) sign(sig protocol.KeySignature, hash []byte) error {
 	return s.Signer.Sign(sig, hash)
 }
 
-func (s *Builder) Sign(message []byte) (protocol.KeySignature, error) {
+func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
+	var sig protocol.Signature
 	sig, err := s.prepare(false)
 	if err != nil {
 		return nil, err
@@ -221,7 +222,8 @@ func (s *Builder) Sign(message []byte) (protocol.KeySignature, error) {
 	return sig, s.sign(sig, message)
 }
 
-func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.KeySignature, error) {
+func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
+	var sig protocol.Signature
 	sig, err := s.prepare(true)
 	if err != nil {
 		return nil, err
@@ -248,7 +250,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.KeySignature, er
 	return sig, s.sign(sig, txn.GetHash())
 }
 
-func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router, ledger *protocol.SyntheticLedger) (protocol.Signature, error) {
+func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router, ledger *protocol.SyntheticLedger) (*protocol.SyntheticSignature, error) {
 	var errs []string
 	if s.Url == nil {
 		errs = append(errs, "missing signer")

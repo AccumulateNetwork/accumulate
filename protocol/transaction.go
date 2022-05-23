@@ -1,23 +1,12 @@
 package protocol
 
 import (
-	"errors"
 	"math/big"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
-
-// SetHash sets the hash returned by GetHash. This will return an error if the
-// body type is not Remote.
-func (t *Transaction) SetHash(hash []byte) error {
-	if t.Body.Type() != TransactionTypeRemote {
-		return errors.New("cannot set the hash: not a remote transaction")
-	}
-	t.hash = hash
-	return nil
-}
 
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
@@ -98,9 +87,9 @@ func (t TransactionType) IsSynthetic() bool {
 	return TransactionMaxUser.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxSynthetic.GetEnumValue()
 }
 
-// IsInternal returns true if the transaction type is internal.
-func (t TransactionType) IsInternal() bool {
-	return TransactionMaxSynthetic.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxInternal.GetEnumValue()
+// IsSystem returns true if the transaction type is internal.
+func (t TransactionType) IsSystem() bool {
+	return TransactionMaxSynthetic.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxSystem.GetEnumValue()
 }
 
 type SyntheticTransaction interface {

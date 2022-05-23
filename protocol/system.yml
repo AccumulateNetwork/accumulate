@@ -10,13 +10,13 @@ InternalLedger:
       type: url
       pointer: true
     - name: Index
-      type: varint
+      type: uint
     - name: Timestamp
       type: time
     - name: PendingOracle
-      type: uvarint
+      type: uint
     - name: ActiveOracle
-      type: uvarint
+      type: uint
     - name: AcmeBurnt
       type: bigint
     - name: OperatorUpdates
@@ -38,7 +38,7 @@ SyntheticLedger:
 
 ##### Transactions #####
 
-InternalGenesis:
+SystemGenesis:
   union: { type: transaction }
 
 ##### Data Types #####
@@ -50,8 +50,15 @@ SubnetSyntheticLedger:
       type: url
       pointer: true
     - name: Produced
-      description: is the sequence number of the latest synthetic transaction produced for the subnet
+      description: is the maximum sequence number of synthetic transactions produced for the subnet
       type: uint
     - name: Received
-      description: is the sequence number of the latest synthetic transaction received from the subnet
+      description: is the maximum sequence number of synthetic transactions received from the subnet
       type: uint
+    - name: Delivered
+      description: is the maximum sequence number of delivered synthetic transactions received from the subnet
+      type: uint
+    - name: Pending
+      description: is the transaction hashes of synthetic transactions received out of order
+      type: hash
+      repeatable: true

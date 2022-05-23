@@ -22,10 +22,10 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
 	}
 
-	return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, body.Cause, false)
+	return executeWriteLiteDataAccount(st, body.Entry, false)
 }
 
-func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
+func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool) (protocol.TransactionResult, error) {
 	if scratch {
 		return nil, fmt.Errorf("cannot write scratch data to a lite data account")
 	}
@@ -44,7 +44,7 @@ func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, en
 			liteDataAccountId = append(liteDataAccountId, origin.Tail...)
 
 			//compute the hash for this entry
-			entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, entry)
+			entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
 			if err != nil {
 				return nil, err
 			}
@@ -82,7 +82,7 @@ func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, en
 		//12 additional bytes.
 		lite.Tail = liteDataAccountId[20:32]
 
-		entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, entry)
+		entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
 		if err != nil {
 			return nil, err
 		}
@@ -93,31 +93,7 @@ func executeWriteLiteDataAccount(st *StateManager, txn *protocol.Transaction, en
 		result.AccountUrl = u
 	}
 
-	sw := protocol.SegWitDataEntry{}
-
-	//reference this chain in the segwit entry.
-	sw.EntryUrl = result.AccountUrl
-
-	//we provide the transaction id of the original transaction
-	sw.Cause = cause
-
-	//and the entry hash
-	sw.EntryHash = result.EntryHash
-
-	// now replace the transaction payload with a segregated witness to the data.
-	// This technique is used to segregate the payload from the stored transaction
-	// by replacing the data payload with a smaller reference to that data via the
-	// entry hash.  While technically, not true segwit since the entry hash is not
-	// signed, the original transaction can be reconstructed by recombining the
-	// signature info stored on the pending chain, the transaction info stored on
-	// the main chain, and the original data payload that resides on the data chain
-	// when the user wishes to validate the signature of the transaction that
-	// produced the data entry
-
-	//now replace the original data entry payload with the new segwit payload
-	txn.Body = &sw
-
-	st.UpdateData(account, sw.EntryHash[:], entry)
+	st.UpdateData(account, result.EntryHash[:], entry)
 
 	return result, nil
 }
