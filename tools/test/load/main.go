@@ -136,8 +136,12 @@ func initClient(server string) (string, error) {
 	checkf(err, "creating client")
 	client.DebugRequest = true
 
-	maxGoroutines := 10
+	// Limit amount of goroutines
+	maxGoroutines := 1
 	guard := make(chan struct{}, maxGoroutines)
+
+	// Add timer to measure TPS
+	timer := time.NewTimer(time.Microsecond)
 
 	// run key generation in gorooutine
 	for i := 0; i < 30; i++ {
@@ -152,6 +156,9 @@ func initClient(server string) (string, error) {
 			_, err = client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 
 			<-guard
+
+			// Timer to measure TPS
+			<-timer.C
 		}(i)
 	}
 
