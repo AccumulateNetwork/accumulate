@@ -45,8 +45,8 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
-	m.methods["query-minor-blocks"] = m.QueryMinorBlocksByUrl
-	m.methods["query-minor-blocks"] = m.QueryMinorBlocksFromDN
+	m.methods["query-minor-blocks-url"] = m.QueryMinorBlocksByUrl
+	m.methods["query-minor-blocks-dn"] = m.QueryMinorBlocksFromDN
 	m.methods["query-synth"] = m.QuerySynth
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory

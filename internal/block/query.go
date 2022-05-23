@@ -2,6 +2,7 @@ package block
 
 import (
 	"bytes"
+	"context"
 	"encoding"
 	"encoding/hex"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tendermint/tendermint/rpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -1022,12 +1024,19 @@ resultLoop:
 					if err == nil {
 						minorEntry.TxCount++
 						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt == protocol.TransactionTypeDirectoryAnchor {
-							body, ok := qr.Envelope.Transaction[0].Body.(*protocol.DirectoryAnchor)
+						if txt == protocol.TransactionTypePartitionAnchor {
+							body, ok := qr.Envelope.Transaction[0].Body.(*protocol.PartitionAnchor)
 							if !ok {
 								return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 							}
-							fmt.Println("Anchor body:", body)
+
+							remoteEntries, err := m.queryRemote(body.Source, body.Block)
+							if err != nil {
+								return nil, err
+							}
+							for _, entry := range remoteEntries {
+								minorEntry.Transactions = append(minorEntry.Transactions, entry.Transactions...)
+							}
 						} else if txt.IsSystem() {
 							systemTxCount++
 						} else if req.TxFetchMode == query.TxFetchModeExpand {
@@ -1049,6 +1058,36 @@ resultLoop:
 		resultCnt++
 	}
 	return &resp, nil
+}
+
+func (m *Executor) queryRemote(source *url.URL, block uint64) ([]*query.ResponseMinorEntry, *protocol.Error) {
+	req := &query.RequestMinorBlocksByUrl{
+		Start:           block,
+		Limit:           1,
+		TxFetchMode:     query.TxFetchModeExpand,
+		BlockFilterMode: query.BlockFilterModeExcludeNone,
+	}
+	buf, err := req.MarshalBinary()
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+	}
+
+	subnet, ok := protocol.ParseSubnetUrl(source)
+	if !ok {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError,
+			Message: fmt.Errorf("the anchor source URL is %s which is not a BVN", source.String())}
+	}
+
+	res, err := m.Router.Query(context.Background(), subnet, buf, client.ABCIQueryOptions{})
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+	}
+	remoteBlocks := new(query.ResponseMinorBlocks)
+	err = remoteBlocks.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
+	return remoteBlocks.Entries, nil
 }
 
 func (m *Executor) queryMinorBlocksByUrl(batch *database.Batch, req *query.RequestMinorBlocksByUrl) (*query.ResponseMinorBlocks, *protocol.Error) {

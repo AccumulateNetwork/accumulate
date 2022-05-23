@@ -47,9 +47,12 @@ QueryType:
   KeyPageIndex:
     value: 8
     description: Query key page index
-  MinorBlocks:
+  MinorBlocksByUrl:
     value: 9
     description: Query minor blocks
   Synth:
     value: 10
     description: Query by synthetic transaction sequence number
+  MinorBlocksFromDN:
+    value: 11
+    description: Query minor blocks

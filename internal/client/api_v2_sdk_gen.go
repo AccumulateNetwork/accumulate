@@ -376,7 +376,7 @@ func (c *Client) QueryKeyPageIndex(ctx context.Context, req *api.KeyPageIndexQue
 func (c *Client) QueryMinorBlocksByUrl(ctx context.Context, req *api.MinorBlocksByUrlQuery) (*api.MultiResponse, error) {
 	var resp api.MultiResponse
 
-	err := c.RequestAPIv2(ctx, "query-minor-blocks", req, &resp)
+	err := c.RequestAPIv2(ctx, "query-minor-blocks-url", req, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +390,7 @@ func (c *Client) QueryMinorBlocksByUrl(ctx context.Context, req *api.MinorBlocks
 func (c *Client) QueryMinorBlocksFromDN(ctx context.Context, req *api.MinorBlocksQuery) (*api.MultiResponse, error) {
 	var resp api.MultiResponse
 
-	err := c.RequestAPIv2(ctx, "query-minor-blocks", req, &resp)
+	err := c.RequestAPIv2(ctx, "query-minor-blocks-dn", req, &resp)
 	if err != nil {
 		return nil, err
 	}

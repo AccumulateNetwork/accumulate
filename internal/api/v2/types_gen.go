@@ -116,9 +116,11 @@ type MetricsResponse struct {
 }
 
 type MinorBlocksByUrlQuery struct {
-	MinorBlocksQuery
 	UrlQuery
-	extraData []byte
+	QueryPagination
+	TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode"`
+	BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode"`
+	extraData       []byte
 }
 
 type MinorBlocksQuery struct {
@@ -658,15 +660,17 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 
 func (v *MinorBlocksByUrlQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		QueryPagination QueryPagination       `json:"queryPagination,omitempty"`
+		Url             *url.URL              `json:"url,omitempty"`
+		Start           uint64                `json:"start,omitempty"`
+		Count           uint64                `json:"count,omitempty"`
 		TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty"`
 		BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty"`
-		Url             *url.URL              `json:"url,omitempty"`
 	}{}
-	u.QueryPagination = v.MinorBlocksQuery.QueryPagination
-	u.TxFetchMode = v.MinorBlocksQuery.TxFetchMode
-	u.BlockFilterMode = v.MinorBlocksQuery.BlockFilterMode
 	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.TxFetchMode = v.TxFetchMode
+	u.BlockFilterMode = v.BlockFilterMode
 	return json.Marshal(&u)
 }
 
@@ -1260,22 +1264,25 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 
 func (v *MinorBlocksByUrlQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		QueryPagination QueryPagination       `json:"queryPagination,omitempty"`
+		Url             *url.URL              `json:"url,omitempty"`
+		Start           uint64                `json:"start,omitempty"`
+		Count           uint64                `json:"count,omitempty"`
 		TxFetchMode     query.TxFetchMode     `json:"txFetchMode,omitempty"`
 		BlockFilterMode query.BlockFilterMode `json:"blockFilterMode,omitempty"`
-		Url             *url.URL              `json:"url,omitempty"`
 	}{}
-	u.QueryPagination = v.MinorBlocksQuery.QueryPagination
-	u.TxFetchMode = v.MinorBlocksQuery.TxFetchMode
-	u.BlockFilterMode = v.MinorBlocksQuery.BlockFilterMode
 	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.TxFetchMode = v.TxFetchMode
+	u.BlockFilterMode = v.BlockFilterMode
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.MinorBlocksQuery.QueryPagination = u.QueryPagination
-	v.MinorBlocksQuery.TxFetchMode = u.TxFetchMode
-	v.MinorBlocksQuery.BlockFilterMode = u.BlockFilterMode
 	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	v.TxFetchMode = u.TxFetchMode
+	v.BlockFilterMode = u.BlockFilterMode
 	return nil
 }
 

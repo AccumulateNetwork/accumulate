@@ -95,7 +95,7 @@ QueryMinorBlocksByUrl:
   description: queries an account's minor blocks
   kind: query
   experimental: true
-  rpc: query-minor-blocks
+  rpc: query-minor-blocks-url
   input: MinorBlocksByUrlQuery
   output: MultiResponse
   call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
@@ -104,7 +104,7 @@ QueryMinorBlocksFromDN:
   description: queries an account's minor blocks
   kind: query
   experimental: true
-  rpc: query-minor-blocks
+  rpc: query-minor-blocks-dn
   input: MinorBlocksQuery
   output: MultiResponse
   call-params: [QueryPagination, TxFetchMode, BlockFilterMode]

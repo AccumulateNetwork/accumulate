@@ -465,14 +465,13 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocksByUrl(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
+func (q *queryDirect) QueryMinorBlocksByUrl(pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
 	err := queryMinorBlocksCheckPagination(pagination)
 	if err != nil {
 		return nil, err
 	}
 
 	req := &query.RequestMinorBlocksByUrl{
-		Account:         u,
 		Start:           pagination.Start,
 		Limit:           pagination.Count,
 		TxFetchMode:     txFetchMode,

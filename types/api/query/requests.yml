@@ -94,9 +94,6 @@ RequestMinorBlocksFromDN:
 RequestMinorBlocksByUrl:
   union: { name: request, type: query, value: MinorBlocksByUrl }
   fields:
-    - name: Account
-      type: url
-      pointer: true
     - name: Start
       type: uint
     - name: Limit

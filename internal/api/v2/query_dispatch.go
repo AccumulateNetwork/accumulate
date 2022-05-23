@@ -159,7 +159,7 @@ func (q *queryDispatch) QueryMinorBlocksByUrl(url *url.URL, pagination QueryPagi
 		return nil, err
 	}
 
-	return q.direct(r).QueryMinorBlocksByUrl(url, pagination, txFetchMode, blockFilter)
+	return q.direct(r).QueryMinorBlocksByUrl(pagination, txFetchMode, blockFilter)
 }
 
 func (q *queryDispatch) QueryMinorBlocksFromDN(pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilter query.BlockFilterMode) (*MultiResponse, error) {

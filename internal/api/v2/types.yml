@@ -271,8 +271,15 @@ MinorBlocksByUrlQuery:
   non-binary: true
   incomparable: true
   embeddings:
-    - MinorBlocksQuery
     - UrlQuery
+    - QueryPagination
+  fields:
+    - name: TxFetchMode
+      type: query.TxFetchMode
+      optional: true
+    - name: BlockFilterMode
+      type: query.BlockFilterMode
+      optional: true
 
 MinorBlocksQuery:
   non-binary: true

@@ -41,11 +41,14 @@ const QueryTypeDataSet QueryType = 7
 // QueryTypeKeyPageIndex Query key page index.
 const QueryTypeKeyPageIndex QueryType = 8
 
-// QueryTypeMinorBlocks Query minor blocks.
-const QueryTypeMinorBlocks QueryType = 9
+// QueryTypeMinorBlocksByUrl Query minor blocks.
+const QueryTypeMinorBlocksByUrl QueryType = 9
 
 // QueryTypeSynth Query by synthetic transaction sequence number.
 const QueryTypeSynth QueryType = 10
+
+// QueryTypeMinorBlocksFromDN Query minor blocks.
+const QueryTypeMinorBlocksFromDN QueryType = 11
 
 // TxFetchModeExpand expand the full transactions in the result set.
 const TxFetchModeExpand TxFetchMode = 0
@@ -126,7 +129,7 @@ func (v QueryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *QueryType) SetEnumValue(id uint64) bool {
 	u := QueryType(id)
 	switch u {
-	case QueryTypeUnknown, QueryTypeUrl, QueryTypeChainId, QueryTypeTxId, QueryTypeTxHistory, QueryTypeDirectoryUrl, QueryTypeData, QueryTypeDataSet, QueryTypeKeyPageIndex, QueryTypeMinorBlocks, QueryTypeSynth:
+	case QueryTypeUnknown, QueryTypeUrl, QueryTypeChainId, QueryTypeTxId, QueryTypeTxHistory, QueryTypeDirectoryUrl, QueryTypeData, QueryTypeDataSet, QueryTypeKeyPageIndex, QueryTypeMinorBlocksByUrl, QueryTypeSynth, QueryTypeMinorBlocksFromDN:
 		*v = u
 		return true
 	default:
@@ -155,10 +158,12 @@ func (v QueryType) String() string {
 		return "dataSet"
 	case QueryTypeKeyPageIndex:
 		return "keyPageIndex"
-	case QueryTypeMinorBlocks:
-		return "minorBlocks"
+	case QueryTypeMinorBlocksByUrl:
+		return "minorBlocksByUrl"
 	case QueryTypeSynth:
 		return "synth"
+	case QueryTypeMinorBlocksFromDN:
+		return "minorBlocksFromDN"
 	default:
 		return fmt.Sprintf("QueryType:%d", v)
 	}
@@ -185,10 +190,12 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypeDataSet, true
 	case "keypageindex":
 		return QueryTypeKeyPageIndex, true
-	case "minorblocks":
-		return QueryTypeMinorBlocks, true
+	case "minorblocksbyurl":
+		return QueryTypeMinorBlocksByUrl, true
 	case "synth":
 		return QueryTypeSynth, true
+	case "minorblocksfromdn":
+		return QueryTypeMinorBlocksFromDN, true
 	default:
 		return 0, false
 	}
