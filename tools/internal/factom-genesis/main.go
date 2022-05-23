@@ -64,12 +64,12 @@ func WriteDataToAccumulate(env string, data *protocol.LiteDataEntry) error {
 		fmt.Println("Error : ", err.Error())
 		return err
 	}
-	addressString, err := protocol.GetFactoidAddressFromRCDHash(data.AccountId[:])
-	if err != nil {
-		fmt.Println("Error : ", err.Error())
-		return err
-	}
-	chainUrl, err := protocol.GetLiteAccountFromFactoidAddress(addressString)
+	//addressString, err := protocol.GetFactoidAddressFromRCDHash(data.AccountId[:])
+	//if err != nil {
+	// fmt.Println("Error : ", err.Error())
+	// return err
+	//}
+	chainUrl, err := protocol.LiteDataAddress(data.AccountId[:])
 	if err != nil {
 		fmt.Println("Error : ", err.Error())
 		return err
