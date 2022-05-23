@@ -42,12 +42,12 @@ func CurlEntryFromFactom() []*Entry {
 		curl := exec.Command("curl", "-X", "POST", "--data-binary", data, "-H", "content-type:text/plain;", "http://localhost:8088/v2")
 		output, err := curl.Output()
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("Error : ", err)
 		}
 		var res Response
 		err = json.Unmarshal(output, &res)
 		if err != nil {
-			fmt.Println(err.Error())
+			fmt.Println("Error : ", err)
 		}
 		entries = append(entries, &res.Result)
 	}

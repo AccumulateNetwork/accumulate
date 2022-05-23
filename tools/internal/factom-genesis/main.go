@@ -2,13 +2,11 @@ package factom
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/ed25519"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -21,43 +19,28 @@ var factomChainData map[string]*Queue
 var chainQueue map[string]bool
 var origin *url.URL
 var signer *signing.Builder
+var key *cmd.Key
 
 const (
-	LOCAL_URL = "http://localhost:26660"
+	LOCAL_URL = "http://127.0.1.1:26660"
 )
 
-func AccountFromPrivateKey(privateKeyHex string) (*url.URL, error) {
-	var privBytes []byte
-	privBytes, err := hex.DecodeString(privateKeyHex)
-	if err != nil {
-		fmt.Println(err.Error())
-		privBytes, err = base64.RawStdEncoding.DecodeString(privateKeyHex)
-		if err != nil {
-			fmt.Println(err.Error())
-			return nil, err
-		}
+func AccountFromPrivateKey(privateKey, publicKey string) (*url.URL, error) {
+	var pk ed25519.PrivateKey
+	if len([]byte(privateKey)) == 32 {
+		pk = ed25519.NewKeyFromSeed([]byte(privateKey))
+	} else {
+		pk = []byte(privateKey)
 	}
-	var pvkey privval.FilePVKey
-	err = json.Unmarshal(privBytes, &pvkey)
-	if err != nil {
-		fmt.Println(err.Error())
-		return nil, err
-	}
-	var pub, priv []byte
-	if pvkey.PubKey != nil {
-		pub = pvkey.PubKey.Bytes()
-	}
-	if pvkey.PrivKey != nil {
-		priv = pvkey.PrivKey.Bytes()
-	}
-	key := &cmd.Key{PrivateKey: pub, PublicKey: priv, Type: protocol.SignatureTypeED25519}
+
+	key = &cmd.Key{PrivateKey: []byte(publicKey), PublicKey: []byte(privateKey), Type: protocol.SignatureTypeED25519}
 	signer = new(signing.Builder)
 	signer.Type = protocol.SignatureTypeLegacyED25519
 	signer.Timestamp = nonceFromTimeNow()
 	signer.Type = key.Type
 	signer.Version = 1
 	signer.SetPrivateKey(key.PrivateKey)
-	url := protocol.LiteAuthorityForKey(key.PublicKey, protocol.SignatureTypeED25519)
+	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	origin = url
 	signer.Url = url.RootIdentity()
 	fmt.Println(signer.Url)
@@ -67,9 +50,10 @@ func AccountFromPrivateKey(privateKeyHex string) (*url.URL, error) {
 func WriteDataToAccumulate(env string, data *protocol.LiteDataEntry) error {
 	client, err := client.New(env)
 	if err != nil {
+		fmt.Println("Error : ", err.Error())
 		return err
 	}
-	wd := &protocol.WriteData{
+	wd := &protocol.WriteDataTo{
 		Entry: *data.DataEntry,
 	}
 	txn := new(protocol.Transaction)
@@ -77,16 +61,39 @@ func WriteDataToAccumulate(env string, data *protocol.LiteDataEntry) error {
 	txn.Header.Principal = origin
 	sig, err := signer.Initiate(txn)
 	if err != nil {
+		fmt.Println("Error : ", err.Error())
 		return err
 	}
+	addressString, err := protocol.GetFactoidAddressFromRCDHash(data.AccountId[:])
+	if err != nil {
+		fmt.Println("Error : ", err.Error())
+		return err
+	}
+	chainUrl, err := protocol.GetLiteAccountFromFactoidAddress(addressString)
+	if err != nil {
+		fmt.Println("Error : ", err.Error())
+		return err
+	}
+	wd.Recipient = chainUrl
 	req := &api.TxRequest{
 		Payload:   wd,
 		Origin:    origin,
 		Signature: sig.GetSignature(),
+		Signer: api.Signer{
+			Timestamp: nonceFromTimeNow(),
+			PublicKey: key.PublicKey,
+			Url:       origin,
+			Version:   1,
+		},
 	}
-	_, err = client.ExecuteWriteDataTo(context.Background(), req)
+	res, err := client.ExecuteWriteDataTo(context.Background(), req)
 	if err != nil {
+		fmt.Println("Error : ", err.Error())
 		return err
+	}
+	if res.Code != 0 {
+		fmt.Println(res.Message)
+		return fmt.Errorf(res.Message)
 	}
 	return nil
 }
@@ -118,7 +125,6 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 }
 
 func ConvertFactomDataEntryToLiteDataEntry(entry Entry) *protocol.LiteDataEntry {
-	fmt.Println(string(entry.ChainId))
 	dataEntry := protocol.LiteDataEntry{
 		DataEntry: &protocol.DataEntry{},
 	}
