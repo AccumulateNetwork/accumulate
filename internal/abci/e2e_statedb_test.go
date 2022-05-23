@@ -48,7 +48,7 @@ func TestStateDBConsistency(t *testing.T) {
 	}
 
 	ledger := n.network.NodeUrl(protocol.Ledger)
-	var ledger1 *protocol.InternalLedger
+	var ledger1 *protocol.SystemLedger
 	batch := n.db.Begin(false)
 	require.NoError(t, batch.Account(ledger).GetStateAs(&ledger1))
 	anchor, err := batch.GetMinorRootChainAnchor(n.network)
@@ -63,7 +63,7 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin(false)
-	var ledger2 *protocol.InternalLedger
+	var ledger2 *protocol.SystemLedger
 	anchor, err = batch.GetMinorRootChainAnchor(n.network)
 	require.NoError(t, err)
 	require.NoError(t, batch.Account(ledger).GetStateAs(&ledger2))

@@ -169,12 +169,3 @@ TokenIssuer:
       type: bigint
       pointer: true
       optional: true
-
-Anchor:
-  union: { type: account }
-  fields:
-    - name: Url
-      type: url
-      pointer: true
-    - type: AccountAuth
-      marshal-as: reference
