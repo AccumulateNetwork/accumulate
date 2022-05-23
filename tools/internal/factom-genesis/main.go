@@ -106,10 +106,14 @@ func WriteDataFromQueueToAccumulate() {
 }
 
 func ExecuteQueueToWriteData(chainId string, queue *Queue) {
-	if len(*queue) > 0 {
-		entry := queue.Pop().(*Entry)
-		dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
-		WriteDataToAccumulate(LOCAL_URL, dataEntry)
+	for {
+		if len(*queue) > 0 {
+			entry := queue.Pop().(*Entry)
+			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
+			WriteDataToAccumulate(LOCAL_URL, dataEntry)
+		} else {
+			break
+		}
 	}
 }
 
