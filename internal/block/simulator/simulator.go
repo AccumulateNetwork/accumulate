@@ -403,7 +403,7 @@ type ExecEntry struct {
 	Database  *database.Database
 	Executor  *block.Executor
 	bootstrap genesis.Bootstrap
-	API      *client.Client
+	API       *client.Client
 
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to
