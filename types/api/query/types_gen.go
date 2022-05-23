@@ -270,9 +270,9 @@ func (*RequestDirectory) Type() QueryType { return QueryTypeDirectoryUrl }
 
 func (*RequestKeyPageIndex) Type() QueryType { return QueryTypeKeyPageIndex }
 
-func (*RequestMinorBlocksByUrl) Type() QueryType { return QueryTypeMinorBlocks }
+func (*RequestMinorBlocksByUrl) Type() QueryType { return QueryTypeMinorBlocksByUrl }
 
-func (*RequestMinorBlocksFromDN) Type() QueryType { return QueryTypeMinorBlocks }
+func (*RequestMinorBlocksFromDN) Type() QueryType { return QueryTypeMinorBlocksFromDN }
 
 func (*RequestSynth) Type() QueryType { return QueryTypeSynth }
 

@@ -78,7 +78,7 @@ RequestKeyPageIndex:
       type: bytes
 
 RequestMinorBlocksFromDN:
-  union: { name: request, type: query, value: MinorBlocks }
+  union: { name: request, type: query, value: MinorBlocksFromDN }
   fields:
     - name: Start
       type: uint
@@ -92,7 +92,7 @@ RequestMinorBlocksFromDN:
       marshal-as: enum
 
 RequestMinorBlocksByUrl:
-  union: { name: request, type: query, value: MinorBlocks }
+  union: { name: request, type: query, value: MinorBlocksByUrl }
   fields:
     - name: Account
       type: url

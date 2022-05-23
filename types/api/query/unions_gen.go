@@ -28,9 +28,9 @@ func NewRequest(typ QueryType) (Request, error) {
 		return new(RequestDirectory), nil
 	case QueryTypeKeyPageIndex:
 		return new(RequestKeyPageIndex), nil
-	case QueryTypeMinorBlocks:
+	case QueryTypeMinorBlocksByUrl:
 		return new(RequestMinorBlocksByUrl), nil
-	case QueryTypeMinorBlocks:
+	case QueryTypeMinorBlocksFromDN:
 		return new(RequestMinorBlocksFromDN), nil
 	case QueryTypeSynth:
 		return new(RequestSynth), nil
