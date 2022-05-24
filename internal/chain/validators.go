@@ -19,14 +19,23 @@ var _ SignerValidator = (*AddValidator)(nil)
 var _ SignerValidator = (*RemoveValidator)(nil)
 var _ SignerValidator = (*UpdateValidatorKey)(nil)
 
-func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
-	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
+	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
+	}
+
+	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
 	}
 
-	if signerPageIdx > 2 {
-		return false, fmt.Errorf("cannot modify validators with a lower priority key page")
+	// If the signer is a page of the principal
+	if principalBook.Equal(signerBook) {
+		// Lower indices are higher priority
+		if signerPageIdx > principalPageIdx {
+			return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+		}
 	}
 
 	// Run the normal checks
