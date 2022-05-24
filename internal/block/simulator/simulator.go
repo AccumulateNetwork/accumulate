@@ -70,52 +70,52 @@ func New(t TB, bvnCount int) *Simulator {
 	return sim
 }
 
-func (s *Simulator) Setup(bvnCount int) {
-	s.Helper()
+func (sim *Simulator) Setup(bvnCount int) {
+	sim.Helper()
 
 	// Initialize the simulartor and network
-	s.routingOverrides = map[[32]byte]string{}
-	s.Logger = s.newLogger().With("module", "simulator")
-	s.Executors = map[string]*ExecEntry{}
-	s.Subnets = make([]config.Subnet, bvnCount+1)
-	s.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
+	sim.routingOverrides = map[[32]byte]string{}
+	sim.Logger = sim.newLogger().With("module", "simulator")
+	sim.Executors = map[string]*ExecEntry{}
+	sim.Subnets = make([]config.Subnet, bvnCount+1)
+	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
 	for i := 0; i < bvnCount; i++ {
-		s.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
+		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
 	}
 
 	// Initialize each executor
-	for i := range s.Subnets {
-		subnet := &s.Subnets[i]
+	for i := range sim.Subnets {
+		subnet := &sim.Subnets[i]
 		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
 
-		logger := s.newLogger().With("subnet", subnet.ID)
-		key := acctesting.GenerateKey(s.Name(), subnet.ID)
+		logger := sim.newLogger().With("subnet", subnet.ID)
+		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
 		network := config.Network{
 			Type:          subnet.Type,
 			LocalSubnetID: subnet.ID,
 			LocalAddress:  subnet.ID,
-			Subnets:       s.Subnets,
+			Subnets:       sim.Subnets,
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
 			Logger:  logger,
 			Key:     key,
 			Network: network,
-			Router:  s.Router(),
+			Router:  sim.Router(),
 		}, db)
-		require.NoError(s, err)
+		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
 			Logger:        logger,
 			Network:       &network,
-			Router:        s.Router(),
+			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 		})
-		require.NoError(s, err)
+		require.NoError(sim, err)
 
-		s.Executors[subnet.ID] = &ExecEntry{
+		sim.Executors[subnet.ID] = &ExecEntry{
 			Database:  db,
 			Executor:  exec,
 			API:       acctesting.DirectJrpcClient(jrpc),
