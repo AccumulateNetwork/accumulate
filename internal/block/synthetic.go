@@ -1,7 +1,6 @@
 package block
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 
@@ -195,10 +194,8 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 
 	// For each produced transaction
 	for i, transaction := range produced {
-		hash := transaction.GetHash()
-
 		// TODO Can we make this less hacky?
-		record := batch.Transaction(hash)
+		record := batch.Transaction(transaction.GetHash())
 		status, err := record.GetStatus()
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
@@ -208,23 +205,10 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			return errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
 		}
 		if len(sigs) == 0 {
-			return errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", hash[:4])
+			return errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", transaction.GetHash()[:4])
 		}
 		if len(sigs) > 1 {
-			return errors.Format(errors.StatusInternalError, "synthetic transaction %X has more than one signature", hash[:4])
-		}
-		initSig := sigs[0]
-
-		// Sign it
-		keySig, err := new(signing.Builder).
-			SetType(protocol.SignatureTypeED25519).
-			SetPrivateKey(x.Key).
-			SetKeyPageUrl(x.Network.ValidatorBook(), 0).
-			SetVersion(1).
-			SetTimestamp(1).
-			Sign(hash)
-		if err != nil {
-			return errors.Format(errors.StatusUnknown, "sign synthetic transaction: %w", err)
+			return errors.Format(errors.StatusInternalError, "synthetic transaction %X has more than one signature", transaction.GetHash()[:4])
 		}
 
 		// Prove it
@@ -240,7 +224,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 
 		proofSig := new(protocol.ReceiptSignature)
 		proofSig.SourceNetwork = x.Network.NodeUrl()
-		proofSig.TransactionHash = *(*[32]byte)(hash)
+		proofSig.TransactionHash = *(*[32]byte)(transaction.GetHash())
 		proofSig.Proof = *protocol.ReceiptFromManaged(r)
 
 		// Record the proof signature but DO NOT record the key signature! Each
@@ -253,15 +237,9 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
-		_, err = batch.Transaction(hash).AddSignature(0, proofSig)
+		_, err = batch.Transaction(transaction.GetHash()).AddSignature(0, proofSig)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", hash[:4], err)
-		}
-
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{transaction}, Signatures: []protocol.Signature{initSig, keySig, proofSig}}
-		err = x.dispatcher.BroadcastTx(context.Background(), transaction.Header.Principal, env)
-		if err != nil {
-			return errors.Format(errors.StatusUnknown, "send synthetic transaction %X: %w", hash[:4], err)
+			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
 	}
 

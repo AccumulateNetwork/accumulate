@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -42,7 +43,12 @@ func (x *Executor) BeginBlock(block *Block) error {
 
 		// Use a read-only batch
 		batch := block.Batch.Begin(false)
-		defer batch.Discard()
+		defer func() {
+			if batch.Dirty() {
+				x.Logger.Error("Finalize made changes")
+			}
+			batch.Discard()
+		}()
 
 		// Finalize the previous block
 		err = x.finalizeBlock(batch, uint64(block.Index), openMajor, majorBlockIndex)
@@ -266,7 +272,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	}
 
 	// Build receipts for synthetic transactions produced in the previous block
-	didSendSynth, err := x.didSendSyntheticTransactions(batch)
+	didSendSynth, err := x.sendSyntheticTransactions(batch)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "build synthetic transaction receipts: %w", err)
 	}
@@ -332,7 +338,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	return nil
 }
 
-func (x *Executor) didSendSyntheticTransactions(batch *database.Batch) (bool, error) {
+func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error) {
 	// Load the root chain's index chain's last two entries
 	last, nextLast, err := indexing.LoadLastTwoIndexEntries(batch.Account(x.Network.Ledger()), protocol.MinorRootIndexChain)
 	if err != nil {
@@ -354,8 +360,71 @@ func (x *Executor) didSendSyntheticTransactions(batch *database.Batch) (bool, er
 	if last == nil {
 		return false, nil // Synth chain is empty
 	}
-	if last.Anchor < prevRootAnchor {
+	synthEnd, synthAnchor := last.Source, last.Anchor
+	var synthStart uint64
+	if nextLast != nil {
+		synthStart = nextLast.Source + 1
+	}
+	if synthAnchor < prevRootAnchor {
 		return false, nil // No change since last block
+	}
+
+	// Load the synthetic transaction chain
+	chain, err := batch.Account(x.Network.Synthetic()).ReadChain(protocol.MainChain)
+	if err != nil {
+		return false, errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+	}
+
+	// Get transaction hashes
+	hashes, err := chain.Entries(int64(synthStart), int64(synthEnd)+1)
+	if err != nil {
+		return false, errors.Format(errors.StatusUnknown, "load entries %d through %d of synthetic transaction chain: %w", synthStart, synthEnd, err)
+	}
+
+	// For each synthetic transaction from the last block
+	for _, hash := range hashes {
+		// Load it
+		record := batch.Transaction(hash)
+		state, err := record.GetState()
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction: %w", err)
+		}
+		txn := state.Transaction
+		if txn.Body.Type() == protocol.TransactionTypeSystemGenesis {
+			continue // Genesis is added to subnet/synthetic#chain/main, but it's not a real synthetic transaction
+		}
+
+		if !bytes.Equal(hash, txn.GetHash()) {
+			return false, errors.Format(errors.StatusInternalError, "%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
+		}
+
+		// TODO Can we make this less hacky?
+		status, err := record.GetStatus()
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
+		}
+		sigs, err := GetAllSignatures(batch, record, status, txn.Header.Initiator[:])
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
+		}
+
+		// Sign it
+		keySig, err := new(signing.Builder).
+			SetType(protocol.SignatureTypeED25519).
+			SetPrivateKey(x.Key).
+			SetKeyPageUrl(x.Network.ValidatorBook(), 0).
+			SetVersion(1).
+			SetTimestamp(1).
+			Sign(hash)
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "sign synthetic transaction: %w", err)
+		}
+
+		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: append(sigs, keySig)}
+		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknown, "send synthetic transaction %X: %w", hash[:4], err)
+		}
 	}
 
 	return true, nil
