@@ -44,6 +44,8 @@ func syncToSnapshot(_ *cobra.Command, args []string) {
 	// The Tendermint height is one more than the last commit height
 	blockHeight := height + 1
 
+	// TODO The user should specify the block header hash directly instead of us
+	// querying a node for it
 	tmblock, err := client.Block(context.Background(), &blockHeight)
 	checkf(err, "fetching block")
 
