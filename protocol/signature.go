@@ -116,7 +116,7 @@ func ETHaddress(pubKey []byte) string {
 }
 
 func netVal(u *url.URL) *url.URL {
-	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 0)
+	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 1)
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {

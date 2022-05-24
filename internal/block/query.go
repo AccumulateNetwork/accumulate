@@ -907,7 +907,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		keySig, err := new(signing.Builder).
 			SetType(protocol.SignatureTypeED25519).
 			SetPrivateKey(m.Key).
-			SetKeyPageUrl(m.Network.ValidatorBook(), 0).
+			SetKeyPageUrl(m.Network.DefaultValidatorPage()).
 			SetVersion(1).
 			SetTimestamp(1).
 			Sign(hash)
