@@ -8,9 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -25,7 +23,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
@@ -105,7 +102,7 @@ func New(t TB, bvnCount int) *Simulator {
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database:  db,
 			Executor:  exec,
-			Subnet:   subnet,
+			Subnet:    subnet,
 			API:       acctesting.DirectJrpcClient(jrpc),
 			t:         t,
 			blockTime: genesisTime,
@@ -162,7 +159,7 @@ func (s *Simulator) InitFromGenesis() {
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.bootstrap = InitGenesis(s, x.Database, x.Executor, netValMap)
+		x.bootstrap = InitGenesis(s, x.Database, x.Executor, genesisTime, netValMap)
 	}
 
 	// Execute bootstrap after the entire network is known
