@@ -8,7 +8,9 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
+	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -23,9 +25,12 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
+
+var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb
@@ -98,10 +103,12 @@ func New(t TB, bvnCount int) *Simulator {
 		require.NoError(sim, err)
 
 		sim.Executors[subnet.ID] = &ExecEntry{
-			Database: db,
-			Executor: exec,
+			Database:  db,
+			Executor:  exec,
 			Subnet:   subnet,
-			API:      acctesting.DirectJrpcClient(jrpc),
+			API:       acctesting.DirectJrpcClient(jrpc),
+			t:         t,
+			blockTime: genesisTime,
 		}
 	}
 
@@ -198,22 +205,7 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 
 	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.ID)
-		submitted := x.TakeSubmitted()
-		errg.Go(func() error {
-			status, err := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
-			if err != nil {
-				return err
-			}
-			if statusChan == nil {
-				return nil
-			}
-
-			for _, status := range status {
-				statusChan <- status
-			}
-			return nil
-		})
+		s.Subnet(subnet.ID).executeBlock(errg, statusChan)
 	}
 
 	// Wait for all subnets to complete
@@ -396,7 +388,10 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 }
 
 type ExecEntry struct {
+	t                       TB
 	mu                      sync.Mutex
+	blockIndex              uint64
+	blockTime               time.Time
 	nextBlock, currentBlock []*protocol.Envelope
 
 	Subnet    *config.Subnet
@@ -415,23 +410,99 @@ type ExecEntry struct {
 //
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
-func (s *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
 	// Capturing the field in a variable is more concurrency safe than using the
 	// field directly
-	if h := s.SubmitHook; h != nil {
+	if h := x.SubmitHook; h != nil {
 		envelopes = h(envelopes)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nextBlock = append(s.nextBlock, envelopes...)
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.nextBlock = append(x.nextBlock, envelopes...)
 }
 
-// TakeSubmitted returns the envelopes for the current block.
-func (s *ExecEntry) TakeSubmitted() []*protocol.Envelope {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	submitted := s.currentBlock
-	s.currentBlock = s.nextBlock
-	s.nextBlock = nil
+// takeSubmitted returns the envelopes for the current block.
+func (x *ExecEntry) takeSubmitted() []*protocol.Envelope {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	submitted := x.currentBlock
+	x.currentBlock = x.nextBlock
+	x.nextBlock = nil
 	return submitted
+}
+
+func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protocol.TransactionStatus) {
+	if x.blockIndex > 0 {
+		x.blockIndex++
+	} else {
+		_ = x.Database.View(func(batch *database.Batch) error {
+			var ledger *protocol.SystemLedger
+			err := batch.Account(x.Executor.Network.Ledger()).GetStateAs(&ledger)
+			switch {
+			case err == nil:
+				x.blockIndex = ledger.Index + 1
+			case errors.Is(err, errors.StatusNotFound):
+				x.blockIndex = protocol.GenesisBlock + 1
+			default:
+				require.NoError(tb{x.t}, err)
+			}
+			return nil
+		})
+	}
+	x.blockTime = x.blockTime.Add(time.Second)
+	block := new(Block)
+	block.Index = x.blockIndex
+	block.Time = x.blockTime
+	block.IsLeader = true
+	block.Batch = x.Database.Begin(true)
+
+	// fmt.Printf("Executing %d\n", x.blockIndex)
+
+	t := tb{x.t}
+	var deliveries []*chain.Delivery
+	for _, envelope := range x.takeSubmitted() {
+		d, err := chain.NormalizeEnvelope(envelope)
+		require.NoErrorf(t, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
+		deliveries = append(deliveries, d...)
+	}
+
+	errg.Go(func() error {
+		defer block.Batch.Discard()
+
+		err := x.Executor.BeginBlock(block)
+		require.NoError(t, err)
+
+		for _, delivery := range deliveries {
+			status, err := delivery.LoadTransaction(block.Batch)
+			if errors.Is(err, errors.StatusDelivered) {
+				if statusChan != nil {
+					status.For = *(*[32]byte)(delivery.Transaction.GetHash())
+					statusChan <- status
+				}
+				continue
+			}
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknown, err)
+			}
+
+			status, err = x.Executor.ExecuteEnvelope(block, delivery)
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknown, err)
+			}
+
+			if statusChan != nil {
+				status.For = *(*[32]byte)(delivery.Transaction.GetHash())
+				statusChan <- status
+			}
+		}
+
+		require.NoError(t, x.Executor.EndBlock(block))
+
+		// Is the block empty?
+		if !block.State.Empty() {
+			// Commit the batch
+			require.NoError(t, block.Batch.Commit())
+		}
+		return nil
+	})
 }
