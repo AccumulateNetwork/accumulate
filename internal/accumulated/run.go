@@ -282,6 +282,15 @@ func (d *Daemon) Start() (err error) {
 	return nil
 }
 
+func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
+	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Network.LocalSubnetID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return ctx.GetABCIClient(), nil
+}
+
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
 	err := d.connectionManager.ConnectDirectly(e.connectionManager)
 	if err != nil {
