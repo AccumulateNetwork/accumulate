@@ -45,7 +45,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 		defer batch.Discard()
 
 		// Finalize the previous block
-		err = x.finalizeBlock(block.Batch, uint64(block.Index), openMajor, majorBlockIndex)
+		err = x.finalizeBlock(batch, uint64(block.Index), openMajor, majorBlockIndex)
 		if err != nil {
 			return err
 		}
