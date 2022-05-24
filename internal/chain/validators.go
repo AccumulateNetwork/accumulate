@@ -211,7 +211,7 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 		return nil, fmt.Errorf("the key book is not of a validator book type")
 	}
 
-	pageUrl := protocol.FormatKeyPageUrl(validatorBookUrl, 1)
+	pageUrl := st.Network.DefaultValidatorPage()
 	var page *protocol.KeyPage
 	err = st.LoadUrlAs(pageUrl, &page)
 	if err != nil {
