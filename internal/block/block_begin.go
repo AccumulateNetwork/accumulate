@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -268,7 +266,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	}
 
 	// Build receipts for synthetic transactions produced in the previous block
-	didSendSynth, err := x.sendSyntheticTransactions(batch)
+	didSendSynth, err := x.didSendSyntheticTransactions(batch)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "build synthetic transaction receipts: %w", err)
 	}
@@ -334,7 +332,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error) {
+func (x *Executor) didSendSyntheticTransactions(batch *database.Batch) (bool, error) {
 	// Load the root chain's index chain's last two entries
 	last, nextLast, err := indexing.LoadLastTwoIndexEntries(batch.Account(x.Network.Ledger()), protocol.MinorRootIndexChain)
 	if err != nil {
@@ -343,7 +341,6 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	if last == nil {
 		return false, nil // Root chain is empty
 	}
-	rootAnchor := last.Source
 	var prevRootAnchor uint64
 	if nextLast != nil {
 		prevRootAnchor = nextLast.Source + 1
@@ -357,121 +354,8 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	if last == nil {
 		return false, nil // Synth chain is empty
 	}
-	synthEnd, synthAnchor := last.Source, last.Anchor
-	var synthStart uint64
-	if nextLast != nil {
-		synthStart = nextLast.Source + 1
-	}
-	if synthAnchor < prevRootAnchor {
+	if last.Anchor < prevRootAnchor {
 		return false, nil // No change since last block
-	}
-
-	// Load the root chain
-	chain, err := batch.Account(x.Network.Ledger()).ReadChain(protocol.MinorRootChain)
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load root chain: %w", err)
-	}
-
-	// Prove the synthetic transaction chain anchor
-	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
-	}
-
-	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Network.Synthetic()).ReadChain(protocol.MainChain)
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load root chain: %w", err)
-	}
-
-	// Get transaction hashes
-	hashes, err := chain.Entries(int64(synthStart), int64(synthEnd)+1)
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load entries %d through %d of synthetic transaction chain: %w", synthStart, synthEnd, err)
-	}
-
-	// For each synthetic transaction from the last block
-	for i, hash := range hashes {
-		// Load it
-		record := batch.Transaction(hash)
-		state, err := record.GetState()
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction: %w", err)
-		}
-		txn := state.Transaction
-		if txn.Body.Type() == protocol.TransactionTypeSystemGenesis {
-			continue // Genesis is added to subnet/synthetic#chain/main, but it's not a real synthetic transaction
-		}
-
-		if !bytes.Equal(hash, txn.GetHash()) {
-			return false, errors.Format(errors.StatusInternalError, "%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
-		}
-
-		// TODO Can we make this less hacky?
-		status, err := record.GetStatus()
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
-		}
-		sigs, err := GetAllSignatures(batch, record, status, txn.Header.Initiator[:])
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
-		}
-		if len(sigs) == 0 {
-			return false, errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", hash[:4])
-		}
-		if len(sigs) > 1 {
-			return false, errors.Format(errors.StatusInternalError, "synthetic transaction %X has more than one signature", hash[:4])
-		}
-		initSig := sigs[0]
-
-		// Sign it
-		keySig, err := new(signing.Builder).
-			SetType(protocol.SignatureTypeED25519).
-			SetPrivateKey(x.Key).
-			SetKeyPageUrl(x.Network.ValidatorBook(), 0).
-			SetVersion(1).
-			SetTimestamp(1).
-			Sign(hash)
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "sign synthetic transaction: %w", err)
-		}
-
-		// Prove it
-		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
-		}
-
-		r, err := managed.CombineReceipts(synthProof, rootProof)
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
-		}
-
-		proofSig := new(protocol.ReceiptSignature)
-		proofSig.SourceNetwork = x.Network.NodeUrl()
-		proofSig.TransactionHash = *(*[32]byte)(hash)
-		proofSig.Proof = *protocol.ReceiptFromManaged(r)
-
-		// Record the proof signature but DO NOT record the key signature! Each
-		// node has a different key, so recording the key signature here would
-		// cause a consensus failure!
-		err = batch.Transaction(proofSig.Hash()).PutState(&database.SigOrTxn{
-			Hash:      proofSig.TransactionHash,
-			Signature: proofSig,
-		})
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "store signature: %w", err)
-		}
-		_, err = batch.Transaction(hash).AddSignature(0, proofSig)
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "record receipt for %X: %w", hash[:4], err)
-		}
-
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig, proofSig}}
-		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "send synthetic transaction %X: %w", hash[:4], err)
-		}
 	}
 
 	return true, nil
