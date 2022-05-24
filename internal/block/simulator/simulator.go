@@ -119,6 +119,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Database:  db,
 			Executor:  exec,
 			API:       acctesting.DirectJrpcClient(jrpc),
+			tb:        sim.tb,
 			blockTime: genesisTime,
 		}
 	}
@@ -401,7 +402,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 }
 
 type ExecEntry struct {
-	t                       TB
+	tb
 	mu                      sync.Mutex
 	blockIndex              uint64
 	blockTime               time.Time
@@ -455,7 +456,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			case errors.Is(err, errors.StatusNotFound):
 				x.blockIndex = protocol.GenesisBlock + 1
 			default:
-				require.NoError(tb{x.t}, err)
+				require.NoError(tb{x.tb}, err)
 			}
 			return nil
 		})
@@ -469,11 +470,10 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 
 	// fmt.Printf("Executing %d\n", x.blockIndex)
 
-	t := tb{x.t}
 	var deliveries []*chain.Delivery
 	for _, envelope := range x.takeSubmitted() {
 		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(t, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
 		deliveries = append(deliveries, d...)
 	}
 
@@ -481,7 +481,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		defer block.Batch.Discard()
 
 		err := x.Executor.BeginBlock(block)
-		require.NoError(t, err)
+		require.NoError(x, err)
 
 		for _, delivery := range deliveries {
 			status, err := delivery.LoadTransaction(block.Batch)
@@ -507,12 +507,12 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			}
 		}
 
-		require.NoError(t, x.Executor.EndBlock(block))
+		require.NoError(x, x.Executor.EndBlock(block))
 
 		// Is the block empty?
 		if !block.State.Empty() {
 			// Commit the batch
-			require.NoError(t, block.Batch.Commit())
+			require.NoError(x, block.Batch.Commit())
 		}
 		return nil
 	})
