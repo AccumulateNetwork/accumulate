@@ -183,9 +183,10 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// For each authority
+	authRequired := transaction.Body.Type().RequireAuthorization()
 	for _, entry := range auth.Authorities {
 		// Do not check signers for disabled authorities
-		if entry.Disabled {
+		if entry.Disabled && !authRequired {
 			continue
 		}
 
@@ -274,7 +275,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.AnchorChain(subnet))
+	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.RootAnchorChain(subnet))
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", subnet, err)
 	}

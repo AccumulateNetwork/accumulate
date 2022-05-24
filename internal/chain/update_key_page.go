@@ -146,7 +146,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 }
 
 func operatorUpdatesToLedger(st *StateManager, operations []protocol.KeyPageOperation) error {
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	err := st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return fmt.Errorf("unable to load main ledger: %w", err)

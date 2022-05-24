@@ -270,7 +270,7 @@ func (b *bootstrap) createValidatorBook() {
 
 func (b *bootstrap) createMainLedger(oraclePrice uint64) {
 	// Create the main ledger
-	ledger := new(protocol.InternalLedger)
+	ledger := new(protocol.SystemLedger)
 	ledger.Url = b.nodeUrl.JoinPath(protocol.Ledger)
 	ledger.ActiveOracle = oraclePrice
 	ledger.PendingOracle = oraclePrice
@@ -287,10 +287,16 @@ func (b *bootstrap) createSyntheticLedger() {
 
 func (b *bootstrap) createAnchorPool() {
 	// Create the anchor pool
-	anchors := new(protocol.Anchor)
-	anchors.Url = b.nodeUrl.JoinPath(protocol.AnchorPool)
-	anchors.AddAuthority(b.authorityUrl)
-	b.WriteRecords(anchors)
+	anchorLedger := new(protocol.AnchorLedger)
+	anchorLedger.Url = b.nodeUrl.JoinPath(protocol.AnchorPool)
+
+	if b.Network.Type == config.Directory {
+		// Initialize the last major block time to prevent a major block from
+		// being created immediately once the network boots
+		anchorLedger.MajorBlockTime = b.InitOpts.GenesisTime
+	}
+
+	b.WriteRecords(anchorLedger)
 
 }
 

@@ -120,6 +120,16 @@ func (t *Types) DecodeFromFile(file string, dec Decoder) error {
 		if typ.Union.Name != "" && typ.Union.Value == "" {
 			typ.Union.Value = strings.TrimSuffix(name, TitleCase(typ.Union.Name))
 		}
+
+		for _, field := range typ.Fields {
+			if field.Type.Code == TypeCodeUnknown && field.Type.Name == "" {
+				if field.Name == "" {
+					return fmt.Errorf("an unnamed field of %s does not have a type", typ.Name)
+				} else {
+					return fmt.Errorf("%s.%s does not have a type", typ.Name, field.Name)
+				}
+			}
+		}
 	}
 	return nil
 }

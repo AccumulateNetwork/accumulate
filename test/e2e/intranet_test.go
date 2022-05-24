@@ -83,7 +83,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	_ = sim.SubnetFor(dn.Executor.Network.NodeUrl()).Database.View(func(batch *database.Batch) error {
-		var ledger *protocol.InternalLedger
+		var ledger *protocol.SystemLedger
 		require.NoError(t, batch.Account(dn.Executor.Network.Ledger()).GetStateAs(&ledger))
 		expected := uint64(price * protocol.AcmeOraclePrecision)
 		require.Equal(t, int(expected), int(ledger.ActiveOracle))
@@ -91,7 +91,7 @@ func TestOracleDistribution(t *testing.T) {
 	})
 
 	_ = sim.SubnetFor(bvn0.Executor.Network.NodeUrl()).Database.View(func(batch *database.Batch) error {
-		var ledger *protocol.InternalLedger
+		var ledger *protocol.SystemLedger
 		require.NoError(t, batch.Account(bvn0.Executor.Network.Ledger()).GetStateAs(&ledger))
 		expected := uint64(price * protocol.AcmeOraclePrecision)
 		require.Equal(t, int(expected), int(ledger.ActiveOracle))
