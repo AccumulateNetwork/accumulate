@@ -29,7 +29,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	// Verify the origin
 	ledger, ok := st.Origin.(*protocol.AnchorLedger)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
 	}
 
 	// Verify the source URL and get the subnet name

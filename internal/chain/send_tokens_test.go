@@ -9,7 +9,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
@@ -32,11 +31,11 @@ func TestLiteTokenTransactions(t *testing.T) {
 	require.NoError(t, db.Begin(true).Account(sponsorUrl).GetStateAs(&liteAcct))
 
 	//now move some tokens around
-	destAddr := testing2.AcmeLiteAddressStdPriv(destPrivKey).String()
-	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
+	destAddr := acctesting.AcmeLiteAddressStdPriv(destPrivKey).String()
+	gtx, err := acctesting.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 	require.NoError(t, err)
 
-	st, d := NewStateManagerForTest(t, db, gtx)
+	st, d := LoadStateManagerForTest(t, db, gtx)
 	defer st.Discard()
 
 	_, err = SendTokens{}.Validate(st, d)

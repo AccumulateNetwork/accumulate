@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -69,8 +68,9 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 
 	// TODO Require the principal to be the ADI when creating a root identity?
 	if !body.Url.IsRootIdentity() {
-		if !body.Url.Identity().Equal(tx.Transaction.Header.Principal) {
-			return nil, errors.Format(errors.StatusUnauthorized, "cannot use %v to create %v", tx.Transaction.Header.Principal, body.Url)
+		err := checkCreateAdiAccount(st, body.Url)
+		if err != nil {
+			return nil, err
 		}
 	}
 
