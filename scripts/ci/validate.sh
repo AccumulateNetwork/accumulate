@@ -255,11 +255,9 @@ ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite k
 accumulate --use-unencrypted-wallet -j data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to keytest keytest-1-0 $ACCOUNT_ID "data test"
 accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
-echo $(accumulate --use-unencrypted-wallet -d -j get "${ACCOUNT_ID}#txn/0")
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
-die
 
 section "Create ADI Data Account"
 wait-for cli-tx account create data --scratch keytest keytest-1-0 keytest/data
