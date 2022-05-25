@@ -35,17 +35,24 @@ type Simulator struct {
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
 
+	LogLevels string
+
 	routingOverrides map[[32]byte]string
 }
 
 func (s *Simulator) newLogger() log.Logger {
+	levels := s.LogLevels
+	if levels == "" {
+		levels = acctesting.DefaultLogLevels
+	}
+
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", acctesting.DefaultLogLevels, false)
+		return logging.NewTestLogger(s, "plain", levels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(acctesting.DefaultLogLevels, w)
+	level, writer, err := logging.ParseLogLevel(levels, w)
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
@@ -54,11 +61,17 @@ func (s *Simulator) newLogger() log.Logger {
 
 func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.Setup(bvnCount)
+	return sim
+}
+
+func (sim *Simulator) Setup(bvnCount int) {
+	sim.Helper()
 
 	// Initialize the simulartor and network
-	sim := new(Simulator)
 	sim.routingOverrides = map[[32]byte]string{}
-	sim.TB = t
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
@@ -73,7 +86,7 @@ func New(t TB, bvnCount int) *Simulator {
 		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
 
 		logger := sim.newLogger().With("subnet", subnet.ID)
-		key := acctesting.GenerateKey(t.Name(), subnet.ID)
+		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
 		network := config.Network{
@@ -104,12 +117,10 @@ func New(t TB, bvnCount int) *Simulator {
 			Executor:  exec,
 			Subnet:    subnet,
 			API:       acctesting.DirectJrpcClient(jrpc),
-			t:         t,
+			tb:        sim.tb,
 			blockTime: genesisTime,
 		}
 	}
-
-	return sim
 }
 
 func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
@@ -385,7 +396,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 }
 
 type ExecEntry struct {
-	t                       TB
+	tb
 	mu                      sync.Mutex
 	blockIndex              uint64
 	blockTime               time.Time
@@ -441,7 +452,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			case errors.Is(err, errors.StatusNotFound):
 				x.blockIndex = protocol.GenesisBlock + 1
 			default:
-				require.NoError(tb{x.t}, err)
+				require.NoError(tb{x.tb}, err)
 			}
 			return nil
 		})
@@ -455,11 +466,10 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 
 	// fmt.Printf("Executing %d\n", x.blockIndex)
 
-	t := tb{x.t}
 	var deliveries []*chain.Delivery
 	for _, envelope := range x.takeSubmitted() {
 		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(t, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
 		deliveries = append(deliveries, d...)
 	}
 
@@ -467,7 +477,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		defer block.Batch.Discard()
 
 		err := x.Executor.BeginBlock(block)
-		require.NoError(t, err)
+		require.NoError(x, err)
 
 		for _, delivery := range deliveries {
 			status, err := delivery.LoadTransaction(block.Batch)
@@ -493,12 +503,12 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			}
 		}
 
-		require.NoError(t, x.Executor.EndBlock(block))
+		require.NoError(x, x.Executor.EndBlock(block))
 
 		// Is the block empty?
 		if !block.State.Empty() {
 			// Commit the batch
-			require.NoError(t, block.Batch.Commit())
+			require.NoError(x, block.Batch.Commit())
 		}
 		return nil
 	})
