@@ -9,24 +9,34 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-var cmd = &cobra.Command{
-	Use:  "url-info <url>",
-	Args: cobra.ExactArgs(1),
-	Run:  run,
+var accountCmd = &cobra.Command{
+	Use:   "account",
+	Short: "Analyze accounts",
 }
 
-var routeCmd = &cobra.Command{
-	Use:  "route <bvn-count> <url>",
-	Args: cobra.ExactArgs(2),
-	Run:  run,
+var accountIdCmd = &cobra.Command{
+	Use:   "id <url>",
+	Short: "Show an account's ID",
+	Args:  cobra.ExactArgs(1),
+	Run:   accountId,
 }
 
-func main() {
-	cmd.AddCommand(routeCmd)
-	_ = cmd.Execute()
+var accountRouteCmd = &cobra.Command{
+	Use:   "route <bvn-count> <url>",
+	Short: "Calculate the route for an account",
+	Args:  cobra.ExactArgs(2),
+	Run:   accountId,
 }
 
-func run(_ *cobra.Command, args []string) {
+func init() {
+	cmd.AddCommand(accountCmd)
+	accountCmd.AddCommand(
+		accountIdCmd,
+		accountRouteCmd,
+	)
+}
+
+func accountId(_ *cobra.Command, args []string) {
 	var bvnCount int
 	if len(args) == 2 {
 		c, err := strconv.ParseInt(args[0], 10, 64)
