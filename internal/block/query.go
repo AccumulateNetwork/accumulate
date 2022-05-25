@@ -46,8 +46,8 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 		state.Name = c.Name
 		state.Type = c.Type
 		state.Height = uint64(ms.Count)
-		state.Roots = make([][]byte, len(ms.HashList))
-		for i, h := range ms.HashList {
+		state.Roots = make([][]byte, len(ms.Pending))
+		for i, h := range ms.Pending {
 			state.Roots[i] = h
 		}
 
