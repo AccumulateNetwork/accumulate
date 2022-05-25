@@ -250,7 +250,8 @@ accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .statu
 success
 
 section "Create lite data account with first entry"
-ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
+#ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
+ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "First Data Entry" "Check" --lite-data "first entry")
 echo "ACOUNT ID === $ACCOUNT_ID"
 echo "============================================"
 echo $(accumulate --use-unencrypted-wallet -j data get $ACCOUNT_ID 0 1 1)
