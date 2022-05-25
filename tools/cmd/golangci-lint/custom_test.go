@@ -20,3 +20,10 @@ func TestNoPrint(t *testing.T) {
 		Run:  noprint,
 	}, "noprint.go")
 }
+
+func TestNoDebug(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), &analysis.Analyzer{
+		Name: "nodebug",
+		Run:  nodebug,
+	}, "nodebug.go")
+}
