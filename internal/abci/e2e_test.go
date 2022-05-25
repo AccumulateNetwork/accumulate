@@ -1422,7 +1422,6 @@ func TestUpdateValidators(t *testing.T) {
 	vldKey1, vldKey2, vldKey3, vldKey4 := generateKey(), generateKey(), generateKey(), generateKey()
 	height := uint64(1)
 
-	// The validator timestamp starts out > 0
 	signer := dn.GetKeyPage(dn.network.DefaultOperatorPage().String())
 	_, entry, ok := signer.EntryByKey(dn.key.PubKey().Bytes())
 	require.True(t, ok)
@@ -1448,7 +1447,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey()})
 
 	// Add a validator
-	addOperatorKey(t, dn, vldKey1, &height)
+	addOperatorKey(t, dn, vldKey1, &timestamp, &height)
 	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey1.PubKey().Bytes()
@@ -1464,7 +1463,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey1.PubKey()})
 
 	// Update a validator
-	addOperatorKey(t, dn, vldKey2, &height)
+	addOperatorKey(t, dn, vldKey2, &timestamp, &height)
 	require.Equal(t, uint64(1), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.UpdateValidatorKey)
@@ -1484,7 +1483,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey()})
 
 	// Add a third validator
-	addOperatorKey(t, dn, vldKey3, &height)
+	addOperatorKey(t, dn, vldKey3, &timestamp, &height)
 	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 
 	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1503,7 +1502,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
 
 	// Add a fourth operator, so the page threshold will become 2.
-	addOperatorKey(t, dn, vldKey4, &height, vldKey2)
+	addOperatorKey(t, dn, vldKey4, &timestamp, &height, vldKey2)
 	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
 
 	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1541,7 +1540,7 @@ func TestUpdateValidators(t *testing.T) {
 
 }
 
-func addOperatorKey(t *testing.T, dn *FakeNode, oprKey tmed25519.PrivKey, height *uint64, signKeys ...tmed25519.PrivKey) {
+func addOperatorKey(t *testing.T, dn *FakeNode, oprKey tmed25519.PrivKey, timestamp *uint64, height *uint64, signKeys ...tmed25519.PrivKey) {
 	// See if we are going to need to sign and have enough keys
 	threshold := dn.GetKeyPage(dn.network.DefaultOperatorPage().String()).AcceptThreshold
 	nrKeys := uint64(len(signKeys))
@@ -1557,6 +1556,7 @@ func addOperatorKey(t *testing.T, dn *FakeNode, oprKey tmed25519.PrivKey, height
 		oprPage := dn.network.DefaultOperatorPage()
 		send(newTxn(oprPage.String()).
 			WithSigner(oprPage, *height).
+			WithTimestampVar(timestamp).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
