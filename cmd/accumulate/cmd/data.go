@@ -327,7 +327,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	wd.Entry, err = prepareData(args[1:], false, kSigner)
+	wd.Entry, err = prepareData(args, false, kSigner)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -369,7 +369,6 @@ func prepareData(args []string, isFirstLiteEntry bool, signer *signing.Builder) 
 		}
 
 		entry.Data = append(entry.Data, data)
-
 	}
 
 	if signer != nil {
@@ -445,7 +444,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	wd.Entry, err = prepareData(args[1:], false, kSigner)
+	wd.Entry, err = prepareData(args, false, kSigner)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
