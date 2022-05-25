@@ -68,10 +68,12 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 				},
 			}
 
-			_, err := genesis.Init(store, genesis.InitOpts{
+			bootstrap, err := genesis.Init(store, genesis.InitOpts{
 				Network: network,
 				Logger:  logger,
 			})
+			require.NoError(b, err)
+			err := bootstrap.Bootstrap()
 			require.NoError(b, err)
 
 			exec, err := chain.NewNodeExecutor(chain.ExecutorOptions{
