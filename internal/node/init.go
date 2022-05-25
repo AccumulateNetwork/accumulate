@@ -18,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
@@ -33,6 +32,7 @@ type InitOptions struct {
 	Config              []*cfg.Config
 	RemoteIP            []string
 	ListenIP            []string
+	NetworkValidatorMap genesis.NetworkValidatorMap
 	Logger              log.Logger
 	FactomAddressesFile string
 }
@@ -40,24 +40,24 @@ type InitOptions struct {
 // Init creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func Init(opts InitOptions) (err error) {
+func Init(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	switch opts.Version {
 	case 0:
 		fallthrough
 	case 1:
-		err = initV1(opts)
+		bootstrap, err = initV1(opts)
 	case 2:
 		//todo: err = initV2(opts)
 	default:
-		return fmt.Errorf("unknown version to init")
+		return nil, fmt.Errorf("unknown version to init")
 	}
-	return err
+	return bootstrap, err
 }
 
 // initV1 creates the initial configuration for a set of nodes, using
 // the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func initV1(opts InitOptions) (err error) {
+func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(opts.WorkDir)
@@ -68,17 +68,17 @@ func initV1(opts InitOptions) (err error) {
 		opts.Logger.Info("Tendermint initialize")
 	}
 
-	config := opts.Config
-	subnetID := config[0].Accumulate.Network.LocalSubnetID
-	genVals := make([]types.GenesisValidator, 0, len(config))
-	genValKeys := make([][]byte, 0, len(config))
+	configs := opts.Config
+	subnetID := configs[0].Accumulate.Network.LocalSubnetID
+	genVals := make([]types.GenesisValidator, 0, len(configs))
+	genValKeys := make([][]byte, 0, len(configs))
 
 	var networkType cfg.NetworkType
-	for i, config := range config {
+	for i, config := range configs {
 		if i == 0 {
 			networkType = config.Accumulate.Network.Type
 		} else if config.Accumulate.Network.Type != networkType {
-			return errors.New("Cannot initialize multiple networks at once")
+			return nil, errors.New("Cannot initialize multiple networks at once")
 		}
 
 		var nodeDirName string
@@ -97,28 +97,28 @@ func initV1(opts InitOptions) (err error) {
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
-			return fmt.Errorf("failed to create config dir: %v", err)
+			return nil, fmt.Errorf("failed to create config dir: %v", err)
 		}
 
 		err = os.MkdirAll(path.Join(nodeDir, "data"), nodeDirPerm)
 		if err != nil {
-			return fmt.Errorf("failed to create data dir: %v", err)
+			return nil, fmt.Errorf("failed to create data dir: %v", err)
 		}
 
 		if err := initFilesWithConfig(config, &subnetID); err != nil {
-			return err
+			return nil, err
 		}
 
 		pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
 		pvStateFile := path.Join(nodeDir, config.PrivValidator.State)
 		pv, err := privval.LoadFilePV(pvKeyFile, pvStateFile)
 		if err != nil {
-			return fmt.Errorf("failed to load private validator: %v", err)
+			return nil, fmt.Errorf("failed to load private validator: %v", err)
 		}
 
 		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
-				Address: pv.Key.PubKey.Address(),
+				Address: pv.Key.Address,
 				PubKey:  pv.Key.PubKey,
 				Power:   1,
 				Name:    nodeDirName,
@@ -128,64 +128,43 @@ func initV1(opts InitOptions) (err error) {
 	}
 
 	// Generate genesis doc from generated validators
-	genDoc := opts.GenesisDoc
-	if genDoc == nil {
+	if opts.GenesisDoc == nil {
 		genTime := tmtime.Now()
 
 		db := memory.New(opts.Logger.With("module", "storage"))
-		root, err := genesis.Init(db, genesis.InitOpts{
-			Network:             config[0].Accumulate.Network,
+		bootstrap, err = genesis.Init(db, genesis.InitOpts{
+			Network:             configs[0].Accumulate.Network,
+			AllConfigs:          configs,
 			GenesisTime:         genTime,
 			Validators:          genVals,
 			Keys:                genValKeys,
+			NetworkValidatorMap: opts.NetworkValidatorMap,
 			Logger:              opts.Logger,
-			Router:              &routing.RouterInstance{Network: &config[0].Accumulate.Network},
+			Router:              &routing.RouterInstance{Network: &configs[0].Accumulate.Network},
 			FactomAddressesFile: opts.FactomAddressesFile,
 		})
 		if err != nil {
-			return err
-		}
-
-		state, err := db.MarshalJSON()
-		if err != nil {
-			return err
-		}
-
-		genDoc = &types.GenesisDoc{
-			ChainID:         subnetID,
-			GenesisTime:     genTime,
-			InitialHeight:   protocol.GenesisBlock + 1,
-			Validators:      genVals,
-			ConsensusParams: types.DefaultConsensusParams(),
-			AppState:        state,
-			AppHash:         root,
-		}
-	}
-
-	// Write genesis file.
-	for _, config := range config {
-		if err := genDoc.SaveAs(path.Join(config.RootDir, config.BaseConfig.Genesis)); err != nil {
-			return fmt.Errorf("failed to save gen doc: %v", err)
+			return nil, err
 		}
 	}
 
 	// Gather validator peer addresses.
 	validatorPeers := map[int]string{}
-	for i, config := range config {
+	for i, config := range configs {
 		// if config.Mode != tmcfg.ModeValidator {
 		// 	continue
 		// }
 
 		nodeKey, err := types.LoadNodeKey(config.NodeKeyFile())
 		if err != nil {
-			return fmt.Errorf("failed to load node key: %v", err)
+			return nil, fmt.Errorf("failed to load node key: %v", err)
 		}
 		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], opts.Port))
 	}
 
 	// Overwrite default config.
-	nConfig := len(config)
-	for i, config := range config {
+	nConfig := len(configs)
+	for i, config := range configs {
 		if nConfig > 1 {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
@@ -209,7 +188,7 @@ func initV1(opts InitOptions) (err error) {
 
 		err := cfg.Store(config)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -223,7 +202,7 @@ func initV1(opts InitOptions) (err error) {
 		logMsg = append(logMsg, "validators", nValidators, "followers", nConfig-nValidators)
 	}
 	opts.Logger.Info("Successfully initialized nodes", logMsg...)
-	return nil
+	return bootstrap, nil
 }
 
 func initFilesWithConfig(config *cfg.Config, chainid *string) error {
