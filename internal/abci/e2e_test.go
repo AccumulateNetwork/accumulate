@@ -1420,6 +1420,12 @@ func TestUpdateValidators(t *testing.T) {
 	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
 
+	// The validator timestamp starts out > 0
+	signer := n.GetKeyPage(n.network.DefaultValidatorPage().String())
+	_, entry, ok := signer.EntryByKey(n.key.PubKey().Bytes())
+	require.True(t, ok)
+	timestamp := entry.GetLastUsedOn()
+
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
 	// for 4
 	ng := new(protocol.NetworkGlobals)
@@ -1430,8 +1436,9 @@ func TestUpdateValidators(t *testing.T) {
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
-			WithSigner(n.network.ValidatorPage(0), 1).
+			WithSigner(n.network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
 			WithBody(wd).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
@@ -1445,6 +1452,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 1).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
@@ -1462,6 +1470,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 2).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
@@ -1476,6 +1485,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 3).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
@@ -1494,6 +1504,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(validators, 4).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 			Build())
 	})
@@ -1780,4 +1791,27 @@ func TestAccountAuth(t *testing.T) {
 			Build())
 	})
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
+}
+
+func TestNetworkDefinition(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+
+	batch := dn.db.Begin(true)
+	defer batch.Discard()
+	_, _, txnHash, err := indexing.Data(batch, protocol.DnUrl().JoinPath(protocol.Network)).GetLatest()
+	require.NoError(t, err)
+
+	entry, err := indexing.GetDataEntry(batch, txnHash)
+	require.NoError(t, err)
+
+	networkDefs := new(protocol.NetworkDefinition)
+	err = json.Unmarshal(entry.GetData()[0], &networkDefs)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, networkDefs.Subnets)
+	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes[0])
 }

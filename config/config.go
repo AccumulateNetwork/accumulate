@@ -22,6 +22,8 @@ const (
 	accConfigFile = "accumulate.toml"
 )
 
+const DevNet = "devnet"
+
 type NetworkType string
 
 const (
@@ -102,10 +104,11 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("init", "info").
 	String()
 
-func Default(net NetworkType, node NodeType, netId string) *Config {
+func Default(netName string, net NetworkType, node NodeType, subnetId string) *Config {
 	c := new(Config)
+	c.Accumulate.Network.NetworkName = netName
 	c.Accumulate.Network.Type = net
-	c.Accumulate.Network.LocalSubnetID = netId
+	c.Accumulate.Network.LocalSubnetID = subnetId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -145,6 +148,7 @@ type Accumulate struct {
 }
 
 type Network struct {
+	NetworkName   string      `toml:"network-name" mapstructure:"network-name"`
 	Type          NetworkType `toml:"type" mapstructure:"type"`
 	LocalSubnetID string      `toml:"local-subnet" mapstructure:"local-subnet"`
 	LocalAddress  string      `toml:"local-address" mapstructure:"local-address"`

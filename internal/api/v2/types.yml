@@ -481,7 +481,7 @@ DescriptionResponse:
   non-binary: true
   incomparable: true
   fields:
-    - name: Subnet
+    - name: Network
       type: config.Network
       marshal-as: reference
 

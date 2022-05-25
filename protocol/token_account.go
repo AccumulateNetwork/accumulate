@@ -49,7 +49,7 @@ func (acct *TokenAccount) GetTokenUrl() *url.URL {
 }
 
 func (page *KeyPage) CreditCredits(amount uint64) {
-	page.CreditBalance = amount
+	page.CreditBalance += amount
 }
 
 func (acct *LiteTokenAccount) TokenBalance() *big.Int {
