@@ -84,8 +84,6 @@ IndexEntry:
 AccumulateDataEntry:
   union: { type: dataEntry }
   fields:
-    - name: Version
-      type: uint
     - name: Data
       repeatable: true
       type: bytes
