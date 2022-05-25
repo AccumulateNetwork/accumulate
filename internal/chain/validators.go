@@ -20,17 +20,19 @@ var _ SignerValidator = (*RemoveValidator)(nil)
 var _ SignerValidator = (*UpdateValidatorKey)(nil)
 
 func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
-	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+	_, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
+	}
+
+	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
 	}
 
-	// If the signer is a page of the principal
-	if transaction.Header.Principal.Equal(signerBook) {
-		// Lower indices are higher priority
-		if signerPageIdx > protocol.d {
-			return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
-		}
+	// Lower indices are higher priority
+	if signerPageIdx > principalPageIdx {
+		return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
 	}
 
 	// Run the normal checks
@@ -191,9 +193,14 @@ func updateValidator(st *StateManager, env *Delivery) error {
 // checkValidatorTransaction implements common checks for validator
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
-	validatorBookUrl := env.Transaction.Header.Principal
-	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
+	validatorPageUrl := env.Transaction.Header.Principal
+	if !st.NodeUrl().Equal(validatorPageUrl.RootIdentity()) {
+		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorPageUrl)
+	}
+
+	validatorBookUrl, _, ok := protocol.ParseKeyPageUrl(validatorPageUrl)
+	if !ok {
+		return nil, errors.Format(errors.StatusBadRequest, "principal is not a key page")
 	}
 
 	var book *protocol.KeyBook
@@ -206,11 +213,10 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 		return nil, fmt.Errorf("the key book is not of a validator book type")
 	}
 
-	pageUrl := st.Network.DefaultValidatorPage()
 	var page *protocol.KeyPage
-	err = st.LoadUrlAs(pageUrl, &page)
+	err = st.LoadUrlAs(validatorPageUrl, &page)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
+		return nil, fmt.Errorf("unable to load %s: %v", validatorPageUrl, err)
 	}
 
 	return page, nil

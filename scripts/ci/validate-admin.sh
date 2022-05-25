@@ -40,7 +40,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
 
   # Register new validator
-  TXID=$(cli-tx validator add dn/validators "$(nodePrivKey 0)" $hexPubKey)
+  TXID=$(cli-tx validator add dn/validators/2 "$(nodePrivKey 0)" $hexPubKey)
   wait-for-tx $TXID
 
   # Sign the required number of times
@@ -69,7 +69,7 @@ if [ -f "$(nodePrivKey 0)" ]; then
   KEY_ADDED_BVN=$(accumulate --use-unencrypted-wallet page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
   [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
 
-  echo Current keypage dn/validators/1
+  echo Current keypage dn/validators/2
   accumulate --use-unencrypted-wallet page get acc://dn/validators/2
   echo Current keypage dn/operators/1
   accumulate --use-unencrypted-wallet page get acc://dn/operators/1
@@ -121,7 +121,7 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
   section "Shutdown dynamic validator"
-  TXID=$(cli-tx validator remove dn/validators "$(nodePrivKey 0)" "$(nodePrivKey 3)")
+  TXID=$(cli-tx validator remove dn/validators/2 "$(nodePrivKey 0)" "$(nodePrivKey 3)")
   wait-for-tx $TXID
 
   # Sign the required number of times

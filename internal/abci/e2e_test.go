@@ -1451,7 +1451,7 @@ func TestUpdateValidators(t *testing.T) {
 	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey1.PubKey().Bytes()
-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			WithTimestampVar(&timestamp).
@@ -1471,7 +1471,7 @@ func TestUpdateValidators(t *testing.T) {
 		body.PubKey = vldKey1.PubKey().Bytes()
 		body.NewPubKey = vldKey2.PubKey().Bytes()
 
-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			WithTimestampVar(&timestamp).
@@ -1489,7 +1489,7 @@ func TestUpdateValidators(t *testing.T) {
 	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey3.PubKey().Bytes()
-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			WithTimestampVar(&timestamp).
@@ -1509,7 +1509,7 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.AddValidator)
 		body.PubKey = vldKey4.PubKey().Bytes()
 
-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
 			WithTimestampVar(&timestamp).
@@ -1526,9 +1526,10 @@ func TestUpdateValidators(t *testing.T) {
 		body := new(protocol.RemoveValidator)
 		body.PubKey = vldKey2.PubKey().Bytes()
 
-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
