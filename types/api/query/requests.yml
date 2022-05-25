@@ -94,10 +94,10 @@ RequestMinorBlocksFromDN:
 RequestMinorBlocksByUrl:
   union: { name: request, type: query, value: MinorBlocksByUrl }
   fields:
-    - name: Start
-      type: uint
-    - name: Limit
-      type: uint
+    - name: Ranges
+      type: Range
+      repeatable: true
+      marshal-as: reference
     - name: TxFetchMode
       type: TxFetchMode
       marshal-as: enum
@@ -116,3 +116,10 @@ RequestSynth:
       pointer: true
     - name: SequenceNumber
       type: uint
+
+Range:
+  fields:
+    - name: Start
+      type: uvarint
+    - name: Count
+      type: uvarint
