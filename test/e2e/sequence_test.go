@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -11,8 +12,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-func init() { acctesting.EnableDebugFeatures() }
 
 func TestOutOfSequenceSynth(t *testing.T) {
 	var timestamp uint64
@@ -119,6 +118,7 @@ func TestMissingSynthTxn(t *testing.T) {
 				return envelopes
 			} else {
 				didDrop = true
+				fmt.Printf("Dropping %X\n", env.Transaction[deposit].GetHash()[:4])
 			}
 
 			txn := env.Transaction[deposit]
@@ -151,7 +151,10 @@ func TestMissingSynthTxn(t *testing.T) {
 			Initiate(SignatureTypeLegacyED25519, alice).
 			Build()
 	}
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(txns...)...)
+	envs := sim.MustSubmitAndExecuteBlock(txns...)
+	sim.ExecuteBlocks(10)
+	require.True(t, didDrop, "synthetic transactions have not been sent")
+	sim.WaitForTransactions(delivered, envs...)
 
 	// Verify
 	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {

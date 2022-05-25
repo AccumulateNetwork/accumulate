@@ -78,7 +78,7 @@ func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.En
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
-	require.NoError(r, err)
+	require.NoErrorf(r, err, "Normalizing envelopes for %s", subnet)
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, envelope := range deliveries {
 		status := new(protocol.TransactionStatus)
