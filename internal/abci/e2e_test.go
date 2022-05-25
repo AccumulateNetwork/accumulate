@@ -1422,6 +1422,12 @@ func TestUpdateValidators(t *testing.T) {
 	vldKey1, vldKey2, vldKey3, vldKey4 := generateKey(), generateKey(), generateKey(), generateKey()
 	height := uint64(1)
 
+	// The validator timestamp starts out > 0
+	signer := n.GetKeyPage(n.network.DefaultValidatorPage().String())
+	_, entry, ok := signer.EntryByKey(n.key.PubKey().Bytes())
+	require.True(t, ok)
+	timestamp := entry.GetLastUsedOn()
+
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2 for 4
 	ng := new(protocol.NetworkGlobals)
 	ng.OperatorAcceptThreshold.Set(5, 12)
@@ -1433,6 +1439,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(wd).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
@@ -1448,6 +1455,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
@@ -1467,6 +1475,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
@@ -1484,6 +1493,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
@@ -1503,6 +1513,7 @@ func TestUpdateValidators(t *testing.T) {
 		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
 			WithSigner(network.DefaultOperatorPage(), height).
 			WithBody(body).
+			WithTimestampVar(&timestamp).
 			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 			Build())
 	})
