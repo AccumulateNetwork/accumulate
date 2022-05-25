@@ -864,18 +864,6 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			}
 		}
 		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: fmt.Errorf("no authority of %s holds %X", chr.Url, chr.Key)}
-	case *query.RequestMinorBlocksFromDN:
-		resp, pErr := m.queryMinorBlocksFromDN(batch, q)
-		if pErr != nil {
-			return nil, nil, pErr
-		}
-
-		k = []byte("minor-block")
-		var err error
-		v, err = resp.MarshalBinary()
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
-		}
 	case *query.RequestMinorBlocksByUrl:
 		resp, pErr := m.queryMinorBlocksByUrl(batch, q)
 		if pErr != nil {
@@ -888,7 +876,6 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
 		}
-
 	case *query.RequestSynth:
 		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
 		if !ok {

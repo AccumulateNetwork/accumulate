@@ -77,20 +77,6 @@ RequestKeyPageIndex:
     - name: Key
       type: bytes
 
-RequestMinorBlocksFromDN:
-  union: { name: request, type: query, value: MinorBlocksFromDN }
-  fields:
-    - name: Start
-      type: uint
-    - name: Limit
-      type: uint
-    - name: TxFetchMode
-      type: TxFetchMode
-      marshal-as: enum
-    - name: BlockFilterMode
-      type: BlockFilterMode
-      marshal-as: enum
-
 RequestMinorBlocksByUrl:
   union: { name: request, type: query, value: MinorBlocksByUrl }
   fields:
@@ -104,6 +90,8 @@ RequestMinorBlocksByUrl:
     - name: BlockFilterMode
       type: BlockFilterMode
       marshal-as: enum
+    - name: EnableAnchorLookups
+      type: bool
 
 RequestSynth:
   union: { name: request, type: query, value: Synth }

@@ -110,20 +110,12 @@ type RequestKeyPageIndex struct {
 }
 
 type RequestMinorBlocksByUrl struct {
-	fieldsSet       []bool
-	Ranges          []Range         `json:"ranges,omitempty" form:"ranges" query:"ranges" validate:"required"`
-	TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
-	BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode" validate:"required"`
-	extraData       []byte
-}
-
-type RequestMinorBlocksFromDN struct {
-	fieldsSet       []bool
-	Start           uint64          `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Limit           uint64          `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
-	TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
-	BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode" validate:"required"`
-	extraData       []byte
+	fieldsSet           []bool
+	Ranges              []Range         `json:"ranges,omitempty" form:"ranges" query:"ranges" validate:"required"`
+	TxFetchMode         TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
+	BlockFilterMode     BlockFilterMode `json:"blockFilterMode,omitempty" form:"blockFilterMode" query:"blockFilterMode" validate:"required"`
+	EnableAnchorLookups bool            `json:"enableAnchorLookups,omitempty" form:"enableAnchorLookups" query:"enableAnchorLookups" validate:"required"`
+	extraData           []byte
 }
 
 type RequestSynth struct {
@@ -276,8 +268,6 @@ func (*RequestDirectory) Type() QueryType { return QueryTypeDirectoryUrl }
 func (*RequestKeyPageIndex) Type() QueryType { return QueryTypeKeyPageIndex }
 
 func (*RequestMinorBlocksByUrl) Type() QueryType { return QueryTypeMinorBlocksByUrl }
-
-func (*RequestMinorBlocksFromDN) Type() QueryType { return QueryTypeMinorBlocksFromDN }
 
 func (*RequestSynth) Type() QueryType { return QueryTypeSynth }
 
@@ -442,24 +432,12 @@ func (v *RequestMinorBlocksByUrl) Copy() *RequestMinorBlocksByUrl {
 	}
 	u.TxFetchMode = v.TxFetchMode
 	u.BlockFilterMode = v.BlockFilterMode
+	u.EnableAnchorLookups = v.EnableAnchorLookups
 
 	return u
 }
 
 func (v *RequestMinorBlocksByUrl) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *RequestMinorBlocksFromDN) Copy() *RequestMinorBlocksFromDN {
-	u := new(RequestMinorBlocksFromDN)
-
-	u.Start = v.Start
-	u.Limit = v.Limit
-	u.TxFetchMode = v.TxFetchMode
-	u.BlockFilterMode = v.BlockFilterMode
-
-	return u
-}
-
-func (v *RequestMinorBlocksFromDN) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RequestSynth) Copy() *RequestSynth {
 	u := new(RequestSynth)
@@ -925,21 +903,7 @@ func (v *RequestMinorBlocksByUrl) Equal(u *RequestMinorBlocksByUrl) bool {
 	if !(v.BlockFilterMode == u.BlockFilterMode) {
 		return false
 	}
-
-	return true
-}
-
-func (v *RequestMinorBlocksFromDN) Equal(u *RequestMinorBlocksFromDN) bool {
-	if !(v.Start == u.Start) {
-		return false
-	}
-	if !(v.Limit == u.Limit) {
-		return false
-	}
-	if !(v.TxFetchMode == u.TxFetchMode) {
-		return false
-	}
-	if !(v.BlockFilterMode == u.BlockFilterMode) {
+	if !(v.EnableAnchorLookups == u.EnableAnchorLookups) {
 		return false
 	}
 
@@ -1968,6 +1932,7 @@ var fieldNames_RequestMinorBlocksByUrl = []string{
 	2: "Ranges",
 	3: "TxFetchMode",
 	4: "BlockFilterMode",
+	5: "EnableAnchorLookups",
 }
 
 func (v *RequestMinorBlocksByUrl) MarshalBinary() ([]byte, error) {
@@ -1985,6 +1950,9 @@ func (v *RequestMinorBlocksByUrl) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.BlockFilterMode == 0) {
 		writer.WriteEnum(4, v.BlockFilterMode)
+	}
+	if !(!v.EnableAnchorLookups) {
+		writer.WriteBool(5, v.EnableAnchorLookups)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestMinorBlocksByUrl)
@@ -2016,76 +1984,10 @@ func (v *RequestMinorBlocksByUrl) IsValid() error {
 	} else if v.BlockFilterMode == 0 {
 		errs = append(errs, "field BlockFilterMode is not set")
 	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_RequestMinorBlocksFromDN = []string{
-	1: "Type",
-	2: "Start",
-	3: "Limit",
-	4: "TxFetchMode",
-	5: "BlockFilterMode",
-}
-
-func (v *RequestMinorBlocksFromDN) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(v.Start == 0) {
-		writer.WriteUint(2, v.Start)
-	}
-	if !(v.Limit == 0) {
-		writer.WriteUint(3, v.Limit)
-	}
-	if !(v.TxFetchMode == 0) {
-		writer.WriteEnum(4, v.TxFetchMode)
-	}
-	if !(v.BlockFilterMode == 0) {
-		writer.WriteEnum(5, v.BlockFilterMode)
-	}
-
-	_, _, err := writer.Reset(fieldNames_RequestMinorBlocksFromDN)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *RequestMinorBlocksFromDN) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Start is missing")
-	} else if v.Start == 0 {
-		errs = append(errs, "field Start is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Limit is missing")
-	} else if v.Limit == 0 {
-		errs = append(errs, "field Limit is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field TxFetchMode is missing")
-	} else if v.TxFetchMode == 0 {
-		errs = append(errs, "field TxFetchMode is not set")
-	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field BlockFilterMode is missing")
-	} else if v.BlockFilterMode == 0 {
-		errs = append(errs, "field BlockFilterMode is not set")
+		errs = append(errs, "field EnableAnchorLookups is missing")
+	} else if !v.EnableAnchorLookups {
+		errs = append(errs, "field EnableAnchorLookups is not set")
 	}
 
 	switch len(errs) {
@@ -3424,44 +3326,11 @@ func (v *RequestMinorBlocksByUrl) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(BlockFilterMode); reader.ReadEnum(4, x) {
 		v.BlockFilterMode = *x
 	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.EnableAnchorLookups = x
+	}
 
 	seen, err := reader.Reset(fieldNames_RequestMinorBlocksByUrl)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *RequestMinorBlocksFromDN) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *RequestMinorBlocksFromDN) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType QueryType
-	if x := new(QueryType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Start = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Limit = x
-	}
-	if x := new(TxFetchMode); reader.ReadEnum(4, x) {
-		v.TxFetchMode = *x
-	}
-	if x := new(BlockFilterMode); reader.ReadEnum(5, x) {
-		v.BlockFilterMode = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_RequestMinorBlocksFromDN)
 	if err != nil {
 		return err
 	}
@@ -4134,31 +4003,17 @@ func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 
 func (v *RequestMinorBlocksByUrl) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            QueryType                `json:"type"`
-		Ranges          encoding.JsonList[Range] `json:"ranges,omitempty"`
-		TxFetchMode     TxFetchMode              `json:"txFetchMode,omitempty"`
-		BlockFilterMode BlockFilterMode          `json:"blockFilterMode,omitempty"`
+		Type                QueryType                `json:"type"`
+		Ranges              encoding.JsonList[Range] `json:"ranges,omitempty"`
+		TxFetchMode         TxFetchMode              `json:"txFetchMode,omitempty"`
+		BlockFilterMode     BlockFilterMode          `json:"blockFilterMode,omitempty"`
+		EnableAnchorLookups bool                     `json:"enableAnchorLookups,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Ranges = v.Ranges
 	u.TxFetchMode = v.TxFetchMode
 	u.BlockFilterMode = v.BlockFilterMode
-	return json.Marshal(&u)
-}
-
-func (v *RequestMinorBlocksFromDN) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type            QueryType       `json:"type"`
-		Start           uint64          `json:"start,omitempty"`
-		Limit           uint64          `json:"limit,omitempty"`
-		TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty"`
-		BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Start = v.Start
-	u.Limit = v.Limit
-	u.TxFetchMode = v.TxFetchMode
-	u.BlockFilterMode = v.BlockFilterMode
+	u.EnableAnchorLookups = v.EnableAnchorLookups
 	return json.Marshal(&u)
 }
 
@@ -4663,15 +4518,17 @@ func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 
 func (v *RequestMinorBlocksByUrl) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            QueryType                `json:"type"`
-		Ranges          encoding.JsonList[Range] `json:"ranges,omitempty"`
-		TxFetchMode     TxFetchMode              `json:"txFetchMode,omitempty"`
-		BlockFilterMode BlockFilterMode          `json:"blockFilterMode,omitempty"`
+		Type                QueryType                `json:"type"`
+		Ranges              encoding.JsonList[Range] `json:"ranges,omitempty"`
+		TxFetchMode         TxFetchMode              `json:"txFetchMode,omitempty"`
+		BlockFilterMode     BlockFilterMode          `json:"blockFilterMode,omitempty"`
+		EnableAnchorLookups bool                     `json:"enableAnchorLookups,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Ranges = v.Ranges
 	u.TxFetchMode = v.TxFetchMode
 	u.BlockFilterMode = v.BlockFilterMode
+	u.EnableAnchorLookups = v.EnableAnchorLookups
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -4681,32 +4538,7 @@ func (v *RequestMinorBlocksByUrl) UnmarshalJSON(data []byte) error {
 	v.Ranges = u.Ranges
 	v.TxFetchMode = u.TxFetchMode
 	v.BlockFilterMode = u.BlockFilterMode
-	return nil
-}
-
-func (v *RequestMinorBlocksFromDN) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type            QueryType       `json:"type"`
-		Start           uint64          `json:"start,omitempty"`
-		Limit           uint64          `json:"limit,omitempty"`
-		TxFetchMode     TxFetchMode     `json:"txFetchMode,omitempty"`
-		BlockFilterMode BlockFilterMode `json:"blockFilterMode,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Start = v.Start
-	u.Limit = v.Limit
-	u.TxFetchMode = v.TxFetchMode
-	u.BlockFilterMode = v.BlockFilterMode
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.Start = u.Start
-	v.Limit = u.Limit
-	v.TxFetchMode = u.TxFetchMode
-	v.BlockFilterMode = u.BlockFilterMode
+	v.EnableAnchorLookups = u.EnableAnchorLookups
 	return nil
 }
 

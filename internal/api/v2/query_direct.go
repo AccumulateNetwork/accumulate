@@ -516,11 +516,14 @@ func (q *queryDirect) QueryMinorBlocksFromDN(pagination QueryPagination, txFetch
 		return nil, err
 	}
 
-	req := &query.RequestMinorBlocksFromDN{
-		Start:           pagination.Start,
-		Limit:           pagination.Count,
-		TxFetchMode:     txFetchMode,
-		BlockFilterMode: blockFilterMode,
+	req := &query.RequestMinorBlocksByUrl{
+		Ranges: []query.Range{{
+			Start: pagination.Start,
+			Count: pagination.Count,
+		}},
+		TxFetchMode:         txFetchMode,
+		BlockFilterMode:     blockFilterMode,
+		EnableAnchorLookups: true,
 	}
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
