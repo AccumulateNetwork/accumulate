@@ -334,7 +334,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 
-func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataEntry {
+func prepareData(args []string, isFirstLiteEntry bool, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
 		data := []byte{}
@@ -362,55 +362,35 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 			//clip the padding
 			data = data[:n]
 		}
+
 		entry.Data = append(entry.Data, data)
+
 	}
-	return entry
-}
 
-func prepareAnyData(args []string, isFirstLiteEntry bool, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
-	entry := new(protocol.AccumulateDataEntry)
+	if signer != nil {
+		fullDat := []byte{}
+		for _, d := range entry.Data {
+			fullDat = append(fullDat[:], d...)
+		}
+		fullDatHash := sha256.Sum256(fullDat[:])
+		sig, err := signer.SetTimestampToNow().Sign(fullDatHash[:])
 
-	if isFirstLiteEntry {
-		entry.Data = append(entry.Data, []byte{})
-	}
-	for i := 0; i < len(args); i++ {
-		data := make([]byte, len(args[i]))
-
-		//attempt to hex decode it
-		n, err := hex.Decode(data, []byte(args[i]))
 		if err != nil {
-			//if it is not a hex string, then just store the data as-is
-			copy(data, args[i])
-		} else {
-			//clip the padding
-			data = data[:n]
+			return nil, err
 		}
 
-		entry.Data = append(entry.Data, data)
+		finData, err := sig.MarshalBinary()
 
+		if err != nil {
+			return nil, err
+		}
+		dataCopy := [][]byte{}
+		dataCopy = append(dataCopy, finData)
+		for _, v := range entry.Data {
+			dataCopy = append(dataCopy, v)
+		}
+		entry.Data = dataCopy
 	}
-	fullDat := []byte{}
-	for _, d := range entry.Data {
-		fullDat = append(fullDat[:], d...)
-	}
-	fullDatHash := sha256.Sum256(fullDat[:])
-	sig, err := signer.SetTimestampToNow().Sign(fullDatHash[:])
-
-	if err != nil {
-		return nil, err
-	}
-
-	finData, err := sig.MarshalBinary()
-
-	if err != nil {
-		return nil, err
-	}
-	dataCopy := [][]byte{}
-	dataCopy = append(dataCopy, finData)
-	for _, v := range entry.Data {
-		dataCopy = append(dataCopy, v)
-	}
-	entry.Data = dataCopy
 	return entry, nil
 }
 
@@ -445,25 +425,24 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	if len(args) < 2 {
 		return "", fmt.Errorf("expecting data")
 	}
-	if Keyname != "" {
 
+	var kSigner signing.Builder
+	if Keyname != "" {
 		keyargs := strings.Split(Keyname, " ")
 		keyargs = append(keyargs, "")
 		keyUrl, err := url.Parse(keyargs[0])
 		if err != nil {
 			return "", fmt.Errorf("invalid url specified for data signing key")
 		}
-		_, kSigner, err := prepareSigner(keyUrl, keyargs[1:])
+		_, kSigner, err = prepareSigner(keyUrl, keyargs[1:])
 		if err != nil {
 			return "", err
 		}
-		wd.Entry, err = prepareAnyData(args, false, kSigner)
-		if err != nil {
-			return PrintJsonRpcError(err)
-		}
-	} else {
+	}
 
-		wd.Entry = prepareData(args[1:], false)
+	wd.Entry, err = prepareData(args[1:], false, kSigner)
+	if err != nil {
+		return PrintJsonRpcError(err)
 	}
 
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
