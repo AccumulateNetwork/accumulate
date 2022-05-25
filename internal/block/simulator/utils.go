@@ -18,31 +18,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
+func InitGenesis(t TB, db *database.Database, exec *Executor, genesisTime time.Time, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
 	t.Helper()
-
-	batch := db.Begin(true)
-	defer batch.Discard()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
-	_, err := genesis.Init(temp, genesis.InitOpts{
-		Network:     exec.Network,
-		GenesisTime: time.Unix(0, 0),
-		Logger:      exec.Logger,
-		Router:      exec.Router,
+	bootstrap, err := genesis.Init(temp, genesis.InitOpts{
+		Network:             exec.Network,
+		GenesisTime:         genesisTime,
+		NetworkValidatorMap: netValMap,
+		Logger:              exec.Logger,
+		Router:              exec.Router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
 		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
-
-	state, err := temp.MarshalJSON()
-	require.NoError(tb{t}, err)
-
-	require.NoError(tb{t}, exec.InitFromGenesis(batch, state))
-	require.NoError(tb{t}, batch.Commit())
+	return bootstrap
 }
 
 func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
