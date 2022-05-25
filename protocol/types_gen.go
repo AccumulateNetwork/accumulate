@@ -39,7 +39,6 @@ type AccountStateProof struct {
 
 type AccumulateDataEntry struct {
 	fieldsSet []bool
-	Version   uint64   `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	extraData []byte
 }
@@ -1022,7 +1021,6 @@ func (v *AccountStateProof) CopyAsInterface() interface{} { return v.Copy() }
 func (v *AccumulateDataEntry) Copy() *AccumulateDataEntry {
 	u := new(AccumulateDataEntry)
 
-	u.Version = v.Version
 	u.Data = make([][]byte, len(v.Data))
 	for i, v := range v.Data {
 		u.Data[i] = encoding.BytesCopy(v)
@@ -2430,9 +2428,6 @@ func (v *AccountStateProof) Equal(u *AccountStateProof) bool {
 }
 
 func (v *AccumulateDataEntry) Equal(u *AccumulateDataEntry) bool {
-	if !(v.Version == u.Version) {
-		return false
-	}
 	if len(v.Data) != len(u.Data) {
 		return false
 	}
@@ -4314,8 +4309,7 @@ func (v *AccountStateProof) IsValid() error {
 
 var fieldNames_AccumulateDataEntry = []string{
 	1: "Type",
-	2: "Version",
-	3: "Data",
+	2: "Data",
 }
 
 func (v *AccumulateDataEntry) MarshalBinary() ([]byte, error) {
@@ -4323,12 +4317,9 @@ func (v *AccumulateDataEntry) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Version == 0) {
-		writer.WriteUint(2, v.Version)
-	}
 	if !(len(v.Data) == 0) {
 		for _, v := range v.Data {
-			writer.WriteBytes(3, v)
+			writer.WriteBytes(2, v)
 		}
 	}
 
@@ -4347,11 +4338,6 @@ func (v *AccumulateDataEntry) IsValid() error {
 		errs = append(errs, "field Type is missing")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Version is missing")
-	} else if v.Version == 0 {
-		errs = append(errs, "field Version is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Data is missing")
 	} else if len(v.Data) == 0 {
 		errs = append(errs, "field Data is not set")
@@ -9588,11 +9574,8 @@ func (v *AccumulateDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Version = x
-	}
 	for {
-		if x, ok := reader.ReadBytes(3); ok {
+		if x, ok := reader.ReadBytes(2); ok {
 			v.Data = append(v.Data, x)
 		} else {
 			break
@@ -12563,12 +12546,10 @@ func (v *AccountStateProof) MarshalJSON() ([]byte, error) {
 
 func (v *AccumulateDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    DataEntryType              `json:"type"`
-		Version uint64                     `json:"version,omitempty"`
-		Data    encoding.JsonList[*string] `json:"data,omitempty"`
+		Type DataEntryType              `json:"type"`
+		Data encoding.JsonList[*string] `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Version = v.Version
 	u.Data = make(encoding.JsonList[*string], len(v.Data))
 	for i, x := range v.Data {
 		u.Data[i] = encoding.BytesToJSON(x)
@@ -13879,12 +13860,10 @@ func (v *AccountStateProof) UnmarshalJSON(data []byte) error {
 
 func (v *AccumulateDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    DataEntryType              `json:"type"`
-		Version uint64                     `json:"version,omitempty"`
-		Data    encoding.JsonList[*string] `json:"data,omitempty"`
+		Type DataEntryType              `json:"type"`
+		Data encoding.JsonList[*string] `json:"data,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Version = v.Version
 	u.Data = make(encoding.JsonList[*string], len(v.Data))
 	for i, x := range v.Data {
 		u.Data[i] = encoding.BytesToJSON(x)
@@ -13895,7 +13874,6 @@ func (v *AccumulateDataEntry) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.Version = u.Version
 	v.Data = make([][]byte, len(u.Data))
 	for i, x := range u.Data {
 		if x, err := encoding.BytesFromJSON(x); err != nil {
