@@ -140,7 +140,7 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	}
 
 	// Check the anchor - TODO this will not work for the DN
-	chain, err := batch.Account(net.AnchorPool()).ReadChain(protocol.AnchorChain(protocol.Directory))
+	chain, err := batch.Account(net.AnchorPool()).ReadChain(protocol.RootAnchorChain(protocol.Directory))
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "load anchor pool for directory anchors: %w", err)
 	}

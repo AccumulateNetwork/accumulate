@@ -161,7 +161,7 @@ func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error
 		return PrintJson(res)
 	}
 
-	str := fmt.Sprintf("--- block #%d, blocktime %v:\n", res.BlockIndex, res.BlockTime)
+	str := fmt.Sprintf("--- block #%d, blocktime %v:\n", res.BlockIndex, getBlockTime(res.BlockTime))
 	if res.TxCount > 0 {
 		str += fmt.Sprintf("    total tx count\t: %d\n", res.TxCount)
 	}
@@ -182,6 +182,13 @@ func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error
 		}
 	}
 	return str, nil
+}
+
+func getBlockTime(blockTime *time.Time) string {
+	if blockTime != nil {
+		return blockTime.String()
+	}
+	return "<not recorded>"
 }
 
 func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
@@ -245,7 +252,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			out += s
 		}
 	case "minorBlock":
-		str := fmt.Sprintf("\n\tMinor block result Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		str := fmt.Sprintf("\n\tMinor block result Start: %d\t Count: %d\t Total blocks: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
 			str += fmt.Sprintln("==========================================================================")
 

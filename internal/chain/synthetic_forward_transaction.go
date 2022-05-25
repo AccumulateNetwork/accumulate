@@ -24,6 +24,6 @@ func (SyntheticForwardTransaction) Validate(st *StateManager, tx *Delivery) (pro
 
 	// Submit the transaction for processing
 	d := tx.NewForwarded(body)
-	st.state.ProcessAdditionalTransaction(d)
+	st.State.ProcessAdditionalTransaction(d)
 	return nil, nil
 }

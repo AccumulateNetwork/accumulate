@@ -15,6 +15,7 @@ type Querier interface {
 	QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error)
 	QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryKeyPageIndex(url *url.URL, key []byte) (*ChainQueryResponse, error)
+	QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error)
 }
 
 func NewQueryDirect(subnet string, opts Options) Querier {

@@ -9,6 +9,7 @@ ChainType:
     value: 0x02
     description: holds chain anchors
   Data:
+    # DEPRECATED
     value: 0x03
     description: holds data entry hashes
   Index:
@@ -206,9 +207,6 @@ TransactionType:
   SyntheticForwardTransaction:
     value: 0x36
     description: forwards a transaction from one subnet to another
-  SegWitDataEntry:
-    value: 0x39
-    description: is a surrogate transaction segregated witness for a WriteData transaction
 
   ##### SYSTEM TRANSACTIONS #####
   SystemGenesis:
@@ -225,9 +223,9 @@ AccountType:
   Unknown:
     value: 0
     description: represents an unknown account type
-  Anchor:
+  AnchorLedger:
     value: 1
-    description: is one or more Merkle DAG anchors
+    description: anchors the other subnets
   Identity:
     value: 2
     description: is an Identity account, aka an ADI
@@ -256,7 +254,7 @@ AccountType:
   UnknownSigner:
     value: 13
     description: represents an unknown signer account
-  InternalLedger:
+  SystemLedger:
     value: 14
     description: is a ledger that tracks the state of internal operations
   LiteIdentity:
@@ -291,7 +289,7 @@ VoteType:
 BookType:
   Normal:
     value: 0
-    description: Plain vanilla key book
+    description: is a normal key book
   Validator:
     value: 0x01
-    description: Validator key book
+    description: is a validator key book

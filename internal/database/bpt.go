@@ -71,7 +71,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 	subnet := network.NodeUrl()
 
 	// Write the block height
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := b.Account(network.Ledger()).GetStateAs(&ledger)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
@@ -99,7 +99,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		account := &Account{b, accountBucket{objectBucket(key)}}
+		account := &Account{b, accountBucket{objectBucket(key)}, nil}
 
 		// Load the main state so we can get the URL
 		a, err := account.GetState()
@@ -179,7 +179,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 			return err
 		}
 
-		account := &Account{b, accountBucket{objectBucket(key)}}
+		account := &Account{b, accountBucket{objectBucket(key)}, nil}
 		err = account.restore(state)
 		if err != nil {
 			return err

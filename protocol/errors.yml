@@ -45,6 +45,9 @@ ErrorCode:
   QueryEntriesError:
     value: 35
     description: is returned when entries query fails
+  BackdoorTxnError:
+    value: 36
+    description: is returned when a txn is submitted from an incorrect bvn
 
   TxnRange:
     value: 6

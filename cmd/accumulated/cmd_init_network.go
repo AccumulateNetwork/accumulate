@@ -270,7 +270,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage

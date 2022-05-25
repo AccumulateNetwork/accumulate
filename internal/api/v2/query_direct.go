@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -14,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -25,20 +23,8 @@ type queryDirect struct {
 	Subnet string
 }
 
-type queryRequest interface {
-	encoding.BinaryMarshaler
-	Type() types.QueryType
-}
-
-func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []byte, error) {
+func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byte, error) {
 	var err error
-	req := new(query.Query)
-	req.Type = content.Type()
-	req.Content, err = content.MarshalBinary()
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
-	}
-
 	b, err := req.MarshalBinary()
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
@@ -74,7 +60,7 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 
 func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
 	req := new(query.RequestByUrl)
-	req.Url = types.String(u.String())
+	req.Url = u
 	k, v, err := q.query(req, opts)
 	if err != nil {
 		return nil, err
@@ -194,7 +180,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 
 func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	req := new(query.RequestDirectory)
-	req.Url = types.String(u.String())
+	req.Url = u
 	req.Start = pagination.Start
 	req.Limit = pagination.Count
 	req.ExpandChains = opts.Expand
@@ -479,7 +465,7 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, includeSystemAnchors bool) (*MultiResponse, error) {
+func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -494,11 +480,11 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	}
 
 	req := &query.RequestMinorBlocks{
-		Account:                       u,
-		Start:                         pagination.Start,
-		Limit:                         pagination.Count,
-		TxFetchMode:                   txFetchMode,
-		FilterSystemAnchorsOnlyBlocks: includeSystemAnchors,
+		Account:         u,
+		Start:           pagination.Start,
+		Limit:           pagination.Count,
+		TxFetchMode:     txFetchMode,
+		BlockFilterMode: blockFilterMode,
 	}
 	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
@@ -519,7 +505,7 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	mres.Items = make([]interface{}, 0)
 	mres.Start = pagination.Start
 	mres.Count = pagination.Count
-	mres.Total = res.Total
+	mres.Total = res.TotalBlocks
 	for _, entry := range res.Entries {
 		queryRes, err := packMinorQueryResponse(entry)
 		if err != nil {
@@ -529,4 +515,23 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	}
 
 	return mres, nil
+}
+
+func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
+	req := new(query.RequestSynth)
+	req.Source = source
+	req.Destination = destination
+	req.SequenceNumber = number
+	_, v, err := q.query(req, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	res := new(query.ResponseByTxId)
+	err = res.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TX response: %v", err)
+	}
+
+	return packTxResponse(res, nil, res.Envelope, res.Status)
 }

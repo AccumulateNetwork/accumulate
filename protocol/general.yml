@@ -77,6 +77,9 @@ IndexEntry:
       description: is the start time of the block. Only include when indexing the root anchor chain
       type: time
       pointer: true
+    - name: RootIndexIndex
+      description: is the index of the root anchor index chain entry. Only include when indexing the anchor ledger for a major block
+      type: uint
 
 AccumulateDataEntry:
   union: { type: dataEntry }
@@ -98,11 +101,6 @@ FactomDataEntry:
     - name: ExtIds
       repeatable: true
       type: bytes
-
-DirectoryIndexMetadata:
-  fields:
-    - name: Count
-      type: uvarint
 
 Receipt:
   fields:
@@ -147,7 +145,8 @@ KeySpecParams:
   fields:
     - name: KeyHash
       type: bytes
-    - name: Owner
+    - name: Delegate
+      alternative: Owner
       type: url
       pointer: true
       optional: true
@@ -160,7 +159,8 @@ KeySpec:
     - name: LastUsedOn
       type: uvarint
       alternative: Nonce
-    - name: Owner
+    - name: Delegate
+      alternative: Owner
       type: url
       pointer: true
 

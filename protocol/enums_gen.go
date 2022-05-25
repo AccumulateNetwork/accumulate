@@ -26,8 +26,8 @@ const AccountAuthOperationTypeRemoveAuthority AccountAuthOperationType = 4
 // AccountTypeUnknown represents an unknown account type.
 const AccountTypeUnknown AccountType = 0
 
-// AccountTypeAnchor is one or more Merkle DAG anchors.
-const AccountTypeAnchor AccountType = 1
+// AccountTypeAnchorLedger anchors the other subnets.
+const AccountTypeAnchorLedger AccountType = 1
 
 // AccountTypeIdentity is an Identity account, aka an ADI.
 const AccountTypeIdentity AccountType = 2
@@ -56,8 +56,8 @@ const AccountTypeLiteDataAccount AccountType = 12
 // AccountTypeUnknownSigner represents an unknown signer account.
 const AccountTypeUnknownSigner AccountType = 13
 
-// AccountTypeInternalLedger is a ledger that tracks the state of internal operations.
-const AccountTypeInternalLedger AccountType = 14
+// AccountTypeSystemLedger is a ledger that tracks the state of internal operations.
+const AccountTypeSystemLedger AccountType = 14
 
 // AccountTypeLiteIdentity is a lite identity account.
 const AccountTypeLiteIdentity AccountType = 15
@@ -71,10 +71,10 @@ const AllowedTransactionBitUpdateKeyPage AllowedTransactionBit = 1
 // AllowedTransactionBitUpdateAccountAuth is the offset of the UpdateAccountAuth bit.
 const AllowedTransactionBitUpdateAccountAuth AllowedTransactionBit = 2
 
-// BookTypeNormal Plain vanilla key book.
+// BookTypeNormal is a normal key book.
 const BookTypeNormal BookType = 0
 
-// BookTypeValidator Validator key book.
+// BookTypeValidator is a validator key book.
 const BookTypeValidator BookType = 1
 
 // ChainTypeUnknown is used when the chain type is not known.
@@ -208,6 +208,9 @@ const ErrorCodeQueryChainUpdatesError ErrorCode = 34
 
 // ErrorCodeQueryEntriesError is returned when entries query fails.
 const ErrorCodeQueryEntriesError ErrorCode = 35
+
+// ErrorCodeBackdoorTxnError is returned when a txn is submitted from an incorrect bvn.
+const ErrorCodeBackdoorTxnError ErrorCode = 36
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -362,9 +365,6 @@ const TransactionTypeSyntheticBurnTokens TransactionType = 53
 // TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 54
 
-// TransactionTypeSegWitDataEntry is a surrogate transaction segregated witness for a WriteData transaction.
-const TransactionTypeSegWitDataEntry TransactionType = 57
-
 // TransactionTypeSystemGenesis initializes system chains.
 const TransactionTypeSystemGenesis TransactionType = 96
 
@@ -465,7 +465,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchor, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeInternalLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -478,8 +478,8 @@ func (v AccountType) String() string {
 	switch v {
 	case AccountTypeUnknown:
 		return "unknown"
-	case AccountTypeAnchor:
-		return "anchor"
+	case AccountTypeAnchorLedger:
+		return "anchorLedger"
 	case AccountTypeIdentity:
 		return "identity"
 	case AccountTypeTokenIssuer:
@@ -498,8 +498,8 @@ func (v AccountType) String() string {
 		return "liteDataAccount"
 	case AccountTypeUnknownSigner:
 		return "unknownSigner"
-	case AccountTypeInternalLedger:
-		return "internalLedger"
+	case AccountTypeSystemLedger:
+		return "systemLedger"
 	case AccountTypeLiteIdentity:
 		return "liteIdentity"
 	case AccountTypeSyntheticLedger:
@@ -514,8 +514,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 	switch strings.ToLower(name) {
 	case "unknown":
 		return AccountTypeUnknown, true
-	case "anchor":
-		return AccountTypeAnchor, true
+	case "anchorledger":
+		return AccountTypeAnchorLedger, true
 	case "identity":
 		return AccountTypeIdentity, true
 	case "tokenissuer":
@@ -536,8 +536,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeLiteDataAccount, true
 	case "unknownsigner":
 		return AccountTypeUnknownSigner, true
-	case "internalledger":
-		return AccountTypeInternalLedger, true
+	case "systemledger":
+		return AccountTypeSystemLedger, true
 	case "liteidentity":
 		return AccountTypeLiteIdentity, true
 	case "syntheticledger":
@@ -831,7 +831,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized, ErrorCodeQueryChainUpdatesError, ErrorCodeQueryEntriesError:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized, ErrorCodeQueryChainUpdatesError, ErrorCodeQueryEntriesError, ErrorCodeBackdoorTxnError:
 		*v = u
 		return true
 	default:
@@ -914,6 +914,8 @@ func (v ErrorCode) String() string {
 		return "queryChainUpdatesError"
 	case ErrorCodeQueryEntriesError:
 		return "queryEntriesError"
+	case ErrorCodeBackdoorTxnError:
+		return "backdoorTxnError"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -994,6 +996,8 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeQueryChainUpdatesError, true
 	case "queryentrieserror":
 		return ErrorCodeQueryEntriesError, true
+	case "backdoortxnerror":
+		return ErrorCodeBackdoorTxnError, true
 	default:
 		return 0, false
 	}
@@ -1331,7 +1335,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSegWitDataEntry, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor:
 		*v = u
 		return true
 	default:
@@ -1396,8 +1400,6 @@ func (v TransactionType) String() string {
 		return "syntheticBurnTokens"
 	case TransactionTypeSyntheticForwardTransaction:
 		return "syntheticForwardTransaction"
-	case TransactionTypeSegWitDataEntry:
-		return "segWitDataEntry"
 	case TransactionTypeSystemGenesis:
 		return "systemGenesis"
 	case TransactionTypeDirectoryAnchor:
@@ -1468,8 +1470,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSyntheticBurnTokens, true
 	case "syntheticforwardtransaction":
 		return TransactionTypeSyntheticForwardTransaction, true
-	case "segwitdataentry":
-		return TransactionTypeSegWitDataEntry, true
 	case "systemgenesis":
 		return TransactionTypeSystemGenesis, true
 	case "directoryanchor":
