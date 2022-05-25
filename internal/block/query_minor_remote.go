@@ -86,6 +86,7 @@ func (m *remoteMinorQuerier) flushQueue(subnetId string) *protocol.Error {
 	for _, mbr := range *queueRef {
 		entryTxs := rmtEntryMap[mbr.block]
 		mbr.entry.Transactions = append(mbr.entry.Transactions, entryTxs...)
+		mbr.entry.TxCount += uint64(len(entryTxs))
 	}
 	return nil
 }

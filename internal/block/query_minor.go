@@ -49,7 +49,7 @@ func (m *Executor) queryMinorBlocksByUrlRange(batch *database.Batch, resp *query
 	resultCnt := uint64(0)
 
 	var rmtQuerier RemoteMinorBlockQuerier
-	if anchorLookups && txFetchMode == query.TxFetchModeOmit {
+	if anchorLookups && txFetchMode == query.TxFetchModeExpand {
 		rmtQuerier = NewRemoteMinorBlockQuerier(m.Router)
 		defer func() {
 			rmtQuerier.Flush()
@@ -108,7 +108,8 @@ resultLoop:
 					if err == nil {
 						minorEntry.TxCount++
 						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt == protocol.TransactionTypePartitionAnchor {
+						if anchorLookups && txt == protocol.TransactionTypePartitionAnchor {
+							systemTxCount++
 							body, ok := qr.Envelope.Transaction[0].Body.(*protocol.PartitionAnchor)
 							if !ok {
 								return &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
@@ -120,7 +121,7 @@ resultLoop:
 							}
 						} else if txt.IsSystem() {
 							systemTxCount++
-						} else if txFetchMode == query.TxFetchModeExpand {
+						} else {
 							minorEntry.Transactions = append(minorEntry.Transactions, qr)
 						}
 					}
