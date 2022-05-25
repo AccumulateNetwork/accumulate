@@ -62,6 +62,8 @@ func ConvertErrorStatus(s errors.Status) ErrorCode {
 		return ErrorCodeUnauthorized
 	case errors.StatusNotFound:
 		return ErrorCodeNotFound
+	case errors.StatusWrongPartition:
+		return ErrorCodeBackdoorTxnError
 
 	default:
 		return ErrorCodeUnknownError

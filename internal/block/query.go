@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -564,6 +565,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 			case err == nil:
 				qset.Signatures = append(qset.Signatures, state.Signature)
 			case errors.Is(err, storage.ErrNotFound):
+				m.logger.Info("Signature not found", "txn-hash", logging.AsHex(txid).Slice(0, 4), "sig-hash", logging.AsHex(e.SignatureHash).Slice(0, 4), "signer", signer.GetUrl())
 				// Leave it nil
 			default:
 				return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
