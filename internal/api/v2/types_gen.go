@@ -64,7 +64,7 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	Subnet    config.Network `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	Network   config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	extraData []byte
 }
 

@@ -176,3 +176,20 @@ Rational:
       type: uint
     - name: Denominator
       type: uint
+
+NetworkDefinition:
+  fields:
+    - name: NetworkName
+      type: string
+    - name: Subnets
+      type: SubnetDefinition
+      repeatable: true
+      marshal-as: reference
+
+SubnetDefinition:
+  fields:
+    - name: SubnetID
+      type: string
+    - name: ValidatorKeyHashes
+      type: hash
+      repeatable: true
