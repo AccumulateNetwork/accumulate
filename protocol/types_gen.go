@@ -432,6 +432,13 @@ type MetricsResponse struct {
 	extraData []byte
 }
 
+type NetworkDefinition struct {
+	fieldsSet   []bool
+	NetworkName string             `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
+	Subnets     []SubnetDefinition `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
+	extraData   []byte
+}
+
 type NetworkGlobals struct {
 	fieldsSet          []bool
 	ValidatorThreshold Rational `json:"validatorThreshold,omitempty" form:"validatorThreshold" query:"validatorThreshold" validate:"required"`
@@ -574,6 +581,13 @@ type SubnetAnchor struct {
 	// StateTreeAnchor is the root of the source's state tree (BPT).
 	StateTreeAnchor [32]byte `json:"stateTreeAnchor,omitempty" form:"stateTreeAnchor" query:"stateTreeAnchor" validate:"required"`
 	extraData       []byte
+}
+
+type SubnetDefinition struct {
+	fieldsSet          []bool
+	SubnetID           string     `json:"subnetID,omitempty" form:"subnetID" query:"subnetID" validate:"required"`
+	ValidatorKeyHashes [][32]byte `json:"validatorKeyHashes,omitempty" form:"validatorKeyHashes" query:"validatorKeyHashes" validate:"required"`
+	extraData          []byte
 }
 
 type SubnetSyntheticLedger struct {
@@ -1701,6 +1715,20 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *NetworkDefinition) Copy() *NetworkDefinition {
+	u := new(NetworkDefinition)
+
+	u.NetworkName = v.NetworkName
+	u.Subnets = make([]SubnetDefinition, len(v.Subnets))
+	for i, v := range v.Subnets {
+		u.Subnets[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *NetworkDefinition) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
 
@@ -1929,6 +1957,20 @@ func (v *SubnetAnchor) Copy() *SubnetAnchor {
 }
 
 func (v *SubnetAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SubnetDefinition) Copy() *SubnetDefinition {
+	u := new(SubnetDefinition)
+
+	u.SubnetID = v.SubnetID
+	u.ValidatorKeyHashes = make([][32]byte, len(v.ValidatorKeyHashes))
+	for i, v := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = v
+	}
+
+	return u
+}
+
+func (v *SubnetDefinition) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SubnetSyntheticLedger) Copy() *SubnetSyntheticLedger {
 	u := new(SubnetSyntheticLedger)
@@ -3335,6 +3377,22 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	return true
 }
 
+func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
+	if !(v.NetworkName == u.NetworkName) {
+		return false
+	}
+	if len(v.Subnets) != len(u.Subnets) {
+		return false
+	}
+	for i := range v.Subnets {
+		if !((&v.Subnets[i]).Equal(&u.Subnets[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	if !((&v.ValidatorThreshold).Equal(&u.ValidatorThreshold)) {
 		return false
@@ -3602,6 +3660,22 @@ func (v *SubnetAnchor) Equal(u *SubnetAnchor) bool {
 	}
 	if !(v.StateTreeAnchor == u.StateTreeAnchor) {
 		return false
+	}
+
+	return true
+}
+
+func (v *SubnetDefinition) Equal(u *SubnetDefinition) bool {
+	if !(v.SubnetID == u.SubnetID) {
+		return false
+	}
+	if len(v.ValidatorKeyHashes) != len(u.ValidatorKeyHashes) {
+		return false
+	}
+	for i := range v.ValidatorKeyHashes {
+		if !(v.ValidatorKeyHashes[i] == u.ValidatorKeyHashes[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -6860,6 +6934,56 @@ func (v *MetricsRequest) IsValid() error {
 	}
 }
 
+var fieldNames_NetworkDefinition = []string{
+	1: "NetworkName",
+	2: "Subnets",
+}
+
+func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.NetworkName) == 0) {
+		writer.WriteString(1, v.NetworkName)
+	}
+	if !(len(v.Subnets) == 0) {
+		for _, v := range v.Subnets {
+			writer.WriteValue(2, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkDefinition)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *NetworkDefinition) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field NetworkName is missing")
+	} else if len(v.NetworkName) == 0 {
+		errs = append(errs, "field NetworkName is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Subnets is missing")
+	} else if len(v.Subnets) == 0 {
+		errs = append(errs, "field Subnets is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_NetworkGlobals = []string{
 	1: "ValidatorThreshold",
 }
@@ -7763,6 +7887,56 @@ func (v *SubnetAnchor) IsValid() error {
 		errs = append(errs, "field StateTreeAnchor is missing")
 	} else if v.StateTreeAnchor == ([32]byte{}) {
 		errs = append(errs, "field StateTreeAnchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SubnetDefinition = []string{
+	1: "SubnetID",
+	2: "ValidatorKeyHashes",
+}
+
+func (v *SubnetDefinition) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.SubnetID) == 0) {
+		writer.WriteString(1, v.SubnetID)
+	}
+	if !(len(v.ValidatorKeyHashes) == 0) {
+		for _, v := range v.ValidatorKeyHashes {
+			writer.WriteHash(2, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_SubnetDefinition)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *SubnetDefinition) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field SubnetID is missing")
+	} else if len(v.SubnetID) == 0 {
+		errs = append(errs, "field SubnetID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ValidatorKeyHashes is missing")
+	} else if len(v.ValidatorKeyHashes) == 0 {
+		errs = append(errs, "field ValidatorKeyHashes is not set")
 	}
 
 	switch len(errs) {
@@ -11008,6 +11182,33 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *NetworkDefinition) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.NetworkName = x
+	}
+	for {
+		if x := new(SubnetDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Subnets = append(v.Subnets, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_NetworkDefinition)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *NetworkGlobals) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11521,6 +11722,33 @@ func (v *SubnetAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SubnetAnchor)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *SubnetDefinition) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SubnetDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.SubnetID = x
+	}
+	for {
+		if x, ok := reader.ReadHash(2); ok {
+			v.ValidatorKeyHashes = append(v.ValidatorKeyHashes, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_SubnetDefinition)
 	if err != nil {
 		return err
 	}
@@ -13184,6 +13412,16 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
+	u := struct {
+		NetworkName string                              `json:"networkName,omitempty"`
+		Subnets     encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
+	}{}
+	u.NetworkName = v.NetworkName
+	u.Subnets = v.Subnets
+	return json.Marshal(&u)
+}
+
 func (v *Object) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    ObjectType                       `json:"type,omitempty"`
@@ -13385,6 +13623,19 @@ func (v *SubnetAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
+	return json.Marshal(&u)
+}
+
+func (v *SubnetDefinition) MarshalJSON() ([]byte, error) {
+	u := struct {
+		SubnetID           string                    `json:"subnetID,omitempty"`
+		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
+	}{}
+	u.SubnetID = v.SubnetID
+	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
+	for i, x := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -15065,6 +15316,21 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
+	u := struct {
+		NetworkName string                              `json:"networkName,omitempty"`
+		Subnets     encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
+	}{}
+	u.NetworkName = v.NetworkName
+	u.Subnets = v.Subnets
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.NetworkName = u.NetworkName
+	v.Subnets = u.Subnets
+	return nil
+}
+
 func (v *Object) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    ObjectType                       `json:"type,omitempty"`
@@ -15457,6 +15723,31 @@ func (v *SubnetAnchor) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
 	} else {
 		v.StateTreeAnchor = x
+	}
+	return nil
+}
+
+func (v *SubnetDefinition) UnmarshalJSON(data []byte) error {
+	u := struct {
+		SubnetID           string                    `json:"subnetID,omitempty"`
+		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
+	}{}
+	u.SubnetID = v.SubnetID
+	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
+	for i, x := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.SubnetID = u.SubnetID
+	v.ValidatorKeyHashes = make([][32]byte, len(u.ValidatorKeyHashes))
+	for i, x := range u.ValidatorKeyHashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ValidatorKeyHashes: %w", err)
+		} else {
+			v.ValidatorKeyHashes[i] = x
+		}
 	}
 	return nil
 }

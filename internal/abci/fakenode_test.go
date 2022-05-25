@@ -51,8 +51,11 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert  *assert.Assertions
-	require *require.Assertions
+	assert    *assert.Assertions
+	require   *require.Assertions
+	netValMap genesis.NetworkValidatorMap
+	Bootstrap genesis.Bootstrap
+	kv        *memory.DB
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -61,6 +64,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.ABCIClient{}
+	netValMap := make(genesis.NetworkValidatorMap)
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -74,11 +78,12 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil, netValMap)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
 	}
+
 	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
@@ -87,6 +92,23 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
 		}
 	}
+
+	// Execute bootstrap after the entire network is known
+	if doGenesis {
+		for _, netName := range subnets {
+			netName = strings.TrimPrefix(netName, evilNodePrefix)
+			nodes := allNodes[netName]
+			for i := range nodes {
+				genesis := nodes[i].Bootstrap
+				err := genesis.Bootstrap()
+				if err != nil {
+					panic(fmt.Errorf("could not execute genesis: %v", err))
+				}
+				nodes[i].CreateInitChain()
+			}
+		}
+	}
+
 	return allNodes
 }
 
@@ -97,7 +119,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkValidatorMap) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -113,6 +135,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.key = pv.Key.PrivKey
 	n.network = &d.Config.Accumulate.Network
 	n.logger = d.Logger
+	n.netValMap = netValMap
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
@@ -193,27 +216,20 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.height++
 
 	kv := memory.New(nil)
-	_, err = genesis.Init(kv, genesis.InitOpts{
-		Network:     *n.network,
-		GenesisTime: time.Now(),
-		Logger:      n.logger,
-		Router:      n.router,
+	opts := genesis.InitOpts{
+		Network:             *n.network,
+		GenesisTime:         time.Now(),
+		NetworkValidatorMap: n.netValMap,
+		Logger:              n.logger,
+		Router:              n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
 		Keys: [][]byte{n.key.Bytes()},
-	})
+	}
+	n.Bootstrap, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
-
-	state, err := kv.MarshalJSON()
-	n.Require().NoError(err)
-
-	n.app.InitChain(abcitypes.RequestInitChain{
-		Time:          time.Now(),
-		ChainId:       n.network.LocalSubnetID,
-		AppStateBytes: state,
-		InitialHeight: protocol.GenesisBlock + 1,
-	})
+	n.kv = kv
 
 	return n
 }
@@ -506,6 +522,17 @@ func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
+}
+
+func (n *FakeNode) CreateInitChain() {
+	state, err := n.kv.MarshalJSON()
+	n.require.NoError(err)
+	n.app.InitChain(abcitypes.RequestInitChain{
+		Time:          time.Now(),
+		ChainId:       n.network.LocalSubnetID,
+		AppStateBytes: state,
+		InitialHeight: protocol.GenesisBlock + 1,
+	})
 }
 
 type e2eDUT struct {
