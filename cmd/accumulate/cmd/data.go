@@ -426,7 +426,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting data")
 	}
 
-	var kSigner signing.Builder
+	var kSigner *signing.Builder
 	if Keyname != "" {
 		keyargs := strings.Split(Keyname, " ")
 		keyargs = append(keyargs, "")
