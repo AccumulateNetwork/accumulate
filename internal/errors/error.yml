@@ -5,6 +5,7 @@ Error:
     - name: Code
       type: Status
       marshal-as: enum
+    - { name: CodeID, type: uint, virtual: true, non-binary: true }
     - name: Cause
       type: Error
       marshal-as: reference
