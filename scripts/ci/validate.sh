@@ -251,8 +251,14 @@ success
 
 section "Create lite data account with first entry"
 ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest1 keytest-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
-accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
-accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
+echo "ACOUNT ID === $ACCOUNT_ID"
+echo "============================================"
+echo $(accumulate --use-unencrypted-wallet -j data get $ACCOUNT_ID 0 1 1)
+echo "--------------------------------------------"
+echo $(accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 1 1)
+echo "============================================"
+accumulate --use-unencrypted-wallet -j data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
+accumulate --use-unencrypted-wallet -j data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
