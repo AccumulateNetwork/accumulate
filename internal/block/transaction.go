@@ -404,6 +404,11 @@ func (x *Executor) recordPendingTransaction(net *config.Network, batch *database
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
+	if receipt == nil {
+		x.logger.Error("Missing receipt for pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type())
+		return status, new(chain.ProcessTransactionState), nil
+	}
+
 	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), *(*[32]byte)(delivery.Transaction.GetHash()))
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)

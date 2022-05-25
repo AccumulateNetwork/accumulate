@@ -89,6 +89,11 @@ func TestRelaunch(t *testing.T) {
 				t.Helper()
 				require.NoError(t, err)
 			})
+
+			daemon := daemon
+			defer func() {
+				assert.NoError(t, daemon.Stop())
+			}()
 		}
 	}
 
