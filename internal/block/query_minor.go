@@ -11,9 +11,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
+// TODO see if it's doable to merge queryMinorBlocksFromDN & queryMinorBlocksByUrl
 func (m *Executor) queryMinorBlocksFromDN(batch *database.Batch, req *query.RequestMinorBlocksFromDN) (*query.ResponseMinorBlocks, *protocol.Error) {
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
@@ -31,7 +32,7 @@ func (m *Executor) queryMinorBlocksFromDN(batch *database.Batch, req *query.Requ
 
 	entryIdx := startIndex
 
-	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	resp := query.ResponseMinorBlocks{TotalBlocks: ledger.Index}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
 
@@ -98,7 +99,10 @@ resultLoop:
 								return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 							}
 
-							rmtQuerier.SubmitQuery(body.Source, body.Block, minorEntry)
+							err := rmtQuerier.SubmitQuery(body.Source, body.MinorBlockIndex, minorEntry)
+							if err != nil {
+								return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+							}
 						} else if txt.IsSystem() {
 							systemTxCount++
 						} else if req.TxFetchMode == query.TxFetchModeExpand {
@@ -127,7 +131,7 @@ resultLoop:
 
 func (m *Executor) queryMinorBlocksByUrl(batch *database.Batch, req *query.RequestMinorBlocksByUrl) (*query.ResponseMinorBlocks, *protocol.Error) {
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}

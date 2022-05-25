@@ -23,7 +23,7 @@ type blockTxsMap map[uint64][]*query.ResponseByTxId
 
 type remoteMinorQuerier struct {
 	router   routing.Router
-	queueMap map[string]minorBlockQueue
+	queueMap map[string]*minorBlockQueue
 }
 
 type RemoteMinorBlockQuerier interface {
@@ -34,7 +34,7 @@ type RemoteMinorBlockQuerier interface {
 func NewRemoteMinorBlockQuerier(router routing.Router) RemoteMinorBlockQuerier {
 	return &remoteMinorQuerier{
 		router:   router,
-		queueMap: map[string]minorBlockQueue{},
+		queueMap: map[string]*minorBlockQueue{},
 	}
 }
 
@@ -45,12 +45,16 @@ func (m *remoteMinorQuerier) SubmitQuery(source *url.URL, block uint64, entry *q
 			Message: fmt.Errorf("the anchor source URL is %s which is not a BVN", source.String())}
 	}
 
-	queue := m.queueMap[subnetId]
-	queue = append(queue, minorBlockRemote{
+	queueRef, ok := m.queueMap[subnetId]
+	if !ok {
+		queueRef = &minorBlockQueue{}
+		m.queueMap[subnetId] = queueRef
+	}
+	*queueRef = append(*queueRef, minorBlockRemote{
 		block: block,
 		entry: entry,
 	})
-	if len(queue) > autoFlushThreshold {
+	if len(*queueRef) > autoFlushThreshold {
 		err := m.flushQueue(subnetId)
 		if err != nil {
 			return err
@@ -71,15 +75,15 @@ func (m *remoteMinorQuerier) Flush() *protocol.Error {
 }
 
 func (m *remoteMinorQuerier) flushQueue(subnetId string) *protocol.Error {
-	queue := m.queueMap[subnetId]
-	m.queueMap[subnetId] = minorBlockQueue{}
+	queueRef := m.queueMap[subnetId]
+	m.queueMap[subnetId] = &minorBlockQueue{}
 
-	ranges := collectRanges(queue)
+	ranges := collectRanges(queueRef)
 	rmtEntryMap, err := m.queryRemote(subnetId, ranges)
 	if err != nil {
 		return err
 	}
-	for _, mbr := range queue {
+	for _, mbr := range *queueRef {
 		entryTxs := rmtEntryMap[mbr.block]
 		mbr.entry.Transactions = append(mbr.entry.Transactions, entryTxs...)
 	}
@@ -88,10 +92,10 @@ func (m *remoteMinorQuerier) flushQueue(subnetId string) *protocol.Error {
 
 // collectRanges loops through the queue and try to create ranges.
 // When the TPS count gets higher it's likely most or all BVNs have an anchor in every DN block.
-func collectRanges(queue minorBlockQueue) []query.Range {
+func collectRanges(queueRef *minorBlockQueue) []query.Range {
 	var ranges []query.Range
 	r := query.Range{}
-	for _, mbr := range queue {
+	for _, mbr := range *queueRef {
 		if mbr.block != (r.Start + r.Count) {
 			r = query.Range{}
 			r.Start = mbr.block
@@ -127,14 +131,7 @@ func (m *remoteMinorQuerier) queryRemote(subnetId string, ranges []query.Range) 
 
 	r := blockTxsMap{}
 	for _, entry := range remoteBlocks.Entries {
-		txs, ok := r[entry.BlockIndex]
-		if !ok {
-			txs = make([]*query.ResponseByTxId, 0)
-			r[entry.BlockIndex] = txs
-		} else {
-			panic("I don't think it will get here") // TODO test
-		}
-		txs = append(txs, entry.Transactions...)
+		r[entry.BlockIndex] = entry.Transactions
 	}
 	return r, nil
 }

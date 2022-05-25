@@ -472,8 +472,10 @@ func (q *queryDirect) QueryMinorBlocksByUrl(pagination QueryPagination, txFetchM
 	}
 
 	req := &query.RequestMinorBlocksByUrl{
-		Start:           pagination.Start,
-		Limit:           pagination.Count,
+		Ranges: []query.Range{{
+			Start: pagination.Start,
+			Count: pagination.Count,
+		}},
 		TxFetchMode:     txFetchMode,
 		BlockFilterMode: blockFilterMode,
 	}
