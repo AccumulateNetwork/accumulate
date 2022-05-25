@@ -48,6 +48,9 @@ const (
 	// Oracle is the path to a node's anchor chain account.
 	Oracle = "oracle"
 
+	// Network is the path to a node's network definition data account.
+	Network = "network"
+
 	// Globals is the path to the Directory network's Mutable Protocol costants data account
 	Globals = "globals"
 

@@ -49,7 +49,7 @@ func BenchmarkHighTps(b *testing.B) {
 	require.NoError(b, exec.Start())
 
 	kv := memory.New(nil)
-	_, err = genesis.Init(kv, genesis.InitOpts{
+	bootstrap, err := genesis.Init(kv, genesis.InitOpts{
 		Network:     network,
 		GenesisTime: time.Now(),
 		Logger:      logger,
@@ -57,6 +57,8 @@ func BenchmarkHighTps(b *testing.B) {
 			{PubKey: tmed25519.PubKey(nodeKey[32:])},
 		},
 	})
+	require.NoError(b, err)
+	err := bootstrap.Bootstrap()
 	require.NoError(b, err)
 
 	state, err := kv.MarshalJSON()

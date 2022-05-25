@@ -8,9 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -25,7 +23,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
@@ -118,6 +115,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 		sim.Executors[subnet.ID] = &ExecEntry{
 			Database:  db,
 			Executor:  exec,
+			Subnet:    subnet,
 			API:       acctesting.DirectJrpcClient(jrpc),
 			tb:        sim.tb,
 			blockTime: genesisTime,
@@ -170,30 +168,26 @@ func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface
 func (s *Simulator) InitFromGenesis() {
 	s.Helper()
 
-	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.ID)
-		batch := x.Database.Begin(true)
-		defer batch.Discard()
+	netValMap := make(genesis.NetworkValidatorMap)
+	for _, x := range s.Executors {
+		x.bootstrap = InitGenesis(s, x.Database, x.Executor, genesisTime, netValMap)
+	}
 
-		// Genesis
-		temp := memory.New(x.Executor.Logger)
-		_, err := genesis.Init(temp, genesis.InitOpts{
-			Network:     x.Executor.Network,
-			GenesisTime: genesisTime,
-			Logger:      x.Executor.Logger,
-			Router:      x.Executor.Router,
-			Validators: []tmtypes.GenesisValidator{
-				{PubKey: ed25519.PubKey(x.Executor.Key[32:])},
-			},
-			Keys: [][]byte{x.Executor.Key},
-		})
-		require.NoError(s, err)
+	// Execute bootstrap after the entire network is known
+	for _, x := range s.Executors {
+		err := x.bootstrap.Bootstrap()
+		if err != nil {
+			panic(fmt.Errorf("could not execute bootstrap: %v", err))
+		}
+		state, err := x.bootstrap.GetDBState()
+		require.NoError(tb{s}, err)
 
-		state, err := temp.MarshalJSON()
-		require.NoError(s, err)
-
-		require.NoError(s, x.Executor.InitFromGenesis(batch, state))
-		require.NoError(s, batch.Commit())
+		func() {
+			batch := x.Database.Begin(true)
+			defer batch.Discard()
+			require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, state))
+			require.NoError(tb{s}, batch.Commit())
+		}()
 	}
 }
 
@@ -408,9 +402,11 @@ type ExecEntry struct {
 	blockTime               time.Time
 	nextBlock, currentBlock []*protocol.Envelope
 
-	Database *database.Database
-	Executor *block.Executor
-	API      *client.Client
+	Subnet    *config.Subnet
+	Database  *database.Database
+	Executor  *block.Executor
+	bootstrap genesis.Bootstrap
+	API       *client.Client
 
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to
