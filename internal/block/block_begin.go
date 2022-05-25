@@ -22,6 +22,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+const debugMajorBlocks = false
+
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
@@ -121,12 +123,20 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		return 0, nil
 	}
 
-	utcHour := block.Time.UTC().Truncate(time.Hour)
-	switch utcHour.Hour() {
-	case 0, 12:
-		// Ok
-	default:
-		return 0, nil
+	var utcHour time.Time
+	if debugMajorBlocks {
+		utcHour = block.Time.UTC().Truncate(time.Second)
+		if block.Index%20 != 19 {
+			return 0, nil
+		}
+	} else {
+		utcHour = block.Time.UTC().Truncate(time.Hour)
+		switch utcHour.Hour() {
+		case 0, 12:
+			// Ok
+		default:
+			return 0, nil
+		}
 	}
 
 	var anchor *protocol.AnchorLedger
