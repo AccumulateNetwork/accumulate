@@ -1423,8 +1423,8 @@ func TestUpdateValidators(t *testing.T) {
 	height := uint64(1)
 
 	// The validator timestamp starts out > 0
-	signer := n.GetKeyPage(n.network.DefaultValidatorPage().String())
-	_, entry, ok := signer.EntryByKey(n.key.PubKey().Bytes())
+	signer := dn.GetKeyPage(dn.network.DefaultOperatorPage().String())
+	_, entry, ok := signer.EntryByKey(dn.key.PubKey().Bytes())
 	require.True(t, ok)
 	timestamp := entry.GetLastUsedOn()
 
