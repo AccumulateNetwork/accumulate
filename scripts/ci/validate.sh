@@ -310,7 +310,7 @@ success
 
 section "Query latest data entry by URL"
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/data#data | jq -re .data.entry.data[0])
-[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo'"
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo', got '$RESULT'"
 
 section "Query data entry at height 0 by URL"
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/data#data/0 | jq -re .data.entry.data[0])
