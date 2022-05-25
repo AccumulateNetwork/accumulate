@@ -12,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func (m *Executor) queryMinorBlocksByUrl(batch *database.Batch, req *query.RequestMinorBlocksByUrl) (*query.ResponseMinorBlocks, *protocol.Error) {
+func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, *protocol.Error) {
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
 	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
@@ -28,7 +28,7 @@ func (m *Executor) queryMinorBlocksByUrl(batch *database.Batch, req *query.Reque
 	rmb := &query.ResponseMinorBlocks{TotalBlocks: ledger.Index}
 
 	for _, rg := range req.Ranges {
-		err := m.queryMinorBlocksByUrlRange(batch, rmb, rg, idxChain, req.BlockFilterMode, req.TxFetchMode, req.EnableAnchorLookups)
+		err := m.queryMinorBlocksRange(batch, rmb, rg, idxChain, req.BlockFilterMode, req.TxFetchMode, req.EnableAnchorLookups)
 		if err != nil {
 			return nil, err
 		}
@@ -36,7 +36,7 @@ func (m *Executor) queryMinorBlocksByUrl(batch *database.Batch, req *query.Reque
 	return rmb, nil
 }
 
-func (m *Executor) queryMinorBlocksByUrlRange(batch *database.Batch, resp *query.ResponseMinorBlocks, qryRange query.Range,
+func (m *Executor) queryMinorBlocksRange(batch *database.Batch, resp *query.ResponseMinorBlocks, qryRange query.Range,
 	idxChain *database.Chain, blockFilterMode query.BlockFilterMode, txFetchMode query.TxFetchMode, anchorLookups bool) *protocol.Error {
 
 	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(qryRange.Start))

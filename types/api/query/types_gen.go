@@ -109,7 +109,7 @@ type RequestKeyPageIndex struct {
 	extraData []byte
 }
 
-type RequestMinorBlocksByUrl struct {
+type RequestMinorBlocks struct {
 	fieldsSet           []bool
 	Ranges              []Range         `json:"ranges,omitempty" form:"ranges" query:"ranges" validate:"required"`
 	TxFetchMode         TxFetchMode     `json:"txFetchMode,omitempty" form:"txFetchMode" query:"txFetchMode" validate:"required"`
@@ -267,7 +267,7 @@ func (*RequestDirectory) Type() QueryType { return QueryTypeDirectoryUrl }
 
 func (*RequestKeyPageIndex) Type() QueryType { return QueryTypeKeyPageIndex }
 
-func (*RequestMinorBlocksByUrl) Type() QueryType { return QueryTypeMinorBlocksByUrl }
+func (*RequestMinorBlocks) Type() QueryType { return QueryTypeMinorBlocksByUrl }
 
 func (*RequestSynth) Type() QueryType { return QueryTypeSynth }
 
@@ -423,8 +423,8 @@ func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 
 func (v *RequestKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *RequestMinorBlocksByUrl) Copy() *RequestMinorBlocksByUrl {
-	u := new(RequestMinorBlocksByUrl)
+func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
+	u := new(RequestMinorBlocks)
 
 	u.Ranges = make([]Range, len(v.Ranges))
 	for i, v := range v.Ranges {
@@ -437,7 +437,7 @@ func (v *RequestMinorBlocksByUrl) Copy() *RequestMinorBlocksByUrl {
 	return u
 }
 
-func (v *RequestMinorBlocksByUrl) CopyAsInterface() interface{} { return v.Copy() }
+func (v *RequestMinorBlocks) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RequestSynth) Copy() *RequestSynth {
 	u := new(RequestSynth)
@@ -888,7 +888,7 @@ func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
 	return true
 }
 
-func (v *RequestMinorBlocksByUrl) Equal(u *RequestMinorBlocksByUrl) bool {
+func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
 	if len(v.Ranges) != len(u.Ranges) {
 		return false
 	}
@@ -1927,7 +1927,7 @@ func (v *RequestKeyPageIndex) IsValid() error {
 	}
 }
 
-var fieldNames_RequestMinorBlocksByUrl = []string{
+var fieldNames_RequestMinorBlocks = []string{
 	1: "Type",
 	2: "Ranges",
 	3: "TxFetchMode",
@@ -1935,7 +1935,7 @@ var fieldNames_RequestMinorBlocksByUrl = []string{
 	5: "EnableAnchorLookups",
 }
 
-func (v *RequestMinorBlocksByUrl) MarshalBinary() ([]byte, error) {
+func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -1955,7 +1955,7 @@ func (v *RequestMinorBlocksByUrl) MarshalBinary() ([]byte, error) {
 		writer.WriteBool(5, v.EnableAnchorLookups)
 	}
 
-	_, _, err := writer.Reset(fieldNames_RequestMinorBlocksByUrl)
+	_, _, err := writer.Reset(fieldNames_RequestMinorBlocks)
 	if err != nil {
 		return nil, err
 	}
@@ -1963,7 +1963,7 @@ func (v *RequestMinorBlocksByUrl) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), err
 }
 
-func (v *RequestMinorBlocksByUrl) IsValid() error {
+func (v *RequestMinorBlocks) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -3299,11 +3299,11 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *RequestMinorBlocksByUrl) UnmarshalBinary(data []byte) error {
+func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *RequestMinorBlocksByUrl) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *RequestMinorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	var vType QueryType
@@ -3330,7 +3330,7 @@ func (v *RequestMinorBlocksByUrl) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.EnableAnchorLookups = x
 	}
 
-	seen, err := reader.Reset(fieldNames_RequestMinorBlocksByUrl)
+	seen, err := reader.Reset(fieldNames_RequestMinorBlocks)
 	if err != nil {
 		return err
 	}
@@ -4001,7 +4001,7 @@ func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *RequestMinorBlocksByUrl) MarshalJSON() ([]byte, error) {
+func (v *RequestMinorBlocks) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                QueryType                `json:"type"`
 		Ranges              encoding.JsonList[Range] `json:"ranges,omitempty"`
@@ -4516,7 +4516,7 @@ func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *RequestMinorBlocksByUrl) UnmarshalJSON(data []byte) error {
+func (v *RequestMinorBlocks) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type                QueryType                `json:"type"`
 		Ranges              encoding.JsonList[Range] `json:"ranges,omitempty"`

@@ -77,7 +77,7 @@ RequestKeyPageIndex:
     - name: Key
       type: bytes
 
-RequestMinorBlocksByUrl:
+RequestMinorBlocks:
   union: { name: request, type: query, value: MinorBlocksByUrl }
   fields:
     - name: Ranges

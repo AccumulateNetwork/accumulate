@@ -110,7 +110,7 @@ func collectRanges(queueRef *minorBlockQueue) []query.Range {
 }
 
 func (m *remoteMinorQuerier) queryRemote(subnetId string, ranges []query.Range) (blockTxsMap, *protocol.Error) {
-	req := &query.RequestMinorBlocksByUrl{
+	req := &query.RequestMinorBlocks{
 		Ranges:          ranges,
 		TxFetchMode:     query.TxFetchModeExpand,
 		BlockFilterMode: query.BlockFilterModeExcludeNone,

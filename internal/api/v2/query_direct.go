@@ -471,7 +471,7 @@ func (q *queryDirect) QueryMinorBlocksByUrl(pagination QueryPagination, txFetchM
 		return nil, err
 	}
 
-	req := &query.RequestMinorBlocksByUrl{
+	req := &query.RequestMinorBlocks{
 		Ranges: []query.Range{{
 			Start: pagination.Start,
 			Count: pagination.Count,
@@ -516,7 +516,7 @@ func (q *queryDirect) QueryMinorBlocksFromDN(pagination QueryPagination, txFetch
 		return nil, err
 	}
 
-	req := &query.RequestMinorBlocksByUrl{
+	req := &query.RequestMinorBlocks{
 		Ranges: []query.Range{{
 			Start: pagination.Start,
 			Count: pagination.Count,

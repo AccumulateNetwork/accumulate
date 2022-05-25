@@ -864,8 +864,8 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			}
 		}
 		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: fmt.Errorf("no authority of %s holds %X", chr.Url, chr.Key)}
-	case *query.RequestMinorBlocksByUrl:
-		resp, pErr := m.queryMinorBlocksByUrl(batch, q)
+	case *query.RequestMinorBlocks:
+		resp, pErr := m.queryMinorBlocks(batch, q)
 		if pErr != nil {
 			return nil, nil, pErr
 		}
