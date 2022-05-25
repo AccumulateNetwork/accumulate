@@ -10,17 +10,18 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-func main() {
-	cmd := &cobra.Command{
-		Use:  "watch-tx [addrs]",
-		Args: cobra.MinimumNArgs(1),
-		RunE: run,
-	}
-
-	_ = cmd.Execute()
+var watchTxCmd = &cobra.Command{
+	Use:   "watch-tx [addrs]",
+	Short: "Subscribe to Tendermint transaction events",
+	Args:  cobra.MinimumNArgs(1),
+	RunE:  watchTx,
 }
 
-func run(_ *cobra.Command, args []string) error {
+func init() {
+	cmd.AddCommand(watchTxCmd)
+}
+
+func watchTx(_ *cobra.Command, args []string) error {
 	for _, arg := range args {
 		client, err := http.New(arg)
 		if err != nil {

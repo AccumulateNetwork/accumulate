@@ -47,7 +47,7 @@ func (t *Transaction) GetState() (*SigOrTxn, error) {
 	if !errors.Is(err, errors.StatusNotFound) {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
-	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.id[:8])
+	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.id)
 }
 
 // PutState stores the transaction state.
