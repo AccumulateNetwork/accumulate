@@ -135,7 +135,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	defer batch.Discard()
 
 	var height uint64
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
@@ -146,20 +146,8 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		return nil, err
 	}
 
-	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
-}
-
-func (m *Executor) logDebug(msg string, keyVals ...interface{}) {
-	m.logger.Debug(msg, keyVals...)
-}
-
-func (m *Executor) logInfo(msg string, keyVals ...interface{}) {
-	m.logger.Info(msg, keyVals...)
-}
-
-func (m *Executor) logError(msg string, keyVals ...interface{}) {
-	m.logger.Error(msg, keyVals...)
 }
 
 func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {

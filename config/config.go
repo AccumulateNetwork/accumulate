@@ -89,14 +89,13 @@ func (l LogLevel) String() string {
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
-	SetModule("block-executor", "info").
 	SetModule("snapshot", "info").
 	// SetModule("accumulate", "info").
 	// SetModule("main", "info").
 	// SetModule("state", "info").
 	// SetModule("statesync", "info").
 	// SetModule("accumulate", "debug").
-	// SetModule("executor", "info").
+	SetModule("executor", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("disk-monitor", "info").
@@ -117,7 +116,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
-	c.Accumulate.Snapshots.Frequency = 2
+	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
@@ -170,9 +169,9 @@ type Snapshots struct {
 	// RetainCount is the number of snapshots to retain
 	RetainCount int `toml:"retain" mapstructure:"retain"`
 
-	// Frequency is how many major blocks should occur before another snapshot
-	// is taken
-	Frequency int `toml:"frequency" mapstructure:"frequency"`
+	// // Frequency is how many major blocks should occur before another snapshot
+	// // is taken
+	// Frequency int `toml:"frequency" mapstructure:"frequency"`
 }
 
 type Storage struct {

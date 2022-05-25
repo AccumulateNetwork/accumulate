@@ -98,7 +98,7 @@ func (b bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoco
 	oraclePrice := uint64(protocol.InitialAcmeOracleValue)
 
 	// Create the main ledger
-	ledger := new(protocol.InternalLedger)
+	ledger := new(protocol.SystemLedger)
 	ledger.Url = uAdi.JoinPath(protocol.Ledger)
 	ledger.ActiveOracle = oraclePrice
 	ledger.PendingOracle = oraclePrice
@@ -111,10 +111,9 @@ func (b bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoco
 	records = append(records, synthLedger)
 
 	// Create the anchor pool
-	anchors := new(protocol.Anchor)
-	anchors.Url = uAdi.JoinPath(protocol.AnchorPool)
-	anchors.AddAuthority(uVal)
-	records = append(records, anchors)
+	anchorLedger := new(protocol.AnchorLedger)
+	anchorLedger.Url = uAdi.JoinPath(protocol.AnchorPool)
+	records = append(records, anchorLedger)
 
 	// Create records and directory entries
 	urls := make([]*url.URL, len(records))
@@ -179,6 +178,10 @@ func (b bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 		operBook, page1 := createDNOperatorBook(b.Network.NodeUrl(), b.Validators)
 		records = append(records, operBook, page1)
+
+		// Initialize the last major block time to prevent a major block from
+		// being created immediately once the network boots
+		anchorLedger.MajorBlockTime = b.InitOpts.GenesisTime
 
 		oracle := new(protocol.AcmeOracle)
 		oracle.Price = oraclePrice
@@ -338,7 +341,7 @@ func createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidato
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
-	spec.Owner = protocol.DnUrl().JoinPath(protocol.OperatorBook)
+	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
 	page2 := createOperatorPage(book.Url, 1, operators, false)

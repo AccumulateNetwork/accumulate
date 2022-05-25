@@ -12,7 +12,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -75,7 +77,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(batch, txid, prove)
+		v, err := m.queryByTxId(batch, txid, prove, false)
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
@@ -228,7 +230,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 			}
 
-			res, err := m.queryByTxId(batch, txid, prove)
+			res, err := m.queryByTxId(batch, txid, prove, false)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -283,7 +285,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 				}
 
-				res, err := m.queryByTxId(batch, txid, prove)
+				res, err := m.queryByTxId(batch, txid, prove, false)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -487,7 +489,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 	return resp, nil
 }
 
-func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (*query.ResponseByTxId, error) {
+func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote bool) (*query.ResponseByTxId, error) {
 	var err error
 
 	tx := batch.Transaction(txid)
@@ -511,7 +513,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	} else if !status.Delivered && status.Remote {
+	} else if !remote && !status.Delivered && status.Remote {
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
@@ -563,6 +565,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 			case err == nil:
 				qset.Signatures = append(qset.Signatures, state.Signature)
 			case errors.Is(err, storage.ErrNotFound):
+				m.logger.Info("Signature not found", "txn-hash", logging.AsHex(txid).Slice(0, 4), "sig-hash", logging.AsHex(e.SignatureHash).Slice(0, 4), "signer", signer.GetUrl())
 				// Leave it nil
 			default:
 				return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
@@ -612,7 +615,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid, false)
+		qr, err := m.queryByTxId(batch, txid, false, false)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				continue // txs can be filtered out for scratch accounts
@@ -700,7 +703,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 	switch q := q.(type) {
 	case *query.RequestByTxId:
 		txr := q
-		qr, err := m.queryByTxId(batch, txr.TxId[:], prove)
+		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
@@ -875,6 +878,58 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
 		}
 
+	case *query.RequestSynth:
+		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
+		if !ok {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a subnet")}
+		}
+		record := batch.Account(m.Network.Synthetic())
+		chain, err := record.ReadChain(protocol.SyntheticIndexChain(subnet))
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth index chain: %w", err)}
+		}
+		entry := new(protocol.IndexEntry)
+		err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to unmarshal the index entry: %w", err)}
+		}
+		chain, err = record.ReadChain(protocol.MainChain)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth main chain: %w", err)}
+		}
+		hash, err := chain.Entry(int64(entry.Source))
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the main entry: %w", err)}
+		}
+		qr, err := m.queryByTxId(batch, hash, prove, true)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+		}
+
+		keySig, err := new(signing.Builder).
+			SetType(protocol.SignatureTypeED25519).
+			SetPrivateKey(m.Key).
+			SetKeyPageUrl(m.Network.ValidatorBook(), 0).
+			SetVersion(1).
+			SetTimestamp(1).
+			Sign(hash)
+		if err != nil {
+			return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "sign synthetic transaction: %w", err)
+		}
+
+		// This is a hack
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, keySig)
+		qr.Signers = append(qr.Signers, query.SignatureSet{
+			Account:    &protocol.UnknownAccount{Url: keySig.GetSigner()},
+			Signatures: []protocol.Signature{keySig},
+		})
+
+		k = []byte("tx")
+		v, err = qr.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, hash)}
+		}
+
 	default:
 		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type().String(), q.Type().GetEnumValue())}
 	}
@@ -883,7 +938,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 
 func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, *protocol.Error) {
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
@@ -953,7 +1008,7 @@ resultLoop:
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
 				if req.TxFetchMode == query.TxFetchModeExpand {
-					qr, err := m.queryByTxId(batch, updIdx.Entry, false)
+					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false)
 					if err == nil {
 						minorEntry.TxCount++
 						txt := qr.Envelope.Transaction[0].Body.Type()

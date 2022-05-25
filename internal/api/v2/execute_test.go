@@ -40,7 +40,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		defer ctrl.Finish()
 
 		local := connections.NewMockClient(ctrl)
-		clients := map[string]connections.Client{}
+		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		j, err := NewJrpc(Options{
@@ -72,7 +72,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		defer ctrl.Finish()
 
 		local := connections.NewMockClient(ctrl)
-		clients := map[string]connections.Client{}
+		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		j, err := NewJrpc(Options{

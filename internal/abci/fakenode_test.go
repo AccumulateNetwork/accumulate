@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -59,7 +60,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]connections.Client{}
+	clients := map[string]connections.ABCIClient{}
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -124,7 +125,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	batch := n.db.Begin(false)
 	defer batch.Discard()
 
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
 		n.height = int64(ledger.Index)
@@ -162,8 +163,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Config: &config.Config{Accumulate: config.Accumulate{
 			Network: *n.network,
 			Snapshots: config.Snapshots{
-				Directory: "snapshots",
-				Frequency: 0, // Do not take snapshots
+				Directory: filepath.Join(n.t.TempDir(), "snapshots"),
 			},
 		}},
 		Address: n.key.PubKey().Address(),
@@ -496,7 +496,7 @@ func (n *FakeNode) GetOraclePrice() uint64 {
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	require.NoError(n.t, ledger.GetStateAs(&ledgerState))
 	return ledgerState.ActiveOracle
 }

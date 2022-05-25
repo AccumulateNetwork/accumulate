@@ -3,25 +3,34 @@ package simulator
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
+	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
+
+var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb
@@ -29,17 +38,24 @@ type Simulator struct {
 	Subnets   []config.Subnet
 	Executors map[string]*ExecEntry
 
+	LogLevels string
+
 	routingOverrides map[[32]byte]string
 }
 
 func (s *Simulator) newLogger() log.Logger {
+	levels := s.LogLevels
+	if levels == "" {
+		levels = acctesting.DefaultLogLevels
+	}
+
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", acctesting.DefaultLogLevels, false)
+		return logging.NewTestLogger(s, "plain", levels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(acctesting.DefaultLogLevels, w)
+	level, writer, err := logging.ParseLogLevel(levels, w)
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
@@ -48,11 +64,17 @@ func (s *Simulator) newLogger() log.Logger {
 
 func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.Setup(bvnCount)
+	return sim
+}
+
+func (sim *Simulator) Setup(bvnCount int) {
+	sim.Helper()
 
 	// Initialize the simulartor and network
-	sim := new(Simulator)
 	sim.routingOverrides = map[[32]byte]string{}
-	sim.TB = t
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
@@ -67,7 +89,7 @@ func New(t TB, bvnCount int) *Simulator {
 		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
 
 		logger := sim.newLogger().With("subnet", subnet.ID)
-		key := acctesting.GenerateKey(t.Name(), subnet.ID)
+		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
 		network := config.Network{
@@ -85,13 +107,22 @@ func New(t TB, bvnCount int) *Simulator {
 		}, db)
 		require.NoError(sim, err)
 
+		jrpc, err := api.NewJrpc(api.Options{
+			Logger:        logger,
+			Network:       &network,
+			Router:        sim.Router(),
+			TxMaxWaitTime: time.Hour,
+		})
+		require.NoError(sim, err)
+
 		sim.Executors[subnet.ID] = &ExecEntry{
-			Database: db,
-			Executor: exec,
+			Database:  db,
+			Executor:  exec,
+			API:       acctesting.DirectJrpcClient(jrpc),
+			tb:        sim.tb,
+			blockTime: genesisTime,
 		}
 	}
-
-	return sim
 }
 
 func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
@@ -141,7 +172,28 @@ func (s *Simulator) InitFromGenesis() {
 
 	for _, subnet := range s.Subnets {
 		x := s.Subnet(subnet.ID)
-		InitFromGenesis(s, x.Database, x.Executor)
+		batch := x.Database.Begin(true)
+		defer batch.Discard()
+
+		// Genesis
+		temp := memory.New(x.Executor.Logger)
+		_, err := genesis.Init(temp, genesis.InitOpts{
+			Network:     x.Executor.Network,
+			GenesisTime: genesisTime,
+			Logger:      x.Executor.Logger,
+			Router:      x.Executor.Router,
+			Validators: []tmtypes.GenesisValidator{
+				{PubKey: ed25519.PubKey(x.Executor.Key[32:])},
+			},
+			Keys: [][]byte{x.Executor.Key},
+		})
+		require.NoError(s, err)
+
+		state, err := temp.MarshalJSON()
+		require.NoError(s, err)
+
+		require.NoError(s, x.Executor.InitFromGenesis(batch, state))
+		require.NoError(s, batch.Commit())
 	}
 }
 
@@ -167,22 +219,7 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 
 	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.ID)
-		submitted := x.TakeSubmitted()
-		errg.Go(func() error {
-			status, err := ExecuteBlock(s, x.Database, x.Executor, nil, submitted...)
-			if err != nil {
-				return err
-			}
-			if statusChan == nil {
-				return nil
-			}
-
-			for _, status := range status {
-				statusChan <- status
-			}
-			return nil
-		})
+		s.Subnet(subnet.ID).executeBlock(errg, statusChan)
 	}
 
 	// Wait for all subnets to complete
@@ -365,11 +402,15 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 }
 
 type ExecEntry struct {
+	tb
 	mu                      sync.Mutex
+	blockIndex              uint64
+	blockTime               time.Time
 	nextBlock, currentBlock []*protocol.Envelope
 
 	Database *database.Database
 	Executor *block.Executor
+	API      *client.Client
 
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to
@@ -381,23 +422,98 @@ type ExecEntry struct {
 //
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
-func (s *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
 	// Capturing the field in a variable is more concurrency safe than using the
 	// field directly
-	if h := s.SubmitHook; h != nil {
+	if h := x.SubmitHook; h != nil {
 		envelopes = h(envelopes)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.nextBlock = append(s.nextBlock, envelopes...)
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.nextBlock = append(x.nextBlock, envelopes...)
 }
 
-// TakeSubmitted returns the envelopes for the current block.
-func (s *ExecEntry) TakeSubmitted() []*protocol.Envelope {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	submitted := s.currentBlock
-	s.currentBlock = s.nextBlock
-	s.nextBlock = nil
+// takeSubmitted returns the envelopes for the current block.
+func (x *ExecEntry) takeSubmitted() []*protocol.Envelope {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	submitted := x.currentBlock
+	x.currentBlock = x.nextBlock
+	x.nextBlock = nil
 	return submitted
+}
+
+func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protocol.TransactionStatus) {
+	if x.blockIndex > 0 {
+		x.blockIndex++
+	} else {
+		_ = x.Database.View(func(batch *database.Batch) error {
+			var ledger *protocol.SystemLedger
+			err := batch.Account(x.Executor.Network.Ledger()).GetStateAs(&ledger)
+			switch {
+			case err == nil:
+				x.blockIndex = ledger.Index + 1
+			case errors.Is(err, errors.StatusNotFound):
+				x.blockIndex = protocol.GenesisBlock + 1
+			default:
+				require.NoError(tb{x.tb}, err)
+			}
+			return nil
+		})
+	}
+	x.blockTime = x.blockTime.Add(time.Second)
+	block := new(Block)
+	block.Index = x.blockIndex
+	block.Time = x.blockTime
+	block.IsLeader = true
+	block.Batch = x.Database.Begin(true)
+
+	// fmt.Printf("Executing %d\n", x.blockIndex)
+
+	var deliveries []*chain.Delivery
+	for _, envelope := range x.takeSubmitted() {
+		d, err := chain.NormalizeEnvelope(envelope)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
+		deliveries = append(deliveries, d...)
+	}
+
+	errg.Go(func() error {
+		defer block.Batch.Discard()
+
+		err := x.Executor.BeginBlock(block)
+		require.NoError(x, err)
+
+		for _, delivery := range deliveries {
+			status, err := delivery.LoadTransaction(block.Batch)
+			if errors.Is(err, errors.StatusDelivered) {
+				if statusChan != nil {
+					status.For = *(*[32]byte)(delivery.Transaction.GetHash())
+					statusChan <- status
+				}
+				continue
+			}
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknown, err)
+			}
+
+			status, err = x.Executor.ExecuteEnvelope(block, delivery)
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknown, err)
+			}
+
+			if statusChan != nil {
+				status.For = *(*[32]byte)(delivery.Transaction.GetHash())
+				statusChan <- status
+			}
+		}
+
+		require.NoError(x, x.Executor.EndBlock(block))
+
+		// Is the block empty?
+		if !block.State.Empty() {
+			// Commit the batch
+			require.NoError(x, block.Batch.Commit())
+		}
+		return nil
+	})
 }
