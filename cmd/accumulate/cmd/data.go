@@ -216,7 +216,11 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	var res *api.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
-	wdt.Entry = prepareData(args, true)
+
+	wdt.Entry, err = prepareData(args, true, nil)
+	if err != nil {
+		return "", err
+	}
 
 	accountId := protocol.ComputeLiteDataAccountId(wdt.Entry)
 	addr, err := protocol.LiteDataAddress(accountId)
@@ -308,6 +312,8 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url")
 	}
 	wd := protocol.WriteData{}
+
+	var kSigner *signing.Builder
 	if Keyname != "" {
 		keyargs := strings.Split(Keyname, " ")
 		keyargs = append(keyargs, "")
@@ -315,18 +321,17 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid url specified for data signing key")
 		}
-		_, kSigner, err := prepareSigner(keyUrl, keyargs[1:])
-
+		_, kSigner, err = prepareSigner(keyUrl, keyargs[1:])
 		if err != nil {
 			return "", err
 		}
-		wd.Entry, err = prepareAnyData(args, false, kSigner)
-		if err != nil {
-			return PrintJsonRpcError(err)
-		}
-	} else {
-		wd.Entry = prepareData(args, false)
 	}
+
+	wd.Entry, err = prepareData(args[1:], false, kSigner)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
+
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
