@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -41,35 +42,28 @@ func accountId(_ *cobra.Command, args []string) {
 	var dclient *client.Client
 	var err error
 	var bvnInfo string
+	var info *api.DescriptionResponse
 	bvnCount := 0
 	if len(args) == 2 {
 		dclient, err = client.New(args[0])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v", err)
-			os.Exit(1)
-		}
-		info, err := dclient.Describe(context.Background())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v", err)
-			os.Exit(1)
-		}
+		check(err)
+		info, err = dclient.Describe(context.Background())
+		check(err)
 		bvnCount = len(info.Network.Subnets)
 		bvnInfo = info.Network.NetworkName
+		fmt.Println(info, bvnCount, bvnInfo)
 		args = args[1:]
 	}
 
 	u, err := url.Parse(args[0])
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v", err)
-		os.Exit(1)
-	}
-
+	check(err)
 	fmt.Printf("Account       : %v\n", u)
 	fmt.Printf("Account ID    : %X\n", u.AccountID())
 	fmt.Printf("Identity ID   : %X\n", u.IdentityAccountID())
 	fmt.Printf("Routing number: %X\n", u.Routing())
 	if bvnCount != 0 {
-		fmt.Printf("Routes to     : %s %d\n", bvnInfo, u.Routing()%uint64(bvnCount))
+		subnet, err := routing.RouteAccount(&info.Network, u)
+		check(err)
+		fmt.Printf("Routes to     : %s\n", subnet)
 	}
 }
