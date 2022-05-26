@@ -39,7 +39,8 @@ func CurlEntryFromFactom() []*Entry {
 	for _, entryHash := range entryHashes {
 		data := `{"jsonrpc": "2.0", "id": 0, "method":"entry","params":{"hash":"` + entryHash + ` "}}`
 		// data := `{"jsonrpc": "2.0", "id": 0, "method":"entry","params":{"hash":"c1059b625ccb2837b8daaa918ec27a9b1ced7030f3ba3556afd5f6e87d9984cf"}}`
-		curl := exec.Command("curl", "-X", "POST", "--data-binary", data, "-H", "content-type:text/plain;", "http://localhost:8088/v2")
+		//curl := exec.Command("curl", "-X", "POST", "--data-binary", data, "-H", "content-type:text/plain;", "http://localhost:8088/v2")
+		curl := exec.Command("curl", "-X", "POST", "--data-binary", data, "-H", "content-type:text/plain;", "https://api.factomd.net/v2")
 		output, err := curl.Output()
 		if err != nil {
 			fmt.Println("Error : ", err)

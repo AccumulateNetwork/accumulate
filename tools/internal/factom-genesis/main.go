@@ -5,20 +5,19 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var factomChainData map[string]*Queue
+var factomChainData map[[32]byte]*Queue
 var chainQueue map[string]bool
 var origin *url.URL
-var signer *signing.Builder
 var key *cmd.Key
 
 const (
@@ -33,68 +32,59 @@ func AccountFromPrivateKey(privateKey, publicKey string) (*url.URL, error) {
 		pk = []byte(privateKey)
 	}
 
-	key = &cmd.Key{PrivateKey: []byte(publicKey), PublicKey: []byte(privateKey), Type: protocol.SignatureTypeED25519}
-	signer = new(signing.Builder)
-	signer.Type = protocol.SignatureTypeLegacyED25519
-	signer.Timestamp = nonceFromTimeNow()
-	signer.Type = key.Type
-	signer.Version = 1
-	signer.SetPrivateKey(key.PrivateKey)
 	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
-	origin = url
-	signer.Url = url.RootIdentity()
-	fmt.Println(signer.Url)
+	key = &cmd.Key{PrivateKey: []byte(publicKey), PublicKey: []byte(privateKey), Type: protocol.SignatureTypeED25519}
+	origin = url.RootIdentity()
 	return url, nil
 }
 
-func WriteDataToAccumulate(env string, data *protocol.AccumulateDataEntry, accountId []byte) error {
+func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error) {
+	txn := new(protocol.Transaction)
+	txn.Body = payload
+	txn.Header.Principal = origin
+	signer := new(signing.Builder)
+	signer.SetPrivateKey(key.PrivateKey)
+	signer.SetTimestampToNow()
+	signer.SetVersion(1)
+	signer.SetType(protocol.SignatureTypeED25519)
+	signer.SetUrl(origin)
+
+	sig, err := signer.Initiate(txn)
+	if err != nil {
+		fmt.Println("Error : ", err.Error())
+		return nil, err
+	}
+
+	envelope := new(protocol.Envelope)
+	envelope.Transaction = append(envelope.Transaction, txn)
+	envelope.Signatures = append(envelope.Signatures, sig)
+	envelope.TxHash = append(envelope.TxHash, txn.GetHash()...)
+
+	return envelope, nil
+}
+
+func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url.URL) error {
 	client, err := client.New(env)
+
 	if err != nil {
 		fmt.Println("Error : ", err.Error())
 		return err
 	}
 
 	wd := &protocol.WriteDataTo{
-		Entry: data,
+		Entry:     data,
+		Recipient: dataAccount,
 	}
 
-	envelope := new(protocol.Envelope)
-	txn := new(protocol.Transaction)
-
-builder
-	newTxn("FooBar").
-		WithSigner(url.MustParse("FooBar/book0/1"), 1).
-		WithBody(wdt).
-		Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-		Build()
-	txn.Body = wd
-	txn.Header.Principal = origin
-	sig, err := signer.Initiate(txn)
+	envelope, err := buildEnvelope(wd)
 	if err != nil {
-		fmt.Println("Error : ", err.Error())
 		return err
 	}
 
-	chainUrl, err := protocol.LiteDataAddress(accountId)
-	if err != nil {
-		fmt.Println("Error : ", err.Error())
-		return err
-	}
-	wd.Recipient = chainUrl
-	b := signing.Builder{}
-	b.SetSigner(signer)
-	req := &api.TxRequest{
-		Payload:   wd,
-		Origin:    origin,
-		Signature: sig.(),
-		Signer: api.Signer{
-			Timestamp: nonceFromTimeNow(),
-			PublicKey: key.PublicKey,
-			Url:       origin,
-			Version:   1,
-		},
-	}
-	res, err := client.ExecuteWriteDataTo(context.Background(), req)
+	req := new(api.ExecuteRequest)
+	req.Envelope = envelope
+
+	res, err := client.ExecuteDirect(context.Background(), req)
 	if err != nil {
 		fmt.Println("Error : ", err.Error())
 		return err
@@ -109,20 +99,27 @@ builder
 func WriteDataFromQueueToAccumulate() {
 	for chainId, data := range factomChainData {
 		// go ExecuteQueueToWriteData(chainId, data)
-		ExecuteQueueToWriteData(chainId, data)
+
+		chainUrl, err := protocol.LiteDataAddress(chainId[:])
+		if err != nil {
+			fmt.Println("Error : ", err.Error())
+			break
+		}
+		ExecuteQueueToWriteData(chainUrl, data)
 	}
 }
 
-func ExecuteQueueToWriteData(chainId string, queue *Queue) {
+func ExecuteQueueToWriteData(chainUrl *url.URL, queue *Queue) error {
 	for {
 		if len(*queue) > 0 {
 			entry := queue.Pop().(*Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
-			WriteDataToAccumulate(LOCAL_URL, dataEntry)
+			WriteDataToAccumulate(LOCAL_URL, &protocol.AccumulateDataEntry{Data: dataEntry.GetData()}, chainUrl)
 		} else {
 			break
 		}
 	}
+	return nil
 }
 
 func GetAccountFromPrivateString(hexString string) *url.URL {
@@ -136,28 +133,68 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 	return protocol.LiteAuthorityForKey(key.PublicKey, key.Type)
 }
 
-func ConvertFactomDataEntryToLiteDataEntry(entry Entry) *protocol.LiteDataEntry {
-	dataEntry := protocol.FactomDataEntry{
-		DataEntry: &protocol.DataEntry{},
-	}
+func ConvertFactomDataEntryToLiteDataEntry(entry Entry) *protocol.FactomDataEntry {
+	dataEntry := new(protocol.FactomDataEntry)
 	copy(dataEntry.AccountId[:], entry.ChainId)
-	dataEntry.DataEntry.Data = append(dataEntry.Data, []byte(entry.Content))
-	dataEntry.DataEntry.Data = append(dataEntry.Data, entry.ExtIds...)
-	return &dataEntry
+	dataEntry.Data = []byte(entry.Content)
+	dataEntry.ExtIds = entry.ExtIds
+	return dataEntry
 }
 
 func GetDataAndPopulateQueue(entries []*Entry) {
-	factomChainData = make(map[string]*Queue)
+	factomChainData = make(map[[32]byte]*Queue)
 	for _, entry := range entries {
-		_, ok := factomChainData[string(entry.ChainId)]
+		accountId := *(*[32]byte)(entry.ChainId)
+		_, ok := factomChainData[accountId]
 		if !ok {
-			factomChainData[string(entry.ChainId)] = NewQueue()
+			factomChainData[accountId] = NewQueue()
 		}
-		factomChainData[string(entry.ChainId)].Push(entry)
+		factomChainData[accountId].Push(entry)
 	}
 }
 
 func nonceFromTimeNow() uint64 {
 	t := time.Now()
 	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
+}
+
+//FaucetWithCredits is only used for testing. Initial account will be prefunded.
+func FaucetWithCredits(env string) error {
+	client, err := client.New(env)
+	if err != nil {
+		return err
+	}
+	faucet := protocol.AcmeFaucet{}
+	faucet.Url = origin
+	resp, err := client.Faucet(context.Background(), &faucet)
+	if err != nil {
+		return err
+	}
+
+	txReq := api.TxnQuery{}
+	txReq.Txid = resp.TransactionHash
+	txReq.Wait = time.Second * 10
+	txReq.IgnorePending = false
+
+	_, err = client.QueryTx(context.Background(), &txReq)
+	if err != nil {
+		return err
+	}
+
+	//now buy a bunch of credits.
+	cred := protocol.AddCredits{}
+	cred.Recipient = origin
+	cred.Oracle = 500
+	cred.Amount.SetInt64(100000000000000)
+
+	envelope, err := buildEnvelope(&cred)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.ExecuteDirect(context.Background(), &api.ExecuteRequest{Envelope: envelope})
+	if err != nil {
+		return err
+	}
+	return nil
 }
