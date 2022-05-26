@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,6 +150,8 @@ func initClient(server string) (string, error) {
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		go func(n int) {
+			start := time.Now()
+
 			// create accounts and store them
 			acc, _ := createAccount(n)
 
@@ -158,6 +161,7 @@ func initClient(server string) (string, error) {
 			<-guard
 
 			// Timer to measure TPS
+			log.Printf("Execution time %s\n", time.Since(start))
 			<-timer.C
 		}(i)
 	}
