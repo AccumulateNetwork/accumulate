@@ -9,14 +9,15 @@ configure devnet:
   script:
   - |
     function init {
-      ./accumulated init -w config-$1 "${@:2}" -n $1
+      mv config/$2 config-$1
       (cd config-$1 && tar czf ../config-$1.tar.gz *)
     }
   - build-daemon
   - build-daemon linux arm64
-  - init DevNet.Directory --no-empty-blocks --no-website
-  - init DevNet.Zion --no-empty-blocks
-  - init DevNet.Yellowstone --no-empty-blocks
+  - ./accumulated init --no-website -w config networks/testnet-canary.json
+  - init DevNet.Directory dn0
+  - init DevNet.Zion bvn0
+  - init DevNet.Yellowstone bvn1
   artifacts:
     paths:
     - config-*.tar.gz
