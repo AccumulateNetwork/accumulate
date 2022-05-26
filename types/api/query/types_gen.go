@@ -4181,7 +4181,7 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 	}
 	v.Name = u.Name
 	v.Type = u.Type
-	if u.Height != 0 {
+	if !(u.Height == 0) {
 		v.Height = u.Height
 	} else {
 		v.Height = u.Count
@@ -4236,7 +4236,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.LocalBlock = u.LocalBlock
 	v.DirectoryBlock = u.DirectoryBlock
-	if u.Proof.Equal(&protocol.Receipt{}) {
+	if !(u.Proof.Equal(&protocol.Receipt{})) {
 		v.Proof = u.Proof
 	} else {
 		v.Proof = u.Receipt
@@ -4696,12 +4696,12 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Authority != nil {
+	if !(u.Authority == nil) {
 		v.Authority = u.Authority
 	} else {
 		v.Authority = u.KeyBook
 	}
-	if u.Signer != nil {
+	if !(u.Signer == nil) {
 		v.Signer = u.Signer
 	} else {
 		v.Signer = u.KeyPage
@@ -4843,7 +4843,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
-	if u.Proof.Equal(&protocol.Receipt{}) {
+	if !(u.Proof.Equal(&protocol.Receipt{})) {
 		v.GeneralReceipt.Proof = u.Proof
 	} else {
 		v.GeneralReceipt.Proof = u.Receipt
