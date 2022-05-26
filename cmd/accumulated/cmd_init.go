@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,16 +37,8 @@ import (
 
 var cmdInit = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize a named network",
-	Run:   initNamedNetwork,
+	Short: "Initialize a network or node",
 	Args:  cobra.NoArgs,
-}
-
-var cmdListNamedNetworkConfig = &cobra.Command{
-	Use:   "list <network-name>",
-	Short: "Initialize a named network",
-	Run:   listNamedNetworkConfig,
-	Args:  cobra.ExactArgs(1),
 }
 
 var cmdInitDualNode = &cobra.Command{
@@ -65,7 +56,7 @@ var cmdInitNode = &cobra.Command{
 }
 
 var cmdInitNetwork = &cobra.Command{
-	Use:   "network <network configuration file",
+	Use:   "network <network configuration file>",
 	Short: "Initialize a network",
 	Run:   initNetwork,
 	Args:  cobra.ExactArgs(1),
@@ -79,7 +70,6 @@ var cmdInitDevnet = &cobra.Command{
 }
 
 var flagInit struct {
-	Net           string
 	NoEmptyBlocks bool
 	NoWebsite     bool
 	Reset         bool
@@ -94,7 +84,7 @@ var flagInitNode struct {
 	SkipVersionCheck bool
 }
 
-var flagInitNodeFromSeed struct {
+var flagInitDualNode struct {
 	GenesisDoc       string
 	Follower         bool
 	SkipVersionCheck bool
@@ -126,7 +116,7 @@ var flagInitNetwork struct {
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdListNamedNetworkConfig, cmdInitDualNode)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdInitDualNode)
 
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().BoolVar(&flagInitNetwork.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
@@ -136,7 +126,6 @@ func init() {
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
 
-	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
@@ -150,9 +139,9 @@ func init() {
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	_ = cmdInitNode.MarkFlagRequired("listen")
 
-	cmdInitDualNode.Flags().BoolVarP(&flagInitNodeFromSeed.Follower, "follow", "f", false, "Do not participate in voting")
-	cmdInitDualNode.Flags().StringVar(&flagInitNodeFromSeed.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
-	cmdInitDualNode.Flags().BoolVar(&flagInitNodeFromSeed.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
+	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
+	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
@@ -165,92 +154,6 @@ func init() {
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
-}
-
-func listNamedNetworkConfig(*cobra.Command, []string) {
-	n := Network{}
-	n.Network = "TestNet"
-	for _, subnet := range networks.TestNet {
-		s := Subnet{}
-
-		s.Name = subnet.Name
-		for i := range subnet.Nodes {
-			s.Nodes = append(s.Nodes, Node{subnet.Nodes[i].IP, subnet.Nodes[i].Type})
-		}
-		s.Port = subnet.Port
-		s.Type = subnet.Type
-		n.Subnet = append(n.Subnet, s)
-	}
-	data, err := json.Marshal(&n)
-	check(err)
-	fmt.Printf("%s", data)
-}
-
-func initNamedNetwork(*cobra.Command, []string) {
-
-	lclSubnet, err := networks.Resolve(flagInit.Net)
-	checkf(err, "--network")
-
-	subnets := make([]config.Subnet, len(lclSubnet.Network))
-	i := uint(0)
-	for _, s := range lclSubnet.Network {
-		bvnNodes := make([]config.Node, len(s.Nodes))
-		for i, n := range s.Nodes {
-			bvnNodes[i] = config.Node{
-				Type:    n.Type,
-				Address: fmt.Sprintf("http://%s:%d", n.IP, s.Port),
-			}
-		}
-
-		subnets[i] = config.Subnet{
-			ID:    s.Name,
-			Type:  s.Type,
-			Nodes: bvnNodes,
-		}
-		i++
-	}
-
-	fmt.Printf("Building config for %s (%s)\n", lclSubnet.Name, lclSubnet.NetworkName)
-
-	listenIP := make([]string, len(lclSubnet.Nodes))
-	remoteIP := make([]string, len(lclSubnet.Nodes))
-	config := make([]*cfg.Config, len(lclSubnet.Nodes))
-
-	for i, node := range lclSubnet.Nodes {
-		listenIP[i] = "0.0.0.0"
-		remoteIP[i] = node.IP
-		config[i] = cfg.Default(lclSubnet.NetworkName, lclSubnet.Type, node.Type, lclSubnet.Name)
-		config[i].Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", node.IP, lclSubnet.Port)
-		config[i].Accumulate.Network.Subnets = subnets
-
-		if flagInit.LogLevels != "" {
-			_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
-			checkf(err, "--log-level")
-			config[i].LogLevel = flagInit.LogLevels
-		}
-
-		if flagInit.NoEmptyBlocks {
-			config[i].Consensus.CreateEmptyBlocks = false
-		}
-
-		if flagInit.NoWebsite {
-			config[i].Accumulate.Website.Enabled = false
-		}
-	}
-
-	if flagInit.Reset {
-		nodeReset()
-	}
-
-	_, err = node.Init(node.InitOptions{
-		WorkDir:  flagMain.WorkDir,
-		Port:     lclSubnet.Port,
-		Config:   config,
-		RemoteIP: remoteIP,
-		ListenIP: listenIP,
-		Logger:   newLogger(),
-	})
-	check(err)
 }
 
 func nodeReset() {
@@ -276,8 +179,8 @@ func initNode(cmd *cobra.Command, args []string) {
 	nodeNr, err := strconv.ParseUint(args[0], 10, 16)
 	checkf(err, "invalid node number")
 
-	netAddr, netPort, err := networks.ResolveAddr(args[1], true)
-	checkf(err, "invalid network name or URL")
+	netAddr, netPort, err := resolveAddr(args[1])
+	checkf(err, "invalid network URL")
 
 	u, err := url.Parse(flagInitNode.ListenIP)
 	checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
@@ -334,46 +237,6 @@ func initNode(cmd *cobra.Command, args []string) {
 	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Network
-
-	if flagInit.Net != "" {
-		config.Accumulate.Network.LocalAddress = parseHost(flagInit.Net)
-		//need to find the subnet and add the local address to it as well.
-		localNode := cfg.Node{Address: flagInit.Net, Type: nodeType}
-		for i, s := range config.Accumulate.Network.Subnets {
-			if s.ID == config.Accumulate.Network.LocalSubnetID {
-				//loop through all the nodes and add persistent peers
-				for _, n := range s.Nodes {
-					//don't bother to fetch if we already have it.
-					nodeHost, _, err := net.SplitHostPort(parseHost(n.Address))
-					if err != nil {
-						warnf("invalid host from node %s", n.Address)
-						continue
-					}
-					if netAddr != nodeHost {
-						tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", nodeHost, netPort+networks.TmRpcPortOffset))
-						if err != nil {
-							warnf("failed to create Tendermint client for %s with error %v", n.Address, err)
-							continue
-						}
-
-						status, err := tmClient.Status(context.Background())
-						if err != nil {
-							warnf("failed to get status of %s with error %v", n.Address, err)
-							continue
-						}
-
-						peers := config.P2P.PersistentPeers
-						config.P2P.PersistentPeers = fmt.Sprintf("%s,%s@%s:%d", peers,
-							status.NodeInfo.NodeID, nodeHost, netPort+networks.TmP2pPortOffset)
-					}
-				}
-
-				//prepend the new node to the list
-				config.Accumulate.Network.Subnets[i].Nodes = append([]cfg.Node{localNode}, config.Accumulate.Network.Subnets[i].Nodes...)
-				break
-			}
-		}
-	}
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
@@ -469,10 +332,6 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 }
 
 func verifyInitFlags(cmd *cobra.Command, count int) {
-	if cmd.Flag("network").Changed {
-		fatalf("--network is not applicable to devnet")
-	}
-
 	if flagInitDevnet.Compose {
 		flagInitDevnet.Docker = true
 	}
@@ -737,4 +596,25 @@ func newLogger() log.Logger {
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	check(err)
 	return logger
+}
+
+func resolveAddr(addr string) (string, int, error) {
+	ip, err := url.Parse(addr)
+	if err != nil {
+		return "", 0, fmt.Errorf("%q is not a URL", addr)
+	}
+
+	if ip.Path != "" && ip.Path != "/" {
+		return "", 0, fmt.Errorf("address cannot have a path")
+	}
+
+	if ip.Port() == "" {
+		return "", 0, fmt.Errorf("%q does not specify a port number", addr)
+	}
+	port, err := strconv.ParseUint(ip.Port(), 10, 16)
+	if err != nil {
+		return "", 0, fmt.Errorf("%q is not a valid port number", ip.Port())
+	}
+
+	return ip.Hostname(), int(port), nil
 }
