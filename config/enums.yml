@@ -1,0 +1,12 @@
+NetworkType:
+  Directory:
+    value: 1
+  BlockValidator:
+    value: 2
+    aliases: [block-validator]
+
+NodeType:
+  Validator:
+    value: 1
+  Follower:
+    value: 2

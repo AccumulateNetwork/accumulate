@@ -15210,7 +15210,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
-	if u.AcceptThreshold != 0 {
+	if !(u.AcceptThreshold == 0) {
 		v.AcceptThreshold = u.AcceptThreshold
 	} else {
 		v.AcceptThreshold = u.Threshold
@@ -15242,7 +15242,7 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.PublicKeyHash != nil {
+	if !(u.PublicKeyHash == nil) {
 		if x, err := encoding.BytesFromJSON(u.PublicKeyHash); err != nil {
 			return fmt.Errorf("error decoding PublicKeyHash: %w", err)
 		} else {
@@ -15255,12 +15255,12 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 			v.PublicKeyHash = x
 		}
 	}
-	if u.LastUsedOn != 0 {
+	if !(u.LastUsedOn == 0) {
 		v.LastUsedOn = u.LastUsedOn
 	} else {
 		v.LastUsedOn = u.Nonce
 	}
-	if u.Delegate != nil {
+	if !(u.Delegate == nil) {
 		v.Delegate = u.Delegate
 	} else {
 		v.Delegate = u.Owner
@@ -15285,7 +15285,7 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	} else {
 		v.KeyHash = x
 	}
-	if u.Delegate != nil {
+	if !(u.Delegate == nil) {
 		v.Delegate = u.Delegate
 	} else {
 		v.Delegate = u.Owner
@@ -15320,7 +15320,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if u.Timestamp != 0 {
+	if !(u.Timestamp == 0) {
 		v.Timestamp = u.Timestamp
 	} else {
 		v.Timestamp = u.Nonce
@@ -15391,7 +15391,7 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
-	if u.LastUsedOn != 0 {
+	if !(u.LastUsedOn == 0) {
 		v.LastUsedOn = u.LastUsedOn
 	} else {
 		v.LastUsedOn = u.Nonce
@@ -16418,7 +16418,7 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Principal != nil {
+	if !(u.Principal == nil) {
 		v.Principal = u.Principal
 	} else {
 		v.Principal = u.Origin
