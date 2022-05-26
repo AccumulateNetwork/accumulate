@@ -146,7 +146,7 @@ func initClient(server string) (string, error) {
 	timer := time.NewTimer(time.Microsecond)
 
 	// run key generation in cycle
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 2; i++ {
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		// generate accounts and faucet in goroutines
@@ -155,20 +155,19 @@ func initClient(server string) (string, error) {
 			acc, _ := createAccount(i)
 
 			// start timer
-			start := time.Now()
+			timer.Reset(time.Microsecond)
 
 			// faucet account
 			_, err = client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 
 			// wait for timer to fire
-			log.Printf("Execution time %s\n", time.Since(start))
-
-			// reset timer
-			timer.Reset(time.Microsecond)
-			<-timer.C
+			log.Printf("Execution time %s\n", time.Since(<-timer.C))
 
 			// time to release goroutine
 			<-guard
+
+			// stop timer
+			<-timer.C
 		}(i)
 	}
 
