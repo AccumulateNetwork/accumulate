@@ -152,7 +152,7 @@ func initClient(server string) (string, error) {
 		// generate accounts and faucet in goroutines
 		go func(n int) {
 			// create accounts and store them
-			acc, _ := createAccount(i)
+			acc, _ := createAccount(n)
 
 			// start timer
 			timer.Reset(time.Microsecond)
