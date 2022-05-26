@@ -1513,7 +1513,7 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 	}
 	v.Name = u.Name
 	v.Type = u.Type
-	if u.Height != 0 {
+	if !(u.Height == 0) {
 		v.Height = u.Height
 	} else {
 		v.Height = u.Count

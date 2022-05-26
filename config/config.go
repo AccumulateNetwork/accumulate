@@ -16,6 +16,9 @@ import (
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
+//go:generate go run ../tools/cmd/gen-enum  --package config enums.yml
+//go:generate go run ../tools/cmd/gen-types --package config types.yml
+
 const (
 	configDir     = "config"
 	tmConfigFile  = "tendermint.toml"
@@ -24,18 +27,18 @@ const (
 
 const DevNet = "devnet"
 
-type NetworkType string
+type NetworkType uint64
 
 const (
-	BlockValidator NetworkType = "block-validator"
-	Directory      NetworkType = "directory"
+	BlockValidator = NetworkTypeBlockValidator
+	Directory      = NetworkTypeDirectory
 )
 
-type NodeType string
+type NodeType uint64
 
 const (
-	Validator NodeType = "validator"
-	Follower  NodeType = "follower"
+	Validator = NodeTypeValidator
+	Follower  = NodeTypeFollower
 )
 
 type StorageType string
@@ -145,25 +148,6 @@ type Accumulate struct {
 	Storage   Storage   `toml:"storage" mapstructure:"storage"`
 	API       API       `toml:"api" mapstructure:"api"`
 	Website   Website   `toml:"website" mapstructure:"website"`
-}
-
-type Network struct {
-	NetworkName   string      `toml:"network-name" mapstructure:"network-name"`
-	Type          NetworkType `toml:"type" mapstructure:"type"`
-	LocalSubnetID string      `toml:"local-subnet" mapstructure:"local-subnet"`
-	LocalAddress  string      `toml:"local-address" mapstructure:"local-address"`
-	Subnets       []Subnet    `toml:"subnets" mapstructure:"subnets"`
-}
-
-type Subnet struct {
-	ID    string      `toml:"id" mapstructure:"id"`
-	Type  NetworkType `toml:"type" mapstructure:"type"`
-	Nodes []Node      `toml:"nodes" mapstructure:"nodes"`
-}
-
-type Node struct {
-	Address string
-	Type    NodeType `toml:"type" mapstructure:"type"`
 }
 
 type Snapshots struct {
