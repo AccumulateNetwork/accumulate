@@ -2,16 +2,25 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+var Keyname string
+
+func init() {
+	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
+}
 
 var dataCmd = &cobra.Command{
 	Use:   "data",
@@ -85,6 +94,8 @@ func PrintDataAccountCreate() {
 
 func PrintDataWrite() {
 	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] --sign-data [keyname] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+
 }
 
 func PrintDataWriteTo() {
@@ -205,7 +216,11 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	var res *api.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
-	wdt.Entry = prepareData(args, true)
+
+	wdt.Entry, err = prepareData(args, true, nil)
+	if err != nil {
+		return "", err
+	}
 
 	accountId := protocol.ComputeLiteDataAccountId(wdt.Entry)
 	addr, err := protocol.LiteDataAddress(accountId)
@@ -296,22 +311,49 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", fmt.Errorf("expecting account url")
 	}
-
 	wd := protocol.WriteData{}
-	wd.Entry = prepareData(args, false)
+
+	var kSigner *signing.Builder
+	if Keyname != "" {
+		keyargs := strings.Split(Keyname, " ")
+		keyargs = append(keyargs, "")
+		keyUrl, err := url.Parse(keyargs[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid url specified for data signing key")
+		}
+		_, kSigner, err = prepareSigner(keyUrl, keyargs[1:])
+		if err != nil {
+			return "", err
+		}
+	}
+
+	wd.Entry, err = prepareData(args, false, kSigner)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
 
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 
-func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataEntry {
+func prepareData(args []string, isFirstLiteEntry bool, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
-		entry.Data = append(entry.Data, []byte{})
+		data := []byte{}
+		if flagAccount.LiteData != "" {
+			n, err := hex.Decode(data, []byte(flagAccount.LiteData))
+			if err != nil {
+				//if it is not a hex string, then just store the data as-is
+				copy(data, flagAccount.LiteData)
+			} else {
+				//clip the padding
+				data = data[:n]
+			}
+		}
+		entry.Data = append(entry.Data, data)
 	}
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
@@ -325,9 +367,35 @@ func prepareData(args []string, isFirstLiteEntry bool) *protocol.AccumulateDataE
 			//clip the padding
 			data = data[:n]
 		}
+
 		entry.Data = append(entry.Data, data)
 	}
-	return entry
+
+	if signer != nil {
+		fullDat := []byte{}
+		for _, d := range entry.Data {
+			fullDat = append(fullDat[:], d...)
+		}
+		fullDatHash := sha256.Sum256(fullDat[:])
+		sig, err := signer.SetTimestampToNow().Sign(fullDatHash[:])
+
+		if err != nil {
+			return nil, err
+		}
+
+		finData, err := sig.MarshalBinary()
+
+		if err != nil {
+			return nil, err
+		}
+		dataCopy := [][]byte{}
+		dataCopy = append(dataCopy, finData)
+		for _, v := range entry.Data {
+			dataCopy = append(dataCopy, v)
+		}
+		entry.Data = dataCopy
+	}
+	return entry, nil
 }
 
 func WriteDataTo(accountUrl string, args []string) (string, error) {
@@ -362,7 +430,24 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting data")
 	}
 
-	wd.Entry = prepareData(args[1:], false)
+	var kSigner *signing.Builder
+	if Keyname != "" {
+		keyargs := strings.Split(Keyname, " ")
+		keyargs = append(keyargs, "")
+		keyUrl, err := url.Parse(keyargs[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid url specified for data signing key")
+		}
+		_, kSigner, err = prepareSigner(keyUrl, keyargs[1:])
+		if err != nil {
+			return "", err
+		}
+	}
+
+	wd.Entry, err = prepareData(args, false, kSigner)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
 
 	res, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {

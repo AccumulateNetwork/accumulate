@@ -138,7 +138,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 }
 
 func operatorUpdatesToLedger(st *StateManager, err error, body *protocol.UpdateKeyPage) error {
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	err = st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return fmt.Errorf("unable to load main ledger: %w", err)
@@ -169,7 +169,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 
 		entry := new(protocol.KeySpec)
 		entry.PublicKeyHash = op.Entry.KeyHash
-		entry.Owner = op.Entry.Owner
+		entry.Delegate = op.Entry.Delegate
 		page.Keys = append(page.Keys, entry)
 		return nil
 
@@ -210,7 +210,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		}
 
 		entry.PublicKeyHash = op.NewEntry.KeyHash
-		entry.Owner = op.NewEntry.Owner
+		entry.Delegate = op.NewEntry.Delegate
 		return nil
 
 	case *protocol.SetThresholdKeyPageOperation:
@@ -262,8 +262,8 @@ func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (i
 	var ok bool
 	if len(search.KeyHash) > 0 {
 		i, entry, ok = page.EntryByKeyHash(search.KeyHash)
-	} else if search.Owner != nil {
-		i, entry, ok = page.EntryByDelegate(search.Owner)
+	} else if search.Delegate != nil {
+		i, entry, ok = page.EntryByDelegate(search.Delegate)
 	} else {
 		return -1, nil, false
 	}
@@ -292,25 +292,25 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	for _, op := range body.Operation {
 		switch op := op.(type) {
 		case *protocol.AddKeyOperation:
-			if op.Entry.Owner == nil {
+			if op.Entry.Delegate == nil {
 				continue
 			}
 
-			owners = append(owners, op.Entry.Owner)
+			owners = append(owners, op.Entry.Delegate)
 
 		case *protocol.UpdateKeyOperation:
 			// Don't check if the new entry does not have an owner
-			if op.NewEntry.Owner == nil {
+			if op.NewEntry.Delegate == nil {
 				continue
 			}
 
 			// Don't check if the owner is not changing
 			_, oldEntry, ok := findKeyPageEntry(page, &op.OldEntry)
-			if ok && oldEntry.Owner != nil && oldEntry.Owner.Equal(op.NewEntry.Owner) {
+			if ok && oldEntry.Delegate != nil && oldEntry.Delegate.Equal(op.NewEntry.Delegate) {
 				continue
 			}
 
-			owners = append(owners, op.NewEntry.Owner)
+			owners = append(owners, op.NewEntry.Delegate)
 
 		default:
 			continue

@@ -369,7 +369,7 @@ func TestAddAuthority(tt *testing.T) {
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestamp(1).
 			WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
-				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Owner: bob.JoinPath("book")}},
+				&protocol.AddKeyOperation{Entry: protocol.KeySpecParams{Delegate: bob.JoinPath("book")}},
 			}}).
 			Initiate(protocol.SignatureTypeED25519, aliceKey).
 			WithSigner(bob.JoinPath("book", "1"), 1).
@@ -497,6 +497,37 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, unauthKey).
 			Build(),
 	)...)
+
+	// A signature for updating auth is still required from all key books, even
+	// disabled ones
+	t.Run("Ready", func(tt *testing.T) {
+		x := sim.SubnetFor(alice)
+		t := NewBatchTest(tt, x.Database)
+		defer t.Discard()
+
+		var account *protocol.TokenAccount
+		require.NoError(t, t.Account(alice.JoinPath("tokens")).GetStateAs(&account))
+		account = t.PutAccountCopy(account).(*protocol.TokenAccount)
+		account.AddAuthority(url.MustParse("foo")).Disabled = true
+
+		// The transaction
+		txn := new(protocol.Transaction)
+		txn.Header.Principal = account.Url
+		txn.Body = new(protocol.UpdateAccountAuth)
+
+		// The signature
+		sig := new(FakeSignature)
+		sig.Signer = alice.JoinPath("book", "1")
+		sig.SignerVersion = 1
+		sig.Timestamp = timestamp + 1
+		sig.PublicKey = []byte{1}
+		t.AddSignature(txn.GetHash(), 0, sig)
+
+		status := t.GetTxnStatus(txn.GetHash())
+		ready, err := x.Executor.TransactionIsReady(t.Batch, txn, status)
+		require.NoError(t, err)
+		require.False(t, ready, "Expected the transaction to be pending")
+	})
 }
 
 func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *chain.Delivery {

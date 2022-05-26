@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
-	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/consts"
@@ -18,25 +17,13 @@ import (
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) {
-	if d.Config.Accumulate.Snapshots.Frequency == 0 {
-		return
-	}
-
-	// We have not implemented major blocks, so let's pretend like one happens
-	// every 12 hours
-	const majorBlockInterval = uint64(12 * time.Hour / time.Second)
-	if event.Index%majorBlockInterval != 0 {
-		return
-	}
-	majorBlock := event.Index / majorBlockInterval
-
-	if majorBlock%uint64(d.Config.Accumulate.Snapshots.Frequency) != 0 {
+	if event.Major == 0 {
 		return
 	}
 
 	// Begin the batch synchronously immediately after commit
 	batch := d.db.Begin(false)
-	go d.collectSnapshot(batch, majorBlock, event.Index)
+	go d.collectSnapshot(batch, event.Major, event.Index)
 }
 
 func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock uint64) {
@@ -47,7 +34,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 	}()
 	defer batch.Discard()
 
-	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "hash", logging.AsHex(batch.BptRoot()))
+	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
 	err := os.Mkdir(snapDir, 0755)
 	if err != nil && !errors.Is(err, fs.ErrExist) {

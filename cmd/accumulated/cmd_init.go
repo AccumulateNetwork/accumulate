@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
@@ -218,7 +219,7 @@ func initNamedNetwork(*cobra.Command, []string) {
 	for i, node := range lclSubnet.Nodes {
 		listenIP[i] = "0.0.0.0"
 		remoteIP[i] = node.IP
-		config[i] = cfg.Default(lclSubnet.Type, node.Type, lclSubnet.Name)
+		config[i] = cfg.Default(lclSubnet.NetworkName, lclSubnet.Type, node.Type, lclSubnet.Name)
 		config[i].Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", node.IP, lclSubnet.Port)
 		config[i].Accumulate.Network.Subnets = subnets
 
@@ -241,14 +242,15 @@ func initNamedNetwork(*cobra.Command, []string) {
 		nodeReset()
 	}
 
-	check(node.Init(node.InitOptions{
+	_, err = node.Init(node.InitOptions{
 		WorkDir:  flagMain.WorkDir,
 		Port:     lclSubnet.Port,
 		Config:   config,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
 		Logger:   newLogger(),
-	}))
+	})
+	check(err)
 }
 
 func nodeReset() {
@@ -289,7 +291,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodePort = int(p)
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccRouterJsonPortOffset))
+	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccApiPortOffset))
 	checkf(err, "failed to create API client for %s", args[0])
 
 	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
@@ -329,9 +331,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.LocalSubnetID)
+	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	config.Accumulate.Network = description.Subnet
+	config.Accumulate.Network = description.Network
 
 	if flagInit.Net != "" {
 		config.Accumulate.Network.LocalAddress = parseHost(flagInit.Net)
@@ -390,7 +392,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodeReset()
 	}
 
-	check(node.Init(node.InitOptions{
+	_, err = node.Init(node.InitOptions{
 		NodeNr:     &nodeNr,
 		Version:    1,
 		WorkDir:    flagMain.WorkDir,
@@ -400,7 +402,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		RemoteIP:   []string{u.Hostname()},
 		ListenIP:   []string{u.Hostname()},
 		Logger:     newLogger(),
-	}))
+	})
+	check(err)
 }
 
 var baseIP net.IP
@@ -563,30 +566,48 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 
 func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
 	logger := newLogger()
-	check(node.Init(node.InitOptions{
-		WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
-		Port:     flagInitDevnet.BasePort,
-		Config:   dnConfig,
-		RemoteIP: dnRemote,
-		ListenIP: dnListen,
-		Logger:   logger.With("subnet", protocol.Directory),
-	}))
+	netValMap := make(genesis.NetworkValidatorMap)
+	genInit, err := node.Init(node.InitOptions{
+		WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
+		Port:                flagInitDevnet.BasePort,
+		Config:              dnConfig,
+		RemoteIP:            dnRemote,
+		ListenIP:            dnListen,
+		NetworkValidatorMap: netValMap,
+		Logger:              logger.With("subnet", protocol.Directory),
+	})
+	check(err)
+	genList := []genesis.Bootstrap{genInit}
+
 	for bvn := range bvnConfig {
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-		check(node.Init(node.InitOptions{
-			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-			Port:     flagInitDevnet.BasePort,
-			Config:   bvnConfig,
-			RemoteIP: bvnRemote,
-			ListenIP: bvnListen,
-			Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
-		}))
+		genesis, err := node.Init(node.InitOptions{
+			WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
+			Port:                flagInitDevnet.BasePort,
+			Config:              bvnConfig,
+			RemoteIP:            bvnRemote,
+			ListenIP:            bvnListen,
+			NetworkValidatorMap: netValMap,
+			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
+		})
+		check(err)
+		if genesis != nil {
+			genList = append(genList, genesis)
+		}
+	}
+
+	// Execute bootstrap after the entire network is known
+	for _, genesis := range genList {
+		err := genesis.Bootstrap()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
+		}
 	}
 }
 
 func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
@@ -639,9 +660,9 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 
 func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote, listen string) {
 	if netType == cfg.Directory {
-		config = cfg.Default(netType, nodeType, protocol.Directory)
+		config = cfg.Default(cfg.DevNet, netType, nodeType, protocol.Directory)
 	} else {
-		config = cfg.Default(netType, nodeType, fmt.Sprintf("BVN%d", bvn))
+		config = cfg.Default(cfg.DevNet, netType, nodeType, fmt.Sprintf("BVN%d", bvn))
 	}
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)

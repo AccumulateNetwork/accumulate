@@ -245,7 +245,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
-		check(node.Init(node.InitOptions{
+		genesis, err := node.Init(node.InitOptions{
 			WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
 			Port:                directory.Port,
 			Config:              dnConfig,
@@ -253,10 +253,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			ListenIP:            dnListen,
 			Logger:              logger.With("subnet", protocol.Directory),
 			FactomAddressesFile: factomAddressesFile,
-		}))
+		})
+		check(err)
+		err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
+		check(err)
 
 		for i := range bvnSubnet {
-			check(node.Init(node.InitOptions{
+			genesis, err := node.Init(node.InitOptions{
 				WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:                bvns[i].Port,
 				Config:              bvnConfig[i],
@@ -264,13 +267,16 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				ListenIP:            bvnListen[i],
 				Logger:              logger.With("subnet", bvns[i].Name),
 				FactomAddressesFile: factomAddressesFile,
-			}))
+			})
+			check(err)
+			err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
+			check(err)
 		}
 		return
 	}
 
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
@@ -321,11 +327,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	//	initValidatorNode("dn", dnBasePort, cmd, args)
 }
 
-func initNetworkNode(networkName string, subnetName string, nodes []Node, netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote []string, listen string) {
+func initNetworkNode(networkName string, subnetName string, nodes []Node, netType cfg.NetworkType, nodeType cfg.NodeType,
+	bvn, node int, compose *dc.Config) (config *cfg.Config, remote []string, listen string) {
+
 	if netType == cfg.Directory {
-		config = cfg.Default(netType, nodeType, protocol.Directory)
+		config = cfg.Default(networkName, netType, nodeType, protocol.Directory)
 	} else {
-		config = cfg.Default(netType, nodeType, fmt.Sprintf("BVN%d", bvn))
+		config = cfg.Default(networkName, netType, nodeType, fmt.Sprintf("BVN%d", bvn))
 	}
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)

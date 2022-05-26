@@ -15,34 +15,27 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitFromGenesis(t TB, db *database.Database, exec *Executor) {
+func InitGenesis(t TB, db *database.Database, exec *Executor, genesisTime time.Time, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
 	t.Helper()
-
-	batch := db.Begin(true)
-	defer batch.Discard()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
-	_, err := genesis.Init(temp, genesis.InitOpts{
-		Network:     exec.Network,
-		GenesisTime: time.Unix(0, 0),
-		Logger:      exec.Logger,
-		Router:      exec.Router,
+	bootstrap, err := genesis.Init(temp, genesis.InitOpts{
+		Network:             exec.Network,
+		GenesisTime:         genesisTime,
+		NetworkValidatorMap: netValMap,
+		Logger:              exec.Logger,
+		Router:              exec.Router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
+		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
-
-	state, err := temp.MarshalJSON()
-	require.NoError(tb{t}, err)
-
-	require.NoError(tb{t}, exec.InitFromGenesis(batch, state))
-	require.NoError(tb{t}, batch.Commit())
+	return bootstrap
 }
 
 func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
@@ -55,53 +48,6 @@ func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename stri
 	defer batch.Discard()
 	require.NoError(tb{t}, exec.InitFromSnapshot(batch, f))
 	require.NoError(tb{t}, batch.Commit())
-}
-
-func ExecuteBlock(t TB, db *database.Database, exec *Executor, block *Block, envelopes ...*protocol.Envelope) ([]*protocol.TransactionStatus, error) {
-	t.Helper()
-
-	if block == nil {
-		block = new(Block)
-		block.IsLeader = true
-	}
-	block.Batch = db.Begin(true)
-
-	var ledger *protocol.InternalLedger
-	require.NoError(tb{t}, block.Batch.Account(exec.Network.Ledger()).GetStateAs(&ledger))
-
-	if block.Index == 0 {
-		block.Index = ledger.Index + 1
-	}
-	if block.Time.IsZero() {
-		block.Time = ledger.Timestamp.Add(time.Second)
-	}
-
-	err := exec.BeginBlock(block)
-	require.NoError(tb{t}, err)
-
-	var results []*protocol.TransactionStatus
-	for _, envelope := range envelopes {
-		for _, delivery := range NormalizeEnvelope(t, envelope) {
-			st, err := DeliverTx(t, exec, block, delivery)
-			if err != nil {
-				return nil, err
-			}
-			st.For = *(*[32]byte)(delivery.Transaction.GetHash())
-			results = append(results, st)
-		}
-	}
-
-	require.NoError(tb{t}, exec.EndBlock(block))
-
-	// Is the block empty?
-	if block.State.Empty() {
-		return results, nil
-	}
-
-	// Commit the batch
-	require.NoError(tb{t}, block.Batch.Commit())
-
-	return results, nil
 }
 
 func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delivery) (protocol.TransactionResult, error) {
@@ -128,47 +74,12 @@ func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 	return deliveries
 }
 
-func DeliverTx(t TB, exec *Executor, block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func Query(t TB, db *database.Database, exec *Executor, req query.Request, prove bool) interface{} {
 	t.Helper()
-
-	status, err := delivery.LoadTransaction(block.Batch)
-	if err != nil {
-		if errors.Is(err, errors.StatusDelivered) {
-			return status, nil
-		}
-		return nil, err
-	}
-
-	status, err = exec.ExecuteEnvelope(block, delivery)
-	if err != nil {
-		return nil, err
-	}
-	return status, nil
-}
-
-func RequireSuccess(t TB, results ...*protocol.TransactionStatus) {
-	for i, r := range results {
-		require.Zerof(tb{t}, r.Code, "Transaction %d failed with code %d: %s", i, r.Code, r.Message)
-	}
-}
-
-type queryRequest interface {
-	encoding.BinaryMarshaler
-	Type() types.QueryType
-}
-
-func Query(t TB, db *database.Database, exec *Executor, req queryRequest, prove bool) interface{} {
-	t.Helper()
-
-	var err error
-	qr := new(query.Query)
-	qr.Type = req.Type()
-	qr.Content, err = req.MarshalBinary()
-	require.NoError(tb{t}, err)
 
 	batch := db.Begin(false)
 	defer batch.Discard()
-	key, value, perr := exec.Query(batch, qr, 0, prove)
+	key, value, perr := exec.Query(batch, req, 0, prove)
 	if perr != nil {
 		require.NoError(tb{t}, perr)
 	}

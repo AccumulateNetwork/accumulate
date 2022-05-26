@@ -3,105 +3,8 @@
 # Stop immediately on error
 set -e
 
-# section <name> - Print a section header
-function section {
-    echo -e '\033[1m'"$1"'\033[0m'
-}
-
-# ensure-key <name> - Generate the key if it does not exist
-function ensure-key {
-    if ! accumulate --use-unencrypted-wallet key list | grep "$1"; then
-        accumulate --use-unencrypted-wallet key generate "$1"
-    fi
-}
-
-# wait-for <cmd...> - Execute a transaction and wait for it to complete
-function wait-for {
-    if [ "$1" == "--no-check" ]; then
-        local NO_CHECK=$1
-        shift
-    fi
-    local TXID
-    TXID=`"$@"` || return 1
-    wait-for-tx $NO_CHECK "$TXID" || return 1
-}
-
-# wait-for-tx [--no-check] [--ignore-pending] <tx id> - Wait for a transaction and any synthetic transactions to complete
-function wait-for-tx {
-    while true; do
-        case "$1" in
-        --no-check)
-            local NO_CHECK=$1
-            shift
-            ;;
-        --ignore-pending)
-            local IGNORE_PENDING=$1
-            shift
-            ;;
-        *)
-            break
-            ;;
-        esac
-    done
-
-    local TXID=$1
-    echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    local RESP=$(accumulate --use-unencrypted-wallet tx get -j $IGNORE_PENDING --wait 1m $TXID)
-    echo $RESP | jq -C --indent 0
-
-    if [ -z "$NO_CHECK" ]; then
-        CODE=$(echo $RESP | jq -re '.status.code // 0') || return 1
-        [ "$CODE" -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
-    fi
-
-    for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
-        wait-for-tx $NO_CHECK --ignore-pending "$TXID" || return 1
-    done
-}
-
-function cli-run {
-    if ! JSON=`accumulate --use-unencrypted-wallet -j "$@" 2>&1`; then
-        echo "$JSON" | jq -C --indent 0 >&2
-        >&2 echo -e '\033[1;31m'"$@"'\033[0m'
-        return 1
-    fi
-    echo "$JSON"
-}
-
-# cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
-function cli-tx {
-    JSON=`cli-run "$@"` || return 1
-    echo "$JSON" | jq -re .transactionHash
-}
-
-# cli-tx-sig <args...> - Execute a CLI command and extract the first signature hash from the result
-function cli-tx-sig {
-    JSON=`cli-run "$@"` || return 1
-    echo "$JSON" | jq -re .signatureHashes[0]
-}
-
-# api-v2 <payload> - Send a JSON-RPC message to the API
-function api-v2 {
-    curl -s -X POST --data "${1}" -H 'content-type:application/json;' "${ACC_API}/../v2"
-}
-
-# api-tx <payload> - Send a JSON-RPC message to the API and extract the TXID from the result
-function api-tx {
-    JSON=`api-v2 "$@"` || return 1
-    echo "$JSON" | jq -r .result.transactionHash
-}
-
-# die <message> - Print an error message and exit
-function die {
-    >&2 echo -e '\033[1;31m'"$@"'\033[0m'
-    exit 1
-}
-
-# success - Print 'success' in bold green text
-function success {
-    echo -e '\033[1;32m'Success'\033[0m'
-    echo
-}
+SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+source ${SCRIPT_DIR}/validate-commons.sh
 
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
@@ -346,6 +249,16 @@ accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .statu
 accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
 
+section "Create lite data account with first entry"
+ACCOUNT_ID=$(accumulate --use-unencrypted-wallet -j account create data --lite keytest keytest-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
+[ "$ACCOUNT_ID" == "acc://4df014cc532c140066add495313e0ffaecba1eba5454cefa" ] || die "${ACCOUNT_ID} does not match expected value"
+accumulate --use-unencrypted-wallet -j data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
+wait-for cli-tx data write-to keytest keytest-1-0 $ACCOUNT_ID "data test"
+accumulate --use-unencrypted-wallet data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
+accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
+accumulate --use-unencrypted-wallet -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
+success
+
 section "Create ADI Data Account"
 wait-for cli-tx account create data --scratch keytest keytest-1-0 keytest/data
 accumulate --use-unencrypted-wallet account get keytest/data 1> /dev/null || die "Cannot find keytest/data"
@@ -397,7 +310,8 @@ success
 
 section "Query latest data entry by URL"
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/data#data | jq -re .data.entry.data[0])
-[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo'"
+echo $(accumulate --use-unencrypted-wallet -j get keytest/data#data)
+[ "$RESULT" == $(echo -n foo | xxd -p) ] && success || die "Latest entry is not 'foo', got '$RESULT'"
 
 section "Query data entry at height 0 by URL"
 RESULT=$(accumulate --use-unencrypted-wallet -j get keytest/data#data/0 | jq -re .data.entry.data[0])

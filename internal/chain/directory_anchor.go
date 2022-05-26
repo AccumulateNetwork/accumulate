@@ -29,8 +29,8 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Verify the origin
-	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchor, st.Origin.Type())
+	if _, ok := st.Origin.(*protocol.AnchorLedger); !ok {
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
 	}
 
 	// Verify the source URL is from the DN
@@ -38,8 +38,14 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid source: not the DN")
 	}
 
+	// Trigger a major block?
+	if st.Network.Type != config.Directory {
+		st.State.MakeMajorBlock = body.MakeMajorBlock
+	}
+
+	// Update the oracle
 	if body.AcmeOraclePrice != 0 && st.Network.Type != config.Directory {
-		var ledgerState *protocol.InternalLedger
+		var ledgerState *protocol.SystemLedger
 		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
 			return nil, fmt.Errorf("unable to load main ledger: %w", err)
@@ -52,18 +58,18 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name
-	err := st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
+	err := st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.AnchorChain(protocol.Directory)+"-bpt", protocol.ChainTypeAnchor, body.StateRoot[:], 0, 0)
+	err = st.AddChainEntry(st.OriginUrl, protocol.BPTAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.StateTreeAnchor[:], 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
-	if body.Major {
+	if body.MajorBlockIndex > 0 {
 		// TODO Handle major blocks?
 		return nil, nil
 	}
@@ -79,11 +85,11 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	// Process receipts
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
-		if !bytes.Equal(receipt.Anchor, body.RootAnchor[:]) {
+		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
 			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
-		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start), "to", logging.AsHex(body.RootAnchor), "block", body.Block, "source", body.Source, "module", "synthetic")
+		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start), "to", logging.AsHex(body.RootChainAnchor), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
 		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
@@ -91,7 +97,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 		for _, hash := range synth {
 			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
-			st.state.ProcessAdditionalTransaction(d)
+			st.State.ProcessAdditionalTransaction(d)
 		}
 	}
 

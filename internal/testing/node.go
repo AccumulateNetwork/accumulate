@@ -15,6 +15,7 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -39,9 +40,8 @@ func NewTestLogger(t testing.TB) log.Logger {
 
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
-	// SetModule("block-executor", "debug").
 	// SetModule("accumulate", "debug").
-	// SetModule("executor", "info").
+	SetModule("executor", "info").
 	// SetModule("governor", "debug").
 	// SetModule("synthetic", "debug").
 	// SetModule("storage", "debug").
@@ -50,15 +50,15 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("fake-tendermint", "info").
 	String()
 
-func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
-	cfg := config.Default(net, node, netId)       //
-	cfg.Mempool.MaxBatchBytes = 1048576           //
-	cfg.Mempool.CacheSize = 1048576               //
-	cfg.Mempool.Size = 50000                      //
-	cfg.Consensus.CreateEmptyBlocks = false       // Empty blocks are annoying to debug
-	cfg.Consensus.TimeoutCommit = time.Second / 5 // Increase block frequency
-	cfg.Accumulate.Website.Enabled = false        // No need for the website
-	cfg.Instrumentation.Prometheus = false        // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+func DefaultConfig(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config {
+	cfg := config.Default(networkName, net, node, netId) //
+	cfg.Mempool.MaxBatchBytes = 1048576                  //
+	cfg.Mempool.CacheSize = 1048576                      //
+	cfg.Mempool.Size = 50000                             //
+	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
+	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
+	cfg.Accumulate.Website.Enabled = false               // No need for the website
+	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Subnets = []config.Subnet{
 		{
 			ID:   "local",
@@ -72,7 +72,7 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 
 func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	const basePort = 30000
-	dir := t.TempDir()
+	tempDir := t.TempDir()
 
 	count := numValidators + numFollowers
 	subnets := make([]config.Subnet, numBvns+1)
@@ -100,7 +100,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			}
 
 			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), subnetId, i))
-			configs[i] = DefaultConfig(netType, nodeType, subnetId)
+			configs[i] = DefaultConfig("unittest", netType, nodeType, subnetId)
 			remotes[i] = getIP(hash).String()
 			nodes[i] = config.Node{
 				Type:    nodeType,
@@ -146,18 +146,26 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
+	netValMap := make(genesis.NetworkValidatorMap)
+	var bootstrapList []genesis.Bootstrap
+
 	for _, subnet := range subnets {
 		subnetId := subnet.ID
-		dir := filepath.Join(dir, subnetId)
-		require.NoError(t, node.Init(node.InitOptions{
+		dir := filepath.Join(tempDir, subnetId)
+		bootstrap, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
 			Port:                basePort,
 			Config:              allConfigs[subnetId],
 			RemoteIP:            allRemotes[subnetId],
 			ListenIP:            allRemotes[subnetId],
+			NetworkValidatorMap: netValMap,
 			Logger:              initLogger.With("subnet", subnetId),
 			FactomAddressesFile: factomAddressFilePath,
-		}))
+		})
+		require.NoError(t, err)
+		if bootstrap != nil {
+			bootstrapList = append(bootstrapList, bootstrap)
+		}
 
 		daemons := make([]*accumulated.Daemon, count)
 		allDaemons[subnetId] = daemons
@@ -168,6 +176,14 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			daemons[i], err = accumulated.Load(dir, logWriter)
 			require.NoError(t, err)
 			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnetId, "node", i)
+		}
+	}
+
+	// Execute bootstrap after the entire network is known
+	for _, bootstrap := range bootstrapList {
+		err := bootstrap.Bootstrap()
+		if err != nil {
+			panic(fmt.Errorf("could not execute genesis: %v", err))
 		}
 	}
 

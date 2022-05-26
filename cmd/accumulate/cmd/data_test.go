@@ -1,17 +1,20 @@
 package cmd
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
 	testMatrix.addTest(testCase2_8)
 	testMatrix.addTest(testCase2_9a)
 	testMatrix.addTest(testCase2_9b)
+	testMatrix.addTest(testCase2_9c)
 }
 
 //testCase2_8
@@ -51,7 +54,7 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
-	r, err := tc.executeTx(t, "account create data lite acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
+	r, err := tc.executeTx(t, "account create data --lite acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
 	require.NoError(t, err)
 
 	aldr := ActionLiteDataResponse{}
@@ -73,6 +76,34 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 	//now read it back as a expanded set
 	_, err = tc.execute(t, fmt.Sprintf("%s 0 1 expand", commandLine))
 	require.NoError(t, err)
+}
+
+func testCase2_9c(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
+	_, err := tc.executeTx(t, "data write acc://RedWagon/DataAccount red1 cafef00dbabe8badf00d --sign-data acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME")
+	require.NoError(t, err)
+
+	//now read back the response
+	r, err := tc.execute(t, "data get acc://RedWagon/DataAccount")
+	require.NoError(t, err)
+
+	var res QueryResponse
+	err = json.Unmarshal([]byte(r), &res)
+	require.NoError(t, err)
+	wd := protocol.WriteData{}
+	err = Remarshal(res.Data, &wd)
+	require.NoError(t, err)
+
+	if len(wd.Entry.GetData()) != 2 {
+		t.Fatal("expected 2 data elements")
+	}
+	sig, err := protocol.UnmarshalKeySignature(wd.Entry.GetData()[0])
+	require.NoError(t, err)
+
+	h := sha256.Sum256(wd.Entry.GetData()[1])
+	require.True(t, sig.Verify(h[:]), "invalid signature for signed data")
 }
 
 //liteAccounts is the predictable test accounts for the unit tests.

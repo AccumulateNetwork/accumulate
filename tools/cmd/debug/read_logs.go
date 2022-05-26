@@ -17,39 +17,26 @@ import (
 
 var now = time.Now()
 
-var cmd = &cobra.Command{
-	Use:  "read-logs <file> [<file>...]",
-	Args: cobra.MinimumNArgs(1),
+var readLogsCmd = &cobra.Command{
+	Use:   "read-logs <file> [<file>...]",
+	Short: "Read and filter JSON log files",
+	Args:  cobra.MinimumNArgs(1),
 }
 
-var flag = struct {
+var flagReadLogs = struct {
 	After  string
 	Before string
 	Module string
 }{}
 
 func init() {
-	cmd.Run = run
-	cmd.Flags().StringVar(&flag.After, "after", "", "Filter events after this date or some duration ago")
-	cmd.Flags().StringVar(&flag.Before, "before", "", "Filter events before this date or some duration ago")
-	cmd.Flags().StringVar(&flag.Module, "module", "", "Filter events from this module")
-}
+	cmd.AddCommand(readLogsCmd)
 
-func main() {
-	_ = cmd.Execute()
+	readLogsCmd.Run = readLogs
+	readLogsCmd.Flags().StringVar(&flagReadLogs.After, "after", "", "Filter events after this date or some duration ago")
+	readLogsCmd.Flags().StringVar(&flagReadLogs.Before, "before", "", "Filter events before this date or some duration ago")
+	readLogsCmd.Flags().StringVar(&flagReadLogs.Module, "module", "", "Filter events from this module")
 }
-
-func fatalf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	os.Exit(1)
-}
-
-func check(err error) {
-	if err != nil {
-		fatalf("%v", err)
-	}
-}
-
 func parseTime(flag string, s string) time.Time {
 	t, err := time.Parse(time.RFC3339, s)
 	if err == nil {
@@ -69,16 +56,16 @@ func parseTime(flag string, s string) time.Time {
 	panic("not reached")
 }
 
-func run(_ *cobra.Command, args []string) {
+func readLogs(_ *cobra.Command, args []string) {
 	var before, after time.Time
 	var filterBefore, filterAfter, filterModule bool
-	if flag.Before != "" {
-		before, filterBefore = parseTime("--before", flag.Before), true
+	if flagReadLogs.Before != "" {
+		before, filterBefore = parseTime("--before", flagReadLogs.Before), true
 	}
-	if flag.After != "" {
-		after, filterAfter = parseTime("--after", flag.After), true
+	if flagReadLogs.After != "" {
+		after, filterAfter = parseTime("--after", flagReadLogs.After), true
 	}
-	filterModule = flag.Module != ""
+	filterModule = flagReadLogs.Module != ""
 
 	if filterBefore && filterAfter && before.Before(after) {
 		fatalf("--before is before --after")
@@ -122,7 +109,7 @@ func run(_ *cobra.Command, args []string) {
 					continue
 				}
 
-				if filterModule && event.Module != flag.Module {
+				if filterModule && event.Module != flagReadLogs.Module {
 					continue
 				}
 

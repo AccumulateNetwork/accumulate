@@ -16,12 +16,10 @@ func NewAccount(typ AccountType) (Account, error) {
 	switch typ {
 	case AccountTypeIdentity:
 		return new(ADI), nil
-	case AccountTypeAnchor:
-		return new(Anchor), nil
+	case AccountTypeAnchorLedger:
+		return new(AnchorLedger), nil
 	case AccountTypeDataAccount:
 		return new(DataAccount), nil
-	case AccountTypeInternalLedger:
-		return new(InternalLedger), nil
 	case AccountTypeKeyBook:
 		return new(KeyBook), nil
 	case AccountTypeKeyPage:
@@ -34,6 +32,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(LiteTokenAccount), nil
 	case AccountTypeSyntheticLedger:
 		return new(SyntheticLedger), nil
+	case AccountTypeSystemLedger:
+		return new(SystemLedger), nil
 	case AccountTypeTokenAccount:
 		return new(TokenAccount), nil
 	case AccountTypeTokenIssuer:
@@ -53,14 +53,11 @@ func EqualAccount(a, b Account) bool {
 	case *ADI:
 		b, ok := b.(*ADI)
 		return ok && a.Equal(b)
-	case *Anchor:
-		b, ok := b.(*Anchor)
+	case *AnchorLedger:
+		b, ok := b.(*AnchorLedger)
 		return ok && a.Equal(b)
 	case *DataAccount:
 		b, ok := b.(*DataAccount)
-		return ok && a.Equal(b)
-	case *InternalLedger:
-		b, ok := b.(*InternalLedger)
 		return ok && a.Equal(b)
 	case *KeyBook:
 		b, ok := b.(*KeyBook)
@@ -79,6 +76,9 @@ func EqualAccount(a, b Account) bool {
 		return ok && a.Equal(b)
 	case *SyntheticLedger:
 		b, ok := b.(*SyntheticLedger)
+		return ok && a.Equal(b)
+	case *SystemLedger:
+		b, ok := b.(*SystemLedger)
 		return ok && a.Equal(b)
 	case *TokenAccount:
 		b, ok := b.(*TokenAccount)
@@ -322,8 +322,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
 		return new(RemoveValidator), nil
-	case TransactionTypeSegWitDataEntry:
-		return new(SegWitDataEntry), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
 	case TransactionTypeSyntheticBurnTokens:
@@ -404,9 +402,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *RemoveValidator:
 		b, ok := b.(*RemoveValidator)
-		return ok && a.Equal(b)
-	case *SegWitDataEntry:
-		b, ok := b.(*SegWitDataEntry)
 		return ok && a.Equal(b)
 	case *SendTokens:
 		b, ok := b.(*SendTokens)
