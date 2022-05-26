@@ -346,10 +346,19 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if !envelopes[i].Transaction.Type().IsUser() {
 			continue
 		}
+		switch envelopes[i].Transaction.Type() {
+		case protocol.TransactionTypeSyntheticAnchor, protocol.TransactionTypeSyntheticBurnTokens, protocol.TransactionTypeSyntheticCreateIdentity,
+			protocol.TransactionTypeSyntheticDepositCredits, protocol.TransactionTypeSyntheticDepositTokens, protocol.TransactionTypeSyntheticForwardTransaction,
+			protocol.TransactionTypeSyntheticMirror, protocol.TransactionTypeSyntheticWriteData:
+			resp.Priority = 1
+		default:
+			resp.Priority = 0
+
+		}
+
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
 		resp.Log = "One or more user transactions failed"
 	}
-
 	return resp
 }
 
