@@ -77,23 +77,34 @@ IndexEntry:
       description: is the start time of the block. Only include when indexing the root anchor chain
       type: time
       pointer: true
+    - name: RootIndexIndex
+      description: is the index of the root anchor index chain entry. Only include when indexing the anchor ledger for a major block
+      type: uint
 
-DataEntry:
+AccumulateDataEntry:
+  union: { type: dataEntry }
   fields:
     - name: Data
       repeatable: true
       type: bytes
 
-DirectoryIndexMetadata:
+FactomDataEntry:
+  non-binary: true
+  union: { type: dataEntry }
   fields:
-    - name: Count
-      type: uvarint
+    - name: AccountId
+      type: hash
+    - name: Data
+      type: bytes
+    - name: ExtIds
+      repeatable: true
+      type: bytes
 
 Receipt:
   fields:
     - name: Start
       type: bytes
-    - name: Result
+    - name: Anchor
       type: bytes
     - name: Entries
       repeatable: true
@@ -132,18 +143,11 @@ KeySpecParams:
   fields:
     - name: KeyHash
       type: bytes
-    - name: Owner
+    - name: Delegate
+      alternative: Owner
       type: url
       pointer: true
       optional: true
-
-AnchoredAccount:
-  fields:
-    - name: Account
-      type: Account
-      marshal-as: union
-    - name: Anchor
-      type: hash
 
 KeySpec:
   fields:
@@ -153,7 +157,8 @@ KeySpec:
     - name: LastUsedOn
       type: uvarint
       alternative: Nonce
-    - name: Owner
+    - name: Delegate
+      alternative: Owner
       type: url
       pointer: true
 
@@ -169,3 +174,20 @@ Rational:
       type: uint
     - name: Denominator
       type: uint
+
+NetworkDefinition:
+  fields:
+    - name: NetworkName
+      type: string
+    - name: Subnets
+      type: SubnetDefinition
+      repeatable: true
+      marshal-as: reference
+
+SubnetDefinition:
+  fields:
+    - name: SubnetID
+      type: string
+    - name: ValidatorKeyHashes
+      type: hash
+      repeatable: true

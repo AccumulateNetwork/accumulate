@@ -6,7 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 
 	"github.com/mdp/qrterminal"
@@ -38,12 +38,14 @@ func init() {
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch data account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
 	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for LegacyBitcoin  ; eth for Ethereum ")
+	accountCreateDataCmd.Flags().StringVar(&flagAccount.LiteData, "lite-data", "", "Add first entry data to lite data account")
 
 }
 
 var flagAccount = struct {
-	Lite    bool
-	Scratch bool
+	Lite     bool
+	Scratch  bool
+	LiteData string
 }{}
 
 var accountCmd = &cobra.Command{
@@ -194,7 +196,7 @@ func QrAccount(s string) (string, error) {
 		QuietZone:      2,
 	})
 
-	r, err := ioutil.ReadAll(b)
+	r, err := io.ReadAll(b)
 	return string(r), err
 }
 
@@ -239,6 +241,12 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
+	var accstate *protocol.AccountStateProof
+	accstate, err = GetAccountStateProof(u, accountUrl)
+	if err != nil {
+		return "", fmt.Errorf("unable to prove account state: %x", err)
+	}
+	tac.TokenIssuerProof = accstate
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch

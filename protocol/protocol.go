@@ -48,6 +48,9 @@ const (
 	// Oracle is the path to a node's anchor chain account.
 	Oracle = "oracle"
 
+	// Network is the path to a node's network definition data account.
+	Network = "network"
+
 	// Globals is the path to the Directory network's Mutable Protocol costants data account
 	Globals = "globals"
 
@@ -57,17 +60,14 @@ const (
 	// SignatureChain is the pending signature chain of a record.
 	SignatureChain = "signature"
 
-	// DataChain is the data chain of a record.
-	DataChain = "data"
-
-	// MajorRootChain is the major anchor root chain of a subnet.
-	MajorRootChain = "major-root"
+	// // MajorRootChain is the major anchor root chain of a subnet.
+	// MajorRootChain = "major-root"
 
 	// MinorRootChain is the minor anchor root chain of a subnet.
 	MinorRootChain = "minor-root"
 
-	// MajorRootIndexChain is the index chain of the major anchor root chain of a subnet.
-	MajorRootIndexChain = "major-root-index"
+	// // MajorRootIndexChain is the index chain of the major anchor root chain of a subnet.
+	// MajorRootIndexChain = "major-root-index"
 
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
 	MinorRootIndexChain = "minor-root-index"
@@ -405,7 +405,7 @@ func IsValidAdiUrl(u *url.URL) error {
 
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
-	_, ok := ParseBvnUrl(u)
+	_, ok := ParseSubnetUrl(u)
 	return ok || BelongsToDn(u)
 }
 
@@ -433,9 +433,12 @@ func IsBvnUrl(u *url.URL) bool {
 	return strings.HasPrefix(u.Hostname(), "bvn-")
 }
 
-// ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
+// ParseSubnetUrl extracts the BVN subnet name from a BVN URL, if the URL is a
 // valid BVN ADI URL.
-func ParseBvnUrl(u *url.URL) (string, bool) {
+func ParseSubnetUrl(u *url.URL) (string, bool) {
+	if IsDnUrl(u) {
+		return Directory, true
+	}
 	if !strings.HasPrefix(u.Authority, "bvn-") {
 		return "", false
 	}
@@ -465,18 +468,33 @@ func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
 	return uint64(math.Round(ratio * float64(validatorCount)))
 }
 
-// AnchorChain returns the name of the intermediate anchor chain for the given
-// subnet.
-func AnchorChain(name string) string {
-	return "anchor-" + name
+const rootAnchorSuffix = "-root"
+const bptAnchorSuffix = "-bpt"
+
+// RootAnchorChain returns the name of the intermediate anchor chain for the given
+// subnet's root chain.
+func RootAnchorChain(name string) string {
+	return name + rootAnchorSuffix
+}
+
+// BPTAnchorChain returns the name of the intermediate anchor chain for the given
+// subnet's BPT.
+func BPTAnchorChain(name string) string {
+	return name + bptAnchorSuffix
 }
 
 // ParseBvnUrl extracts the subnet name from a intermediate anchor chain name.
 func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasPrefix(strings.ToLower(name), "anchor-") {
+	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
 		return "", false
 	}
-	return name[7:], true
+	return name[:len(name)-len(rootAnchorSuffix)], true
+}
+
+// SyntheticIndexChain returns the name of the synthetic transaction index chain
+// for the given subnet.
+func SyntheticIndexChain(name string) string {
+	return "index-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

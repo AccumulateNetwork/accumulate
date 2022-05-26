@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -25,7 +26,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -48,8 +51,11 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert  *assert.Assertions
-	require *require.Assertions
+	assert    *assert.Assertions
+	require   *require.Assertions
+	netValMap genesis.NetworkValidatorMap
+	Bootstrap genesis.Bootstrap
+	kv        *memory.DB
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -57,7 +63,8 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]connections.Client{}
+	clients := map[string]connections.ABCIClient{}
+	netValMap := make(genesis.NetworkValidatorMap)
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -71,11 +78,12 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil, netValMap)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
 	}
+
 	connectionManager := connections.NewFakeConnectionManager(clients)
 	for _, netName := range subnets {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
@@ -84,6 +92,23 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 			nodes[i].Start(chans[i], connectionManager, doGenesis)
 		}
 	}
+
+	// Execute bootstrap after the entire network is known
+	if doGenesis {
+		for _, netName := range subnets {
+			netName = strings.TrimPrefix(netName, evilNodePrefix)
+			nodes := allNodes[netName]
+			for i := range nodes {
+				genesis := nodes[i].Bootstrap
+				err := genesis.Bootstrap()
+				if err != nil {
+					panic(fmt.Errorf("could not execute genesis: %v", err))
+				}
+				nodes[i].CreateInitChain()
+			}
+		}
+	}
+
 	return allNodes
 }
 
@@ -94,7 +119,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkValidatorMap) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -110,6 +135,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.key = pv.Key.PrivKey
 	n.network = &d.Config.Accumulate.Network
 	n.logger = d.Logger
+	n.netValMap = netValMap
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
@@ -122,10 +148,10 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	batch := n.db.Begin(false)
 	defer batch.Discard()
 
-	var ledger *protocol.InternalLedger
+	var ledger *protocol.SystemLedger
 	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	if err == nil {
-		n.height = ledger.Index
+		n.height = int64(ledger.Index)
 	} else {
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
@@ -154,10 +180,16 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Executor: mgr,
+		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
-		Network:  *n.network,
-		Address:  n.key.PubKey().Address(),
+		Config: &config.Config{Accumulate: config.Accumulate{
+			Network: *n.network,
+			Snapshots: config.Snapshots{
+				Directory: filepath.Join(n.t.TempDir(), "snapshots"),
+			},
+		}},
+		Address: n.key.PubKey().Address(),
 	})
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		n.T().Helper()
@@ -184,26 +216,20 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.height++
 
 	kv := memory.New(nil)
-	_, err = genesis.Init(kv, genesis.InitOpts{
-		Network:     *n.network,
-		GenesisTime: time.Now(),
-		Logger:      n.logger,
-		Router:      n.router,
+	opts := genesis.InitOpts{
+		Network:             *n.network,
+		GenesisTime:         time.Now(),
+		NetworkValidatorMap: n.netValMap,
+		Logger:              n.logger,
+		Router:              n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
-	})
+		Keys: [][]byte{n.key.Bytes()},
+	}
+	n.Bootstrap, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)
-
-	state, err := kv.MarshalJSON()
-	n.Require().NoError(err)
-
-	n.app.InitChain(abcitypes.RequestInitChain{
-		Time:          time.Now(),
-		ChainId:       n.network.LocalSubnetID,
-		AppStateBytes: state,
-		InitialHeight: protocol.GenesisBlock + 1,
-	})
+	n.kv = kv
 
 	return n
 }
@@ -232,6 +258,7 @@ func (n *FakeNode) NextHeight() int64 {
 }
 
 func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
+	n.t.Helper()
 	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
 	n.Require().NoError(err)
 	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
@@ -253,6 +280,7 @@ func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
 }
 
 func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
+	n.t.Helper()
 	r := n.QueryAccount(url)
 	data, err := json.Marshal(r.Data)
 	n.Require().NoError(err)
@@ -369,8 +397,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 func convertIds32(ids ...[32]byte) [][]byte {
 	ids2 := make([][]byte, len(ids))
 	for i, id := range ids {
-		// Make a copy to avoid capturing the loop variable
-		id := id
+		id := id // See docs/developer/rangevarref.md
 		ids2[i] = id[:]
 	}
 	return ids2
@@ -387,21 +414,18 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)
-	record := batch.Account(u)
-	require.True(n.t, u.RootIdentity().Equal(u))
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err := record.Index("Directory", "Metadata").GetAs(md)
+	dir := indexing.Directory(batch, u)
+	count, err := dir.Count()
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
 	require.NoError(n.t, err)
 
-	chains := make([]string, md.Count)
+	chains := make([]string, count)
 	for i := range chains {
-		data, err := record.Index("Directory", uint64(i)).Get()
+		data, err := dir.Get(uint64(i))
 		require.NoError(n.t, err)
-		chains[i] = string(data)
+		chains[i] = data.String()
 	}
 	return chains
 }
@@ -428,66 +452,87 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 }
 
 func (n *FakeNode) GetDataAccount(url string) *protocol.DataAccount {
+	n.t.Helper()
 	acct := new(protocol.DataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
+	n.t.Helper()
 	acct := new(protocol.TokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteIdentity(url string) *protocol.LiteIdentity {
+	n.t.Helper()
 	acct := new(protocol.LiteIdentity)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
+	n.t.Helper()
 	acct := new(protocol.LiteTokenAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteDataAccount(url string) *protocol.LiteDataAccount {
+	n.t.Helper()
 	acct := new(protocol.LiteDataAccount)
 	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetADI(url string) *protocol.ADI {
+	n.t.Helper()
 	adi := new(protocol.ADI)
 	n.QueryAccountAs(url, adi)
 	return adi
 }
 
 func (n *FakeNode) GetKeyBook(url string) *protocol.KeyBook {
+	n.t.Helper()
 	book := new(protocol.KeyBook)
 	n.QueryAccountAs(url, book)
 	return book
 }
 
 func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
+	n.t.Helper()
 	mss := new(protocol.KeyPage)
 	n.QueryAccountAs(url, mss)
 	return mss
 }
 
 func (n *FakeNode) GetOraclePrice() uint64 {
+	n.t.Helper()
 	batch := n.db.Begin(true)
 	defer batch.Discard()
 	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.InternalLedger
+	var ledgerState *protocol.SystemLedger
 	require.NoError(n.t, ledger.GetStateAs(&ledgerState))
 	return ledgerState.ActiveOracle
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
+	n.t.Helper()
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
+}
+
+func (n *FakeNode) CreateInitChain() {
+	state, err := n.kv.MarshalJSON()
+	n.require.NoError(err)
+	n.app.InitChain(abcitypes.RequestInitChain{
+		Time:          time.Now(),
+		ChainId:       n.network.LocalSubnetID,
+		AppStateBytes: state,
+		InitialHeight: protocol.GenesisBlock + 1,
+	})
 }
 
 type e2eDUT struct {

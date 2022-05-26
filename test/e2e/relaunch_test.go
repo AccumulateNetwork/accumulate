@@ -46,7 +46,7 @@ func TestRelaunch(t *testing.T) {
 	txqResp := new(api.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second, IgnorePending: true}, txqResp)
 	for _, txid := range txqResp.SyntheticTxids {
-		rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second, IgnorePending: true}, nil)
+		rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second, IgnorePending: true}, nil) //nolint:rangevarref
 	}
 
 	// Query the account
@@ -89,6 +89,11 @@ func TestRelaunch(t *testing.T) {
 				t.Helper()
 				require.NoError(t, err)
 			})
+
+			daemon := daemon
+			defer func() {
+				assert.NoError(t, daemon.Stop())
+			}()
 		}
 	}
 

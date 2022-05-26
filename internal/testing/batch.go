@@ -22,7 +22,7 @@ func NewBatchTest(t *testing.T, beginner DbBeginner) BatchTest {
 	return BatchTest{t, beginner.Begin(true)}
 }
 
-func (t BatchTest) Run(name string, run func(BatchTest)) {
+func (t BatchTest) Run(name string, run func(t BatchTest)) {
 	t.T.Run(name, func(s *testing.T) {
 		t := BatchTest{s, t.Begin(true)}
 		defer t.Discard()
@@ -40,8 +40,8 @@ func (t *BatchTest) PutAccountCopy(account protocol.Account) protocol.Account {
 	return copy
 }
 
-func (t *BatchTest) AddSignature(txnHash []byte, sig protocol.Signature) {
-	_, err := t.Transaction(txnHash).AddSignature(sig)
+func (t *BatchTest) AddSignature(txnHash []byte, keyEntryIndex uint64, sig protocol.Signature) {
+	_, err := t.Transaction(txnHash).AddSignature(keyEntryIndex, sig)
 	require.NoError(t, err)
 }
 

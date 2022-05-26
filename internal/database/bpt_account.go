@@ -63,7 +63,7 @@ func (a *Account) state(fullTxnState, preserveChains bool) (*accountState, error
 
 	// Load transaction state
 	for i, h := range obj.Pending.Hashes {
-		state, err := a.batch.Transaction(h[:]).state(fullTxnState)
+		state, err := a.batch.Transaction(h[:]).state(fullTxnState) //nolint:rangevarref
 		if err != nil {
 			return nil, err
 		}
@@ -154,7 +154,10 @@ func (a *Account) restore(s *accountState) error {
 	}
 
 	// Store transaction state
-	for _, p := range s.Pending {
+	txns := make([]*transactionState, 0, len(s.Pending)+len(s.Transactions))
+	txns = append(txns, s.Pending...)
+	txns = append(txns, s.Transactions...)
+	for _, p := range txns {
 		if len(p.State.Signers) != len(p.Signatures) {
 			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", p.Hash[:4], len(p.State.Signers), len(p.Signatures))
 		}
@@ -188,7 +191,7 @@ func (s *merkleState) MerkleHash() []byte {
 	var right []byte
 	for _, left := range cascade {
 		if right == nil {
-			left := left // Copy
+			left := left // See docs/developer/rangevarref.md
 			right = left[:]
 		} else {
 			right = hash.Combine(left[:], right)

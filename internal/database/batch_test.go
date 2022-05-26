@@ -14,7 +14,7 @@ func TestBatchCommit(t *testing.T) {
 	// Setup
 	batch := db.Begin(true)
 	defer batch.Discard()
-	ledger := new(protocol.InternalLedger)
+	ledger := new(protocol.SystemLedger)
 	ledger.Url = ledgerUrl
 	ledger.Index = 5
 	require.NoError(t, batch.Account(ledgerUrl).PutState(ledger))
@@ -29,7 +29,7 @@ func TestBatchCommit(t *testing.T) {
 	defer sub.Discard()
 	ledger = nil
 	require.NoError(t, sub.Account(ledgerUrl).GetStateAs(&ledger))
-	require.Equal(t, int64(5), ledger.Index)
+	require.Equal(t, uint64(5), ledger.Index)
 	ledger.Index = 6
 	require.NoError(t, sub.Account(ledgerUrl).PutState(ledger))
 	require.NoError(t, sub.Commit())
@@ -39,5 +39,5 @@ func TestBatchCommit(t *testing.T) {
 	defer sub.Discard()
 	ledger = nil
 	require.NoError(t, sub.Account(ledgerUrl).GetStateAs(&ledger))
-	require.Equal(t, int64(6), ledger.Index)
+	require.Equal(t, uint64(6), ledger.Index)
 }

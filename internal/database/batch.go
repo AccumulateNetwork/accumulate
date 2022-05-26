@@ -41,6 +41,7 @@ const (
 type Batch struct {
 	done        bool
 	writable    bool
+	dirty       bool
 	id          int
 	nextChildId int
 	parent      *Batch
@@ -144,6 +145,10 @@ func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
 		b.logger.Debug("Cache", "key", key, "dirty", logging.WithFormat("%v → %v", cv.dirty, dirty))
 	case debugCacheValue:
 		b.logger.Debug("Cache", "value", value, "dirty", logging.WithFormat("%v → %v", cv.dirty, dirty))
+	}
+
+	if dirty {
+		b.dirty = true
 	}
 
 	if dirty && !cv.dirty {
@@ -311,6 +316,7 @@ func (b *Batch) Commit() error {
 	}
 
 	b.done = true
+
 	if b.parent != nil {
 		for k, v := range b.values {
 			if !v.dirty {
@@ -353,4 +359,9 @@ func (b *Batch) Discard() {
 	}
 	b.done = true
 	b.store.Discard()
+}
+
+// Dirty returns true if anything has been changed.
+func (b *Batch) Dirty() bool {
+	return b.dirty
 }

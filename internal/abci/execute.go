@@ -13,7 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type executeFunc func(*chain.Delivery) (protocol.TransactionResult, error)
+type executeFunc func(*chain.Delivery) (*protocol.TransactionStatus, error)
 
 func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, *protocol.Error) {
 	hash := sha256.Sum256(raw)
@@ -34,22 +34,33 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, env := range deliveries {
-		status := new(protocol.TransactionStatus)
-		result, err := execute(env)
-		if err != nil {
-			sentry.CaptureException(err)
-			if err1, ok := err.(*protocol.Error); ok {
-				status.Code = err1.Code.GetEnumValue()
-			} else if err2, ok := err.(*errors.Error); ok {
-				status.Code = err2.Code.GetEnumValue()
-				status.Error = err2
-			} else {
-				status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-			}
-			status.Message = err.Error()
+		status, err := execute(env)
+		if err == nil {
+			results[i] = status
+			continue
 		}
 
-		status.Result = result
+		if status == nil {
+			status = new(protocol.TransactionStatus)
+		}
+
+		sentry.CaptureException(err)
+		status.Message = err.Error()
+
+		var err1 *protocol.Error
+		if status.Code == 0 && errors.As(err, &err1) {
+			status.Code = err1.Code.GetEnumValue()
+		}
+
+		var err2 *errors.Error
+		if status.Error == nil && errors.As(err, &err2) {
+			status.Error = err2
+		}
+
+		if status.Code == 0 {
+			status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
+		}
+
 		results[i] = status
 	}
 
@@ -66,7 +77,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 }
 
 func checkTx(exec *Executor, db *database.Database) executeFunc {
-	return func(envelope *chain.Delivery) (protocol.TransactionResult, error) {
+	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
 		batch := db.Begin(false)
 		defer batch.Discard()
 
@@ -75,19 +86,19 @@ func checkTx(exec *Executor, db *database.Database) executeFunc {
 			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 		}
 		if result == nil {
-			return new(protocol.EmptyResult), nil
+			result = new(protocol.EmptyResult)
 		}
-		return result, nil
+		return &protocol.TransactionStatus{Result: result}, nil
 	}
 }
 
 func deliverTx(exec *Executor, block *Block) executeFunc {
-	return func(envelope *chain.Delivery) (protocol.TransactionResult, error) {
+	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
 		status, err := exec.ExecuteEnvelope(block, envelope)
 		if err != nil {
 			return nil, err
 		}
 
-		return status.Result, nil
+		return status, nil
 	}
 }

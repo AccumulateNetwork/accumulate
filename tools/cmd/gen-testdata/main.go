@@ -78,10 +78,10 @@ var txnTests = []*TCG{
 		txnTest("adi", &CreateDataAccount{Url: parseUrl("adi/data")}),
 	}},
 	{Name: "WriteData", Cases: []*TC{
-		txnTest("adi", &WriteData{Entry: DataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
+		txnTest("adi", &WriteData{Entry: &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "WriteDataTo", Cases: []*TC{
-		txnTest("adi", &WriteDataTo{Recipient: parseUrl("lite-data-account"), Entry: DataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
+		txnTest("adi", &WriteDataTo{Recipient: parseUrl("lite-data-account"), Entry: &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "AcmeFaucet", Cases: []*TC{
 		txnTest("faucet", &AcmeFaucet{Url: parseUrl("lite-token-account")}),
@@ -116,7 +116,7 @@ var txnTests = []*TCG{
 	}},
 	{Name: "SyntheticWriteData", Cases: []*TC{
 		txnTest("adi", &SyntheticWriteData{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
-			Entry: DataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
+			Entry: &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "SyntheticDepositTokens", Cases: []*TC{
 		txnTest("adi", &SyntheticDepositTokens{SyntheticOrigin: SyntheticOrigin{Cause: [32]byte{1}, Source: testing2.FakeBvn},
@@ -152,7 +152,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&LiteIdentity{Url: parseUrl("lite-identity"), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Owner: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
+		testdata.NewAcntTest(&KeyPage{Url: parseUrl("adi/page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Delegate: parseUrl("foo/bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
 		testdata.NewAcntTest(&KeyBook{Url: parseUrl("adi/book")}),

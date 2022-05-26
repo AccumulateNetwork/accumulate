@@ -1,13 +1,13 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -72,7 +72,7 @@ func (m *StateManager) Commit() (*ProcessTransactionState, error) {
 		return nil, err
 	}
 
-	return &m.state, nil
+	return &m.State, nil
 }
 
 func (m *StateManager) Discard() {
@@ -88,11 +88,11 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 		panic("No destination URL specified!")
 	}
 
-	m.state.DidProduceTxn(url, body)
+	m.State.DidProduceTxn(url, body)
 }
 
 func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.state.ValidatorsUpdates = append(m.state.ValidatorsUpdates, ValidatorUpdate{
+	m.State.ValidatorsUpdates = append(m.State.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: true,
 	})
@@ -100,7 +100,7 @@ func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
 
 func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
 	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.state.ValidatorsUpdates = append(m.state.ValidatorsUpdates, ValidatorUpdate{
+	m.State.ValidatorsUpdates = append(m.State.ValidatorsUpdates, ValidatorUpdate{
 		PubKey:  pubKey,
 		Enabled: false,
 	})
@@ -111,7 +111,7 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 		var book *protocol.KeyBook
 		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return fmt.Errorf("invalid key book %q: %v", authority, err)
+			return errors.Format(errors.StatusUnknown, "load %q: %w", authority, err)
 		}
 	}
 
@@ -123,12 +123,12 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 
 func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
 	if !account.GetUrl().RootIdentity().Equal(m.OriginUrl.RootIdentity()) {
-		return fmt.Errorf("cannot inherit from principal: belongs to a different root identity")
+		return errors.New(errors.StatusBadRequest, "cannot inherit from principal: belongs to a different root identity")
 	}
 
 	principal, ok := m.Origin.(protocol.FullAccount)
 	if !ok {
-		return fmt.Errorf("cannot inherit from principal: not a full account")
+		return errors.New(errors.StatusBadRequest, "cannot inherit from principal: not a full account")
 	}
 
 	// Inherit auth from the principal
@@ -148,13 +148,16 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 
 	default:
 		// Otherwise, inherit
-		return m.InheritAuth(account)
+		err := m.InheritAuth(account)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
 	}
 
 	for _, authority := range authorities {
 		err := m.AddAuthority(account, authority)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 

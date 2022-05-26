@@ -8,8 +8,8 @@ import (
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -116,10 +116,17 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 		}
 	}
 
-	directory := urls[0].Identity()
-	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
-		return db.Account(u).Index(key...)
-	}, directory, urls...)
+	dir := indexing.Directory(db, urls[0].Identity())
+	for _, u := range urls {
+		if u.IsRootIdentity() {
+			continue
+		}
+		err := dir.Put(u)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
@@ -260,6 +267,7 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 	page.AcceptThreshold = 1
+	page.Version = 1
 	page.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		hash := sha256.Sum256(key.Bytes())

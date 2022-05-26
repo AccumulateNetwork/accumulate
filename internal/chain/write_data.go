@@ -11,6 +11,8 @@ import (
 
 type WriteData struct{}
 
+var _ SignerValidator = (*WriteData)(nil)
+
 func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
 
 func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
@@ -33,7 +35,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 	case errors.Is(err, errors.StatusNotFound):
 		// Are we creating a lite data account?
-		computedChainId := protocol.ComputeLiteDataAccountId(&body.Entry)
+		computedChainId := protocol.ComputeLiteDataAccountId(body.Entry)
 		return bytes.HasPrefix(computedChainId, chainId), nil
 
 	default:
@@ -44,7 +46,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 // SignerIsAuthorized returns nil if the transaction is writing to a lite data
 // account.
-func (WriteData) SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer) (fallback bool, err error) {
+func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
@@ -55,17 +57,19 @@ func (WriteData) SignerIsAuthorized(batch *database.Batch, transaction *protocol
 
 // TransactionIsReady returns true if the transaction is writing to a lite data
 // account.
-func (WriteData) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, _ *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, false, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if !lite {
-		return false, true, nil
+	// Writing to a lite data account only requires one signature
+	if lite {
+		return len(status.Signers) > 0, false, nil
 	}
 
-	return true, false, nil
+	// Fallback to general authorization
+	return false, true, nil
 }
 
 func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -78,24 +82,27 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
+	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
+		return nil, fmt.Errorf("writing new Factom-formatted data entries is not supported")
+	}
+
 	//check will return error if there is too much data or no data for the entry
-	_, err := body.Entry.CheckSize()
+	_, err := protocol.CheckDataEntrySize(body.Entry)
 	if err != nil {
 		return nil, err
 	}
 
-	cause := *(*[32]byte)(tx.Transaction.GetHash())
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
 	if err == nil {
-		return executeWriteLiteDataAccount(st, tx.Transaction, &body.Entry, cause, body.Scratch)
+		return executeWriteLiteDataAccount(st, body.Entry, body.Scratch)
 	}
 
-	return executeWriteFullDataAccount(st, tx.Transaction, &body.Entry, cause, body.Scratch)
+	return executeWriteFullDataAccount(st, body.Entry, body.Scratch)
 }
 
-func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, entry *protocol.DataEntry, cause [32]byte, scratch bool) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
-		return nil, errors.NotFound("%v not found", txn.Header.Principal)
+		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
 	account, ok := st.Origin.(*protocol.DataAccount)
 	if !ok {
@@ -107,30 +114,10 @@ func executeWriteFullDataAccount(st *StateManager, txn *protocol.Transaction, en
 		return nil, fmt.Errorf("cannot write scratch data to a non-scratch account")
 	}
 
-	// now replace the transaction payload with a segregated witness to the data.
-	// This technique is used to segregate the payload from the stored transaction
-	// by replacing the data payload with a smaller reference to that data via the
-	// entry hash.  While technically, not true segwit since the entry hash is not
-	// signed, the original transaction can be reconstructed by recombining the
-	// signature info stored on the pending chain, the transaction info stored on
-	// the main chain, and the original data payload that resides on the data chain
-	// when the user wishes to validate the signature of the transaction that
-	// produced the data entry
-
-	sw := protocol.SegWitDataEntry{}
-	sw.Cause = cause
-	sw.EntryHash = *(*[32]byte)(entry.Hash())
-	sw.EntryUrl = st.OriginUrl
-
-	//now replace the original data entry payload with the new segwit payload
-	txn.Body = &sw
-
-	//store the entry
-	st.UpdateData(st.Origin, sw.EntryHash[:], entry)
-
 	result := new(protocol.WriteDataResult)
 	result.EntryHash = *(*[32]byte)(entry.Hash())
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
+	st.UpdateData(st.Origin, result.EntryHash[:], entry)
 	return result, nil
 }

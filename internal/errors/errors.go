@@ -85,12 +85,21 @@ func New(code Status, v interface{}) *Error {
 	return e
 }
 
-func Wrap(code Status, err error) *Error {
+func Wrap(code Status, err error) error {
 	if err == nil {
+		// The return type must be `error` - otherwise this returns statement
+		// can cause strange errors
 		return nil
 	}
 	e := makeError(code)
 	e.setCause(convert(err))
+	return e
+}
+
+func FormatWithCause(code Status, cause error, format string, args ...interface{}) *Error {
+	e := makeError(code)
+	e.Message = fmt.Sprintf(format, args...)
+	e.setCause(convert(cause))
 	return e
 }
 
