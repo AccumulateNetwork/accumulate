@@ -145,24 +145,25 @@ func initClient(server string) (string, error) {
 	timer := time.NewTimer(time.Microsecond)
 
 	// run key generation in gorooutine
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 10; i++ {
 
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		go func(n int) {
-			start := time.Now()
-
 			// create accounts and store them
 			acc, _ := createAccount(n)
+
+			// start timer
+			start := time.Now()
 
 			// faucet account
 			_, err = client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 
-			<-guard
-
 			// Timer to measure TPS
 			log.Printf("Execution time %s\n", time.Since(start))
 			<-timer.C
+
+			<-guard
 		}(i)
 	}
 
