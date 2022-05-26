@@ -131,6 +131,7 @@ func initClient(server string) (string, error) {
 
 	// Launch the devnet
 	runCmd := launch()
+	defer func() { _ = runCmd.Process.Kill() }()
 
 	// Create new client on localhost
 	client, err := client.New("http://127.0.1.1:26660/v2")
@@ -144,14 +145,14 @@ func initClient(server string) (string, error) {
 	// Add timer to measure TPS
 	timer := time.NewTimer(time.Microsecond)
 
-	// run key generation in gorooutine
-	for i := 0; i < 10; i++ {
-
+	// run key generation in cycle
+	for i := 0; i < 1; i++ {
 		guard <- struct{}{} // would block if guard channel is already filled
 
+		// generate accounts and faucet in goroutines
 		go func(n int) {
 			// create accounts and store them
-			acc, _ := createAccount(n)
+			acc, _ := createAccount(i)
 
 			// start timer
 			start := time.Now()
@@ -159,12 +160,21 @@ func initClient(server string) (string, error) {
 			// faucet account
 			_, err = client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 
-			// Timer to measure TPS
+			// wait for timer to fire
 			log.Printf("Execution time %s\n", time.Since(start))
+
+			// reset timer
+			timer.Reset(time.Microsecond)
 			<-timer.C
 
+			// time to release goroutine
 			<-guard
 		}(i)
+	}
+
+	// wait for goroutines to finish
+	for i := 0; i < maxGoroutines; i++ {
+		guard <- struct{}{}
 	}
 
 	stop(runCmd)
