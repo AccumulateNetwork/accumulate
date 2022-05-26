@@ -47,16 +47,26 @@ func AccountFromPrivateKey(privateKey, publicKey string) (*url.URL, error) {
 	return url, nil
 }
 
-func WriteDataToAccumulate(env string, data *protocol.LiteDataEntry) error {
+func WriteDataToAccumulate(env string, data *protocol.AccumulateDataEntry, accountId []byte) error {
 	client, err := client.New(env)
 	if err != nil {
 		fmt.Println("Error : ", err.Error())
 		return err
 	}
+
 	wd := &protocol.WriteDataTo{
-		Entry: *data.DataEntry,
+		Entry: data,
 	}
+
+	envelope := new(protocol.Envelope)
 	txn := new(protocol.Transaction)
+
+builder
+	newTxn("FooBar").
+		WithSigner(url.MustParse("FooBar/book0/1"), 1).
+		WithBody(wdt).
+		Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+		Build()
 	txn.Body = wd
 	txn.Header.Principal = origin
 	sig, err := signer.Initiate(txn)
@@ -64,21 +74,19 @@ func WriteDataToAccumulate(env string, data *protocol.LiteDataEntry) error {
 		fmt.Println("Error : ", err.Error())
 		return err
 	}
-	//addressString, err := protocol.GetFactoidAddressFromRCDHash(data.AccountId[:])
-	//if err != nil {
-	// fmt.Println("Error : ", err.Error())
-	// return err
-	//}
-	chainUrl, err := protocol.LiteDataAddress(data.AccountId[:])
+
+	chainUrl, err := protocol.LiteDataAddress(accountId)
 	if err != nil {
 		fmt.Println("Error : ", err.Error())
 		return err
 	}
 	wd.Recipient = chainUrl
+	b := signing.Builder{}
+	b.SetSigner(signer)
 	req := &api.TxRequest{
 		Payload:   wd,
 		Origin:    origin,
-		Signature: sig.GetSignature(),
+		Signature: sig.(),
 		Signer: api.Signer{
 			Timestamp: nonceFromTimeNow(),
 			PublicKey: key.PublicKey,
@@ -129,7 +137,7 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 }
 
 func ConvertFactomDataEntryToLiteDataEntry(entry Entry) *protocol.LiteDataEntry {
-	dataEntry := protocol.LiteDataEntry{
+	dataEntry := protocol.FactomDataEntry{
 		DataEntry: &protocol.DataEntry{},
 	}
 	copy(dataEntry.AccountId[:], entry.ChainId)
