@@ -562,6 +562,16 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Network config.Network `json:"network,omitempty"`
+		Subnet  config.Network `json:"subnet,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Subnet = v.Network
+	return json.Marshal(&u)
+}
+
 func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url          *url.URL `json:"url,omitempty"`
@@ -986,7 +996,7 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Type = u.Type
-	if u.MainChain != nil {
+	if !(u.MainChain == nil) {
 		v.MainChain = u.MainChain
 	} else {
 		v.MainChain = u.MerkleState
@@ -1068,13 +1078,31 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	v.UrlQuery.Url = u.Url
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains
 	}
 	v.QueryOptions.Height = u.Height
 	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Network config.Network `json:"network,omitempty"`
+		Subnet  config.Network `json:"subnet,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Subnet = v.Network
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(u.Network.Equal(&config.Network{})) {
+		v.Network = u.Network
+	} else {
+		v.Network = u.Subnet
+	}
 	return nil
 }
 
@@ -1101,7 +1129,7 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 	v.UrlQuery.Url = u.Url
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains
@@ -1128,7 +1156,7 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains
@@ -1148,7 +1176,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Version != 0 {
+	if !(u.Version == 0) {
 		v.Version = u.Version
 	} else {
 		v.Version = u.Height
@@ -1190,7 +1218,7 @@ func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Height != 0 {
+	if !(u.Height == 0) {
 		v.Height = u.Height
 	} else {
 		v.Height = u.Count
@@ -1360,7 +1388,7 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.Expand = u.Expand
 	} else {
 		v.Expand = u.ExpandChains
@@ -1428,7 +1456,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	if u.Timestamp != 0 {
+	if !(u.Timestamp == 0) {
 		v.Timestamp = u.Timestamp
 	} else {
 		v.Timestamp = u.Nonce
@@ -1519,7 +1547,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Type = u.Type
-	if u.MainChain != nil {
+	if !(u.MainChain == nil) {
 		v.MainChain = u.MainChain
 	} else {
 		v.MainChain = u.MerkleState
@@ -1529,12 +1557,12 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Data = x
 	}
-	if u.Origin != nil {
+	if !(u.Origin == nil) {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
 	}
-	if u.TransactionHash != nil {
+	if !(u.TransactionHash == nil) {
 		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
 			return fmt.Errorf("error decoding TransactionHash: %w", err)
 		} else {
@@ -1614,7 +1642,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.CheckOnly = u.CheckOnly
 	v.IsEnvelope = u.IsEnvelope
-	if u.Origin != nil {
+	if !(u.Origin == nil) {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
@@ -1672,7 +1700,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.TransactionHash != nil {
+	if !(u.TransactionHash == nil) {
 		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
 			return fmt.Errorf("error decoding TransactionHash: %w", err)
 		} else {
@@ -1693,7 +1721,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 			v.SignatureHashes[i] = x
 		}
 	}
-	if u.SimpleHash != nil {
+	if !(u.SimpleHash == nil) {
 		if x, err := encoding.BytesFromJSON(u.SimpleHash); err != nil {
 			return fmt.Errorf("error decoding SimpleHash: %w", err)
 		} else {
@@ -1737,7 +1765,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains

@@ -46,7 +46,7 @@ type {{.Name}} struct {
 	{{-     if .IsEmbedded}}
 	{{.Type}}
 	{{-     else}}
-	{{.Name}} {{resolveType . false}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}`{{end}}
+	{{.Name}} {{resolveType . false}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}{{if .Toml}} toml:"{{.Toml}}" mapstructure:"{{.Toml}}"{{end}}`{{end}}
 	{{-     end}}
 	{{-   end}}
 	{{- end}}
@@ -233,7 +233,7 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 {{- if .Field.Virtual}}
 {{areEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (errVirtualFieldNotEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name))}}
 {{- else if .Field.AlternativeName}}
-if u.{{get .Field}}{{if and .Field.AsReference (not .Field.Pointer)}}.Equal(&{{resolveType .Field false}}{}){{else}} != {{jsonZeroValue .Field}}{{end}} {
+if !(u.{{get .Field}}{{if and .Field.AsReference (not .Field.Pointer)}}.Equal(&{{resolveType .Field false}}{}){{else}} == {{jsonZeroValue .Field}}{{end}}) {
 	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (get .Field)}}
 } else {
 	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.AlternativeName) (get .Field)}}
