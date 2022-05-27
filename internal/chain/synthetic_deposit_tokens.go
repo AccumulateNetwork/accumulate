@@ -34,7 +34,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		case *protocol.TokenAccount:
 			account = origin
 		default:
-			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
+			return nil, fmt.Errorf("invalid principal: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 		}
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)

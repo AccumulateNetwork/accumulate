@@ -314,7 +314,7 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 	var err2 *errors.Error
 	require.Error(t, err)
 	require.ErrorAs(t, err, &err2)
-	require.Equal(t, errors.StatusUnauthorized, err2.Code)
+	require.Equal(t, errors.StatusBadRequest, err2.Code)
 }
 
 func TestCreateIdentityWithRemoteLite(t *testing.T) {
