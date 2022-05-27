@@ -54,7 +54,7 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry, scr
 			result.AccountID = liteDataAccountId
 			result.AccountUrl = st.OriginUrl
 		default:
-			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
+			return nil, fmt.Errorf("invalid principal: want chain type %v, got %v",
 				protocol.AccountTypeLiteDataAccount, origin.Type())
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(st.OriginUrl); err != nil {

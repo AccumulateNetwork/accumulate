@@ -34,8 +34,8 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	workDir := flagMain.WorkDir
 
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%d", dnBasePort)
-	flagInitNode.SkipVersionCheck = flagInitNodeFromSeed.SkipVersionCheck
-	flagInitNode.GenesisDoc = flagInitNodeFromSeed.GenesisDoc
+	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
+	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
 	flagInitNode.Follower = false
 
 	// configure the BVN first so we know how to setup the bvn.
