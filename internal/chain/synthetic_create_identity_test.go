@@ -42,7 +42,7 @@ func TestSyntheticCreateIdentity_MultiSlash(t *testing.T) {
 		Initiate(protocol.SignatureTypeED25519, fooKey).
 		Build()
 
-	st, d := NewStateManagerForTest(t, db, env)
+	st, d := LoadStateManagerForTest(t, db, env)
 	defer st.Discard()
 
 	scc := SyntheticCreateIdentity{}
@@ -80,7 +80,7 @@ func TestSyntheticCreateIdentity_MultiSlash_SubADI(t *testing.T) {
 		Initiate(protocol.SignatureTypeED25519, fooKey).
 		Build()
 
-	st, d := NewStateManagerForTest(t, db, env)
+	st, d := LoadStateManagerForTest(t, db, env)
 	defer st.Discard()
 
 	require.NoError(t, err)

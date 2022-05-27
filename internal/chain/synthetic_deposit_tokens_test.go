@@ -28,7 +28,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	defer batch.Discard()
 	require.NoError(t, testing2.CreateTokenAccount(batch, protocol.FaucetUrl.String(), protocol.ACME, 1e9, true))
 
-	st, d := NewStateManagerForTest(t, db, nil)
+	st, d := LoadStateManagerForTest(t, db, nil)
 	defer st.Discard()
 
 	_, err := SyntheticDepositTokens{}.Validate(st, d)
