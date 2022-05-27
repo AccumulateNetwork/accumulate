@@ -143,12 +143,12 @@ func initClient(server string) (string, error) {
 	maxGoroutines := 1
 	guard := make(chan struct{}, maxGoroutines)
 
-	// Add timer to measure TPS
-	timer := time.NewTimer(time.Microsecond)
-
 	// run key generation in cycle
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 2; i++ {
 		guard <- struct{}{} // would block if guard channel is already filled
+
+		// Add timer to measure TPS
+		timer := time.NewTimer(time.Microsecond)
 
 		// generate accounts and faucet in goroutines
 		go func(n int) {
@@ -163,7 +163,7 @@ func initClient(server string) (string, error) {
 
 			txReq := api.TxnQuery{}
 			txReq.Txid = resp.TransactionHash
-			txReq.Wait = time.Second * 10
+			txReq.Wait = time.Second * 100
 			txReq.IgnorePending = false
 
 			_, err = client.QueryTx(context.Background(), &txReq)
@@ -180,6 +180,8 @@ func initClient(server string) (string, error) {
 			// stop timer
 			<-timer.C
 		}(i)
+		// stop timer
+		<-timer.C
 	}
 
 	// wait for goroutines to finish
