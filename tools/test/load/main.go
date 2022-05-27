@@ -17,6 +17,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -146,7 +147,7 @@ func initClient(server string) (string, error) {
 	timer := time.NewTimer(time.Microsecond)
 
 	// run key generation in cycle
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 1; i++ {
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		// generate accounts and faucet in goroutines
@@ -157,8 +158,18 @@ func initClient(server string) (string, error) {
 			// start timer
 			timer.Reset(time.Microsecond)
 
-			// faucet account
-			_, err = client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
+			// faucet account and wait for Tx execution
+			resp, err := client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
+
+			txReq := api.TxnQuery{}
+			txReq.Txid = resp.TransactionHash
+			txReq.Wait = time.Second * 10
+			txReq.IgnorePending = false
+
+			_, err = client.QueryTx(context.Background(), &txReq)
+			if err != nil {
+				return
+			}
 
 			// wait for timer to fire
 			log.Printf("Execution time %s\n", time.Since(<-timer.C))
