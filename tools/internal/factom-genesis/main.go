@@ -75,7 +75,7 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 	}
 
 	wd := &protocol.WriteDataTo{
-		Entry:     data,
+		Entry:     &protocol.AccumulateDataEntry{Data: data.GetData()},
 		Recipient: dataAccount,
 	}
 
@@ -125,15 +125,13 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 		return err
 	}
 
-	var dataHash [32]byte
-	copy(dataHash[:], data.Hash())
 	queryReq := &api.DataEntryQuery{
 		Url:       dataAccount,
-		EntryHash: dataHash,
+		EntryHash: *(*[32]byte)(data.Hash()),
 	}
 	queryRes, err := client.QueryData(context.Background(), queryReq)
 	if err != nil {
-		log.Println("Error : ", err.Error())
+		log.Printf("Error (%x): %v\n", data, err)
 		return err
 	}
 	log.Println("Response : ", queryRes.Data)
@@ -160,7 +158,7 @@ func ExecuteQueueToWriteData(chainUrl *url.URL, queue *Queue) error {
 		if len(*queue) > 0 {
 			entry := queue.Pop().(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
-			WriteDataToAccumulate(LOCAL_URL, &protocol.AccumulateDataEntry{Data: dataEntry.GetData()}, chainUrl)
+			WriteDataToAccumulate(LOCAL_URL, dataEntry, chainUrl)
 		} else {
 			break
 		}
@@ -181,7 +179,12 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 
 func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataEntry {
 	dataEntry := new(protocol.FactomDataEntry)
-	copy(dataEntry.AccountId[:], entry.ChainID)
+	chainId, err := hex.DecodeString(entry.ChainID)
+	if err != nil {
+		log.Printf(" Error: invalid chainId ")
+		return nil
+	}
+	copy(dataEntry.AccountId[:], chainId)
 	dataEntry.Data = []byte(entry.Content)
 	dataEntry.ExtIds = entry.ExtIDs
 	return dataEntry
