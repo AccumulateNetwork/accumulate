@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
+	f2 "github.com/FactomProject/factom"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom-genesis"
+	"log"
 )
 
 const (
@@ -15,12 +18,22 @@ const (
 var faucet = true
 
 func main() {
-	url, _ := factom.AccountFromPrivateKey(Key_Private_Key, Key_Public_Key)
+	pk, err := hex.DecodeString(Key_Private_Key)
+	if err != nil {
+		log.Fatalf("invalid private key %v", err)
+	}
+	url, _ := factom.AccountFromPrivateKey(pk)
 	fmt.Println("URL : ", url)
 	if faucet {
-		factom.FaucetWithCredits(factom.LOCAL_URL)
+		err := factom.FaucetWithCredits(factom.LOCAL_URL)
+		if err != nil {
+			log.Fatalf("cannot faucet account %v", err)
+		}
 	}
-	entries := factom.CurlEntryFromFactom()
+
+	f2.SetFactomdServer("https://api.factomd.net")
+
+	entries := factom.EntriesFromFactom()
 	factom.GetDataAndPopulateQueue(entries)
 	factom.WriteDataFromQueueToAccumulate()
 }

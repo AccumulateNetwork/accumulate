@@ -43,7 +43,17 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
-require github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
+require (
+	github.com/FactomProject/btcutil v0.0.0-20160826074221-43986820ccd5 // indirect
+	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
+	github.com/FactomProject/factom v0.4.0 // indirect
+	github.com/FactomProject/go-bip32 v0.3.5 // indirect
+	github.com/FactomProject/go-bip39 v0.3.5 // indirect
+	github.com/FactomProject/go-bip44 v0.0.0-20190306062959-b541a96d8da9 // indirect
+	github.com/FactomProject/go-simplejson v0.5.0 // indirect
+	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
+	github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
+)
 
 require (
 	4d63.com/gochecknoglobals v0.1.0 // indirect

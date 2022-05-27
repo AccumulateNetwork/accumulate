@@ -5,7 +5,9 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
+	f2 "github.com/FactomProject/factom"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"log"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
@@ -24,17 +26,17 @@ const (
 	LOCAL_URL = "http://127.0.1.1:26660"
 )
 
-func AccountFromPrivateKey(privateKey, publicKey string) (*url.URL, error) {
+func AccountFromPrivateKey(privateKey []byte) (*url.URL, error) {
 	var pk ed25519.PrivateKey
-	if len([]byte(privateKey)) == 32 {
-		pk = ed25519.NewKeyFromSeed([]byte(privateKey))
+	if len(privateKey) == 32 || len(privateKey) == 64 {
+		pk = ed25519.NewKeyFromSeed(privateKey)
 	} else {
-		pk = []byte(privateKey)
+		return nil, fmt.Errorf("invalid private key, cannot create account")
 	}
 
 	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
-	key = &cmd.Key{PrivateKey: []byte(publicKey), PublicKey: []byte(privateKey), Type: protocol.SignatureTypeED25519}
-	origin = url.RootIdentity()
+	key = &cmd.Key{PrivateKey: pk, PublicKey: pk[32:], Type: protocol.SignatureTypeED25519}
+	origin = url
 	return url, nil
 }
 
@@ -93,26 +95,36 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 		fmt.Println(res.Message)
 		return fmt.Errorf(res.Message)
 	}
+	//TODO: Read back data to confirm it wrote, or write a separate function to verify data
+	//TODO: formulate factom entry hash from data, also consider passing in the orig. entry hash obtained from factom -> compare those hashes
+	//TODO: query entry hash
+	//TODO: here is the get call. if the get works then it should be ok.
+	//resp, err := client.Get(context.Background(), dataAccount.String() + "#data/" + entryHash)
+	//if err != nil {
+	//	return err
+	//}
 	return nil
 }
 
 func WriteDataFromQueueToAccumulate() {
 	for chainId, data := range factomChainData {
 		// go ExecuteQueueToWriteData(chainId, data)
-
 		chainUrl, err := protocol.LiteDataAddress(chainId[:])
 		if err != nil {
 			fmt.Println("Error : ", err.Error())
 			break
 		}
+
+		log.Printf("Writing data to %s", chainUrl.String())
 		ExecuteQueueToWriteData(chainUrl, data)
 	}
 }
 
 func ExecuteQueueToWriteData(chainUrl *url.URL, queue *Queue) error {
+
 	for {
 		if len(*queue) > 0 {
-			entry := queue.Pop().(*Entry)
+			entry := queue.Pop().(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
 			WriteDataToAccumulate(LOCAL_URL, &protocol.AccumulateDataEntry{Data: dataEntry.GetData()}, chainUrl)
 		} else {
@@ -133,23 +145,26 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 	return protocol.LiteAuthorityForKey(key.PublicKey, key.Type)
 }
 
-func ConvertFactomDataEntryToLiteDataEntry(entry Entry) *protocol.FactomDataEntry {
+func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataEntry {
 	dataEntry := new(protocol.FactomDataEntry)
-	copy(dataEntry.AccountId[:], entry.ChainId)
+	copy(dataEntry.AccountId[:], entry.ChainID)
 	dataEntry.Data = []byte(entry.Content)
-	dataEntry.ExtIds = entry.ExtIds
+	dataEntry.ExtIds = entry.ExtIDs
 	return dataEntry
 }
 
-func GetDataAndPopulateQueue(entries []*Entry) {
+func GetDataAndPopulateQueue(entries []*f2.Entry) {
 	factomChainData = make(map[[32]byte]*Queue)
 	for _, entry := range entries {
-		accountId := *(*[32]byte)(entry.ChainId)
-		_, ok := factomChainData[accountId]
-		if !ok {
-			factomChainData[accountId] = NewQueue()
+		accountId, err := hex.DecodeString(entry.ChainID)
+		if err != nil {
+			log.Fatalf("cannot decode account id")
 		}
-		factomChainData[accountId].Push(entry)
+		_, ok := factomChainData[*(*[32]byte)(accountId)]
+		if !ok {
+			factomChainData[*(*[32]byte)(accountId)] = NewQueue()
+		}
+		factomChainData[*(*[32]byte)(accountId)].Push(entry)
 	}
 }
 
@@ -185,16 +200,27 @@ func FaucetWithCredits(env string) error {
 	cred := protocol.AddCredits{}
 	cred.Recipient = origin
 	cred.Oracle = 500
-	cred.Amount.SetInt64(100000000000000)
+	cred.Amount.SetInt64(200000000000000)
 
 	envelope, err := buildEnvelope(&cred)
 	if err != nil {
 		return err
 	}
 
-	_, err = client.ExecuteDirect(context.Background(), &api.ExecuteRequest{Envelope: envelope})
+	resp, err = client.ExecuteDirect(context.Background(), &api.ExecuteRequest{Envelope: envelope})
 	if err != nil {
 		return err
 	}
+
+	txReq = api.TxnQuery{}
+	txReq.Txid = resp.TransactionHash
+	txReq.Wait = time.Second * 10
+	txReq.IgnorePending = false
+
+	_, err = client.QueryTx(context.Background(), &txReq)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
