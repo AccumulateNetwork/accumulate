@@ -41,7 +41,6 @@ func init() {
 func accountId(_ *cobra.Command, args []string) {
 	var dclient *client.Client
 	var err error
-	var bvnInfo string
 	var info *api.DescriptionResponse
 	bvnCount := 0
 	if len(args) == 2 {
@@ -50,8 +49,6 @@ func accountId(_ *cobra.Command, args []string) {
 		info, err = dclient.Describe(context.Background())
 		check(err)
 		bvnCount = len(info.Network.Subnets)
-		bvnInfo = info.Network.NetworkName
-		fmt.Println(info, bvnCount, bvnInfo)
 		args = args[1:]
 	}
 
