@@ -48,11 +48,16 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
 	}
 
-	if !body.Url.Identity().Equal(st.OriginUrl) {
-		return nil, errors.Format(errors.StatusBadRequest, "%q cannot be the origininator of %q", st.OriginUrl, body.Url)
+	err := checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
 	}
 
-	err := verifyCreateTokenAccountProof(st.Network, st.batch, tx.Transaction.Header.Principal, body)
+	if body.TokenUrl == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "token URL is missing")
+	}
+
+	err = verifyCreateTokenAccountProof(st.Network, st.batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}

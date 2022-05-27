@@ -106,7 +106,7 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	}
 	account, ok := st.Origin.(*protocol.DataAccount)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
+		return nil, fmt.Errorf("invalid principal: want %v, got %v",
 			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
