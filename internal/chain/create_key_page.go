@@ -20,7 +20,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	case *protocol.KeyBook:
 		book = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.Type())
+		return nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyBook, origin.Type())
 	}
 
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyPage)

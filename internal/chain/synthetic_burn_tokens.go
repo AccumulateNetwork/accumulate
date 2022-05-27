@@ -24,7 +24,7 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Tr
 
 	account, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
 	account.Issued.Sub(&account.Issued, &body.Amount)
