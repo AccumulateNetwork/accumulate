@@ -160,6 +160,9 @@ func initClient(server string) (string, error) {
 
 			// faucet account and wait for Tx execution
 			resp, err := client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
+			if err != nil {
+				fmt.Printf("Error: faucet: %v\n", err)
+			}
 
 			txReq := api.TxnQuery{}
 			txReq.Txid = resp.TransactionHash
@@ -176,9 +179,6 @@ func initClient(server string) (string, error) {
 
 			// time to release goroutine
 			<-guard
-
-			// stop timer
-			<-timer.C
 		}(i)
 		// stop timer
 		<-timer.C
