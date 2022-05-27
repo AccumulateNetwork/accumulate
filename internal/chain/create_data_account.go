@@ -43,9 +43,9 @@ func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), tx.Transaction.Body)
 	}
 
-	//only the ADI can create the data account associated with the ADI
-	if !body.Url.Identity().Equal(st.OriginUrl) {
-		return nil, fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, body.Url)
+	err := checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
 	}
 
 	//create the data account
@@ -53,7 +53,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	account.Url = body.Url
 	account.Scratch = body.Scratch
 
-	err := st.SetAuth(account, body.Authorities)
+	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
 		return nil, err
 	}
