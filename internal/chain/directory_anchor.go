@@ -30,7 +30,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.AnchorLedger); !ok {
-		return nil, fmt.Errorf("invalid origin record: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
 	}
 
 	// Verify the source URL is from the DN

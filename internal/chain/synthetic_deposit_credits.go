@@ -50,7 +50,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		account = origin
 
 	default:
-		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
 	account.CreditCredits(body.Amount)

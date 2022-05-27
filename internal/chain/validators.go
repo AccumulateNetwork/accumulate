@@ -191,7 +191,7 @@ func updateValidator(st *StateManager, env *Delivery) error {
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
 	validatorBookUrl := env.Transaction.Header.Principal
 	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
+		return nil, fmt.Errorf("invalid principal: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
 	}
 
 	var book *protocol.KeyBook

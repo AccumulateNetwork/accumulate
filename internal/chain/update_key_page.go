@@ -96,12 +96,12 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
 	bookUrl, _, ok := protocol.ParseKeyPageUrl(st.OriginUrl)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: page url is invalid: %s", page.Url)
+		return nil, fmt.Errorf("invalid principal: page url is invalid: %s", page.Url)
 	}
 
 	var book *protocol.KeyBook
