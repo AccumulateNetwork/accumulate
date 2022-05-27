@@ -22,7 +22,7 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 
 	issuer, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
+		return nil, fmt.Errorf("invalid principal: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
 	issuer.Issued.Add(&issuer.Issued, &body.Amount)
