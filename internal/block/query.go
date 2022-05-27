@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -906,23 +905,18 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
 		}
 
-		keySig, err := new(signing.Builder).
-			SetType(protocol.SignatureTypeED25519).
-			SetPrivateKey(m.Key).
-			SetKeyPageUrl(m.Network.ValidatorBook(), 0).
-			SetVersion(1).
-			SetTimestamp(1).
-			Sign(hash)
+		keySig, err := m.signTransaction(batch, qr.Envelope.Transaction[0], qr.Envelope.Signatures)
 		if err != nil {
 			return nil, nil, protocol.Errorf(protocol.ErrorCodeInternal, "sign synthetic transaction: %w", err)
 		}
 
-		// This is a hack
 		qr.Envelope.Signatures = append(qr.Envelope.Signatures, keySig)
-		qr.Signers = append(qr.Signers, query.SignatureSet{
-			Account:    &protocol.UnknownAccount{Url: keySig.GetSigner()},
-			Signatures: []protocol.Signature{keySig},
-		})
+		for _, signer := range qr.Signers {
+			if signer.Account.GetUrl().Equal(keySig.GetSigner()) {
+				signer.Signatures = append(signer.Signatures, keySig)
+				break
+			}
+		}
 
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()

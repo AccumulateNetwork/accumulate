@@ -115,10 +115,6 @@ func ETHaddress(pubKey []byte) string {
 	return fmt.Sprintf("0x%x", address[:])
 }
 
-func netVal(u *url.URL) *url.URL {
-	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 0)
-}
-
 func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
 loop:
 	for sig := sig; ; {
@@ -682,11 +678,15 @@ func (e *ETHSignature) Verify(txnHash []byte) bool {
  * Receipt Signature
  */
 
-// GetSigner returns SourceNetwork.
-func (s *ReceiptSignature) GetSigner() *url.URL { return netVal(s.SourceNetwork) }
+// GetSigner panics.
+func (s *ReceiptSignature) GetSigner() *url.URL {
+	panic("a receipt signature does not have a signer")
+}
 
-// RoutingLocation returns SourceNetwork.
-func (s *ReceiptSignature) RoutingLocation() *url.URL { return netVal(s.SourceNetwork) }
+// RoutingLocation panics.
+func (s *ReceiptSignature) RoutingLocation() *url.URL {
+	panic("a receipt signature does not have a routing location")
+}
 
 // GetSignerVersion returns 1.
 func (s *ReceiptSignature) GetSignerVersion() uint64 { return 1 }
@@ -735,11 +735,13 @@ func (s *ReceiptSignature) Verify(hash []byte) bool {
  * Synthetic Signature
  */
 
-// GetSigner returns the URL of the destination network's validator key page.
-func (s *SyntheticSignature) GetSigner() *url.URL { return netVal(s.DestinationNetwork) }
+// GetSigner panics.
+func (s *SyntheticSignature) GetSigner() *url.URL {
+	panic("a synthetic signature does not have a signer")
+}
 
-// RoutingLocation returns the URL of the destination network's validator key page.
-func (s *SyntheticSignature) RoutingLocation() *url.URL { return netVal(s.DestinationNetwork) }
+// RoutingLocation returns the URL of the destination network's identity.
+func (s *SyntheticSignature) RoutingLocation() *url.URL { return s.DestinationNetwork }
 
 // GetSignerVersion returns 1.
 func (s *SyntheticSignature) GetSignerVersion() uint64 { return 1 }

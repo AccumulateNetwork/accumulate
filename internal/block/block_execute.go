@@ -15,6 +15,10 @@ type Block struct {
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
+		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
+	}
+
 	status, additional, err := x.executeEnvelope(block, delivery)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
@@ -91,7 +95,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		defer batch.Discard()
 
 		for _, signature := range delivery.Signatures {
-			if signature.RoutingLocation().LocalTo(delivery.Transaction.Header.Principal) {
+			if !signature.Type().IsSystem() && signature.RoutingLocation().LocalTo(delivery.Transaction.Header.Principal) {
 				shouldProcessTransaction = true
 			}
 

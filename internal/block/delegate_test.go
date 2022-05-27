@@ -58,7 +58,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 	sim.CreateKeyBook(alice.JoinPath("other-book"), key2[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
-		page.Keys = append(page.Keys, &KeySpec{Delegate: alice.JoinPath("other-book")})
+		page.AddKeySpec(&KeySpec{Delegate: alice.JoinPath("other-book")})
 	})
 	updateAccount(sim, alice.JoinPath("other-book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
@@ -101,7 +101,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	sim.CreateKeyBook(alice.JoinPath("other-book"), otherKey1[32:], otherKey2[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
-		page.Keys = append(page.Keys, &KeySpec{Delegate: alice.JoinPath("other-book")})
+		page.AddKeySpec(&KeySpec{Delegate: alice.JoinPath("other-book")})
 	})
 	updateAccount(sim, alice.JoinPath("other-book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
@@ -152,10 +152,10 @@ func TestDelegatedSignature_Double(t *testing.T) {
 		require.NoError(t, acctesting.AddCredits(batch, alice.JoinPath("book2", "1"), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateKeyPage(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: alice.JoinPath("book1")})
+			page.AddKeySpec(&KeySpec{Delegate: alice.JoinPath("book1")})
 		}))
 		require.NoError(t, acctesting.UpdateKeyPage(batch, alice.JoinPath("book1", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: alice.JoinPath("book2")})
+			page.AddKeySpec(&KeySpec{Delegate: alice.JoinPath("book2")})
 		}))
 	})
 
@@ -202,7 +202,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateKeyPage(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: bob.JoinPath("book0")})
+			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book0")})
 		}))
 	})
 	updateSubnetFor(sim, bob, func(batch *database.Batch) {
@@ -256,7 +256,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 		require.NoError(t, acctesting.CreateKeyBook(batch, types.String(bob.JoinPath("book1").String()), tmed25519.PubKey(key3[32:])))
 		require.NoError(t, acctesting.AddCredits(batch, bob.JoinPath("book1", "1"), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: bob.JoinPath("book1")})
+			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book1")})
 		}))
 	})
 
@@ -306,7 +306,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 	updateSubnetFor(sim, bob, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), types.String(bob.String()), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: charlie.JoinPath("book0")})
+			page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book0")})
 		}))
 	})
 	updateSubnetFor(sim, charlie, func(batch *database.Batch) {
@@ -356,13 +356,13 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateAccount(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: bob.JoinPath("book0")})
+			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book0")})
 		}))
 	})
 	updateSubnetFor(sim, bob, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), types.String(bob.String()), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
-			page.Keys = append(page.Keys, &KeySpec{Delegate: charlie.JoinPath("book0")})
+			page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book0")})
 		}))
 	})
 	updateSubnetFor(sim, charlie, func(batch *database.Batch) {
@@ -416,10 +416,8 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
 		page.AcceptThreshold = 2
-		page.Keys = append(page.Keys,
-			&KeySpec{Delegate: bob.JoinPath("book")},
-			&KeySpec{Delegate: charlie.JoinPath("book")},
-		)
+		page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book")})
+		page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book")})
 	})
 	updateAccount(sim, bob.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9

@@ -218,6 +218,9 @@ TransactionType:
   PartitionAnchor:
     value: 0x62
     description: system transaction for partition data
+  SystemWriteData:
+    value: 0x63
+    description: writes data to a system data account
 
 AccountType:
   Unknown:

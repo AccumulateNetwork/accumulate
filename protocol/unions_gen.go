@@ -49,6 +49,9 @@ func NewAccount(typ AccountType) (Account, error) {
 
 //EqualAccount is used to compare the values of the union
 func EqualAccount(a, b Account) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *ADI:
 		b, ok := b.(*ADI)
@@ -194,6 +197,9 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 
 //EqualDataEntry is used to compare the values of the union
 func EqualDataEntry(a, b DataEntry) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AccumulateDataEntry:
 		b, ok := b.(*AccumulateDataEntry)
@@ -338,6 +344,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticWriteData), nil
 	case TransactionTypeSystemGenesis:
 		return new(SystemGenesis), nil
+	case TransactionTypeSystemWriteData:
+		return new(SystemWriteData), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -357,6 +365,9 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 
 //EqualTransactionBody is used to compare the values of the union
 func EqualTransactionBody(a, b TransactionBody) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AcmeFaucet:
 		b, ok := b.(*AcmeFaucet)
@@ -426,6 +437,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SystemGenesis:
 		b, ok := b.(*SystemGenesis)
+		return ok && a.Equal(b)
+	case *SystemWriteData:
+		b, ok := b.(*SystemWriteData)
 		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		b, ok := b.(*UpdateAccountAuth)
@@ -551,6 +565,9 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 
 //EqualAccountAuthOperation is used to compare the values of the union
 func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AddAccountAuthorityOperation:
 		b, ok := b.(*AddAccountAuthorityOperation)
@@ -672,6 +689,9 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 
 //EqualKeyPageOperation is used to compare the values of the union
 func EqualKeyPageOperation(a, b KeyPageOperation) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AddKeyOperation:
 		b, ok := b.(*AddKeyOperation)
@@ -808,6 +828,9 @@ func NewSignature(typ SignatureType) (Signature, error) {
 
 //EqualSignature is used to compare the values of the union
 func EqualSignature(a, b Signature) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *BTCLegacySignature:
 		b, ok := b.(*BTCLegacySignature)

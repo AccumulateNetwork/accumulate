@@ -170,7 +170,7 @@ func (s *Simulator) InitFromGenesis() {
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.bootstrap = InitGenesis(s, x.Database, x.Executor, genesisTime, netValMap)
+		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, netValMap)
 	}
 
 	// Execute bootstrap after the entire network is known
@@ -353,11 +353,9 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	return statuses, transactions
 }
 
-func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
-	s.Helper()
-
+func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte, n int) *ExecEntry {
 	var x *ExecEntry
-	for i := 0; i < 50; i++ {
+	for i := 0; i < n; i++ {
 		x = s.findTxn(statusCheck, txnHash)
 		if x != nil {
 			break
@@ -365,6 +363,13 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 
 		s.ExecuteBlock(nil)
 	}
+	return x
+}
+
+func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
+	s.Helper()
+
+	x := s.WaitForTransaction(statusCheck, txnHash, 50)
 	if x == nil {
 		s.Errorf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
 		s.FailNow()

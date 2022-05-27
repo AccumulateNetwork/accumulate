@@ -1622,7 +1622,7 @@ func TestMultisig(t *testing.T) {
 		hash := sha256.Sum256(key2[32:])
 		page.AcceptThreshold = 2
 		page.CreditBalance = 1e8
-		page.Keys = append(page.Keys, &protocol.KeySpec{
+		page.AddKeySpec(&protocol.KeySpec{
 			PublicKeyHash: hash[:],
 		})
 	}))

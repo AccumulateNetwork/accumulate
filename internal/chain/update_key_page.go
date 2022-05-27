@@ -170,7 +170,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		entry := new(protocol.KeySpec)
 		entry.PublicKeyHash = op.Entry.KeyHash
 		entry.Delegate = op.Entry.Delegate
-		page.Keys = append(page.Keys, entry)
+		page.AddKeySpec(entry)
 		return nil
 
 	case *protocol.RemoveKeyOperation:
@@ -179,7 +179,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("entry to be removed not found on the key page")
 		}
 
-		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+		page.RemoveKeySpecAt(index)
 
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
 		if !ok {
