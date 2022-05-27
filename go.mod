@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
+	github.com/FactomProject/factom v0.4.0
 	github.com/boltdb/bolt v1.3.1
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -46,7 +47,6 @@ require (
 require (
 	github.com/FactomProject/btcutil v0.0.0-20160826074221-43986820ccd5 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
-	github.com/FactomProject/factom v0.4.0 // indirect
 	github.com/FactomProject/go-bip32 v0.3.5 // indirect
 	github.com/FactomProject/go-bip39 v0.3.5 // indirect
 	github.com/FactomProject/go-bip44 v0.0.0-20190306062959-b541a96d8da9 // indirect

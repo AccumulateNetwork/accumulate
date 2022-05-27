@@ -185,6 +185,7 @@ github.com/bkielbasa/cyclop v1.2.0/go.mod h1:qOI0yy6A7dYC4Zgsa72Ppm9kONl0RoIlPbz
 github.com/blizzy78/varnamelen v0.6.1/go.mod h1:zy2Eic4qWqjrxa60jG34cfL0VXcSwzUrIx68eJPb4Q8=
 github.com/blizzy78/varnamelen v0.6.2 h1:Z857yhnsqKadJo+ALsdpRpN5SCyTTR5rEX+hwVGY4Vk=
 github.com/blizzy78/varnamelen v0.6.2/go.mod h1:V9TzQZ4fLJ1DSrjVDfl89H7aMnTvKkApdHeyESmyR7k=
+github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 h1:DDGfHa7BWjL4YnC6+E63dPcxHo2sUxDIu8g3QgEJdRY=
 github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869/go.mod h1:Ekp36dRnpXw/yCqJaO+ZrUyxD+3VXMFFr56k5XYrpB4=
 github.com/boltdb/bolt v1.3.1 h1:JQmyP4ZBrce+ZQu0dY660FMfatumYDLun9hBCUVIkF4=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=

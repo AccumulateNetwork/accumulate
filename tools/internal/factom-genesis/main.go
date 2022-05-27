@@ -5,10 +5,11 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
-	f2 "github.com/FactomProject/factom"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"log"
 	"time"
+
+	f2 "github.com/FactomProject/factom"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -92,17 +93,50 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 		return err
 	}
 	if res.Code != 0 {
-		fmt.Println(res.Message)
+		fmt.Println("Response Error : ", res.Message)
 		return fmt.Errorf(res.Message)
 	}
 	//TODO: Read back data to confirm it wrote, or write a separate function to verify data
 	//TODO: formulate factom entry hash from data, also consider passing in the orig. entry hash obtained from factom -> compare those hashes
 	//TODO: query entry hash
 	//TODO: here is the get call. if the get works then it should be ok.
-	//resp, err := client.Get(context.Background(), dataAccount.String() + "#data/" + entryHash)
-	//if err != nil {
-	//	return err
-	//}
+
+	// queryUrl, err := url.Parse(dataAccount.String() + "#data/" + hex.EncodeToString(data.Hash()))
+	// if err != nil {
+	// 	log.Println("URL error : ", err.Error())
+	// 	return err
+	// }
+	// genQuery := &api.GeneralQuery{}
+	// genQuery.Url = queryUrl
+	// resp, err := client.Query(context.Background(), genQuery)
+	// if err != nil {
+	// 	log.Println("Error : ", err.Error())
+	// 	return err
+	// }
+	// log.Println("Response : ", resp)
+
+	txReq := api.TxnQuery{}
+	txReq.Txid = res.TransactionHash
+	txReq.Wait = time.Second * 10
+	txReq.IgnorePending = false
+
+	_, err = client.QueryTx(context.Background(), &txReq)
+	if err != nil {
+		return err
+	}
+
+	var dataHash [32]byte
+	copy(dataHash[:], data.Hash())
+	queryReq := &api.DataEntryQuery{
+		Url:       dataAccount,
+		EntryHash: dataHash,
+	}
+	queryRes, err := client.QueryData(context.Background(), queryReq)
+	if err != nil {
+		log.Println("Error : ", err.Error())
+		return err
+	}
+	log.Println("Response : ", queryRes.Data)
 	return nil
 }
 
