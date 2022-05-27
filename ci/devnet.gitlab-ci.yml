@@ -15,7 +15,7 @@ configure devnet:
   - build-daemon
   - build-daemon linux arm64
   - ./accumulated init network --no-website -w config networks/testnet-canary.json
-  - init DevNet.Directory dn0
+  - init DevNet.Directory dn
   - init DevNet.Zion bvn0
   - init DevNet.Yellowstone bvn1
   artifacts:
