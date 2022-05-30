@@ -105,7 +105,7 @@ SignerMetadata:
     - name: AcceptThreshold
       type: uint
 
-MinorQueryResponse:
+MinorBlock:
   non-binary: true
   incomparable: true
   fields:
@@ -116,6 +116,13 @@ MinorQueryResponse:
       description: is the start time of the block.
       type: time
       pointer: true
+
+MinorQueryResponse:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - MinorBlock
+  fields:
     - name: TxCount
       description: shows how many transactions this block contains
       type: uint
@@ -124,6 +131,23 @@ MinorQueryResponse:
       type: bytes
     - name: Transactions
       type: TransactionQueryResponse
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
+MajorQueryResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: MajorBlockIndex
+      description: is the index of the major block.
+      type: uint
+    - name: MajorBlockTime
+      description: is the start time of the major block.
+      type: time
+      pointer: true
+    - name: MinorBlocks
+      type: MinorBlock
       repeatable: true
       pointer: true
       marshal-as: reference
@@ -174,90 +198,90 @@ Signer:
   non-binary: true
   incomparable: true
   fields:
-  - name: PublicKey
-    type: bytes
-  - name: Timestamp
-    type: uvarint
-    alternative: Nonce
-  - name: Url
-    type: url
-    pointer: true
-  - name: Version
-    type: uint
-    optional: true
-  - name: SignatureType
-    type: protocol.SignatureType
-    optional: true
-  - name: UseSimpleHash
-    description: tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash
-    type: bool
-    optional: true
+    - name: PublicKey
+      type: bytes
+    - name: Timestamp
+      type: uvarint
+      alternative: Nonce
+    - name: Url
+      type: url
+      pointer: true
+    - name: Version
+      type: uint
+      optional: true
+    - name: SignatureType
+      type: protocol.SignatureType
+      optional: true
+    - name: UseSimpleHash
+      description: tells the API to use the signature's simple metadata hash as the initiator hash instead of its Merkle hash
+      type: bool
+      optional: true
 
 TokenSend:
   non-binary: true
   incomparable: true
   fields:
-  - name: From
-    type: url
-    pointer: true
-  - name: To
-    repeatable: true
-    type: TokenDeposit
-    marshal-as: reference
+    - name: From
+      type: url
+      pointer: true
+    - name: To
+      repeatable: true
+      type: TokenDeposit
+      marshal-as: reference
 
 TokenDeposit:
   non-binary: true
   incomparable: true
   fields:
-  - name: Url
-    type: url
-    pointer: true
-  - name: Amount
-    type: bigint
-  - name: Txid
-    type: bytes
+    - name: Url
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+    - name: Txid
+      type: bytes
 
 GeneralQuery:
   non-binary: true
   incomparable: true
   embeddings:
-  - UrlQuery
-  - QueryOptions
+    - UrlQuery
+    - QueryOptions
 
 UrlQuery:
   non-binary: true
   incomparable: true
   fields:
-  - name: Url
-    type: url
-    pointer: true
+    - name: Url
+      type: url
+      pointer: true
 
 KeyPageIndexQuery:
   non-binary: true
   incomparable: true
   embeddings:
-  - UrlQuery
+    - UrlQuery
   fields:
-  - name: Key
-    type: bytes
+    - name: Key
+      type: bytes
 
 TxHistoryQuery:
   non-binary: true
   incomparable: true
   embeddings:
-  - UrlQuery
-  - QueryPagination
+    - UrlQuery
+    - QueryPagination
 
 QueryPagination:
   non-binary: true
   incomparable: true
   fields:
-  - name: Start
-    type: uvarint
-    optional: true
-  - name: Count
-    type: uvarint
-    optional: true
+    - name: Start
+      type: uvarint
+      optional: true
+    - name: Count
+      type: uvarint
+      optional: true
 
 DirectoryQuery:
   non-binary: true
@@ -281,6 +305,13 @@ MinorBlocksQuery:
       type: query.BlockFilterMode
       optional: true
 
+MajorBlocksQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
+
 QueryOptions:
   non-binary: true
   incomparable: true
@@ -300,24 +331,24 @@ TxnQuery:
   non-binary: true
   incomparable: true
   embeddings:
-  - QueryOptions
+    - QueryOptions
   fields:
-  - name: Txid
-    type: bytes
-  - name: Wait
-    type: duration
-    optional: true
-  - name: IgnorePending
-    description: tells QueryTx to ignore pending transactions
-    type: bool
-    optional: true
+    - name: Txid
+      type: bytes
+    - name: Wait
+      type: duration
+      optional: true
+    - name: IgnorePending
+      description: tells QueryTx to ignore pending transactions
+      type: bool
+      optional: true
 
 ChainIdQuery:
   non-binary: true
   incomparable: true
   fields:
-  - name: ChainId
-    type: bytes
+    - name: ChainId
+      type: bytes
 
 MetricsQuery:
   non-binary: true
@@ -351,58 +382,58 @@ TxRequest:
   non-binary: true
   incomparable: true
   fields:
-  - name: CheckOnly
-    type: bool
-    optional: true
-  - name: IsEnvelope
-    type: bool
-    optional: true
-  - name: Origin
-    type: url
-    pointer: true
-    alternative: Sponsor
-  - name: Signer
-    type: Signer
-    marshal-as: reference
-  - name: Signature
-    type: bytes
-  - name: KeyPage
-    description: is deprecated
-    type: KeyPage
-    marshal-as: reference
-  - name: TxHash
-    type: bytes
-    optional: true
-  - name: Payload
-    type: any
-  - name: Memo
-    type: string
-    optional: true
-  - name: Metadata
-    type: bytes
-    optional: true
+    - name: CheckOnly
+      type: bool
+      optional: true
+    - name: IsEnvelope
+      type: bool
+      optional: true
+    - name: Origin
+      type: url
+      pointer: true
+      alternative: Sponsor
+    - name: Signer
+      type: Signer
+      marshal-as: reference
+    - name: Signature
+      type: bytes
+    - name: KeyPage
+      description: is deprecated
+      type: KeyPage
+      marshal-as: reference
+    - name: TxHash
+      type: bytes
+      optional: true
+    - name: Payload
+      type: any
+    - name: Memo
+      type: string
+      optional: true
+    - name: Metadata
+      type: bytes
+      optional: true
 
 TxResponse:
   non-binary: true
   incomparable: true
   fields:
-  - name: TransactionHash
-    type: bytes
-    alternative: Txid
-  - name: SignatureHashes
-    type: bytes
-    repeatable: true
-  - name: SimpleHash
-    type: bytes
-    alternative: Hash
-  - name: Code
-    type: uvarint
-  - name: Message
-    type: string
-  - name: Delivered
-    type: bool
-  - name: Result
-    type: any
+    - name: TransactionHash
+      type: bytes
+      alternative: Txid
+    - name: SignatureHashes
+      type: bytes
+      repeatable: true
+    - name: SimpleHash
+      type: bytes
+      alternative: Hash
+    - name: Code
+      type: uvarint
+    - name: Message
+      type: string
+    - name: Delivered
+      type: bool
+    - name: Result
+      type: any
 
 DataEntryQuery:
   fields:

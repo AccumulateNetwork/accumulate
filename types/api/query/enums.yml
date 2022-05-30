@@ -53,3 +53,6 @@ QueryType:
   Synth:
     value: 10
     description: Query by synthetic transaction sequence number
+  MajorBlocks:
+    value: 11
+    description: Query major blocks

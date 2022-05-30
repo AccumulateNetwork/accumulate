@@ -875,9 +875,20 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for minor blocks response")}
+		}
+	case *query.RequestMajorBlocks:
+		resp, pErr := m.queryMajorBlocks(batch, q)
+		if pErr != nil {
+			return nil, nil, pErr
 		}
 
+		k = []byte("major-block")
+		var err error
+		v, err = resp.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for major blocks response")}
+		}
 	case *query.RequestSynth:
 		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
 		if !ok {

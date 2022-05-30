@@ -517,6 +517,56 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	return mres, nil
 }
 
+func (q *queryDirect) QueryMajorBlocks(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+	if pagination.Count == 0 {
+		// TODO Return an empty array plus the total count?
+		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
+	}
+
+	if pagination.Start > math.MaxInt64 {
+		return nil, errors.New(errors.StatusBadRequest, "start is too large")
+	}
+
+	if pagination.Count > QueryMinorBlocksMaxCount {
+		return nil, fmt.Errorf("count is too large, the ceiling is fixed to %d", QueryMinorBlocksMaxCount)
+	}
+
+	req := &query.RequestMajorBlocks{
+		Account: u,
+		Start:   pagination.Start,
+		Limit:   pagination.Count,
+	}
+	k, v, err := q.query(req, QueryOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if k != "major-block" {
+		return nil, fmt.Errorf("unknown response type: want major-block, got %q", k)
+	}
+
+	res := new(query.ResponseMajorBlocks)
+	err = res.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+
+	mres := new(MultiResponse)
+	mres.Type = "majorBlock"
+	mres.Items = make([]interface{}, 0)
+	mres.Start = pagination.Start
+	mres.Count = pagination.Count
+	mres.Total = res.TotalBlocks
+	for _, entry := range res.Entries {
+		queryRes, err := packMajorQueryResponse(entry)
+		if err != nil {
+			return nil, err
+		}
+		mres.Items = append(mres.Items, queryRes)
+	}
+
+	return mres, nil
+}
+
 func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
 	req := new(query.RequestSynth)
 	req.Source = source
