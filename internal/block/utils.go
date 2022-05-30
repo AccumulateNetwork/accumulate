@@ -123,39 +123,20 @@ func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anch
 	return prev.Source + 1, entry.Source, entry.Anchor, nil
 }
 
-func (*Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
-	switch account := account.(type) {
-	case *protocol.LiteIdentity:
-		return &protocol.AccountAuth{
-			Authorities: []protocol.AuthorityEntry{
-				{Url: account.Url},
-			},
-		}, nil
-	case *protocol.LiteTokenAccount:
-		return &protocol.AccountAuth{
-			Authorities: []protocol.AuthorityEntry{
-				{Url: account.Url.RootIdentity()},
-			},
-		}, nil
-
-	case protocol.FullAccount:
-		return account.GetAuth(), nil
-
-	case *protocol.KeyPage:
-		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
-		if !ok {
-			return nil, errors.Format(errors.StatusInternalError, "invalid key page URL: %v", account.Url)
-		}
-		var book *protocol.KeyBook
-		err := batch.Account(bookUrl).GetStateAs(&book)
-		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
-		}
-		return book.GetAuth(), nil
-
-	default:
-		return &protocol.AccountAuth{}, nil
+func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+	auth, url, err := protocol.GetAccountAuthoritySet(account)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
+	if auth != nil {
+		return auth, nil
+	}
+
+	account, err = batch.Account(url).GetState()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return x.GetAccountAuthoritySet(batch, account)
 }
 
 func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {

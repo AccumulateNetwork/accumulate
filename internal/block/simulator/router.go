@@ -4,8 +4,6 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/rpc/client"
-	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -13,8 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 type router struct {
@@ -30,38 +26,6 @@ func (r router) RouteAccount(account *url.URL) (string, error) {
 
 func (r router) Route(envs ...*protocol.Envelope) (string, error) {
 	return routing.RouteEnvelopes(r.RouteAccount, envs...)
-}
-
-func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
-	qu, e := query.UnmarshalRequest(rawQuery)
-	require.NoError(r, e)
-
-	x := r.Subnet(subnet)
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
-	switch {
-	case err == nil:
-		//Ok
-
-	case errors.Is(err, storage.ErrNotFound):
-		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = err.Error()
-		res.Response.Code = uint32(protocol.ErrorCodeNotFound)
-		return res, nil
-
-	default:
-		r.Logf("Query failed: %v", err)
-		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = err.Error()
-		res.Response.Code = uint32(err.Code)
-		return res, nil
-	}
-
-	res := new(coretypes.ResultABCIQuery)
-	res.Response.Code = uint32(protocol.ErrorCodeOK)
-	res.Response.Key, res.Response.Value = k, v
-	return res, nil
 }
 
 func (r router) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {

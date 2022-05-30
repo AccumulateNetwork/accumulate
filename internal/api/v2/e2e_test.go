@@ -11,10 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -22,19 +20,6 @@ import (
 )
 
 func init() { acctesting.EnableDebugFeatures() }
-
-func TestEndToEnd(t *testing.T) {
-	acctesting.SkipCI(t, "flaky")
-	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky")
-	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
-	t.Skip("flaky")
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0, false)
-		acctesting.RunTestNet(s.T(), subnets, daemons)
-		return &e2eDUT{s, daemons[protocol.Directory][0]}
-	}))
-}
 
 func TestValidate(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")

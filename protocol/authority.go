@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -76,6 +77,36 @@ func MakeLiteSigner(signer Signer) Signer {
 
 	default:
 		return signer
+	}
+}
+
+func GetAccountAuthoritySet(account Account) (*AccountAuth, *url.URL, error) {
+	switch account := account.(type) {
+	case *LiteIdentity:
+		return &AccountAuth{
+			Authorities: []AuthorityEntry{
+				{Url: account.Url},
+			},
+		}, nil, nil
+	case *LiteTokenAccount:
+		return &AccountAuth{
+			Authorities: []AuthorityEntry{
+				{Url: account.Url.RootIdentity()},
+			},
+		}, nil, nil
+
+	case FullAccount:
+		return account.GetAuth(), nil, nil
+
+	case *KeyPage:
+		bookUrl, _, ok := ParseKeyPageUrl(account.Url)
+		if !ok {
+			return nil, nil, errors.Format(errors.StatusInternalError, "invalid key page URL: %v", account.Url)
+		}
+		return nil, bookUrl, nil
+
+	default:
+		return &AccountAuth{}, nil, nil
 	}
 }
 

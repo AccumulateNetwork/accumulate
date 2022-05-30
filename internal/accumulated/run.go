@@ -100,6 +100,9 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
+	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
+
 	if d.Config.Accumulate.SentryDSN != "" {
 		opts := sentry.ClientOptions{
 			Dsn:           d.Config.Accumulate.SentryDSN,
@@ -156,9 +159,6 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
-
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
 		Address:  d.Key().PubKey().Address(),
@@ -210,6 +210,9 @@ func (d *Daemon) Start() (err error) {
 		Router:           &router,
 		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
+		EventBus:         d.eventBus,
+		Key:              d.Key().Bytes(),
+		Database:         d.db,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)

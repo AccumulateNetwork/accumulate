@@ -5,6 +5,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 
@@ -18,4 +20,7 @@ type Options struct {
 	Router           routing.Router
 	TxMaxWaitTime    time.Duration
 	PrometheusServer string
+	EventBus         *events.Bus
+	Key              []byte
+	Database         *database.Database
 }
