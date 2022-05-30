@@ -67,8 +67,8 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 
 // SaveSnapshot writes the full state of the partition out to a file.
 func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error {
-	synthetic := object("Account", network.Synthetic())
-	subnet := network.NodeUrl()
+	/*synthetic := object("Account", network.Synthetic())
+	subnet := network.NodeUrl()*/
 
 	// Write the block height
 	var ledger *protocol.SystemLedger
@@ -101,14 +101,17 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 		// Create an Account object
 		account := &Account{b, accountBucket{objectBucket(key)}, nil}
 
-		// Load the main state so we can get the URL
+		/*// Load the main state so we can get the URL
 		a, err := account.GetState()
 		if err != nil {
 			return nil, err
 		}
 
 		// Load the full state - preserve chains if the account is a subnet account
-		state, err := account.state(true, subnet.PrefixOf(a.GetUrl()))
+		state, err := account.state(true, subnet.PrefixOf(a.GetUrl()))*/
+
+		// Load the full state - always preserve chains for now
+		state, err := account.state(true, true)
 		if err != nil {
 			return nil, err
 		}
@@ -122,9 +125,9 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 			return nil, fmt.Errorf("hash does not match for %v\n", state.Main.GetUrl())
 		}
 
-		if objectBucket(key) != synthetic {
+		/*if objectBucket(key) != synthetic {
 			return state.MarshalBinary()
-		}
+		}*/
 
 		txns, err := account.stateOfTransactionsOnChain(protocol.MainChain)
 		if err != nil {
@@ -132,9 +135,9 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 		}
 
 		for _, txn := range txns {
-			if txn.State.Delivered {
+			/*if txn.State.Delivered {
 				continue
-			}
+			}*/
 
 			state.Transactions = append(state.Transactions, txn)
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/pflag"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
@@ -24,6 +25,7 @@ type Node struct {
 	IP   string          `json:"ip"`
 	Type config.NodeType `json:"type"`
 }
+
 type Subnet struct {
 	Name  string             `json:"name"`
 	Type  config.NetworkType `json:"type"`
@@ -50,11 +52,6 @@ func loadNetworkConfiguration(file string) (ret Network, err error) {
 
 //load network config file
 func initNetwork(cmd *cobra.Command, args []string) {
-
-	if cmd.Flag("network").Changed {
-		fatalf("--network is not applicable to accumulated init validator")
-	}
-
 	networkConfigFile := args[0]
 	network, err := loadNetworkConfiguration(networkConfigFile)
 	check(err)
@@ -245,32 +242,43 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
-		genesis, err := node.Init(node.InitOptions{
+		netValMap := make(genesis.NetworkValidatorMap)
+		genInit, err := node.Init(node.InitOptions{
 			WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
 			Port:                directory.Port,
 			Config:              dnConfig,
 			RemoteIP:            dnRemote,
 			ListenIP:            dnListen,
+			NetworkValidatorMap: netValMap,
 			Logger:              logger.With("subnet", protocol.Directory),
 			FactomAddressesFile: factomAddressesFile,
 		})
 		check(err)
-		err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
-		check(err)
+		genList := []genesis.Bootstrap{genInit}
 
 		for i := range bvnSubnet {
-			genesis, err := node.Init(node.InitOptions{
+			genInit, err := node.Init(node.InitOptions{
 				WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:                bvns[i].Port,
 				Config:              bvnConfig[i],
 				RemoteIP:            bvnRemote[i],
 				ListenIP:            bvnListen[i],
+				NetworkValidatorMap: netValMap,
 				Logger:              logger.With("subnet", bvns[i].Name),
 				FactomAddressesFile: factomAddressesFile,
 			})
 			check(err)
-			err = genesis.Bootstrap() // TODO Enable for generateNetworkDefinition when we can produce a NetworkValidatorMap with validator keys for this use case
-			check(err)
+			if genInit != nil {
+				genList = append(genList, genInit)
+			}
+		}
+
+		// Execute bootstrap after the entire network is known
+		for _, genesis := range genList {
+			err := genesis.Bootstrap()
+			if err != nil {
+				panic(fmt.Errorf("could not execute genesis: %v", err))
+			}
 		}
 		return
 	}

@@ -7,33 +7,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func main() {
-	cmd.Run = func(cmd *cobra.Command, _ []string) { _ = cmd.Usage() }
-	cmdTruncate.Run = truncate
-	cmdCompact.Run = compact
+func init() {
+	badgerTruncateCmd.Run = truncate
+	badgerCompactCmd.Run = compact
 
-	cmd.AddCommand(cmdTruncate, cmdCompact)
-	_ = cmd.Execute()
+	cmd.AddCommand(badgerCmd)
+	badgerCmd.AddCommand(badgerTruncateCmd, badgerCompactCmd)
 }
 
-var cmd = &cobra.Command{
+var badgerCmd = &cobra.Command{
 	Use:   "badger",
 	Short: "Badger maintenance utilities",
 }
 
-var cmdTruncate = &cobra.Command{
+var badgerTruncateCmd = &cobra.Command{
 	Use:   "truncate [database]",
 	Short: "Truncate the value log of a corrupted database",
 	Args:  cobra.ExactArgs(1),
 }
 
-var cmdCompact = &cobra.Command{
+var badgerCompactCmd = &cobra.Command{
 	Use:   "compact [database]",
 	Short: "Run GC on a database to compact it",
 	Args:  cobra.ExactArgs(1),
 }
 
-var compactRatio = cmdCompact.Flags().Float64("ratio", 0.5, "Badger GC ratio")
+var compactRatio = badgerCompactCmd.Flags().Float64("ratio", 0.5, "Badger GC ratio")
 
 func truncate(_ *cobra.Command, args []string) {
 	opt := badger.DefaultOptions(args[0]).

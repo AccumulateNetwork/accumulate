@@ -154,7 +154,10 @@ func (a *Account) restore(s *accountState) error {
 	}
 
 	// Store transaction state
-	for _, p := range s.Pending {
+	txns := make([]*transactionState, 0, len(s.Pending)+len(s.Transactions))
+	txns = append(txns, s.Pending...)
+	txns = append(txns, s.Transactions...)
+	for _, p := range txns {
 		if len(p.State.Signers) != len(p.Signatures) {
 			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", p.Hash[:4], len(p.State.Signers), len(p.Signatures))
 		}

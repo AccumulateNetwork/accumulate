@@ -27,7 +27,7 @@ func (BurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
+		return nil, fmt.Errorf("invalid principal: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 	}
 
 	//ensure user cannot burn more than is in the account
