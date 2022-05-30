@@ -37,5 +37,5 @@ func main() {
 
 	entries := factom.EntriesFromFactom()
 	factom.GetDataAndPopulateQueue(entries)
-	factom.WriteDataFromQueueToAccumulate()
+	factom.WriteDataFromQueueToAccumulate(factom.LOCAL_URL)
 }

@@ -54,7 +54,7 @@ func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error)
 
 	sig, err := signer.Initiate(txn)
 	if err != nil {
-		fmt.Println("Error : ", err.Error())
+		log.Println("Error : ", err.Error())
 		return nil, err
 	}
 
@@ -68,9 +68,14 @@ func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error)
 
 func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url.URL) error {
 	client, err := client.New(env)
-
 	if err != nil {
-		fmt.Println("Error : ", err.Error())
+		log.Println("Error : ", err.Error())
+		return err
+	}
+	queryRes, err := queryDataByHash(client, dataAccount, data.Hash())
+	if err == nil && queryRes.Data != nil {
+		log.Println("======", queryRes)
+		err := fmt.Errorf("record for data entry hash is already available")
 		return err
 	}
 
@@ -89,31 +94,17 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 
 	res, err := client.ExecuteDirect(context.Background(), req)
 	if err != nil {
-		fmt.Println("Error : ", err.Error())
+		log.Println("Error : ", err.Error())
 		return err
 	}
 	if res.Code != 0 {
-		fmt.Println("Response Error : ", res.Message)
+		log.Println("Response Error : ", res.Message)
 		return fmt.Errorf(res.Message)
 	}
 	//TODO: Read back data to confirm it wrote, or write a separate function to verify data
 	//TODO: formulate factom entry hash from data, also consider passing in the orig. entry hash obtained from factom -> compare those hashes
 	//TODO: query entry hash
 	//TODO: here is the get call. if the get works then it should be ok.
-
-	// queryUrl, err := url.Parse(dataAccount.String() + "#data/" + hex.EncodeToString(data.Hash()))
-	// if err != nil {
-	// 	log.Println("URL error : ", err.Error())
-	// 	return err
-	// }
-	// genQuery := &api.GeneralQuery{}
-	// genQuery.Url = queryUrl
-	// resp, err := client.Query(context.Background(), genQuery)
-	// if err != nil {
-	// 	log.Println("Error : ", err.Error())
-	// 	return err
-	// }
-	// log.Println("Response : ", resp)
 
 	txReq := api.TxnQuery{}
 	txReq.Txid = res.TransactionHash
@@ -125,11 +116,7 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 		return err
 	}
 
-	queryReq := &api.DataEntryQuery{
-		Url:       dataAccount,
-		EntryHash: *(*[32]byte)(data.Hash()),
-	}
-	queryRes, err := client.QueryData(context.Background(), queryReq)
+	queryRes, err = queryDataByHash(client, dataAccount, data.Hash())
 	if err != nil {
 		log.Printf("Error (%x): %v\n", data, err)
 		return err
@@ -138,21 +125,29 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 	return nil
 }
 
-func WriteDataFromQueueToAccumulate() {
+func queryDataByHash(client *client.Client, account *url.URL, hash []byte) (*api.ChainQueryResponse, error) {
+	queryReq := &api.DataEntryQuery{
+		Url:       account,
+		EntryHash: *(*[32]byte)(hash),
+	}
+	return client.QueryData(context.Background(), queryReq)
+}
+
+func WriteDataFromQueueToAccumulate(env string) {
 	for chainId, data := range factomChainData {
 		// go ExecuteQueueToWriteData(chainId, data)
 		chainUrl, err := protocol.LiteDataAddress(chainId[:])
 		if err != nil {
-			fmt.Println("Error : ", err.Error())
+			log.Println("Error : ", err.Error())
 			break
 		}
 
 		log.Printf("Writing data to %s", chainUrl.String())
-		ExecuteQueueToWriteData(chainUrl, data)
+		ExecuteQueueToWriteData(env, chainUrl, data)
 	}
 }
 
-func ExecuteQueueToWriteData(chainUrl *url.URL, queue *Queue) error {
+func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) error {
 
 	for {
 		if len(*queue) > 0 {
