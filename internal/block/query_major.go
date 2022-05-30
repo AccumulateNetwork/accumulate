@@ -10,26 +10,32 @@ import (
 )
 
 func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (*query.ResponseMajorBlocks, *protocol.Error) {
+	anchorsAcc := batch.Account(m.Network.NodeUrl(protocol.AnchorPool))
+	var anchorLedger *protocol.AnchorLedger
+	err := anchorsAcc.GetStateAs(&anchorLedger)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	var ledger *protocol.SystemLedger
-	err := ledgerAcc.GetStateAs(&ledger)
+	var systemLedger *protocol.SystemLedger
+	err = ledgerAcc.GetStateAs(&systemLedger)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 	}
 
-	mjrIdxChain, err := ledgerAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
+	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
-	mjrStartIdx, _, err := indexing.SearchIndexChain(mjrIdxChain, req.Start, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
+	mjrStartIdx, _, err := indexing.SearchIndexChain(mjrIdxChain, uint64(mjrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 	}
 
 	mjrEntryIdx := mjrStartIdx
 
-	resp := query.ResponseMajorBlocks{TotalBlocks: ledger.Index}
+	resp := query.ResponseMajorBlocks{TotalBlocks: uint64(mjrIdxChain.Height())}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
 
@@ -43,6 +49,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	default:
 		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 	}
+	mjrEntryIdx++
 
 	for resultCnt < req.Limit && !firstBlock {
 		err = mjrIdxChain.EntryAs(int64(mjrEntryIdx), curEntry)
@@ -69,16 +76,16 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 		}
 		mjrEntry.MajorBlockTime = curEntry.BlockTime
 
-		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
+		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 		}
 
 		startIdx := uint64(0)
 		if !firstBlock {
-			startIdx = curEntry.RootIndexIndex
+			startIdx = prevEntry.RootIndexIndex
 		}
-		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, startIdx, indexing.MatchAfter, indexing.SearchIndexChainByBlock(startIdx))
+		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, uint64(mnrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(startIdx))
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 		}
@@ -88,16 +95,19 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 			mnrEntry := new(query.ResponseMinorEntry)
 			mnrEntry.BlockIndex = mnrIdxEntry.BlockIndex
 			mnrEntry.BlockTime = mnrIdxEntry.BlockTime
-			mjrEntry.MinorBlocks = append(mjrEntry.MinorBlocks, mnrEntry)
-			mnrIdx++
 			err = mnrIdxChain.EntryAs(int64(mnrIdx), mnrIdxEntry)
 			switch {
 			case err == nil:
-			case mnrIdxEntry.BlockIndex == prevEntry.RootIndexIndex || errors.Is(err, storage.ErrNotFound):
+			case errors.Is(err, storage.ErrNotFound):
 				break minorEntryLoop
 			default:
 				return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 			}
+			if mnrIdxEntry.BlockIndex >= curEntry.RootIndexIndex {
+				break minorEntryLoop
+			}
+			mjrEntry.MinorBlocks = append(mjrEntry.MinorBlocks, mnrEntry)
+			mnrIdx++
 		}
 		resp.Entries = append(resp.Entries, mjrEntry)
 		mjrEntryIdx++

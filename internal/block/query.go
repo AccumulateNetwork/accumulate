@@ -967,7 +967,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 
 	entryIdx := startIndex
 
-	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	resp := query.ResponseMinorBlocks{TotalBlocks: ledger.Index}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
 

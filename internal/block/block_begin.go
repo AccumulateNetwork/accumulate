@@ -22,7 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-const debugMajorBlocks = false
+const debugMajorBlocks = true // TODO revert after debug
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
