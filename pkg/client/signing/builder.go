@@ -48,11 +48,6 @@ func (s *Builder) SetUrl(u *url.URL) *Builder {
 	return s
 }
 
-func (s *Builder) SetKeyPageUrlWithIndex(bookUrl *url.URL, pageIndex uint64) *Builder {
-	s.Url = protocol.FormatKeyPageUrl(bookUrl, pageIndex)
-	return s
-}
-
 func (s *Builder) SetKeyPageUrl(pageUrl *url.URL) *Builder {
 	s.Url = pageUrl
 	return s
