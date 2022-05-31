@@ -210,7 +210,9 @@ func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {
 		return 0, nil
 	}
 
-	x.logger.Info("Recorded major block", "major-index", major.BlockIndex, "minor-index", block.Index)
+	if !x.IsDevNet { // Don't pollute the test / CI logs
+		x.logger.Info("Recorded major block", "major-index", major.BlockIndex, "minor-index", block.Index)
+	}
 	return major.BlockIndex, nil
 }
 
