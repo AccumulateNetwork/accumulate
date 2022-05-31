@@ -101,7 +101,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Key:      key,
 			Network:  network,
 			Router:   sim.Router(),
-			IsDevNet: true,
+			IsDevNet: false,
 		}, db)
 		require.NoError(sim, err)
 
