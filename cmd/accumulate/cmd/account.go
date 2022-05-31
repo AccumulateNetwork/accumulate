@@ -476,11 +476,6 @@ func RestoreAccounts() (out string, err error) {
 		if err != nil {
 			return "", err
 		}
-
-		err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.Type.GetEnumValue()))
-		if err != nil {
-			return "", err
-		}
 	}
 
 	//update wallet version
