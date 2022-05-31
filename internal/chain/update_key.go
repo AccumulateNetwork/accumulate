@@ -24,7 +24,7 @@ func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, 
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return nil, nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
+		return nil, nil, fmt.Errorf("invalid principal: want account type %v, got %v", protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
 	return body, page, nil

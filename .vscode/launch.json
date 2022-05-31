@@ -25,6 +25,20 @@
       ]
     },
     {
+      "name": "Init canary testnet",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "init",
+        "network",
+        "-w=${workspaceFolder}/.nodes",
+        "--reset",
+        "${workspaceFolder}/networks/testnet-canary.json"
+      ]
+    },
+    {
       "name": "Run DevNet",
       "type": "go",
       "request": "launch",
