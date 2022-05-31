@@ -80,7 +80,13 @@ func encodeWithValue[T encoding.BinaryValue](v T) func(_ *cobra.Command, args []
 		data, err := v.MarshalBinary()
 		check(err)
 		if encodeFlag.Hash {
-			data = doSha256(data)
+			if u, ok := any(v).(interface{ GetHash() []byte }); ok {
+				// Use custom hashing for transactions and certain transaction
+				// bodies
+				data = u.GetHash()
+			} else {
+				data = doSha256(data)
+			}
 		}
 
 		fmt.Printf("%x\n", data)
