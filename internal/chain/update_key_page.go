@@ -199,18 +199,25 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("cannot add an empty entry")
 		}
 
-		_, entry, found := findKeyPageEntry(page, &op.OldEntry)
+		// Find the old entry
+		oldPos, entry, found := findKeyPageEntry(page, &op.OldEntry)
 		if !found {
 			return fmt.Errorf("entry to be updated not found on the key page")
 		}
 
+		// Check for an existing key
 		_, _, found = findKeyPageEntry(page, &op.NewEntry)
 		if found {
 			return fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
+		// Update the entry
 		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Delegate = op.NewEntry.Delegate
+
+		// Relocate the entry
+		page.RemoveKeySpecAt(oldPos)
+		page.AddKeySpec(entry)
 		return nil
 
 	case *protocol.SetThresholdKeyPageOperation:

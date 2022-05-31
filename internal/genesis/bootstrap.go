@@ -428,7 +428,7 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkVal
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = 1
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
@@ -444,7 +444,6 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkVal
 func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValidatorMap, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
 	if validatorsOnly {
@@ -468,16 +467,19 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 			spec.PublicKeyHash = kh[:]
 			page.AddKeySpec(spec)
 		}
-	}
 
-	for _, operators := range operators {
-		for _, operator := range operators {
-			spec := new(protocol.KeySpec)
-			kh := sha256.Sum256(operator.PubKey.Bytes())
-			spec.PublicKeyHash = kh[:]
-			page.AddKeySpec(spec)
+	} else {
+		for _, operators := range operators {
+			for _, operator := range operators {
+				spec := new(protocol.KeySpec)
+				kh := sha256.Sum256(operator.PubKey.Bytes())
+				spec.PublicKeyHash = kh[:]
+				page.AddKeySpec(spec)
+			}
 		}
 	}
+
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
 	return page
 }
 
