@@ -127,9 +127,9 @@ func calcMajorBlockTime(blocks []*query.ResponseMinorEntry) *time.Time {
 	lastBlockTime := blocks[len(blocks)-1].BlockTime
 	majorBlockTime := time.Date(lastBlockTime.Year(), lastBlockTime.Month(), lastBlockTime.Day(), 0, 0, 0, 0, time.UTC)
 	if lastBlockTime.Hour() < 12 {
-		majorBlockTime.Add(time.Hour * 12) // TODO is the last minor block always before 12:00:00.000000 ?
+		majorBlockTime.Add(time.Hour * 12)
 	} else {
-		majorBlockTime.AddDate(0, 0, 1) // TODO is the last minor block always before 00:00:00.000000 ?
+		majorBlockTime.AddDate(0, 0, 1)
 	}
 	return &majorBlockTime
 }
