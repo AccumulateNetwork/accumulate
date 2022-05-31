@@ -300,30 +300,40 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 	return res, nil
 }
 
-func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
+func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, []*api.TransactionQueryResponse, error) {
 	res, err := dispatchTxRequest(payload, txHash, origin, signer)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if TxWait == 0 {
-		return res, nil
+		return res, nil, nil
 	}
 
-	_, err = waitForTxn(res.TransactionHash, TxWait, TxIgnorePending)
+	resps, err := waitForTxn(res.TransactionHash, TxWait, TxIgnorePending)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return res, nil
+	return res, resps, nil
 }
 
 func dispatchTxAndPrintResponse(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
-	res, err := dispatchTxAndWait(payload, txHash, origin, signer)
+	res, resps, err := dispatchTxAndWait(payload, txHash, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
+	if res.Code == 0 {
+		result := ""
+		for _, response := range resps {
+			str, err := PrintTransactionQueryResponseV2(response)
+			if err != nil {
+				return PrintJsonRpcError(err)
+			}
+			result = fmt.Sprint(result, str, "\n")
+		}
+		return result, nil
+	}
 	return ActionResponseFrom(res).Print()
 }
 
@@ -374,6 +384,7 @@ type ActionResponse struct {
 	Error           types.String                `json:"error"`
 	Mempool         types.String                `json:"mempool"`
 	Result          *protocol.TransactionStatus `json:"result"`
+	SynthTxns       types.String                `json:"synthtxns"`
 }
 
 type ActionDataResponse struct {
