@@ -1,0 +1,38 @@
+
+#NetworkType
+
+Network:
+  fields:
+    - name: NetworkName
+      type: string
+    - name: Type
+      type: NetworkType
+    - name: LocalSubnetID
+      type: string
+    - name: Subnets
+      type: Subnet
+      repeatable: true
+
+#type Network struct {
+        #NetworkName   string      `toml:"network-name" mapstructure:"network-name"`
+        #Type          NetworkType `toml:"type" mapstructure:"type"`
+        #LocalSubnetID string      `toml:"local-subnet" mapstructure:"local-subnet"`
+        #LocalAddress  string      `toml:"local-address" mapstructure:"local-address"`
+        #Subnets       []Subnet    `toml:"subnets" mapstructure:"subnets"`
+        #}
+
+Subnet:
+  - name: ID
+    type: string
+  - name: Type
+    type: NetworkType
+  - name: Nodes
+    type: Node
+    repeatable: true
+
+Node:
+  - name: Address 
+    type: string
+  - name: Type
+    type: NodeType
+
