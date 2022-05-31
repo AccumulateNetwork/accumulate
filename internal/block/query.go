@@ -960,6 +960,9 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
+	if req.Start == 0 { // We don't have major block 0, avoid crash
+		req.Start = 1
+	}
 	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
