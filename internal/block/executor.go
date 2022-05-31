@@ -147,7 +147,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		return nil, err
 	}
 
-	if !opts.isGenesis {
+	/*if !opts.isGenesis {
 		url := opts.Network.NodeUrl(protocol.Globals)
 		entry, err := indexing.Data(batch, url).GetLatestEntry()
 		if err != nil {
@@ -159,7 +159,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 			return nil, fmt.Errorf("failed to decode latest globals entry: %v", err)
 		}
 		m.networkGlobals = globals
-	}
+	}*/
 
 	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
