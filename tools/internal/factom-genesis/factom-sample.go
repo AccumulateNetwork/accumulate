@@ -20,9 +20,9 @@ import (
 
 var notFound = -32008
 
-var blockNotFound = f2.NewJSONError(notFound, "Block not found", nil)
-var entryNotFound = f2.NewJSONError(notFound, "Entry not found", nil)
-var objectNotFound = f2.NewJSONError(notFound, "Object not found", nil)
+// var blockNotFound = f2.NewJSONError(notFound, "Block not found", nil)
+// var entryNotFound = f2.NewJSONError(notFound, "Entry not found", nil)
+// var objectNotFound = f2.NewJSONError(notFound, "Object not found", nil)
 
 func EntriesFromFactom() []*f2.Entry {
 	//these are the hashes for the first 10 entries of chain df3ade9eec4b08d5379cc64270c30ea7315d8a8a1a69efe2b98a60ecdd69e604

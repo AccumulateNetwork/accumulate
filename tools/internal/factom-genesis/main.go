@@ -19,7 +19,8 @@ import (
 )
 
 var factomChainData map[[32]byte]*Queue
-var chainQueue map[string]bool
+
+// var chainQueue map[string]bool
 var origin *url.URL
 var key *cmd.Key
 
@@ -147,18 +148,20 @@ func WriteDataFromQueueToAccumulate(env string) {
 	}
 }
 
-func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) error {
+func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
 
 	for {
 		if len(*queue) > 0 {
 			entry := queue.Pop().(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
-			WriteDataToAccumulate(LOCAL_URL, dataEntry, chainUrl)
+			err := WriteDataToAccumulate(LOCAL_URL, dataEntry, chainUrl)
+			if err != nil {
+				log.Println("Error writing data to accumulate : ", err.Error())
+			}
 		} else {
 			break
 		}
 	}
-	return nil
 }
 
 func GetAccountFromPrivateString(hexString string) *url.URL {
@@ -200,10 +203,10 @@ func GetDataAndPopulateQueue(entries []*f2.Entry) {
 	}
 }
 
-func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
-}
+// func nonceFromTimeNow() uint64 {
+// 	t := time.Now()
+// 	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
+// }
 
 //FaucetWithCredits is only used for testing. Initial account will be prefunded.
 func FaucetWithCredits(env string) error {
