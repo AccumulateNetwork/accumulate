@@ -146,11 +146,10 @@ func (d *Daemon) Start() (err error) {
 		Network:           &d.Config.Accumulate.Network,
 	}
 	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      d.Key().Bytes(),
-		Network:  d.Config.Accumulate.Network,
-		Router:   &router,
-		IsDevNet: d.Config.Accumulate.Network.NetworkName == config.DevNet,
+		Logger:  d.Logger,
+		Key:     d.Key().Bytes(),
+		Network: d.Config.Accumulate.Network,
+		Router:  &router,
 	}
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {

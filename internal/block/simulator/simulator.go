@@ -97,11 +97,10 @@ func (sim *Simulator) Setup(bvnCount int) {
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
-			Logger:   logger,
-			Key:      key,
-			Network:  network,
-			Router:   sim.Router(),
-			IsDevNet: false,
+			Logger:  logger,
+			Key:     key,
+			Network: network,
+			Router:  sim.Router(),
 		}, db)
 		require.NoError(sim, err)
 

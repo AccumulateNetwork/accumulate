@@ -24,19 +24,19 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors  map[protocol.TransactionType]TransactionExecutor
-	dispatcher *dispatcher
-	logger     logging.OptionalLogger
+	executors      map[protocol.TransactionType]TransactionExecutor
+	dispatcher     *dispatcher
+	logger         logging.OptionalLogger
+	networkGlobals *protocol.NetworkGlobals // TODO update when changed
 
 	// oldBlockMeta blockMetadata
 }
 
 type ExecutorOptions struct {
-	Logger   log.Logger
-	Key      ed25519.PrivateKey
-	Router   routing.Router
-	Network  config.Network
-	IsDevNet bool
+	Logger  log.Logger
+	Key     ed25519.PrivateKey
+	Router  routing.Router
+	Network config.Network
 
 	isGenesis bool
 }
@@ -107,7 +107,6 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network config
 			Network:   network,
 			Logger:    logger,
 			Router:    router,
-			IsDevNet:  false,
 			isGenesis: true,
 		},
 		db,
@@ -146,6 +145,20 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		height = 0
 	default:
 		return nil, err
+	}
+
+	if !opts.isGenesis {
+		url := opts.Network.NodeUrl(protocol.Globals)
+		entry, err := indexing.Data(batch, url).GetLatestEntry()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get latest globals data entry: %v", err)
+		}
+		globals := new(protocol.NetworkGlobals)
+		err = globals.UnmarshalBinary(entry.GetData()[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode latest globals entry: %v", err)
+		}
+		m.networkGlobals = globals
 	}
 
 	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))

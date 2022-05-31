@@ -323,10 +323,11 @@ func (b *bootstrap) createGlobals() error {
 	global := new(protocol.DataAccount)
 	global.Url = b.nodeUrl.JoinPath(protocol.Globals)
 	wd := new(protocol.WriteData)
-	threshold := new(protocol.NetworkGlobals)
-	threshold.ValidatorThreshold.Numerator = 2
-	threshold.ValidatorThreshold.Denominator = 3
-	data, err := threshold.MarshalBinary()
+	ng := new(protocol.NetworkGlobals)
+	ng.ValidatorThreshold.Numerator = 2
+	ng.ValidatorThreshold.Denominator = 3
+	ng.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
+	data, err := ng.MarshalBinary()
 	if err != nil {
 		return err
 	}
