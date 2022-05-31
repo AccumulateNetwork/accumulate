@@ -255,8 +255,7 @@ func (r *Reader) ReadTime(n uint) (time.Time, bool) {
 		return time.Time{}, false
 	}
 
-	// TODO Does this restore as UTC?
-	return time.Unix(v, 0), true
+	return time.Unix(v, 0).UTC(), true
 }
 
 // ReadBytes reads the length of the value as a varint-encoded unsigned integer

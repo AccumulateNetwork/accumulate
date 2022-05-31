@@ -193,8 +193,8 @@ func PrintMajorBlockQueryResponseV2(res *api2.MajorQueryResponse) (string, error
 
 	if len(res.MinorBlocks) > 0 {
 		for _, mnrBlk := range res.MinorBlocks {
-			str += fmt.Sprintf("    minor block index: %d", mnrBlk.BlockIndex)
-			str += fmt.Sprintf("    minor block time : %s", getBlockTime(mnrBlk.BlockTime))
+			str += fmt.Sprintf("    minor block index: %d\n", mnrBlk.BlockIndex)
+			str += fmt.Sprintf("    minor block time : %s\n", getBlockTime(mnrBlk.BlockTime))
 		}
 	} else {
 		str += fmt.Sprintf("    (empty)")

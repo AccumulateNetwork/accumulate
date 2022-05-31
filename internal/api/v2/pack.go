@@ -135,7 +135,7 @@ func packMajorQueryResponse(entry *query.ResponseMajorEntry) (*MajorQueryRespons
 	resp.MajorBlockIndex = entry.MajorBlockIndex
 	resp.MajorBlockTime = entry.MajorBlockTime
 	for _, minBlk := range entry.MinorBlocks {
-		var minBlkResp *MinorBlock
+		minBlkResp := &MinorBlock{}
 		minBlkResp.BlockIndex = minBlk.BlockIndex
 		minBlkResp.BlockTime = minBlk.BlockTime
 		resp.MinorBlocks = append(resp.MinorBlocks, minBlkResp)

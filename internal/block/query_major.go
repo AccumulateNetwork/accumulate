@@ -7,9 +7,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"time"
 )
 
-func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (*query.ResponseMajorBlocks, *protocol.Error) {
+func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, perr *protocol.Error) {
+
 	anchorsAcc := batch.Account(m.Network.NodeUrl(protocol.AnchorPool))
 	var anchorLedger *protocol.AnchorLedger
 	err := anchorsAcc.GetStateAs(&anchorLedger)
@@ -28,73 +30,64 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
+	if req.Start == 0 { // We don't have major block 0, avoid crash
+		req.Start = 1
+	}
 	mjrStartIdx, _, err := indexing.SearchIndexChain(mjrIdxChain, uint64(mjrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 	}
 
-	mjrEntryIdx := mjrStartIdx
-
-	resp := query.ResponseMajorBlocks{TotalBlocks: uint64(mjrIdxChain.Height())}
+	resp = &query.ResponseMajorBlocks{TotalBlocks: uint64(mjrIdxChain.Height())}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
+	mjrEntryIdx := mjrStartIdx
+	mnrStartIdx := uint64(1)
 
-	firstBlock := false
-	prevEntry := new(protocol.IndexEntry)
-	err = mjrIdxChain.EntryAs(int64(mjrEntryIdx), prevEntry)
-	switch {
-	case err == nil:
-	case errors.Is(err, storage.ErrNotFound):
-		return &resp, nil
-	default:
-		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	if mjrEntryIdx > 0 {
+		mnrStartIdx, perr = getPrevEntryRootIndex(mjrIdxChain, mjrEntryIdx)
+		if err != nil {
+			return nil, perr
+		}
 	}
-	mjrEntryIdx++
 
-	for resultCnt < req.Limit && !firstBlock {
+majorEntryLoop:
+	for resultCnt < req.Limit {
 		err = mjrIdxChain.EntryAs(int64(mjrEntryIdx), curEntry)
 		switch {
 		case err == nil:
 		case errors.Is(err, storage.ErrNotFound):
-			firstBlock = true
+			break majorEntryLoop
 		default:
 			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 		}
 
-		mjrEntry := new(query.ResponseMajorEntry)
+		rspMjrEntry := new(query.ResponseMajorEntry)
 		for {
-			mjrEntry.MajorBlockIndex = req.Start + resultCnt
-
-			// Create new entry, append empty entry when blocks were missing
-			if mjrEntry.MajorBlockIndex < curEntry.BlockIndex || curEntry.BlockIndex == 0 {
-				resp.Entries = append(resp.Entries, mjrEntry)
-				resultCnt++
-				mjrEntry = new(query.ResponseMajorEntry)
-				continue
+			rspMjrEntry.MajorBlockIndex = req.Start + resultCnt
+			if rspMjrEntry.MajorBlockIndex >= curEntry.BlockIndex && curEntry.BlockIndex != 0 {
+				break
 			}
-			break
+
+			// Append empty entry when blocks were missing
+			resp.Entries = append(resp.Entries, rspMjrEntry)
+			resultCnt++
+			rspMjrEntry = new(query.ResponseMajorEntry)
 		}
-		mjrEntry.MajorBlockTime = curEntry.BlockTime
 
 		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 		}
 
-		startIdx := uint64(0)
-		if !firstBlock {
-			startIdx = prevEntry.RootIndexIndex
-		}
-		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, uint64(mnrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(startIdx))
+		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, uint64(mnrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(mnrStartIdx))
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
 		}
 
 	minorEntryLoop:
 		for {
-			mnrEntry := new(query.ResponseMinorEntry)
-			mnrEntry.BlockIndex = mnrIdxEntry.BlockIndex
-			mnrEntry.BlockTime = mnrIdxEntry.BlockTime
+			rspMnrEntry := new(query.ResponseMinorEntry)
 			err = mnrIdxChain.EntryAs(int64(mnrIdx), mnrIdxEntry)
 			switch {
 			case err == nil:
@@ -103,16 +96,39 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 			default:
 				return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 			}
-			if mnrIdxEntry.BlockIndex >= curEntry.RootIndexIndex {
+			if mnrIdxEntry.BlockIndex > curEntry.RootIndexIndex {
 				break minorEntryLoop
 			}
-			mjrEntry.MinorBlocks = append(mjrEntry.MinorBlocks, mnrEntry)
+			rspMnrEntry.BlockIndex = mnrIdxEntry.BlockIndex
+			rspMnrEntry.BlockTime = mnrIdxEntry.BlockTime
+			rspMjrEntry.MinorBlocks = append(rspMjrEntry.MinorBlocks, rspMnrEntry)
 			mnrIdx++
 		}
-		resp.Entries = append(resp.Entries, mjrEntry)
+		rspMjrEntry.MajorBlockTime = calcMajorBlockTime(rspMjrEntry.MinorBlocks)
+		resp.Entries = append(resp.Entries, rspMjrEntry)
+		mnrStartIdx = mnrIdxEntry.BlockIndex
 		mjrEntryIdx++
 		resultCnt++
-		prevEntry = curEntry
 	}
-	return &resp, nil
+	return resp, nil
+}
+
+func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uint64, *protocol.Error) {
+	prevEntry := new(protocol.IndexEntry)
+	err := mjrIdxChain.EntryAs(int64(mjrEntryIdx)-1, prevEntry)
+	if err != nil {
+		return 0, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+	}
+	return prevEntry.RootIndexIndex + 1, nil
+}
+
+func calcMajorBlockTime(blocks []*query.ResponseMinorEntry) *time.Time {
+	lastBlockTime := blocks[len(blocks)-1].BlockTime
+	majorBlockTime := time.Date(lastBlockTime.Year(), lastBlockTime.Month(), lastBlockTime.Day(), 0, 0, 0, 0, time.UTC)
+	if lastBlockTime.Hour() < 12 {
+		majorBlockTime.Add(time.Hour * 12) // TODO is the last minor block always before 12:00:00.000000 ?
+	} else {
+		majorBlockTime.AddDate(0, 0, 1) // TODO is the last minor block always before 00:00:00.000000 ?
+	}
+	return &majorBlockTime
 }
