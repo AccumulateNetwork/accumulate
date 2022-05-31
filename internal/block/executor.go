@@ -32,10 +32,11 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger  log.Logger
-	Key     ed25519.PrivateKey
-	Router  routing.Router
-	Network config.Network
+	Logger   log.Logger
+	Key      ed25519.PrivateKey
+	Router   routing.Router
+	Network  config.Network
+	IsDevNet bool
 
 	isGenesis bool
 }
@@ -106,6 +107,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network config
 			Network:   network,
 			Logger:    logger,
 			Router:    router,
+			IsDevNet:  false,
 			isGenesis: true,
 		},
 		db,

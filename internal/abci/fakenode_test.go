@@ -171,10 +171,11 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		ConnectionManager: connMgr,
 	}
 	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
-		Logger:  n.logger,
-		Key:     n.key.Bytes(),
-		Network: *n.network,
-		Router:  n.router,
+		Logger:   n.logger,
+		Key:      n.key.Bytes(),
+		Network:  *n.network,
+		Router:   n.router,
+		IsDevNet: true,
 	}, n.db)
 	n.Require().NoError(err)
 
