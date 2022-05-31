@@ -325,7 +325,7 @@ func ListAccounts() (string, error) {
 			}
 			out += string(d)
 		} else {
-			out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", kr.LiteAccount, kr.LiteAccount, pubKey, sigType)
+			out += fmt.Sprintf("\n\tkey name\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", v.Value, kr.LiteAccount, pubKey, sigType)
 		}
 	}
 	if WantJsonOutput {
@@ -450,6 +450,18 @@ func RestoreAccounts() (out string, err error) {
 		liteAccount, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
 		if err != nil {
 			return "", err
+		}
+
+		//check to see if the key type has been assigned, if not set it to the ed25519Legacy...
+		_, err = GetWallet().Get(BucketSigType, v.Value)
+		if err != nil {
+			//add the default key type
+			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.Type, string(v.Key))
+
+			err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.Type.GetEnumValue()))
+			if err != nil {
+				return "", err
+			}
 		}
 
 		liteLabel, _ := LabelForLiteTokenAccount(liteAccount.String())
