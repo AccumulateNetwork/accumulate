@@ -9,9 +9,8 @@ import (
 	"time"
 
 	f2 "github.com/FactomProject/factom"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
