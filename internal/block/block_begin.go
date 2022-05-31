@@ -434,6 +434,10 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 }
 
 func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transaction, sigs []protocol.Signature) (protocol.Signature, error) {
+	if len(sigs) == 0 {
+		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "synthetic transaction has no signatures")
+	}
+
 	synthSig, ok := sigs[0].(*protocol.SyntheticSignature)
 	if !ok {
 		return nil, errors.Format(errors.StatusUnknown, "invalid first synthetic transaction signature: want type %v, got %v", protocol.SignatureTypeSynthetic, sigs[0].Type())
