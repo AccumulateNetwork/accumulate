@@ -2,7 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -79,11 +78,11 @@ func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
+		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
 	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
-		return nil, fmt.Errorf("writing new Factom-formatted data entries is not supported")
+		return nil, errors.Format(errors.StatusBadRequest, "writing new Factom-formatted data entries is not supported")
 	}
 
 	//check will return error if there is too much data or no data for the entry
@@ -94,30 +93,42 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
 	if err == nil {
+		if body.WriteToState {
+			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a lite data account")
+		}
 		return executeWriteLiteDataAccount(st, body.Entry, body.Scratch)
 	}
 
-	return executeWriteFullDataAccount(st, body.Entry, body.Scratch)
-}
-
-func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
+
 	account, ok := st.Origin.(*protocol.DataAccount)
 	if !ok {
-		return nil, fmt.Errorf("invalid principal: want %v, got %v",
+		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: want %v, got %v",
 			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
-	if scratch && !account.Scratch {
-		return nil, fmt.Errorf("cannot write scratch data to a non-scratch account")
+	if body.Scratch && !account.Scratch {
+		return nil, errors.Format(errors.StatusBadRequest, "cannot write scratch data to a non-scratch account")
+	}
+
+	if body.WriteToState {
+		if account.Scratch {
+			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a scratch data account")
+		}
+
+		account.Entry = body.Entry
+		err = st.Update(account)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknown, "store account: %w", err)
+		}
 	}
 
 	result := new(protocol.WriteDataResult)
-	result.EntryHash = *(*[32]byte)(entry.Hash())
+	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
-	st.UpdateData(st.Origin, result.EntryHash[:], entry)
+	st.UpdateData(st.Origin, result.EntryHash[:], body.Entry)
 	return result, nil
 }
