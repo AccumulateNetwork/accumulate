@@ -1,8 +1,7 @@
 package chain
 
 import (
-	"fmt"
-
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -17,15 +16,19 @@ func (WriteDataTo) Execute(st *StateManager, tx *Delivery) (protocol.Transaction
 func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteDataTo)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
+		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
+	}
+
+	if body.Entry == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
 	}
 
 	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
-		return nil, fmt.Errorf("writing new Factom-formatted data entries is not supported")
+		return nil, errors.Format(errors.StatusBadRequest, "writing new Factom-formatted data entries is not supported")
 	}
 
 	if _, err := protocol.ParseLiteDataAddress(body.Recipient); err != nil {
-		return nil, fmt.Errorf("only writes to lite data accounts supported: %s: %v", body.Recipient, err)
+		return nil, errors.Format(errors.StatusBadRequest, "only writes to lite data accounts supported: %s: %v", body.Recipient, err)
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)

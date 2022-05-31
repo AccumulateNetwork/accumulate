@@ -81,6 +81,10 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
+	if body.Entry == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
+	}
+
 	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
 		return nil, errors.Format(errors.StatusBadRequest, "writing new Factom-formatted data entries is not supported")
 	}
