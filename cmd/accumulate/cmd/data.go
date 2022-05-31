@@ -347,6 +347,9 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 	var resps []*api.TransactionQueryResponse
 	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
+	if err != nil {
+		return "", err
+	}
 	result := ""
 	if res.Code == 0 {
 

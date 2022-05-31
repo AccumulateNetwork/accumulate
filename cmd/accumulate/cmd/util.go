@@ -323,8 +323,12 @@ func dispatchTxAndPrintResponse(payload protocol.TransactionBody, txHash []byte,
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
+
+	result, err := ActionResponseFrom(res).Print()
+	if err != nil {
+		return "", err
+	}
 	if res.Code == 0 {
-		result := ""
 		for _, response := range resps {
 			str, err := PrintTransactionQueryResponseV2(response)
 			if err != nil {
@@ -332,9 +336,8 @@ func dispatchTxAndPrintResponse(payload protocol.TransactionBody, txHash []byte,
 			}
 			result = fmt.Sprint(result, str, "\n")
 		}
-		return result, nil
 	}
-	return ActionResponseFrom(res).Print()
+	return result, nil
 }
 
 func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
