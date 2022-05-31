@@ -18,7 +18,7 @@ import (
 //	Result  Entry  `json:"result"`
 //}
 
-var notFound = -32008
+// var notFound = -32008
 
 // var blockNotFound = f2.NewJSONError(notFound, "Block not found", nil)
 // var entryNotFound = f2.NewJSONError(notFound, "Entry not found", nil)
