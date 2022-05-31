@@ -154,7 +154,7 @@ func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
 		if len(*queue) > 0 {
 			entry := queue.Pop().(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
-			err := WriteDataToAccumulate(LOCAL_URL, dataEntry, chainUrl)
+			err := WriteDataToAccumulate(env, dataEntry, chainUrl)
 			if err != nil {
 				log.Println("Error writing data to accumulate : ", err.Error())
 			}
