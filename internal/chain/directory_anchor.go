@@ -43,20 +43,6 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 	}
 
-	// Update the oracle
-	if body.AcmeOraclePrice != 0 && st.Network.Type != config.Directory {
-		var ledgerState *protocol.SystemLedger
-		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load main ledger: %w", err)
-		}
-		ledgerState.PendingOracle = body.AcmeOraclePrice
-		err = st.Update(ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update ledger state: %v", err)
-		}
-	}
-
 	// Add the anchor to the chain - use the subnet name as the chain name
 	err := st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
@@ -112,12 +98,8 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 		switch update.Name {
 		case protocol.OperatorBook:
 			txn.Header.Principal = st.DefaultOperatorPage()
-		case protocol.Globals,
-			protocol.Oracle,
-			protocol.Network:
-			txn.Header.Principal = st.NodeUrl(update.Name)
 		default:
-			return fmt.Errorf("unknown network account %q", update.Name)
+			txn.Header.Principal = st.NodeUrl(update.Name)
 		}
 
 		st.State.ProcessAdditionalTransaction(delivery.NewInternal(txn))

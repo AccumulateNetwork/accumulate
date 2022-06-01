@@ -43,6 +43,7 @@ type FakeNode struct {
 	t       testing.TB
 	db      *database.Database
 	network *config.Network
+	exec    *block.Executor
 	app     abcitypes.Application
 	client  *acctesting.FakeTendermint
 	key     crypto.PrivKey
@@ -169,7 +170,8 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	var err error
 	n.router, _, err = routing.NewSimpleRouter(n.network, connMgr)
 	require.NoError(n.t, err)
-	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
+
+	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
@@ -178,7 +180,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
-		Executor: mgr,
+		Executor: n.exec,
 		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
@@ -511,13 +513,7 @@ func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
 }
 
 func (n *FakeNode) GetOraclePrice() uint64 {
-	n.t.Helper()
-	batch := n.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.SystemLedger
-	require.NoError(n.t, ledger.GetStateAs(&ledgerState))
-	return ledgerState.ActiveOracle
+	return n.exec.ActiveGlobals_TESTONLY().Oracle.Price
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
