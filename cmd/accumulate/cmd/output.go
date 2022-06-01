@@ -303,7 +303,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCreditBalance\t:\t%d\n", litIdentity.CreditBalance)
+		out += fmt.Sprintf("\tCreditBalance\t:\t%v\n", protocol.FormatAmount(litIdentity.CreditBalance, protocol.CreditPrecisionPower))
 		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(litIdentity.LastUsedOn*uint64(time.Microsecond))))
 
 		return out, nil
