@@ -1,9 +1,10 @@
 package events
 
 import (
+	"time"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"time"
 )
 
 type Event interface {

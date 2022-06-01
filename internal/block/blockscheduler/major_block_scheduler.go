@@ -3,11 +3,12 @@ package blockscheduler
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/gorhill/cronexpr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"strings"
-	"time"
 )
 
 const debugMajorBlocks = false
