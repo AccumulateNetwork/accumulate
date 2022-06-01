@@ -336,7 +336,6 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-	var resps []*api.TransactionQueryResponse
 	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return "", err
@@ -459,7 +458,6 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-	var resps []*api.TransactionQueryResponse
 	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return "", err
