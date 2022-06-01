@@ -1,4 +1,14 @@
 
+NetworkConfigRequest:
+  fields:
+    - name: Network
+      type: string
+
+NetworkConfigResponse:
+  fields:
+    - name: Network
+      type: Network
+
 SubnetListRequest:
   fields:
     - name: Network
@@ -32,9 +42,8 @@ SeedCountRequest:
     - name: Subnet
       type: string
 
-
-
 SeedCountResponse:
   fields:
     - name: Count
       type: int
+

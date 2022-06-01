@@ -1,22 +1,58 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"net"
 	"net/url"
 	"os"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 )
 
-// initDualNode accumulate init dual BVN0 http://ip:dnport
+// initDualNode accumulate init dual Mainnet.BVN0 http://ip:dnport
 func initDualNode(cmd *cobra.Command, args []string) {
-	subnetName := args[0]
+	s := strings.Split(args[0], ".")
+	if len(s) != 2 {
+		fatalf("network must be in the form of <network-name>.<subnet-name>, e.g. mainnet.bvn0")
+	}
+	networkName := s[0]
+	subnetName := s[1]
 	u, err := url.Parse(args[1])
 	check(err)
+
+	seed := flagInitDualNode.SeedProxy
+	//query the seed node to obtain network configuration
+	var directoryBootstrapPeers string
+	var bvnBootstrapPeers string
+	if seed != "" {
+		seedProxy, err := proxy.New(seed)
+		check(err)
+		slr := proxy.SeedListRequest{}
+		slr.Network = networkName
+		slr.Subnet = subnetName
+		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
+		if err != nil {
+			checkf(err, "proxy returned seeding error")
+		}
+		bvnBootstrapPeers = strings.Join(resp.Addresses, ",")
+
+		//now query the directory peers
+		slr.Network = networkName
+		slr.Subnet = "Directory"
+		resp, err = seedProxy.GetSeedList(context.Background(), &slr)
+		if err != nil {
+			checkf(err, "proxy returned seeding error for directory query")
+		}
+		directoryBootstrapPeers = strings.Join(resp.Addresses, ",")
+	}
+	println(directoryBootstrapPeers)
+	println(bvnBootstrapPeers)
 
 	host := u.Hostname()
 	port := u.Port()
@@ -36,6 +72,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%d", dnBasePort)
 	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
 	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
+	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
 	flagInitNode.Follower = false
 
 	// configure the BVN first so we know how to setup the bvn.
@@ -99,7 +136,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if len(c.P2P.PersistentPeers) > 0 {
-		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
+		c.P2P.BootstrapPeers = bvnBootstrapPeers //c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""
 	}
 	dnWebHostUrl, err := url.Parse(c.Accumulate.Website.ListenAddress)
