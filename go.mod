@@ -43,6 +43,8 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
+require github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75 // indirect
+
 require (
 	4d63.com/gochecknoglobals v0.1.0 // indirect
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 // indirect

@@ -5,9 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
-	"time"
-
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
@@ -20,9 +17,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"math/big"
+	"time"
 )
 
-const debugMajorBlocks = false
+const debugMajorBlocks = true
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
@@ -123,20 +122,13 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		return 0, nil
 	}
 
-	var utcHour time.Time
-	if debugMajorBlocks {
-		utcHour = block.Time.UTC().Truncate(time.Second)
-		if block.Index%20 != 19 {
-			return 0, nil
-		}
-	} else {
-		utcHour = block.Time.UTC().Truncate(time.Hour)
-		switch utcHour.Hour() {
-		case 0, 12:
-			// Ok
-		default:
-			return 0, nil
-		}
+	if x.globals.nextMajorBlockTime.IsZero() {
+		x.getNextMajorBlockTime()
+	}
+
+	blockTimeUTC := block.Time.UTC()
+	if blockTimeUTC.Before(x.globals.nextMajorBlockTime) {
+		return 0, nil
 	}
 
 	var anchor *protocol.AnchorLedger
@@ -146,7 +138,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		return 0, errors.Format(errors.StatusUnknown, "load anchor ledger: %w", err)
 	}
 
-	if !anchor.MajorBlockTime.Before(utcHour) {
+	if !anchor.MajorBlockTime.Before(blockTimeUTC) {
 		return 0, nil
 	}
 
@@ -166,7 +158,16 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 
 	x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 	block.State.OpenedMajorBlock = true
+	x.getNextMajorBlockTime()
 	return anchor.MajorBlockIndex, nil
+}
+
+func (x *Executor) getNextMajorBlockTime() {
+	if debugMajorBlocks {
+		x.globals.nextMajorBlockTime = time.Now().UTC().Truncate(time.Second).Add(20 * time.Second)
+	} else {
+		x.globals.nextMajorBlockTime = x.globals.majorBlockSchedule.Next(time.Now().UTC())
+	}
 }
 
 func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {

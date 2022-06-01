@@ -174,6 +174,12 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize node: %v", err)
 	}
 
+	// Have executor load globals (only after loading genesis doc state)
+	err = exec.LoadGlobals(d.db)
+	if err != nil {
+		return err
+	}
+
 	// Start node
 	// TODO Feed Tendermint logger to service logger
 	err = d.node.Start()

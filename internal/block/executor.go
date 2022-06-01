@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
+	"github.com/gorhill/cronexpr"
 	"io"
+	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -24,10 +26,10 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors      map[protocol.TransactionType]TransactionExecutor
-	dispatcher     *dispatcher
-	logger         logging.OptionalLogger
-	networkGlobals *protocol.NetworkGlobals // TODO update when changed
+	executors  map[protocol.TransactionType]TransactionExecutor
+	dispatcher *dispatcher
+	logger     logging.OptionalLogger
+	globals    executorGlobals
 
 	// oldBlockMeta blockMetadata
 }
@@ -39,6 +41,11 @@ type ExecutorOptions struct {
 	Network config.Network
 
 	isGenesis bool
+}
+
+type executorGlobals struct {
+	majorBlockSchedule *cronexpr.Expression
+	nextMajorBlockTime time.Time
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -119,6 +126,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
+	m.globals = executorGlobals{}
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -146,21 +154,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	default:
 		return nil, err
 	}
-
-	/*if !opts.isGenesis {
-		url := opts.Network.NodeUrl(protocol.Globals)
-		entry, err := indexing.Data(batch, url).GetLatestEntry()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get latest globals data entry: %v", err)
-		}
-		globals := new(protocol.NetworkGlobals)
-		err = globals.UnmarshalBinary(entry.GetData()[0])
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode latest globals entry: %v", err)
-		}
-		m.networkGlobals = globals
-	}*/
-
 	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
 }
@@ -271,4 +264,25 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Network)
+}
+
+func (m *Executor) LoadGlobals(db *database.Database) error {
+	if !m.isGenesis {
+		batch := db.Begin(false)
+		defer batch.Discard()
+
+		url := m.Network.NodeUrl(protocol.Globals)
+		entry, err := indexing.Data(batch, url).GetLatestEntry()
+		if err != nil {
+			return fmt.Errorf("failed to get latest globals data entry: %v", err)
+		}
+		globals := new(protocol.NetworkGlobals)
+		err = globals.UnmarshalBinary(entry.GetData()[0])
+		if err != nil {
+			return fmt.Errorf("failed to decode latest globals entry: %v", err)
+		}
+
+		m.globals.majorBlockSchedule = cronexpr.MustParse(globals.MajorBlockSchedule)
+	}
+	return nil
 }
