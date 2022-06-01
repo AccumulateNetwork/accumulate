@@ -358,20 +358,23 @@ func CreateTX(sender string, args []string) (string, error) {
 	return dispatchTxAndPrintResponse(send, nil, u, signer)
 }
 
-func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) (*api2.TransactionQueryResponse, error) {
+func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) ([]*api2.TransactionQueryResponse, error) {
+	var queryResponses []*api2.TransactionQueryResponse
 	queryRes, err := getTX(hash, wait, ignorePending)
 	if err != nil {
 		return nil, err
 	}
+	queryResponses = append(queryResponses, queryRes)
 	if queryRes.SyntheticTxids != nil {
 		for _, txid := range queryRes.SyntheticTxids {
-			_, err := waitForTxn(txid[:], wait, true) //nolint:rangevarref
+			resp, err := waitForTxn(txid[:], wait, true) //nolint:rangevarref
 			if err != nil {
 				return nil, err
 			}
+			queryResponses = append(queryResponses, resp...)
 		}
 	}
-	return queryRes, nil
+	return queryResponses, nil
 }
 
 func ExecuteTX(sender string, args []string) (string, error) {
