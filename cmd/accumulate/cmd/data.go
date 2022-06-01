@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var Keyname string
@@ -242,13 +243,17 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		lde.ExtIds = data[1:]
 	}
 	entryHash := lde.Hash()
-
-	res, err = dispatchTxAndWait(&wdt, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wdt, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
-	return ActionResponseFromLiteData(res, addr.String(), accountId, entryHash).Print()
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
+	}
+	ar := ActionResponseFromLiteData(res, addr.String(), accountId, entryHash)
+	ar.SynthTxns = types.String(result)
+	return ar.Print()
 }
 
 func CreateDataAccount(origin string, args []string) (string, error) {
@@ -331,12 +336,17 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
-	res, err := dispatchTxAndWait(&wd, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
-		return PrintJsonRpcError(err)
+		return "", err
 	}
-	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
+	}
+	ar := ActionResponseFromData(res, wd.Entry.Hash())
+	ar.SynthTxns = types.String(result)
+	return ar.Print()
 }
 
 func prepareData(args []string, isFirstLiteEntry bool, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
@@ -448,8 +458,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
-	res, err := dispatchTxAndWait(&wd, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -470,5 +479,12 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.Data = data[0]
 		lde.ExtIds = data[1:]
 	}
-	return ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash()).Print()
+
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
+	}
+	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
+	ar.SynthTxns = types.String(result)
+	return ar.Print()
 }
