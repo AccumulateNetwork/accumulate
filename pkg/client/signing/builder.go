@@ -28,6 +28,47 @@ type Builder struct {
 	Timestamp  uint64
 }
 
+func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
+	s.Type = sig.Type()
+
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = sig.Timestamp
+	case *protocol.ED25519Signature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = sig.Timestamp
+	case *protocol.RCD1Signature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = sig.Timestamp
+	case *protocol.BTCSignature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = sig.Timestamp
+	case *protocol.BTCLegacySignature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = sig.Timestamp
+	case *protocol.ETHSignature:
+		s.Url = sig.Signer
+		s.Version = sig.SignerVersion
+		s.Timestamp = sig.Timestamp
+	case *protocol.DelegatedSignature:
+		_, err := s.Import(sig.Signature)
+		if err != nil {
+			return nil, err
+		}
+		s.Delegators = append(s.Delegators, sig.Delegator)
+	default:
+		return nil, fmt.Errorf("unsupported signature type %v", sig.Type())
+	}
+
+	return s, nil
+}
+
 func (s *Builder) UseSimpleHash() *Builder {
 	s.InitMode = InitWithSimpleHash
 	return s
