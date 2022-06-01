@@ -86,3 +86,9 @@ func (w *SyntheticWriteData) GetHash() []byte {
 	x.Entry = nil
 	return hashWriteData(x, w.Entry)
 }
+
+func (w *SystemWriteData) GetHash() []byte {
+	x := w.Copy()
+	x.Entry = nil
+	return hashWriteData(x, w.Entry)
+}

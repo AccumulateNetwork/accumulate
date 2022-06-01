@@ -103,6 +103,10 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return executeWriteLiteDataAccount(st, body.Entry, body.Scratch)
 	}
 
+	return executeWriteFullDataAccount(st, body.Entry, body.Scratch, body.WriteToState)
+}
+
+func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch, writeToState bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
@@ -113,26 +117,26 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
-	if body.Scratch && !account.Scratch {
+	if scratch && !account.Scratch {
 		return nil, errors.Format(errors.StatusBadRequest, "cannot write scratch data to a non-scratch account")
 	}
 
-	if body.WriteToState {
+	if writeToState {
 		if account.Scratch {
 			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a scratch data account")
 		}
 
-		account.Entry = body.Entry
-		err = st.Update(account)
+		account.Entry = entry
+		err := st.Update(account)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store account: %w", err)
 		}
 	}
 
 	result := new(protocol.WriteDataResult)
-	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
+	result.EntryHash = *(*[32]byte)(entry.Hash())
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
-	st.UpdateData(st.Origin, result.EntryHash[:], body.Entry)
+	st.UpdateData(st.Origin, result.EntryHash[:], entry)
 	return result, nil
 }

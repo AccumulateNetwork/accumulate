@@ -701,7 +701,9 @@ type SystemLedger struct {
 type SystemWriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	extraData []byte
+	// WriteToState writes the data entry to the account state.
+	WriteToState bool `json:"writeToState,omitempty" form:"writeToState" query:"writeToState"`
+	extraData    []byte
 }
 
 type TokenAccount struct {
@@ -2173,6 +2175,7 @@ func (v *SystemWriteData) Copy() *SystemWriteData {
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
+	u.WriteToState = v.WriteToState
 
 	return u
 }
@@ -3943,6 +3946,9 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 
 func (v *SystemWriteData) Equal(u *SystemWriteData) bool {
 	if !(EqualDataEntry(v.Entry, u.Entry)) {
+		return false
+	}
+	if !(v.WriteToState == u.WriteToState) {
 		return false
 	}
 
@@ -8688,6 +8694,7 @@ func (v *SystemLedger) IsValid() error {
 var fieldNames_SystemWriteData = []string{
 	1: "Type",
 	2: "Entry",
+	3: "WriteToState",
 }
 
 func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
@@ -8697,6 +8704,9 @@ func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(v.Entry == nil) {
 		writer.WriteValue(2, v.Entry)
+	}
+	if !(!v.WriteToState) {
+		writer.WriteBool(3, v.WriteToState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemWriteData)
@@ -12264,6 +12274,9 @@ func (v *SystemWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	if x, ok := reader.ReadBool(3); ok {
+		v.WriteToState = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemWriteData)
 	if err != nil {
@@ -13953,11 +13966,13 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 
 func (v *SystemWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  TransactionType                       `json:"type"`
-		Entry encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type         TransactionType                       `json:"type"`
+		Entry        encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		WriteToState bool                                  `json:"writeToState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
+	u.WriteToState = v.WriteToState
 	return json.Marshal(&u)
 }
 
@@ -16249,11 +16264,13 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 
 func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  TransactionType                       `json:"type"`
-		Entry encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type         TransactionType                       `json:"type"`
+		Entry        encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		WriteToState bool                                  `json:"writeToState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
+	u.WriteToState = v.WriteToState
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16262,6 +16279,7 @@ func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 	}
 	v.Entry = u.Entry.Value
 
+	v.WriteToState = u.WriteToState
 	return nil
 }
 
