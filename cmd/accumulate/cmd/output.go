@@ -705,6 +705,9 @@ func (a *ActionResponse) Print() (string, error) {
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
 		}
+		if a.SynthTxns != "" {
+			out += fmt.Sprintf("\tSynthTxns\t\t: %s\n", a.SynthTxns)
+		}
 		if a.Result != nil {
 			out += "\tResult\t\t\t: "
 			d, err := json.Marshal(a.Result.Result)
