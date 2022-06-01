@@ -61,6 +61,7 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   accumulate --use-unencrypted-wallet page get acc://dn/validators/1
 fi
 
+
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
 if [ -f "$(nodePrivKey 0)" ]; then
   TXID=$(cli-tx data write dn/oracle "$(nodePrivKey 0)" '{"price":501}')

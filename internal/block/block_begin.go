@@ -18,16 +18,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"math/big"
-	"time"
 )
-
-const debugMajorBlocks = true
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
-	// Check if its time for a major block
+	// Check if it's time for a major block
 	openMajor, err := x.shouldOpenMajorBlock(block)
 	if err != nil {
 		return err
@@ -122,12 +119,13 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		return 0, nil
 	}
 
-	if x.globals.nextMajorBlockTime.IsZero() {
-		x.getNextMajorBlockTime()
+	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
+	if !x.majorBlockScheduler.IsInitialized() {
+		return 0, nil
 	}
 
 	blockTimeUTC := block.Time.UTC()
-	if blockTimeUTC.Before(x.globals.nextMajorBlockTime) {
+	if blockTimeUTC.Before(x.majorBlockScheduler.GetNextMajorBlockTime()) {
 		return 0, nil
 	}
 
@@ -158,16 +156,8 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 
 	x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 	block.State.OpenedMajorBlock = true
-	x.getNextMajorBlockTime()
+	x.majorBlockScheduler.UpdateNextMajorBlockTime()
 	return anchor.MajorBlockIndex, nil
-}
-
-func (x *Executor) getNextMajorBlockTime() {
-	if debugMajorBlocks {
-		x.globals.nextMajorBlockTime = time.Now().UTC().Truncate(time.Second).Add(20 * time.Second)
-	} else {
-		x.globals.nextMajorBlockTime = x.globals.majorBlockSchedule.Next(time.Now().UTC())
-	}
 }
 
 func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {

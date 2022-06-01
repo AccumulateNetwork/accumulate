@@ -4,16 +4,14 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
-	"github.com/gorhill/cronexpr"
-	"io"
-	"time"
-
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -21,15 +19,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	"io"
 )
 
 type Executor struct {
 	ExecutorOptions
 
-	executors  map[protocol.TransactionType]TransactionExecutor
-	dispatcher *dispatcher
-	logger     logging.OptionalLogger
-	globals    executorGlobals
+	executors           map[protocol.TransactionType]TransactionExecutor
+	dispatcher          *dispatcher
+	logger              logging.OptionalLogger
+	eventBus            *events.Bus
+	majorBlockScheduler blockscheduler.MajorBlockScheduler
 
 	// oldBlockMeta blockMetadata
 }
@@ -41,11 +41,6 @@ type ExecutorOptions struct {
 	Network config.Network
 
 	isGenesis bool
-}
-
-type executorGlobals struct {
-	majorBlockSchedule *cronexpr.Expression
-	nextMajorBlockTime time.Time
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -126,7 +121,8 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
-	m.globals = executorGlobals{}
+	m.eventBus = events.NewBus(opts.Logger.With("module", "events"))
+	m.majorBlockScheduler = blockscheduler.Init(m.eventBus)
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -266,7 +262,7 @@ func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) erro
 	return batch.SaveSnapshot(file, &m.Network)
 }
 
-func (m *Executor) LoadGlobals(db *database.Database) error {
+func (m *Executor) EmitNetworkGlobalsEvent(db *database.Database) error {
 	if !m.isGenesis {
 		batch := db.Begin(false)
 		defer batch.Discard()
@@ -276,13 +272,10 @@ func (m *Executor) LoadGlobals(db *database.Database) error {
 		if err != nil {
 			return fmt.Errorf("failed to get latest globals data entry: %v", err)
 		}
-		globals := new(protocol.NetworkGlobals)
-		err = globals.UnmarshalBinary(entry.GetData()[0])
-		if err != nil {
-			return fmt.Errorf("failed to decode latest globals entry: %v", err)
-		}
-
-		m.globals.majorBlockSchedule = cronexpr.MustParse(globals.MajorBlockSchedule)
+		m.eventBus.Publish(events.DidDataAccountUpdate{
+			AccountUrl: url,
+			DataEntry:  &entry,
+		})
 	}
 	return nil
 }

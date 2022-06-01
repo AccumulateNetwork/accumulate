@@ -4,6 +4,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -77,7 +78,8 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		return status, nil, nil
 	}
 
-	if delivery.Transaction.Body.Type().IsSynthetic() {
+	txType := delivery.Transaction.Body.Type()
+	if txType.IsSynthetic() {
 		err = delivery.LoadSyntheticMetadata(block.Batch, status)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknown, err)
@@ -85,7 +87,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	}
 
 	// Process signatures
-	shouldProcessTransaction := !delivery.Transaction.Body.Type().IsUser()
+	shouldProcessTransaction := !txType.IsUser()
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
@@ -134,10 +136,10 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Body.Type().IsSystem() {
+		if !txType.IsSystem() {
 			kv := []interface{}{
 				"block", block.Index,
-				"type", delivery.Transaction.Body.Type(),
+				"type", txType,
 				"pending", status.Pending,
 				"delivered", status.Delivered,
 				"remote", status.Remote,
@@ -179,6 +181,23 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		err = batch.Commit()
 		if err != nil {
 			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+		}
+	}
+
+	// Emit events for data chain update transactions (addressed to own node URL only)
+	if status.Delivered && !x.isGenesis {
+		switch v := status.Result.(type) {
+		case *protocol.WriteDataResult:
+			if v.AccountUrl.Authority == x.Network.NodeUrl().Authority && txType == protocol.TransactionTypeWriteData {
+				body, ok := delivery.Transaction.Body.(*protocol.WriteData)
+				if !ok {
+					return nil, nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteData), delivery.Transaction.Body)
+				}
+				x.eventBus.Publish(events.DidDataAccountUpdate{
+					AccountUrl: v.AccountUrl,
+					DataEntry:  &body.Entry,
+				})
+			}
 		}
 	}
 

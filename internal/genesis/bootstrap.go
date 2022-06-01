@@ -327,7 +327,7 @@ func (b *bootstrap) createGlobals() error {
 	ng.ValidatorThreshold.Numerator = 2
 	ng.ValidatorThreshold.Denominator = 3
 	ng.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
-	data, err := ng.MarshalBinary()
+	data, err := json.Marshal(&ng)
 	if err != nil {
 		return err
 	}

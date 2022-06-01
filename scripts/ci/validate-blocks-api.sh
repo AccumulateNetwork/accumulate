@@ -57,16 +57,16 @@ if [ "${FILESIZE}" -lt "500" ]; then
 fi
 
 section "Test major block API on BVN0"
-accumulate --use-unencrypted-wallet blocks major acc://bvn-bvn0 1 5 >/tmp/output.txt
+accumulate --use-unencrypted-wallet blocks major acc://bvn-bvn0 1 1 >/tmp/output.txt
 FILESIZE=$(stat -c%s "/tmp/output.txt")
-if [ "${FILESIZE}" -lt "2000" ]; then
+if [ "${FILESIZE}" -lt "400" ]; then
   dieBlocksApi "major block result set too small: ${FILESIZE}"
 fi
 
 section "Test major block API on BVN1"
-accumulate --use-unencrypted-wallet blocks major acc://bvn-bvn1 1 5 >/tmp/output.txt
+accumulate --use-unencrypted-wallet blocks major acc://bvn-bvn1 1 1 >/tmp/output.txt
 FILESIZE=$(stat -c%s "/tmp/output.txt")
-if [ "${FILESIZE}" -lt "2000" ]; then
+if [ "${FILESIZE}" -lt "400" ]; then
   dieBlocksApi "major block result set too small: ${FILESIZE}"
 fi
 

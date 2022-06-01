@@ -2,6 +2,7 @@ package chain
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -222,7 +223,7 @@ func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
 	}
 
 	globals := new(protocol.NetworkGlobals)
-	err = globals.UnmarshalBinary(entry.GetData()[0])
+	err = json.Unmarshal(entry.GetData()[0], globals)
 	if err != nil {
 		st.logger.Error("Failed to decode latest globals entry", "error", err)
 		return protocol.FallbackValidatorThreshold

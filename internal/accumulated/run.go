@@ -175,7 +175,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Have executor load globals (only after loading genesis doc state)
-	err = exec.LoadGlobals(d.db)
+	err = exec.EmitNetworkGlobalsEvent(d.db)
 	if err != nil {
 		return err
 	}

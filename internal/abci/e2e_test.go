@@ -1425,7 +1425,7 @@ func TestUpdateValidators(t *testing.T) {
 	ng := new(protocol.NetworkGlobals)
 	ng.ValidatorThreshold.Set(5, 12)
 	wd := new(protocol.WriteData)
-	d, err := ng.MarshalBinary()
+	d, err := json.Marshal(&ng)
 	require.NoError(t, err)
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
 	n.MustExecuteAndWait(func(send func(*Tx)) {
