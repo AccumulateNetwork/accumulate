@@ -60,6 +60,9 @@ func (s *majorBlockScheduler) onDidDataAccountUpdate(event events.DidDataAccount
 }
 
 func (s *majorBlockScheduler) IsInitialized() bool {
+	if debugMajorBlocks {
+		return true
+	}
 	if s.majorBlockSchedule == nil {
 		return false
 	}
