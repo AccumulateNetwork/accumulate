@@ -652,3 +652,19 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 		}
 	}
 }
+
+func GetSynthTxnsString(res *api.TxResponse, resps []*api.TransactionQueryResponse) (string, error) {
+	result := ""
+	if res.Code == 0 {
+
+		for _, response := range resps {
+			str, err := PrintTransactionQueryResponseV2(response)
+			if err != nil {
+				return PrintJsonRpcError(err)
+			}
+			result = fmt.Sprint(result, str, "\n")
+		}
+
+	}
+	return result, nil
+}

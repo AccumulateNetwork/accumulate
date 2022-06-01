@@ -59,7 +59,6 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 
 	aldr := ActionLiteDataResponse{}
 	require.NoError(t, json.Unmarshal([]byte(r), &aldr))
-	fmt.Println(aldr)
 	//now read back the response
 	commandLine := fmt.Sprintf("data get %s", aldr.AccountUrl)
 	_, err = tc.execute(t, commandLine)

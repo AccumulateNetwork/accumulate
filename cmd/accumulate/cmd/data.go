@@ -243,22 +243,13 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		lde.ExtIds = data[1:]
 	}
 	entryHash := lde.Hash()
-	var resps []*api.TransactionQueryResponse
-	res, resps, err = dispatchTxAndWait(&wdt, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wdt, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-	result := ""
-	if res.Code == 0 {
-
-		for _, response := range resps {
-			str, err := PrintTransactionQueryResponseV2(response)
-			if err != nil {
-				return PrintJsonRpcError(err)
-			}
-			result = fmt.Sprint(result, str, "\n")
-		}
-
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
 	}
 	ar := ActionResponseFromLiteData(res, addr.String(), accountId, entryHash)
 	ar.SynthTxns = types.String(result)
@@ -350,17 +341,9 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	result := ""
-	if res.Code == 0 {
-
-		for _, response := range resps {
-			str, err := PrintTransactionQueryResponseV2(response)
-			if err != nil {
-				return PrintJsonRpcError(err)
-			}
-			result = fmt.Sprint(result, str, "\n")
-		}
-
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
 	}
 	ar := ActionResponseFromData(res, wd.Entry.Hash())
 	ar.SynthTxns = types.String(result)
@@ -499,17 +482,9 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.ExtIds = data[1:]
 	}
 
-	result := ""
-	if res.Code == 0 {
-
-		for _, response := range resps {
-			str, err := PrintTransactionQueryResponseV2(response)
-			if err != nil {
-				return PrintJsonRpcError(err)
-			}
-			result = fmt.Sprint(result, str, "\n")
-		}
-
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
 	}
 	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
 	ar.SynthTxns = types.String(result)
