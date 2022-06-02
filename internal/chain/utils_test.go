@@ -13,6 +13,7 @@ import (
 )
 
 func LoadStateManagerForTest(t *testing.T, db *database.Database, envelope *protocol.Envelope) (*StateManager, *Delivery) {
+	t.Helper()
 	delivery, err := NormalizeEnvelope(envelope)
 	require.NoError(t, err)
 	require.Len(t, delivery, 1)
@@ -25,6 +26,7 @@ func LoadStateManagerForTest(t *testing.T, db *database.Database, envelope *prot
 }
 
 func NewStateManagerForTest(t *testing.T, db *database.Database, transaction *protocol.Transaction) *StateManager {
+	t.Helper()
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal

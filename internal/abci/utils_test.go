@@ -5,7 +5,6 @@ import (
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 var globalNonce uint64
@@ -16,7 +15,11 @@ func generateKey() tmed25519.PrivKey {
 }
 
 func newTxn(origin string) acctesting.TransactionBuilder {
-	u := url.MustParse(origin)
+	u, err := acctesting.ParseUrl(origin)
+	if err != nil {
+		panic(err)
+	}
+
 	return acctesting.NewTransaction().
 		WithPrincipal(u).
 		WithTimestampVar(&globalNonce).
