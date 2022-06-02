@@ -71,7 +71,7 @@ func (s *Simulator) CreateIdentity(identityUrl *url.URL, pubKey ...[]byte) {
 			keyHash := sha256.Sum256(pubKey)
 			key := new(protocol.KeySpec)
 			key.PublicKeyHash = keyHash[:]
-			page.Keys = append(page.Keys, key)
+			page.AddKeySpec(key)
 		}
 
 		writeAccountState(s, batch, identity)
@@ -97,7 +97,7 @@ func (s *Simulator) CreateKeyBook(bookUrl *url.URL, pubKey ...[]byte) {
 			keyHash := sha256.Sum256(pubKey)
 			key := new(protocol.KeySpec)
 			key.PublicKeyHash = keyHash[:]
-			page.Keys = append(page.Keys, key)
+			page.AddKeySpec(key)
 		}
 
 		writeAccountState(s, batch, book)
@@ -122,7 +122,7 @@ func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
 			keyHash := sha256.Sum256(pubKey)
 			key := new(protocol.KeySpec)
 			key.PublicKeyHash = keyHash[:]
-			page.Keys = append(page.Keys, key)
+			page.AddKeySpec(key)
 		}
 
 		writeAccountState(s, batch, book)

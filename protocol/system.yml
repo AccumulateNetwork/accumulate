@@ -89,6 +89,13 @@ DirectoryAnchor:
       description: notifies the subnet that the DN has opened a major block
       type: uint
 
+SystemWriteData:
+  union: { type: transaction }
+  fields:
+    - name: Entry
+      type: DataEntry
+      marshal-as: union
+
 
 ##### Data Types #####
 
