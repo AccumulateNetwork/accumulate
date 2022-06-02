@@ -38,6 +38,9 @@ Status:
   NotFound:
     value: 404
     description: means a record could not be found
+  Conflict:
+    value: 409
+    description: means the request failed due to a conflict
   BadSignerVersion:
     value: 411
     description: means the signer version does not match

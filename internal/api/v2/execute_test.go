@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -30,7 +29,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	baseReq := TxRequest{
-		Origin:     url.MustParse("check"),
+		Origin:     protocol.AccountUrl("check"),
 		Payload:    hex.EncodeToString(data),
 		IsEnvelope: true,
 	}

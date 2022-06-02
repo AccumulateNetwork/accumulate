@@ -11,7 +11,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/rand"
 )
@@ -36,7 +35,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/book", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
-	bookUrl := url.MustParse("foo/book")
+	bookUrl := protocol.AccountUrl("foo", "book")
 
 	for _, idx := range []uint64{0, 1, 2} {
 		t.Run(fmt.Sprint(idx), func(t *testing.T) {
@@ -66,7 +65,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {
-				require.EqualError(t, err, fmt.Sprintf(`signer acc://foo/book/%d is lower priority than the principal acc://foo/book/2`, idx+1))
+				require.EqualError(t, err, fmt.Sprintf(`signer acc://foo.acme/book/%d is lower priority than the principal acc://foo.acme/book/2`, idx+1))
 			}
 
 			// Do not store state changes
