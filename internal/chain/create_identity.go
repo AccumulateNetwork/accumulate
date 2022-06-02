@@ -120,7 +120,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		page.AcceptThreshold = 1 // Require one signature from the Key Page
 		keySpec := new(protocol.KeySpec)
 		keySpec.PublicKeyHash = body.KeyHash
-		page.Keys = append(page.Keys, keySpec)
+		page.AddKeySpec(keySpec)
 		accounts = append(accounts, page)
 	}
 
