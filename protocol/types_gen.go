@@ -697,6 +697,12 @@ type SystemLedger struct {
 	extraData       []byte
 }
 
+type SystemWriteData struct {
+	fieldsSet []bool
+	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	extraData []byte
+}
+
 type TokenAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -962,6 +968,8 @@ func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSynthe
 func (*SystemGenesis) Type() TransactionType { return TransactionTypeSystemGenesis }
 
 func (*SystemLedger) Type() AccountType { return AccountTypeSystemLedger }
+
+func (*SystemWriteData) Type() TransactionType { return TransactionTypeSystemWriteData }
 
 func (*TokenAccount) Type() AccountType { return AccountTypeTokenAccount }
 
@@ -2152,6 +2160,18 @@ func (v *SystemLedger) Copy() *SystemLedger {
 }
 
 func (v *SystemLedger) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SystemWriteData) Copy() *SystemWriteData {
+	u := new(SystemWriteData)
+
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+	}
+
+	return u
+}
+
+func (v *SystemWriteData) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TokenAccount) Copy() *TokenAccount {
 	u := new(TokenAccount)
@@ -3906,6 +3926,14 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		if !(EqualKeyPageOperation(v.OperatorUpdates[i], u.OperatorUpdates[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *SystemWriteData) Equal(u *SystemWriteData) bool {
+	if !(EqualDataEntry(v.Entry, u.Entry)) {
+		return false
 	}
 
 	return true
@@ -8640,6 +8668,50 @@ func (v *SystemLedger) IsValid() error {
 	}
 }
 
+var fieldNames_SystemWriteData = []string{
+	1: "Type",
+	2: "Entry",
+}
+
+func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Entry == nil) {
+		writer.WriteValue(2, v.Entry)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SystemWriteData)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *SystemWriteData) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Entry is missing")
+	} else if v.Entry == nil {
+		errs = append(errs, "field Entry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TokenAccount = []string{
 	1: "Type",
 	2: "Url",
@@ -12143,6 +12215,37 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *SystemWriteData) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SystemWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
+
+	seen, err := reader.Reset(fieldNames_SystemWriteData)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *TokenAccount) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13812,6 +13915,16 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	return json.Marshal(&u)
+}
+
+func (v *SystemWriteData) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  TransactionType                       `json:"type"`
+		Entry encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
 
@@ -16092,6 +16205,24 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	for i, x := range u.OperatorUpdates.Value {
 		v.OperatorUpdates[i] = x
 	}
+	return nil
+}
+
+func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  TransactionType                       `json:"type"`
+		Entry encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Entry = u.Entry.Value
+
 	return nil
 }
 

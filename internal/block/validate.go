@@ -6,6 +6,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -22,8 +23,11 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
 	txnType := delivery.Transaction.Body.Type()
+	if txnType == protocol.TransactionTypeSystemWriteData {
+		// SystemWriteData transactions are purely internal transactions
+		return nil, errors.Format(errors.StatusBadRequest, "unsupported transaction type: %v", txnType)
+	}
 	if txnType != protocol.TransactionTypeRemote {
-		txnType = delivery.Transaction.Body.Type()
 		_, ok := x.executors[txnType]
 		if !ok {
 			return nil, errors.Format(errors.StatusBadRequest, "unsupported transaction type: %v", txnType)
@@ -38,10 +42,12 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
-		_, err := x.validateSignature(batch, delivery, signature, sigExecMetadata{
-			Location:  signature.RoutingLocation(),
-			Initiated: i > 0 || txnType == protocol.TransactionTypeRemote,
-		})
+		var md sigExecMetadata
+		md.Initiated = i > 0 || txnType == protocol.TransactionTypeRemote
+		if !signature.Type().IsSystem() {
+			md.Location = signature.RoutingLocation()
+		}
+		_, err := x.validateSignature(batch, delivery, signature, md)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "signature %d: %w", i, err)
 		}
@@ -86,9 +92,14 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Lite token address => lite identity
-	signerUrl := firstSig.GetSigner()
-	if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
-		signerUrl = signerUrl.RootIdentity()
+	var signerUrl *url.URL
+	if _, ok := firstSig.(*protocol.SyntheticSignature); ok {
+		signerUrl = x.Network.DefaultOperatorPage()
+	} else {
+		signerUrl = firstSig.GetSigner()
+		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+			signerUrl = signerUrl.RootIdentity()
+		}
 	}
 
 	var signer protocol.Signer
@@ -185,7 +196,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if !signature.Verify(delivery.Transaction.GetHash()) {
 			return nil, errors.New(errors.StatusBadRequest, "invalid")
 		}
-		signer, err = x.validateNormalSignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+		signer, err = x.validateKeySignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:
 		return nil, errors.Format(errors.StatusBadRequest, "unknown signature type %v", signature.Type())
