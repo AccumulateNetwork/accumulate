@@ -45,7 +45,7 @@ func TestKeyPage_MofN(t *testing.T) {
 		key := new(KeySpec)
 		key.PublicKeyHash = rh.Next()
 		key.LastUsedOn = 0
-		kp.Keys = append(kp.Keys, key)
+		kp.AddKeySpec(key)
 		for j := 1; j < 12; j++ {
 			err := kp.SetThreshold(uint64(j))
 			require.Truef(t, err == nil || j > i, "error: %v i: %d j %d", err, i, j)

@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -125,6 +126,21 @@ func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.S
 	}
 
 	return set.Add(keyEntryIndex, newSignature)
+}
+
+// AddSystemSignature adds a system signature to the operator signature set.
+// AddSystemSignature panics if the signature is not a system signature.
+func (t *Transaction) AddSystemSignature(net *config.Network, newSignature protocol.Signature) (int, error) {
+	if !newSignature.Type().IsSystem() {
+		panic("not a system signature")
+	}
+
+	set, err := t.newSigSet(net.DefaultOperatorPage(), true)
+	if err != nil {
+		return 0, err
+	}
+
+	return set.Add(0, newSignature)
 }
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
