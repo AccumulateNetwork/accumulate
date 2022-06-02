@@ -106,10 +106,14 @@ func Unmarshal{{.Interface}}From(rd io.ReadSeeker) ({{.Interface}}, error) {
 
 // Unmarshal{{.Interface}}Json unmarshals a {{.Interface}}.
 func Unmarshal{{.Interface}}JSON(data []byte) ({{.Interface}}, error) {
-	var typ struct{ Type {{.Enumeration}} }
+	var typ *struct{ Type {{.Enumeration}} }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := New{{.Interface}}(typ.Type)
