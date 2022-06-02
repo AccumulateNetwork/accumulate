@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -23,7 +22,7 @@ func makeExtraData(t *testing.T, fn func(*encoding.Writer)) []byte {
 
 func TestExtraData(t *testing.T) {
 	txn1 := new(Transaction)
-	txn1.Header.Principal = url.MustParse("foo")
+	txn1.Header.Principal = AccountUrl("foo")
 	txn1.Header.Initiator = storage.MakeKey(t.Name())
 	txn1.Header.Memo = "asdf"
 	txn1.Header.Metadata = []byte("qwer")
@@ -31,7 +30,7 @@ func TestExtraData(t *testing.T) {
 
 	body1 := new(SendTokens)
 	txn1.Body = body1
-	body1.To = []*TokenRecipient{{Url: url.MustParse("bar"), Amount: *big.NewInt(10)}, {Url: url.MustParse("baz"), Amount: *big.NewInt(20)}}
+	body1.To = []*TokenRecipient{{Url: AccountUrl("bar"), Amount: *big.NewInt(10)}, {Url: AccountUrl("baz"), Amount: *big.NewInt(20)}}
 	body1.extraData = makeExtraData(t, func(w *encoding.Writer) { w.WriteString(10, "extra body data") })
 
 	// Marshal and unmarshal

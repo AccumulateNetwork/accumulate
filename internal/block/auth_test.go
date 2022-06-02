@@ -26,7 +26,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 	// Foo's first authority and signer
 	authority := new(FakeAuthority)
-	authority.Url = url.MustParse("foo/authority")
+	authority.Url = protocol.AccountUrl("foo", "authority")
 	authority.AddAuthority(authority.Url)
 	t.PutAccount(authority)
 
@@ -37,7 +37,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 	// Foo's second authority and signer
 	authority2 := new(FakeAuthority)
-	authority2.Url = url.MustParse("foo/authority2")
+	authority2.Url = protocol.AccountUrl("foo", "authority2")
 	authority2.AddAuthority(authority2.Url)
 	t.PutAccount(authority2)
 
@@ -59,7 +59,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 	// An authority and signer belonging to a different root identity
 	remoteAuthority := new(FakeAuthority)
-	remoteAuthority.Url = url.MustParse("bar/authority")
+	remoteAuthority.Url = protocol.AccountUrl("bar", "authority")
 	remoteAuthority.AddAuthority(remoteAuthority.Url)
 	t.PutAccount(remoteAuthority)
 
@@ -70,7 +70,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 	// Foo's account
 	account := new(FakeAccount)
-	account.Url = url.MustParse("foo/account")
+	account.Url = protocol.AccountUrl("foo", "account")
 	account.AddAuthority(authority.Url)
 	t.PutAccount(account)
 
@@ -307,14 +307,14 @@ func TestAddAuthority(tt *testing.T) {
 	sim.InitFromGenesis()
 
 	// Main identity
-	alice := url.MustParse("alice")
+	alice := protocol.AccountUrl("alice")
 	aliceKey := GenerateKey(tt.Name(), alice)
 	sim.CreateIdentity(alice, aliceKey[32:])
 	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e9)})
 	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
 	// Second identity
-	bob := url.MustParse("bob")
+	bob := protocol.AccountUrl("bob")
 	bobKey := GenerateKey(tt.Name(), bob)
 	sim.CreateIdentity(bob, bobKey[32:])
 	updateAccount(sim, bob.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
@@ -455,7 +455,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := url.MustParse("alice")
+	alice := protocol.AccountUrl("alice")
 	lite := AcmeLiteAddressStdPriv(GenerateKey(t.Name(), "Lite"))
 	mainKey := GenerateKey(t.Name(), alice)
 	unauthKey := GenerateKey(t.Name(), alice, "unauth")
@@ -481,7 +481,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, unauthKey).
 			Build(),
 	)
-	require.EqualError(t, err, "signature 0: acc://alice/unauth/book/1 is not authorized to sign transactions for acc://alice/tokens")
+	require.EqualError(t, err, "signature 0: acc://alice.acme/unauth/book/1 is not authorized to sign transactions for acc://alice.acme/tokens")
 
 	// An unauthorized signer should be able to send tokens
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
@@ -509,7 +509,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		var account *protocol.TokenAccount
 		require.NoError(t, t.Account(alice.JoinPath("tokens")).GetStateAs(&account))
 		account = t.PutAccountCopy(account).(*protocol.TokenAccount)
-		account.AddAuthority(url.MustParse("foo")).Disabled = true
+		account.AddAuthority(protocol.AccountUrl("foo")).Disabled = true
 
 		// The transaction
 		txn := new(protocol.Transaction)

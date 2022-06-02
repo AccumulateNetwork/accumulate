@@ -40,7 +40,7 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 func testCase3_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "account create token acc://RedWagon red1 acc://RedWagon/acct acc://acme acc://RedWagon/book")
+	r, err := tc.executeTx(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acct acc://acme acc://RedWagon.acme/book")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -52,7 +52,7 @@ func testCase3_1(t *testing.T, tc *testCmd) {
 func testCase3_2(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.execute(t, "account create token acc://RedWagon red1 acmeacct2 acc://acme acc://RedWagon/book")
+	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acmeacct2 acc://acme acc://RedWagon.acme/book")
 	require.Error(t, err)
 
 	t.Log(r)
@@ -64,7 +64,7 @@ func testCase3_2(t *testing.T, tc *testCmd) {
 func testCase3_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.execute(t, "account create token acc://RedWagon red1 acc://RedWagon/acmeacct acc://factoid acc://RedWagon/book")
+	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acmeacct acc://factoid.acme acc://RedWagon.acme/book")
 	require.Error(t, err)
 
 	t.Log(r)

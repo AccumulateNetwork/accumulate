@@ -41,6 +41,9 @@ const StatusUnauthorized Status = 403
 // StatusNotFound means a record could not be found.
 const StatusNotFound Status = 404
 
+// StatusConflict means the request failed due to a conflict.
+const StatusConflict Status = 409
+
 // StatusBadSignerVersion means the signer version does not match.
 const StatusBadSignerVersion Status = 411
 
@@ -57,7 +60,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusUnknown, StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError:
+	case StatusUnknown, StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError:
 		*v = u
 		return true
 	default:
@@ -90,6 +93,8 @@ func (v Status) String() string {
 		return "unauthorized"
 	case StatusNotFound:
 		return "notFound"
+	case StatusConflict:
+		return "conflict"
 	case StatusBadSignerVersion:
 		return "badSignerVersion"
 	case StatusBadTimestamp:
@@ -126,6 +131,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusUnauthorized, true
 	case "notfound":
 		return StatusNotFound, true
+	case "conflict":
+		return StatusConflict, true
 	case "badsignerversion":
 		return StatusBadSignerVersion, true
 	case "badtimestamp":

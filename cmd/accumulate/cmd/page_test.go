@@ -22,7 +22,7 @@ func init() {
 func testCase4_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "book create acc://RedWagon red1 acc://RedWagon/book4_1")
+	r, err := tc.executeTx(t, "book create acc://RedWagon.acme red1 acc://RedWagon.acme/book4_1")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -31,7 +31,7 @@ func testCase4_1(t *testing.T, tc *testCmd) {
 func testCase4_2(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "book create acc://RedWagon red1 acc://RedWagon/book0 red2")
+	r, err := tc.executeTx(t, "book create acc://RedWagon.acme red1 acc://RedWagon.acme/book0 red2")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -40,10 +40,10 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book0/1 1000 10", liteAccounts[2])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book0/1 1000 10", liteAccounts[2])
 	require.NoError(t, err)
 
-	r, err := tc.executeTx(t, "page key add acc://RedWagon/book0/1 red2 red4")
+	r, err := tc.executeTx(t, "page key add acc://RedWagon.acme/book0/1 red2 red4")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -53,11 +53,11 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "page create acc://RedWagon/book0 red2 red3")
+	r, err := tc.executeTx(t, "page create acc://RedWagon.acme/book0 red2 red3")
 	require.NoError(t, err)
 	t.Log(r)
 
-	r, err = tc.executeTx(t, "page create acc://RedWagon/book0 red2 red5")
+	r, err = tc.executeTx(t, "page create acc://RedWagon.acme/book0 red2 red5")
 	require.NoError(t, err)
 	t.Log(r)
 
@@ -67,7 +67,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 func testCase4_5(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	r, err := tc.executeTx(t, "account create token acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book0")
+	r, err := tc.executeTx(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acct2 acc://ACME acc://RedWagon.acme/book0")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -78,7 +78,7 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//remove red4
-	r, err := tc.executeTx(t, "page key remove acc://RedWagon/book0/1 red2 red4")
+	r, err := tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red4")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -89,7 +89,7 @@ func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//replace key3 with key 4
-	r, err := tc.executeTx(t, "page key update acc://RedWagon/book0/1 red2 red2 red5")
+	r, err := tc.executeTx(t, "page key update acc://RedWagon.acme/book0/1 red2 red2 red5")
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -101,12 +101,12 @@ func testCase4_8(t *testing.T, tc *testCmd) {
 
 	t.Log("Skipping test to await for full support for v2")
 
-	//commandLine := fmt.Sprintf("tx create %s acc://RedWagon/acct2 5", liteAccounts[0])
+	//commandLine := fmt.Sprintf("tx create %s acc://RedWagon.acme/acct2 5", liteAccounts[0])
 	//r, err := tc.execute(t, commandLine)
 	//require.NoError(t, err)
 	//
 	//time.Sleep(2 * time.Second)
-	//commandLine = fmt.Sprintf("tx create acc://RedWagon/acct2 red3 1 1 acc://Redwagon/acct 1.1234")
+	//commandLine = fmt.Sprintf("tx create acc://RedWagon.acme/acct2 red3 1 1 acc://Redwagon.acme/acct 1.1234")
 	//r, err = tc.execute(t, commandLine)
 	//require.NoError(t, err)
 	//
