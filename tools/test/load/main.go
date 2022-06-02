@@ -180,8 +180,6 @@ func initClient(server string) (string, error) {
 		guard <- struct{}{}
 	}
 
-	stop(runCmd)
-
 	return "", nil
 }
 
