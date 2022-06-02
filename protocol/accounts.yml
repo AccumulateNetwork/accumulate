@@ -145,6 +145,10 @@ DataAccount:
     - name: Scratch
       type: bool
       optional: true
+    - name: Entry
+      type: DataEntry
+      marshal-as: union
+      optional: true
 
 TokenIssuer:
   union: { type: account }
