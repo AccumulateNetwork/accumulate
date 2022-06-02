@@ -26,6 +26,9 @@ func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 }
 
 func EqualTransactionResult(a, b TransactionResult) bool {
+	if a == b {
+		return true
+	}
 	// TODO Find a way to generate this
 	switch a := a.(type) {
 	case *WriteDataResult:
