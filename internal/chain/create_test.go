@@ -7,7 +7,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
@@ -15,7 +14,7 @@ import (
 func TestCreateAccountWithinNonAdi(t *testing.T) {
 	// Setup
 	db := database.OpenInMemory(nil)
-	alice := url.MustParse("alice")
+	alice := protocol.AccountUrl("alice")
 	aliceTokens := alice.JoinPath("tokens")
 	badAccount := aliceTokens.JoinPath("account")
 	_ = db.Update(func(batch *database.Batch) error {
@@ -56,8 +55,8 @@ func TestCreateAccountWithinNonAdi(t *testing.T) {
 func TestCreateAccountWithinOtherAdi(t *testing.T) {
 	// Setup
 	db := database.OpenInMemory(nil)
-	alice := url.MustParse("alice")
-	bob := url.MustParse("bob")
+	alice := protocol.AccountUrl("alice")
+	bob := protocol.AccountUrl("bob")
 	badAccount := bob.JoinPath("account")
 	_ = db.Update(func(batch *database.Batch) error {
 		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(alice), types.String(alice.String())))
@@ -69,12 +68,12 @@ func TestCreateAccountWithinOtherAdi(t *testing.T) {
 		Body  protocol.TransactionBody
 		Error string
 	}{
-		{&protocol.CreateDataAccount{Url: badAccount}, "invalid principal: cannot create acc://bob/account as a child of acc://alice"},
-		{&protocol.CreateIdentity{Url: badAccount}, "invalid principal: cannot create acc://bob/account as a child of acc://alice"},
-		{&protocol.CreateKeyBook{Url: badAccount}, "invalid principal: cannot create acc://bob/account as a child of acc://alice"},
-		{&protocol.CreateDataAccount{Url: badAccount}, "invalid principal: cannot create acc://bob/account as a child of acc://alice"},
-		{&protocol.CreateTokenAccount{Url: badAccount}, "invalid principal: cannot create acc://bob/account as a child of acc://alice"},
-		{&protocol.CreateToken{Url: badAccount}, "invalid principal: cannot create acc://bob/account as a child of acc://alice"},
+		{&protocol.CreateDataAccount{Url: badAccount}, "invalid principal: cannot create acc://bob.acme/account as a child of acc://alice.acme"},
+		{&protocol.CreateIdentity{Url: badAccount}, "invalid principal: cannot create acc://bob.acme/account as a child of acc://alice.acme"},
+		{&protocol.CreateKeyBook{Url: badAccount}, "invalid principal: cannot create acc://bob.acme/account as a child of acc://alice.acme"},
+		{&protocol.CreateDataAccount{Url: badAccount}, "invalid principal: cannot create acc://bob.acme/account as a child of acc://alice.acme"},
+		{&protocol.CreateTokenAccount{Url: badAccount}, "invalid principal: cannot create acc://bob.acme/account as a child of acc://alice.acme"},
+		{&protocol.CreateToken{Url: badAccount}, "invalid principal: cannot create acc://bob.acme/account as a child of acc://alice.acme"},
 	}
 
 	for _, c := range cases {

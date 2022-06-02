@@ -139,6 +139,10 @@ func (e *Error) recordCallSite(depth int) {
 	e.CallStack = append(e.CallStack, cs)
 }
 
+func (e *Error) CodeID() uint64 {
+	return uint64(e.Code)
+}
+
 func (e *Error) Error() string {
 	if e.Message == "" && e.Cause != nil {
 		return e.Cause.Error()

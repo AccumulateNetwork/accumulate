@@ -294,7 +294,14 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 		return nil, err
 	}
 	if res.Code != 0 {
-		return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
+		result := new(protocol.TransactionStatus)
+		if Remarshal(res.Result, result) != nil {
+			return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
+		}
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		return nil, protocol.NewError(protocol.ErrorCode(result.Code), errors.New(result.Message))
 	}
 
 	return res, nil
@@ -637,7 +644,7 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 		case <-ticker:
 			// Get a proof of the BVN anchor
 			req = new(api.GeneralQuery)
-			req.Url = url2.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
+			req.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", localReceipt.Anchor))
 			resp = new(api.ChainQueryResponse)
 			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
