@@ -1,21 +1,27 @@
 package e2e
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
@@ -341,4 +347,69 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
 		return nil
 	})
+}
+
+func TestGetBlocks(t *testing.T) {
+	client, err := client.New("https://testnet.accumulatenetwork.io")
+	require.NoError(t, err)
+
+	// Query DN blocks
+	req := new(api.MinorBlocksQuery)
+	req.Url = url.MustParse("dn")
+	req.Start = 100
+	req.Count = 10
+	req.TxFetchMode = query.TxFetchModeExpand
+	resp, err := client.QueryMinorBlocks(context.Background(), req)
+	require.NoError(t, err)
+
+	// For each DN block
+	for _, block := range resp.Items {
+		// This block would be unnecessary for JavaScript
+		data, err := json.Marshal(block)
+		require.NoError(t, err)
+		var resp api.MinorQueryResponse
+		require.NoError(t, json.Unmarshal(data, &resp))
+
+		// Just to make the output cleaner for this test
+		if len(resp.Transactions) == 0 {
+			continue
+		}
+
+		fmt.Printf("Block %d @ %v\n", resp.BlockIndex, resp.BlockTime)
+
+		// Print each transaction and record anchors
+		var anchors []*protocol.SyntheticAnchor
+		for _, env := range resp.Transactions {
+			fmt.Printf("    %v %X (%v)", env.Transaction.Header.Principal, env.Transaction.GetHash()[:4], env.Transaction.Body.Type())
+
+			if anchor, ok := env.Transaction.Body.(*protocol.SyntheticAnchor); ok {
+				anchors = append(anchors, anchor)
+				fmt.Printf(" block %d from %v", anchor.Block, anchor.Source)
+			}
+			fmt.Println()
+		}
+
+		// For each anchor in the block
+		for _, anchor := range anchors {
+			// Query the corresponding BVN block
+			req := new(api.MinorBlocksQuery)
+			req.Url = anchor.Source
+			req.Start = anchor.Block
+			req.Count = 1
+			req.TxFetchMode = query.TxFetchModeExpand
+			resp, err := client.QueryMinorBlocks(context.Background(), req)
+			require.NoError(t, err)
+
+			// Print out the transactions
+			for _, block := range resp.Items {
+				data, err := json.Marshal(block)
+				require.NoError(t, err)
+				var resp api.MinorQueryResponse
+				require.NoError(t, json.Unmarshal(data, &resp))
+				for _, env := range resp.Transactions {
+					fmt.Printf("    %v %X (%v)\n", env.Transaction.Header.Principal, env.Transaction.GetHash()[:4], env.Transaction.Body.Type())
+				}
+			}
+		}
+	}
 }
