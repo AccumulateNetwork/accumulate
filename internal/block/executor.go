@@ -32,12 +32,12 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger  log.Logger         `json:"logger,omitempty"`
-	Key     ed25519.PrivateKey `json:"key,omitempty"`
-	Router  routing.Router     `json:"router,omitempty"`
-	Network config.Accumulate  `json:"network"`
+	Logger  log.Logger
+	Key     ed25519.PrivateKey
+	Router  routing.Router
+	Network config.Describe
 
-	isGenesis bool `json:"is_genesis,omitempty"`
+	isGenesis bool
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -76,7 +76,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		UpdateValidatorKey{},
 	}
 
-	switch opts.Network.Type {
+	switch opts.Network.NetworkType {
 	case config.Directory:
 		executors = append(executors,
 			PartitionAnchor{},
@@ -89,7 +89,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.Type)
+		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -100,10 +100,10 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Accumulate, router routing.Router) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, router routing.Router) (*Executor, error) {
 	return newExecutor(
 		ExecutorOptions{
-			Network:   network,
+			Network:   *network,
 			Logger:    logger,
 			Router:    router,
 			isGenesis: true,

@@ -21,7 +21,7 @@ type StateManager struct {
 	OriginUrl *url.URL
 }
 
-func LoadStateManager(net *config.Network, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+func LoadStateManager(net *config.Describe, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
 	var signer protocol.Signer
 	err := batch.Account(status.Initiator).GetStateAs(&signer)
 	switch {
@@ -50,7 +50,7 @@ func LoadStateManager(net *config.Network, batch *database.Batch, principal prot
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(net *config.Network, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
+func NewStateManager(net *config.Describe, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal

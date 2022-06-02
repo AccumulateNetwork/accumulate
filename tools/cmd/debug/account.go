@@ -48,7 +48,7 @@ func accountId(_ *cobra.Command, args []string) {
 		check(err)
 		info, err = dclient.Describe(context.Background())
 		check(err)
-		bvnCount = len(info.Network.Subnets)
+		bvnCount = len(info.Describe.Subnets)
 		args = args[1:]
 	}
 
@@ -59,7 +59,7 @@ func accountId(_ *cobra.Command, args []string) {
 	fmt.Printf("Identity ID   : %X\n", u.IdentityAccountID())
 	fmt.Printf("Routing number: %X\n", u.Routing())
 	if bvnCount != 0 {
-		subnet, err := routing.RouteAccount(&info.Network, u)
+		subnet, err := routing.RouteAccount(&info.Describe.Network, u)
 		check(err)
 		fmt.Printf("Routes to     : %s\n", subnet)
 	}

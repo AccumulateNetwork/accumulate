@@ -26,7 +26,7 @@ import (
 type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
 
 type InitOpts struct {
-	Network             config.Network
+	Network             config.Describe
 	AllConfigs          []*config.Config
 	Validators          []tmtypes.GenesisValidator
 	NetworkValidatorMap NetworkValidatorMap
@@ -49,11 +49,11 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	if b.InitOpts.NetworkValidatorMap == nil {
 		panic("NetworkValidatorMap is not present")
 	}
-	if _, ok := b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.LocalSubnetID]; !ok {
-		b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.LocalSubnetID] = b.InitOpts.Validators
+	if _, ok := b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.SubnetId]; !ok {
+		b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.SubnetId] = b.InitOpts.Validators
 	}
 
-	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, opts.Router)
+	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &opts.Network, opts.Router)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, err
 	}
 
-	switch b.InitOpts.Network.Type {
+	switch b.InitOpts.Network.NetworkType {
 	case config.Directory:
 		err = b.initDN(oraclePrice)
 		if err != nil {
@@ -281,7 +281,7 @@ func (b *bootstrap) createAnchorPool() {
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.nodeUrl.JoinPath(protocol.AnchorPool)
 
-	if b.Network.Type == config.Directory {
+	if b.Network.NetworkType == config.Directory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
 		anchorLedger.MajorBlockTime = b.InitOpts.GenesisTime
@@ -374,14 +374,14 @@ func (b *bootstrap) initBVN() error {
 	// Test with `${ID}` not `bvn-${ID}` because the latter will fail
 	// with "bvn-${ID} is reserved"
 	network := b.InitOpts.Network
-	if err := protocol.IsValidAdiUrl(&url.URL{Authority: network.LocalSubnetID}); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
+	if err := protocol.IsValidAdiUrl(&url.URL{Authority: network.SubnetId}); err != nil {
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.SubnetId, err))
 	}
 
 	b.createBVNOperatorBook(b.nodeUrl, b.InitOpts.NetworkValidatorMap)
 
-	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
-	if err == nil && subnet == network.LocalSubnetID {
+	subnet, err := routing.RouteAccount(&network.Network, protocol.FaucetUrl)
+	if err == nil && subnet == network.SubnetId {
 		liteId := new(protocol.LiteIdentity)
 		liteId.Url = protocol.FaucetUrl.RootIdentity()
 
@@ -397,8 +397,8 @@ func (b *bootstrap) initBVN() error {
 			return err
 		}
 		for _, factomAddress := range factomAddresses {
-			subnet, err := routing.RouteAccount(&network, factomAddress.Address)
-			if err == nil && subnet == network.LocalSubnetID {
+			subnet, err := routing.RouteAccount(&network.Network, factomAddress.Address)
+			if err == nil && subnet == network.SubnetId {
 				lite := new(protocol.LiteTokenAccount)
 				lite.Url = factomAddress.Address
 				lite.TokenUrl = protocol.AcmeUrl()
@@ -495,7 +495,7 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 }
 
 func (b *bootstrap) generateNetworkDefinition() error {
-	if b.InitOpts.Network.Type != config.Directory {
+	if b.InitOpts.Network.NetworkType != config.Directory {
 		return fmt.Errorf("generateNetworkDefinition is only allowed for DNs")
 	}
 	networkDefs := b.buildNetworkDefinition()
@@ -533,7 +533,7 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	}
 
 	genDoc := &tmtypes.GenesisDoc{
-		ChainID:         b.InitOpts.Network.LocalSubnetID,
+		ChainID:         b.InitOpts.Network.SubnetId,
 		GenesisTime:     b.InitOpts.GenesisTime,
 		InitialHeight:   protocol.GenesisBlock + 1,
 		Validators:      b.InitOpts.Validators,

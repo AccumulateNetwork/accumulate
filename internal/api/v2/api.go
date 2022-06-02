@@ -14,7 +14,7 @@ import (
 
 type Options struct {
 	Logger           log.Logger
-	Network          *config.Network
+	Network          *config.Describe
 	Router           routing.Router
 	TxMaxWaitTime    time.Duration
 	PrometheusServer string

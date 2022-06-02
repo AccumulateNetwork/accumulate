@@ -1,26 +1,32 @@
 
 NetworkConfigRequest:
+  non-binary: true
   fields:
     - name: Network
       type: string
 
 NetworkConfigResponse:
+  non-binary: true
   fields:
     - name: Network
-      type: Network
+      type: config.Network
+      marshal-as: reference
 
 SubnetListRequest:
+  non-binary: true
   fields:
     - name: Network
       type: string
 
 SubnetListResponse:
+  non-binary: true
   fields:
     - name: Subnets
       type: string
       repeatable: true
 
 SeedListRequest:
+  non-binary: true
   fields:
     - name: Network
       type: string
@@ -30,12 +36,14 @@ SeedListRequest:
       type: int
 
 SeedListResponse:
+  non-binary: true
   fields:
     - name: Addresses
       type: string
       repeatable: true
 
 SeedCountRequest:
+  non-binary: true
   fields:
     - name: Network
       type: string
@@ -43,6 +51,7 @@ SeedCountRequest:
       type: string
 
 SeedCountResponse:
+  non-binary: true
   fields:
     - name: Count
       type: int

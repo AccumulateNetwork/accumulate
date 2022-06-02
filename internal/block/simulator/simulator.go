@@ -91,11 +91,11 @@ func (sim *Simulator) Setup(bvnCount int) {
 		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
-		network := config.Network{
-			Type:          subnet.Type,
-			LocalSubnetID: subnet.ID,
-			LocalAddress:  subnet.ID,
-			Subnets:       sim.Subnets,
+		network := config.Describe{
+			NetworkType:  subnet.Type,
+			SubnetId:     subnet.ID,
+			LocalAddress: subnet.ID,
+			Network:      config.Network{Subnets: sim.Subnets},
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
@@ -477,7 +477,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	var deliveries []*chain.Delivery
 	for _, envelope := range x.takeSubmitted() {
 		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.SubnetId)
 		deliveries = append(deliveries, d...)
 	}
 

@@ -69,15 +69,15 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	}
 
 	configs := opts.Config
-	subnetID := configs[0].Accumulate.Network.LocalSubnetID
+	subnetID := configs[0].Accumulate.SubnetId
 	genVals := make([]types.GenesisValidator, 0, len(configs))
 	genValKeys := make([][]byte, 0, len(configs))
 
 	var networkType cfg.NetworkType
 	for i, config := range configs {
 		if i == 0 {
-			networkType = config.Accumulate.Network.Type
-		} else if config.Accumulate.Network.Type != networkType {
+			networkType = config.Accumulate.NetworkType
+		} else if config.Accumulate.NetworkType != networkType {
 			return nil, errors.New("Cannot initialize multiple networks at once")
 		}
 
@@ -133,7 +133,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 
 		db := memory.New(opts.Logger.With("module", "storage"))
 		bootstrap, err = genesis.Init(db, genesis.InitOpts{
-			Network:             configs[0].Accumulate.Network,
+			Network:             configs[0].Accumulate.Describe,
 			AllConfigs:          configs,
 			GenesisTime:         genTime,
 			Validators:          genVals,
@@ -181,7 +181,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
-		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
+		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.SubnetId, i)
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
 		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)

@@ -119,7 +119,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 
 func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 	// Only the directory network can open a major block
-	if x.Network.Type != config.Directory {
+	if x.Network.NetworkType != config.Directory {
 		return 0, nil
 	}
 
@@ -300,7 +300,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	// Send the block anchor
 	x.logger.Debug("Anchor block", "index", ledger.Index)
 
-	switch x.Network.Type {
+	switch x.Network.NetworkType {
 	case config.Directory:
 		// DN -> all BVNs
 		anchor, err := x.buildDirectoryAnchor(batch, ledger, openMajor, majorBlockIndex)

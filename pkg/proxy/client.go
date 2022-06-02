@@ -51,7 +51,19 @@ func (c *Client) RequestAPIv2(ctx context.Context, method string, params, result
 	return c.Client.Request(ctx, c.serverRpc, method, params, result)
 }
 
-// GetIp get list of seed ip's.
+// GetNetworkConfig get full network description
+func (c *Client) GetNetworkConfig(ctx context.Context, req *NetworkConfigRequest) (*NetworkConfigResponse, error) {
+	var resp NetworkConfigResponse
+
+	err := c.RequestAPIv2(ctx, "get-subnet-list", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// GetSubnetList get list of subnets on a given network
 func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*SubnetListResponse, error) {
 	var resp SubnetListResponse
 
@@ -63,7 +75,7 @@ func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*Su
 	return &resp, nil
 }
 
-// GetIp get list of seed ip's.
+// GetSeedList get list of seed ip's for a particular subnet
 func (c *Client) GetSeedList(ctx context.Context, req *SeedListRequest) (*SeedListResponse, error) {
 	var resp SeedListResponse
 

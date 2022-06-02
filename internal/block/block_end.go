@@ -104,7 +104,7 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	// If dn/oracle was updated, update the ledger's oracle value, but only if
 	// we're on the DN - mirroring can cause dn/oracle to be updated on the BVN
-	if accountSeen[protocol.PriceOracleAuthority] && m.Network.LocalSubnetID == protocol.Directory {
+	if accountSeen[protocol.PriceOracleAuthority] && m.Network.SubnetId == protocol.Directory {
 		// If things go south here, don't return and error, instead, just log one
 		newOracleValue, err := m.updateOraclePrice(block)
 		if err != nil {
@@ -170,7 +170,7 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	if len(block.State.ProducedTxns) > 0 {
 		// Build synthetic receipts on Directory nodes
-		if m.Network.Type == config.Directory {
+		if m.Network.NetworkType == config.Directory {
 			err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 			if err != nil {
 				return err

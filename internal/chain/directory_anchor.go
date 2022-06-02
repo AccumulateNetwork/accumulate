@@ -39,12 +39,12 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Trigger a major block?
-	if st.Network.Type != config.Directory {
+	if st.NetworkType != config.Directory {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 	}
 
 	// Update the oracle
-	if body.AcmeOraclePrice != 0 && st.Network.Type != config.Directory {
+	if body.AcmeOraclePrice != 0 && st.NetworkType != config.Directory {
 		var ledgerState *protocol.SystemLedger
 		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 		if err != nil {
@@ -75,7 +75,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 && st.Network.Type != config.Directory {
+	if len(body.OperatorUpdates) > 0 && st.NetworkType != config.Directory {
 		result, err := executeOperatorUpdates(st, body)
 		if err != nil {
 			return result, err

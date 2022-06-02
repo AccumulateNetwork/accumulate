@@ -96,7 +96,7 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 
 func (cm *connectionManager) SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error) {
 	// When subnet is the same as the current node's subnet id, just return the local
-	if strings.EqualFold(subnetId, cm.accConfig.Network.LocalSubnetID) {
+	if strings.EqualFold(subnetId, cm.accConfig.SubnetId) {
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(subnetId)
 		}

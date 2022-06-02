@@ -16,7 +16,7 @@ import (
 )
 
 type stateCache struct {
-	*config.Network
+	*config.Describe
 	logger logging.OptionalLogger
 	txType protocol.TransactionType
 	txHash types.Bytes32
@@ -29,9 +29,9 @@ type stateCache struct {
 	Pretend bool
 }
 
-func newStateCache(net *config.Network, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
+func newStateCache(net *config.Describe, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
 	c := new(stateCache)
-	c.Network = net
+	c.Describe = net
 	c.txType = txtype
 	c.txHash = txid
 	c.batch = batch

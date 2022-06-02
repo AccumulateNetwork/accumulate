@@ -42,7 +42,7 @@ import (
 type FakeNode struct {
 	t       testing.TB
 	db      *database.Database
-	network *config.Network
+	network *config.Describe
 	app     abcitypes.Application
 	client  *acctesting.FakeTendermint
 	key     crypto.PrivKey
@@ -133,7 +133,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n := new(FakeNode)
 	n.t = t
 	n.key = pv.Key.PrivKey
-	n.network = &d.Config.Accumulate.Network
+	n.network = &d.Config.Accumulate.Describe
 	n.logger = d.Logger
 	n.netValMap = netValMap
 
@@ -156,7 +156,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.LocalSubnetID)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.SubnetId)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -167,7 +167,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
 	n.router = &routing.RouterInstance{
-		Network:           n.network,
+		Network:           &n.network.Network,
 		ConnectionManager: connMgr,
 	}
 	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
@@ -184,7 +184,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		DB:       n.db,
 		Logger:   n.logger,
 		Config: &config.Config{Accumulate: config.Accumulate{
-			Network: *n.network,
+			Describe: *n.network,
 			Snapshots: config.Snapshots{
 				Directory: filepath.Join(n.t.TempDir(), "snapshots"),
 			},
@@ -431,7 +431,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.LocalSubnetID, api2.Options{
+	q := api2.NewQueryDirect(n.network.SubnetId, api2.Options{
 		Logger:  n.logger,
 		Network: n.network,
 		Router:  n.router,
@@ -529,7 +529,7 @@ func (n *FakeNode) CreateInitChain() {
 	n.require.NoError(err)
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       n.network.LocalSubnetID,
+		ChainId:       n.network.SubnetId,
 		AppStateBytes: state,
 		InitialHeight: protocol.GenesisBlock + 1,
 	})

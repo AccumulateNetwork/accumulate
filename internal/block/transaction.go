@@ -264,7 +264,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 
 	// Determine which anchor chain to load
 	var subnet string
-	if x.Network.Type != config.Directory {
+	if x.Network.NetworkType != config.Directory {
 		subnet = protocol.Directory
 	} else {
 		var ok bool
@@ -372,7 +372,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(net *config.Network, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
 		status.Remote = false

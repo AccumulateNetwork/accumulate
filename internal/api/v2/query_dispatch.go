@@ -24,7 +24,8 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	errCh := make(chan error)       // Error channel
 	doneCh := make(chan struct{})   // Completion channel
 	wg := new(sync.WaitGroup)       // Wait for completion
-	wg.Add(len(q.Network.Subnets))  //
+
+	wg.Add(len(q.Network.Subnets)) //
 
 	// Mark complete on return
 	defer close(doneCh)

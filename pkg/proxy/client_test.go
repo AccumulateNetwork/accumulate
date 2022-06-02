@@ -45,8 +45,6 @@ func newMux(t *testing.T, methods *jsonrpc2.MethodMap) *http.ServeMux {
 	return mux
 }
 
-func
-
 func NewJrpc(opts Options) (*JrpcMethods, error) {
 	var err error
 	m := new(JrpcMethods)

@@ -613,7 +613,7 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	return signer, nil
 }
 
-func verifySyntheticSignature(net *config.Network, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.SyntheticSignature, md sigExecMetadata) error {
+func verifySyntheticSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.SyntheticSignature, md sigExecMetadata) error {
 	if md.Nested() {
 		return errors.New(errors.StatusBadRequest, "a synthetic signature cannot be nested within another signature")
 	}

@@ -148,9 +148,9 @@ func initBasic(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
+	config := config.Default(description.Describe.Name, description.Describe.NetworkType, nodeType, description.Describe.SubnetId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	config.Accumulate.Network = description.Network
+	config.Accumulate.Network = description.Describe.Network
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
@@ -380,7 +380,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
+	config := config.Default(description.Network.Name, description.Network.Type, nodeType, description.Network.LocalSubnetID)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Network
 

@@ -28,7 +28,7 @@ func NewStateManagerForTest(t *testing.T, db *database.Database, transaction *pr
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
-	m.stateCache = *newStateCache(&config.Network{LocalSubnetID: t.Name()}, transaction.Body.Type(), txid, db.Begin(true))
+	m.stateCache = *newStateCache(&config.Describe{SubnetId: t.Name()}, transaction.Body.Type(), txid, db.Begin(true))
 
 	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
 	return m

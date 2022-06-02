@@ -57,7 +57,7 @@ func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLas
 	return
 }
 
-func getRootReceipt(net *config.Network, batch *Batch, from, to int64) (*managed.Receipt, error) {
+func getRootReceipt(net *config.Describe, batch *Batch, from, to int64) (*managed.Receipt, error) {
 	localChain, err := batch.Account(net.Ledger()).ReadChain(protocol.MinorRootChain)
 	if err != nil {
 		return nil, errors.Unknown("get minor root chain: %w", err)
@@ -115,7 +115,7 @@ func getIndexedChainReceipt(account *Account, name string, chainEntry []byte, in
 	return receipt, nil
 }
 
-func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account) (block uint64, receipt *managed.Receipt, err error) {
+func ReceiptForAccountState(net *config.Describe, batch *Batch, account *Account) (block uint64, receipt *managed.Receipt, err error) {
 	// Get a receipt from the BPT
 	r, err := account.StateReceipt()
 	if err != nil {
@@ -132,7 +132,7 @@ func ReceiptForAccountState(net *config.Network, batch *Batch, account *Account)
 	return rootEntry.BlockIndex, r, nil
 }
 
-func ReceiptForChainEntry(net *config.Network, batch *Batch, account *Account, hash []byte, entry *TransactionChainEntry) (uint64, *managed.Receipt, error) {
+func ReceiptForChainEntry(net *config.Describe, batch *Batch, account *Account, hash []byte, entry *TransactionChainEntry) (uint64, *managed.Receipt, error) {
 	// Load the index entry
 	accountIndex, err := loadIndexEntry(account, entry.Chain, protocol.IndexChain(entry.Chain, false), entry.ChainIndex)
 	if err != nil {
@@ -167,7 +167,7 @@ func ReceiptForChainEntry(net *config.Network, batch *Batch, account *Account, h
 	return rootIndex.BlockIndex, r, nil
 }
 
-func ReceiptForChainIndex(net *config.Network, batch *Batch, account *Account, name string, index int64) (uint64, *managed.Receipt, error) {
+func ReceiptForChainIndex(net *config.Describe, batch *Batch, account *Account, name string, index int64) (uint64, *managed.Receipt, error) {
 	indexChain, err := account.ReadIndexChain(name, false)
 	if err != nil {
 		return 0, nil, fmt.Errorf("unable to load %s index chain of %v: %w", name, account, err)

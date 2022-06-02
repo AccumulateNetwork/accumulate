@@ -64,7 +64,7 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	Network   config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Describe  config.Describe `json:"describe,omitempty" form:"describe" query:"describe" validate:"required"`
 	extraData []byte
 }
 

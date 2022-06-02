@@ -55,7 +55,7 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 }
 
 func (m *JrpcMethods) EnableDebug() {
-	q := m.querier.direct(m.Network.LocalSubnetID)
+	q := m.querier.direct(m.Network.SubnetId)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -122,6 +122,6 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
-	res.Network = *m.Network
+	res.Describe = *m.Network
 	return res
 }

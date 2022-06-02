@@ -468,8 +468,8 @@ DescriptionResponse:
   non-binary: true
   incomparable: true
   fields:
-    - name: Network
-      type: config.Network
+    - name: Describe
+      type: config.Describe
       marshal-as: reference
 
 SyntheticTransactionRequest:
