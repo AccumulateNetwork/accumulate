@@ -19,9 +19,9 @@ SystemLedger:
       type: uint
     - name: AcmeBurnt
       type: bigint
-    - name: OperatorUpdates
-      type: KeyPageOperation
-      marshal-as: union
+    - name: PendingUpdates
+      type: NetworkAccountUpdate
+      marshal-as: reference
       repeatable: true
 
 SyntheticLedger:
@@ -75,11 +75,11 @@ DirectoryAnchor:
   fields:
     - name: AcmeOraclePrice
       type: uvarint
-    - name: OperatorUpdates
-      description: anchor-based synchronization updates from bvn
-      type: KeyPageOperation
+    - name: Updates
+      description: are synchronization updates for network accounts
+      type: NetworkAccountUpdate
+      marshal-as: reference
       repeatable: true
-      marshal-as: union
     - name: Receipts
       description: are receipts for anchors from other subnets that were included in the block
       type: Receipt
@@ -102,6 +102,14 @@ SystemWriteData:
 
 
 ##### Data Types #####
+
+NetworkAccountUpdate:
+  fields:
+    - name: Name
+      type: string
+    - name: Body
+      type: TransactionBody
+      marshal-as: union
 
 SubnetAnchor:
   fields:

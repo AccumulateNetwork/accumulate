@@ -18,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -182,76 +181,43 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, err
 	}
 
-	switch b.InitOpts.Network.Type {
-	case config.Directory:
-		err = b.initDN(oraclePrice)
-		if err != nil {
-			return nil, err
-		}
-		if b.InitOpts.NetworkValidatorMap != nil {
-			err = b.generateNetworkDefinition()
-			if err != nil {
-				return nil, err
-			}
-		}
-	case config.BlockValidator:
-		err = b.initBVN()
+	err = b.createOracle(oraclePrice)
+	if err != nil {
+		return nil, err
+	}
+
+	if b.InitOpts.NetworkValidatorMap != nil {
+		err = b.generateNetworkDefinition()
 		if err != nil {
 			return nil, err
 		}
 	}
+
+	switch b.InitOpts.Network.Type {
+	case config.Directory:
+		err = b.initDN()
+	case config.BlockValidator:
+		err = b.initBVN()
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	err = st.Create(b.records...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create records: %w", err)
 	}
 
-	var timestamp uint64
 	for _, wd := range b.dataRecords {
 		body := new(protocol.SystemWriteData)
 		body.Entry = wd.Entry
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = wd.Account
 		txn.Body = body
-		sigs, err := b.sign(txn, b.Network.DefaultOperatorPage(), &timestamp)
-		if err != nil {
-			return nil, err
-		}
-		st.State.ProcessAdditionalTransaction(tx.NewChild(txn, sigs))
+		st.State.ProcessAdditionalTransaction(tx.NewInternal(txn))
 	}
 
 	return nil, st.AddDirectoryEntry(b.nodeUrl, b.urls...)
-}
-
-func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *uint64) ([]protocol.Signature, error) {
-	sig, err := new(signing.Builder).
-		UseSimpleHash().
-		SetUrl(signer).
-		SetVersion(1).
-		SetPrivateKey(b.Keys[0]).
-		SetType(protocol.SignatureTypeED25519).
-		SetTimestampWithVar(timestamp).
-		Initiate(txn)
-	if err != nil {
-		return nil, err
-	}
-
-	sigs := []protocol.Signature{sig}
-	for _, key := range b.Keys[1:] {
-		sig, err := new(signing.Builder).
-			UseSimpleHash().
-			SetUrl(signer).
-			SetVersion(1).
-			SetPrivateKey(key).
-			SetType(protocol.SignatureTypeED25519).
-			SetTimestampWithVar(timestamp).
-			Sign(txn.GetHash())
-		if err != nil {
-			return nil, err
-		}
-		sigs = append(sigs, sig)
-	}
-
-	return sigs, nil
 }
 
 func (b *bootstrap) createADI() {
@@ -368,11 +334,9 @@ func (b *bootstrap) createRouting() error {
 	return nil
 }
 
-func (b *bootstrap) initDN(oraclePrice uint64) error {
-	b.createDNOperatorBook()
-
+func (b *bootstrap) createOracle(price uint64) error {
 	oracle := new(protocol.AcmeOracle)
-	oracle.Price = oraclePrice
+	oracle.Price = price
 	wd := new(protocol.WriteData)
 	data, err := json.Marshal(&oracle)
 	if err != nil {
@@ -383,6 +347,11 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 	daOracle.Url = b.nodeUrl.JoinPath(protocol.Oracle)
 	daOracle.AddAuthority(b.authorityUrl)
 	b.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle.Url, wd.Entry})
+	return nil
+}
+
+func (b *bootstrap) initDN() error {
+	b.createDNOperatorBook()
 
 	acme := new(protocol.TokenIssuer)
 	acme.AddAuthority(b.authorityUrl)
@@ -525,9 +494,6 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 }
 
 func (b *bootstrap) generateNetworkDefinition() error {
-	if b.InitOpts.Network.Type != config.Directory {
-		return fmt.Errorf("generateNetworkDefinition is only allowed for DNs")
-	}
 	networkDefs := b.buildNetworkDefinition()
 	wd := new(protocol.WriteData)
 	data, err := json.Marshal(&networkDefs)
@@ -538,7 +504,7 @@ func (b *bootstrap) generateNetworkDefinition() error {
 
 	da := new(protocol.DataAccount)
 	da.Url = b.nodeUrl.JoinPath(protocol.Network)
-	da.AddAuthority(b.authorityUrl)
+	da.AddAuthority(b.authorityUrl) // TODO Lock BVN accounts so they can't be updated directly
 	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
 	return nil
 }

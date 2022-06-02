@@ -74,11 +74,11 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, nil
 	}
 
-	// Process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 && st.Network.Type != config.Directory {
-		result, err := executeOperatorUpdates(st, body)
+	// Process updates when present
+	if len(body.Updates) > 0 && st.Network.Type != config.Directory {
+		err := processNetworkAccountUpdates(st, tx, body.Updates)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
 	}
 
@@ -104,37 +104,23 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	return nil, nil
 }
 
-func executeOperatorUpdates(st *StateManager, body *protocol.DirectoryAnchor) (protocol.TransactionResult, error) {
-	for _, opUpd := range body.OperatorUpdates {
-		bookUrl := st.NodeUrl().JoinPath(protocol.OperatorBook)
+func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates []protocol.NetworkAccountUpdate) error {
+	for _, update := range updates {
+		txn := new(protocol.Transaction)
+		txn.Body = update.Body
 
-		var page1 *protocol.KeyPage
-		err := st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 0), &page1)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key page: %v", err)
-		}
-
-		// Validate source
-		_, _, ok := page1.EntryByDelegate(body.Source.JoinPath(protocol.OperatorBook))
-		if !ok {
-			return nil, fmt.Errorf("source is not from DN but from %q", body.Source)
-		}
-
-		var page2 *protocol.KeyPage
-		err = st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 1), &page2)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key page: %v", err)
+		switch update.Name {
+		case protocol.OperatorBook:
+			txn.Header.Principal = st.DefaultOperatorPage()
+		case protocol.Globals,
+			protocol.Oracle,
+			protocol.Network:
+			txn.Header.Principal = st.NodeUrl(update.Name)
+		default:
+			return fmt.Errorf("unknown network account %q", update.Name)
 		}
 
-		updateKeyPage := &UpdateKeyPage{}
-		err = updateKeyPage.executeOperation(page2, opUpd)
-		if err != nil {
-			return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
-		}
-		err = st.Update(page2)
-		if err != nil {
-			return nil, fmt.Errorf("unable to update main ledger: %w", err)
-		}
+		st.State.ProcessAdditionalTransaction(delivery.NewInternal(txn))
 	}
-	return nil, nil
+	return nil
 }
