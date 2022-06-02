@@ -48,11 +48,6 @@ func (s *Builder) SetUrl(u *url.URL) *Builder {
 	return s
 }
 
-func (s *Builder) SetKeyPageUrl(pageUrl *url.URL) *Builder {
-	s.Url = pageUrl
-	return s
-}
-
 func (s *Builder) SetPrivateKey(privKey []byte) *Builder {
 	s.Signer = PrivateKey(privKey)
 	return s

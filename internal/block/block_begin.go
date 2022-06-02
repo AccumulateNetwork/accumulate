@@ -422,7 +422,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 		keySig, err := new(signing.Builder).
 			SetType(protocol.SignatureTypeED25519).
 			SetPrivateKey(x.Key).
-			SetKeyPageUrl(x.Network.DefaultValidatorPage()).
+			SetUrl(x.Network.DefaultValidatorPage()).
 			SetVersion(1).
 			SetTimestamp(1).
 			Sign(hash)
@@ -594,7 +594,7 @@ func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64
 	keySig, err := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(x.Key).
-		SetKeyPageUrl(x.Network.DefaultValidatorPage()).
+		SetUrl(x.Network.DefaultValidatorPage()).
 		SetVersion(1).
 		Sign(txn.GetHash())
 	if err != nil {
