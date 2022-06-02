@@ -52,7 +52,7 @@ const (
 	FeeIssueTokens Fee = 300
 
 	// FeeBurnTokens equiv. to token send
-	FeeBurnTokens Fee = 300
+	FeeBurnTokens Fee = 10
 
 	// FeeCreateKeyPage $1.00
 	FeeCreateKeyPage Fee = 10000
