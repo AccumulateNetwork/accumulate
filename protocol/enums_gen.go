@@ -374,6 +374,9 @@ const TransactionTypeDirectoryAnchor TransactionType = 97
 // TransactionTypePartitionAnchor system transaction for partition data.
 const TransactionTypePartitionAnchor TransactionType = 98
 
+// TransactionTypeSystemWriteData writes data to a system data account.
+const TransactionTypeSystemWriteData TransactionType = 99
+
 // VoteTypeAccept vote yea in favor of proposal.
 const VoteTypeAccept VoteType = 0
 
@@ -1335,7 +1338,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1406,6 +1409,8 @@ func (v TransactionType) String() string {
 		return "directoryAnchor"
 	case TransactionTypePartitionAnchor:
 		return "partitionAnchor"
+	case TransactionTypeSystemWriteData:
+		return "systemWriteData"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1476,6 +1481,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeDirectoryAnchor, true
 	case "partitionanchor":
 		return TransactionTypePartitionAnchor, true
+	case "systemwritedata":
+		return TransactionTypeSystemWriteData, true
 	default:
 		return 0, false
 	}

@@ -192,12 +192,12 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	var timestamp uint64
 	for _, wd := range b.dataRecords {
-		body := new(protocol.WriteData)
+		body := new(protocol.SystemWriteData)
 		body.Entry = wd.Entry
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = wd.Account
 		txn.Body = body
-		sigs, err := b.sign(txn, b.Network.DefaultValidatorPage(), &timestamp)
+		sigs, err := b.sign(txn, b.Network.DefaultOperatorPage(), &timestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -238,6 +238,7 @@ func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *
 
 	return sigs, nil
 }
+
 func (b *bootstrap) createADI() {
 	// Create the ADI
 	adi := new(protocol.ADI)
@@ -254,7 +255,7 @@ func (b *bootstrap) createValidatorBook() {
 	book.AddAuthority(uBook)
 	book.PageCount = 1
 
-	page := createOperatorPage(uBook, 0, b.InitOpts.Validators, true)
+	page := createOperatorPage(uBook, 0, b.InitOpts.NetworkValidatorMap, true)
 	b.WriteRecords(book, page)
 }
 
@@ -377,7 +378,7 @@ func (b *bootstrap) initBVN() error {
 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
 	}
 
-	b.createBVNOperatorBook(b.nodeUrl, b.InitOpts.Validators)
+	b.createBVNOperatorBook(b.nodeUrl, b.InitOpts.NetworkValidatorMap)
 
 	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
 	if err == nil && subnet == network.LocalSubnetID {
@@ -415,11 +416,11 @@ func (b *bootstrap) createDNOperatorBook() {
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
-	page := createOperatorPage(book.Url, 0, b.InitOpts.Validators, false)
+	page := createOperatorPage(book.Url, 0, b.InitOpts.NetworkValidatorMap, false)
 	b.WriteRecords(book, page)
 }
 
-func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
+func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkValidatorMap) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -427,7 +428,7 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = 1
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
@@ -440,25 +441,45 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.
 	b.WriteRecords(book, page1, page2)
 }
 
-func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
+func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValidatorMap, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
-	for _, operator := range operators {
-		/* TODO
-		Determine which operators are also validators and which not. Followers should be omitted,
-		but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
-		*/
-		isValidator := true
-		if isValidator || !validatorsOnly {
+	if validatorsOnly {
+		subnet, ok := protocol.ParseSubnetUrl(uBook)
+		if !ok {
+			panic("book URL does not belong to a subnet")
+		}
+
+		operators, ok := operators[subnet]
+		if !ok {
+			panic("missing operators for subnet")
+		}
+
+		for _, operator := range operators {
+			/* TODO
+			Determine which operators are also validators and which not. Followers should be omitted,
+			but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
+			*/
 			spec := new(protocol.KeySpec)
 			kh := sha256.Sum256(operator.PubKey.Bytes())
 			spec.PublicKeyHash = kh[:]
-			page.Keys = append(page.Keys, spec)
+			page.AddKeySpec(spec)
+		}
+
+	} else {
+		for _, operators := range operators {
+			for _, operator := range operators {
+				spec := new(protocol.KeySpec)
+				kh := sha256.Sum256(operator.PubKey.Bytes())
+				spec.PublicKeyHash = kh[:]
+				page.AddKeySpec(spec)
+			}
 		}
 	}
+
+	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
 	return page
 }
 

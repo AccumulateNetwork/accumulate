@@ -84,8 +84,7 @@ func addValidator(st *StateManager, env *Delivery) error {
 	}
 
 	// Add the key hash to the key page
-	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
-	page.Keys = append(page.Keys, key)
+	page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
 
 	// Update the threshold
 	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
@@ -126,10 +125,9 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	}
 
 	// Remove the key hash from the key page
-	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+	page.RemoveKeySpecAt(index)
 
 	// Update the threshold
-
 	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
@@ -191,7 +189,7 @@ func updateValidator(st *StateManager, env *Delivery) error {
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
 	validatorBookUrl := env.Transaction.Header.Principal
 	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
-		return nil, fmt.Errorf("invalid origin: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
+		return nil, fmt.Errorf("invalid principal: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
 	}
 
 	var book *protocol.KeyBook

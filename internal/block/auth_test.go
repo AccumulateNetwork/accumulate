@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -545,4 +546,58 @@ func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *chain.
 	}
 	parent := &chain.Delivery{Transaction: &protocol.Transaction{Body: body}}
 	return parent.NewForwarded(body)
+}
+
+func TestValidateKeyForSynthTxns(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup
+	aliceKey, bobKey := GenerateKey("alice"), GenerateKey("bob")
+	alice, bob := AcmeLiteAddressStdPriv(aliceKey), AcmeLiteAddressStdPriv(bobKey)
+	sim.SetRouteFor(alice.RootIdentity(), "BVN0")
+	sim.SetRouteFor(bob.RootIdentity(), "BVN1")
+	sim.CreateAccount(&protocol.LiteIdentity{Url: alice.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&protocol.LiteTokenAccount{Url: alice, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
+
+	// Change the node's key
+	sim.SubnetFor(alice).Executor.Key = GenerateKey("New")
+
+	// Execute a transaction
+	envs := sim.MustSubmitAndExecuteBlock(
+		NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice, 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&protocol.SendTokens{
+				To: []*protocol.TokenRecipient{
+					{Url: bob, Amount: *big.NewInt(68)},
+				},
+			}).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+			Build(),
+	)
+	txnHash := envs[0].Transaction[0].GetHash()
+	if sim.WaitForTransaction(delivered, txnHash, 50) == nil {
+		t.Fatal("Transaction has not been delivered after 50 blocks")
+	}
+
+	// Get the synthetic transaction ID
+	var synthHash []byte
+	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+		synth, err := batch.Transaction(txnHash).GetSyntheticTxns()
+		require.NoError(t, err)
+		require.Len(t, synth.Hashes, 1)
+		synthHash = synth.Hashes[0][:]
+		return nil
+	})
+
+	// Verify that the synthetic transaction does not get delivered. TODO Verify
+	// an error?
+	if sim.WaitForTransaction(delivered, synthHash, 50) != nil {
+		t.Fatal("Synthetic transaction was delivered")
+	}
 }

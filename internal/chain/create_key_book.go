@@ -36,17 +36,14 @@ func (CreateKeyBook) Execute(st *StateManager, tx *Delivery) (protocol.Transacti
 }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
-	if _, ok := st.Origin.(*protocol.ADI); !ok {
-		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", protocol.AccountTypeIdentity, st.Origin.Type())
-	}
-
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyBook)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), tx.Transaction.Body)
 	}
 
-	if !body.Url.Identity().Equal(st.OriginUrl) {
-		return nil, fmt.Errorf("%q does not belong to %q", body.Url, st.OriginUrl)
+	err := checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
 	}
 
 	book := new(protocol.KeyBook)
@@ -54,7 +51,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	book.AddAuthority(body.Url)
 	book.PageCount = 1
 
-	err := st.SetAuth(book, body.Authorities)
+	err = st.SetAuth(book, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

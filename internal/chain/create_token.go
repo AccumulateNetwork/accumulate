@@ -41,6 +41,11 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), tx.Transaction.Body)
 	}
 
+	err := checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
+	}
+
 	if body.Precision > 18 {
 		return nil, fmt.Errorf("precision must be in range 0 to 18")
 	}
@@ -52,7 +57,7 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	token.Symbol = body.Symbol
 	token.Properties = body.Properties
 
-	err := st.SetAuth(token, body.Authorities)
+	err = st.SetAuth(token, body.Authorities)
 	if err != nil {
 		return nil, err
 	}

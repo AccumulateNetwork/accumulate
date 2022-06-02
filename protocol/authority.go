@@ -69,6 +69,8 @@ func MakeLiteSigner(signer Signer) Signer {
 		signer.Keys = make([]*KeySpec, 0, len(keys))
 		for _, key := range keys {
 			if key.Delegate != nil {
+				// It's OK to use append here because the keys are already in
+				// order
 				signer.Keys = append(signer.Keys, &KeySpec{Delegate: key.Delegate})
 			}
 		}
@@ -150,17 +152,6 @@ func (p *KeyPage) GetSignatureThreshold() uint64 {
 func (p *KeyPage) EntryByKey(key []byte) (int, KeyEntry, bool) {
 	keyHash := sha256.Sum256(key)
 	return p.EntryByKeyHash(keyHash[:])
-}
-
-// EntryByKeyHash finds the entry with a matching key hash.
-func (p *KeyPage) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
-	for i, entry := range p.Keys {
-		if bytes.Equal(entry.PublicKeyHash, keyHash) {
-			return i, entry, true
-		}
-	}
-
-	return -1, nil, false
 }
 
 // EntryByDelegate finds the entry with a matching owner.
