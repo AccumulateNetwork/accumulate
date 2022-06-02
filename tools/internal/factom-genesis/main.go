@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"sync"
 	"time"
 
 	f2 "github.com/FactomProject/factom"
@@ -144,10 +143,9 @@ func WriteDataFromQueueToAccumulate(env string) {
 }
 
 func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
-	var m sync.Mutex
 	for {
-		if len(*queue) > 0 {
-			entry := queue.Pop(&m).(*f2.Entry)
+		if len(*&queue.q) > 0 {
+			entry := queue.Pop().(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
 			err := WriteDataToAccumulate(env, dataEntry, chainUrl)
 			if err != nil {
@@ -184,7 +182,6 @@ func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataE
 }
 
 func GetDataAndPopulateQueue(entries []*f2.Entry) {
-	var m sync.Mutex
 	factomChainData = make(map[[32]byte]*Queue)
 	for _, entry := range entries {
 		accountId, err := hex.DecodeString(entry.ChainID)
@@ -195,7 +192,7 @@ func GetDataAndPopulateQueue(entries []*f2.Entry) {
 		if !ok {
 			factomChainData[*(*[32]byte)(accountId)] = NewQueue()
 		}
-		factomChainData[*(*[32]byte)(accountId)].Push(&m, entry)
+		factomChainData[*(*[32]byte)(accountId)].Push(entry)
 	}
 }
 
