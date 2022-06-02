@@ -77,6 +77,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	}
 
 	flags := cmd.PersistentFlags()
+	flags.StringVar(&DatabaseDir, "database", filepath.Join(currentUser.HomeDir, ".accumulate"), "Directory the database is stored in")
 	flags.StringVarP(&serverAddr, "server", "s", serverAddr, "Accumulated server")
 	flags.DurationVarP(&ClientTimeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVar(&UseUnencryptedWallet, "use-unencrypted-wallet", false, "Use unencrypted wallet (strongly discouraged) stored at ~/.accumulate/wallet.db")
@@ -153,7 +154,6 @@ func InitRootCmd(database db.DB) *cobra.Command {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	DatabaseDir = filepath.Join(currentUser.HomeDir, ".accumulate")
 	rootCmd := InitRootCmd(nil)
 	cobra.CheckErr(rootCmd.Execute())
 }

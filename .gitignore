@@ -28,7 +28,7 @@ tools/cmd/gen-enum/go_build*
 
 # Tooling
 .idea
-.nodes
+.nodes*
 .vagrant
 .terraform
 .terraform.lock.hcl

@@ -6,6 +6,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -77,14 +78,16 @@ func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
 
 // DidAddChainEntry records a chain update in the block state.
 func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
-	if u.Path == "/"+protocol.Synthetic && name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
-		// TODO This will break if we change the subnet URLs
-		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
-			Transaction: entry,
-			ChainEntry:  index,
-		})
-		if err != nil {
-			return err
+	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
+		subnet, ok := protocol.ParseSubnetUrl(u)
+		if ok && protocol.SubnetUrl(subnet).JoinPath(protocol.Synthetic).Equal(u) {
+			err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
+				Transaction: entry,
+				ChainEntry:  index,
+			})
+			if err != nil {
+				return errors.Format(errors.StatusUnknown, "load block state: %w", err)
+			}
 		}
 	}
 
@@ -106,19 +109,19 @@ func (c *ChainUpdates) AddChainEntry(batch *database.Batch, account *url.URL, na
 	// Check if the account exists
 	_, err := batch.Account(account).GetState()
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "load account state: %w", err)
 	}
 
 	// Add an entry to the chain
 	chain, err := batch.Account(account).Chain(name, typ)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "load %s chain: %w", name, err)
 	}
 
 	index := chain.Height()
 	err = chain.AddEntry(entry, true)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "add entry to %s chain: %w", name, err)
 	}
 
 	// Update the ledger

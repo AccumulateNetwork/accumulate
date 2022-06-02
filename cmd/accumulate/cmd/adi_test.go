@@ -43,11 +43,11 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	_, err = tc.executeTx(t, "credits %s %s 1000 100 0.0", liteAccounts[0], liteId)
 	require.NoError(t, err)
 
-	_, err = tc.executeTx(t, "adi create %s acc://RedWagon red1", liteId)
+	_, err = tc.executeTx(t, "adi create %s acc://RedWagon.acme red1", liteId)
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
-	_, err = tc.execute(t, "adi directory acc://RedWagon 0 10")
+	_, err = tc.execute(t, "adi directory acc://RedWagon.acme 0 10")
 	require.NoError(t, err)
 
 }
@@ -77,7 +77,7 @@ func testCase2_3(t *testing.T, tc *testCmd) {
 //Create an ADI with a number only, expect failure
 func testCase2_4(t *testing.T, tc *testCmd) {
 	t.Helper()
-	commandLine := fmt.Sprintf("adi create %s acc://12345 red1", liteAccounts[0])
+	commandLine := fmt.Sprintf("adi create %s acc://12345.acme red1", liteAccounts[0])
 	_, err := tc.execute(t, commandLine)
 	require.Error(t, err)
 
@@ -91,7 +91,7 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 	t.Log("Need to support get txid with upgrade to V2 api to perform test, skipping... ")
 
 	//uncomment after V2 upgrade
-	//commandLine := fmt.Sprintf("adi create %s acc://RedWagon red5 blue green", liteAccounts[0])
+	//commandLine := fmt.Sprintf("adi create %s acc://RedWagon.acme red5 blue green", liteAccounts[0])
 	//r, err := tc.executeTx(t, commandLine)
 	//require.NoError(t, err)
 	//
@@ -110,16 +110,16 @@ func testCase2_6a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//attempt to add 1000 credits with only 9 acme with 15% slippage
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
-	r, err := tc.executeTx(t, "adi create acc://RedWagon red1 acc://Redstone red2")
+	r, err := tc.executeTx(t, "adi create acc://RedWagon.acme red1 acc://Redstone.acme red2")
 	require.NoError(t, err)
 
 	t.Log(r)
 
 	//if this doesn't fail, then adi is created
-	r, err = tc.execute(t, "adi directory acc://Redstone 0 10")
+	r, err = tc.execute(t, "adi directory acc://Redstone.acme 0 10")
 	t.Log(r)
 	require.NoError(t, err)
 }
@@ -138,7 +138,7 @@ func testCase2_6b(t *testing.T, tc *testCmd) {
 	u, err := protocol.LiteTokenAddress(pubKey.PublicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
-	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 %s red2", u.String())
+	commandLine := fmt.Sprintf("adi create acc://RedWagon.acme red1 %s red2", u.String())
 	_, err = tc.execute(t, commandLine)
 	require.Error(t, err)
 }
@@ -148,15 +148,15 @@ func testCase2_6b(t *testing.T, tc *testCmd) {
 func testCase2_7a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
-	r, err := tc.executeTx(t, "adi create acc://RedWagon red1 acc://RedWagon/sub1 red2")
+	r, err := tc.executeTx(t, "adi create acc://RedWagon.acme red1 acc://RedWagon.acme/sub1 red2")
 	t.Log(r)
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
-	r, err = tc.execute(t, "adi directory acc://RedWagon/sub1 0 10")
+	r, err = tc.execute(t, "adi directory acc://RedWagon.acme/sub1 0 10")
 	require.NoError(t, err)
 	t.Log(r)
 }
@@ -166,9 +166,9 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 func testCase2_7b(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	_, err := tc.executeTx(t, "credits %s acc://RedWagon/book/1 1000 10", liteAccounts[1])
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
 
-	_, err = tc.executeTx(t, "adi create acc://RedWagon red1 acc://RedWagon/sub1/sub2 red2")
+	_, err = tc.executeTx(t, "adi create acc://RedWagon.acme red1 acc://RedWagon.acme/sub1/sub2 red2")
 	require.Error(t, err)
 }

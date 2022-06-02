@@ -36,7 +36,7 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	//set the oracle price to $1.00
-	_, err = tc.executeTx(t, "data write dn/oracle dnkey {\"price\":10000}")
+	_, err = tc.executeTx(t, "data write dn.acme/oracle dnkey {\"price\":10000}")
 	require.NoError(t, err)
 }
 
