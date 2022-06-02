@@ -3,7 +3,6 @@ package block
 import (
 	"bytes"
 	"crypto/ed25519"
-	"fmt"
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -89,7 +88,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.Type)
+		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Network.Type)
 	}
 
 	// This is a no-op in dev
@@ -125,7 +124,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
-			panic(fmt.Errorf("duplicate executor for %d", x.Type()))
+			panic(errors.Format(errors.StatusInternalError, "duplicate executor for %d", x.Type()))
 		}
 		m.executors[x.Type()] = x
 
@@ -143,7 +142,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	case errors.Is(err, storage.ErrNotFound):
 		height = 0
 	default:
-		return nil, err
+		return nil, errors.Format(errors.StatusUnknown, "load ledger: %w", err)
 	}
 
 	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
@@ -179,14 +178,21 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	_, err = m.ExecuteEnvelope(block, delivery)
+	status, err := m.ExecuteEnvelope(block, delivery)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
+	if status.Code != 0 {
+		if status.Error != nil {
+			return errors.Wrap(errors.StatusUnknown, status.Error)
+		}
+		return errors.New(errors.StatusUnknown, status.Message)
+	}
+
 	err = m.EndBlock(block)
 	if err != nil {
-		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return nil
@@ -200,7 +206,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, err
+		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
 	}
 }
 
@@ -213,7 +219,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	src := memory.New(nil)
 	err := src.UnmarshalJSON(data)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal app state: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %v", err)
 	}
 
 	// Load the root anchor chain so we can verify the system state
@@ -226,20 +232,20 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	defer subbatch.Discard()
 	err = subbatch.Import(src)
 	if err != nil {
-		return fmt.Errorf("failed to import database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to import database: %v", err)
 	}
 
 	// Commit the database batch
 	err = subbatch.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to load app state into database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %v", err)
 	}
 
 	root := batch.BptRoot()
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
 	if !bytes.Equal(srcRoot, root) {
-		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
+		panic(errors.Format(errors.StatusInternalError, "Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
 	}
 
 	return nil
@@ -248,7 +254,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
 	err := batch.RestoreSnapshot(file)
 	if err != nil {
-		return fmt.Errorf("load state: %w", err)
+		return errors.Format(errors.StatusUnknown, "load state: %w", err)
 	}
 
 	return nil

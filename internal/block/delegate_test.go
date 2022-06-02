@@ -52,7 +52,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := url.MustParse("alice")
+	alice := protocol.AccountUrl("alice")
 	key1, key2 := acctesting.GenerateKey(alice), acctesting.GenerateKey(alice, 2)
 	sim.CreateIdentity(alice, key1[32:])
 	sim.CreateKeyBook(alice.JoinPath("other-book"), key2[32:])
@@ -95,7 +95,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := url.MustParse("alice")
+	alice := protocol.AccountUrl("alice")
 	key1, otherKey1, otherKey2 := acctesting.GenerateKey(alice), acctesting.GenerateKey(alice, 1), acctesting.GenerateKey(alice, 2)
 	sim.CreateIdentity(alice, key1[32:])
 	sim.CreateKeyBook(alice.JoinPath("other-book"), otherKey1[32:], otherKey2[32:])
@@ -142,7 +142,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := url.MustParse("alice")
+	alice := protocol.AccountUrl("alice")
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
 	updateSubnetFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
@@ -192,7 +192,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob := url.MustParse("alice"), url.MustParse("bob")
+	alice, bob := protocol.AccountUrl("alice"), protocol.AccountUrl("bob")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 
@@ -241,7 +241,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob := url.MustParse("alice"), url.MustParse("bob")
+	alice, bob := protocol.AccountUrl("alice"), protocol.AccountUrl("bob")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 
@@ -292,7 +292,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob, charlie := url.MustParse("alice"), url.MustParse("bob"), url.MustParse("charlie")
+	alice, bob, charlie := protocol.AccountUrl("alice"), protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 	sim.SetRouteFor(charlie, "BVN2")
@@ -345,7 +345,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob, charlie := url.MustParse("alice"), url.MustParse("bob"), url.MustParse("charlie")
+	alice, bob, charlie := protocol.AccountUrl("alice"), protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 	sim.SetRouteFor(charlie, "BVN2")
@@ -402,7 +402,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob, charlie := url.MustParse("alice"), url.MustParse("bob"), url.MustParse("charlie")
+	alice, bob, charlie := protocol.AccountUrl("alice"), protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 	sim.SetRouteFor(charlie, "BVN2")
@@ -500,9 +500,9 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		require.Len(t, sigs, 2)
 		require.IsType(t, (*DelegatedSignature)(nil), sigs[0])
 		sig := sigs[0].(*DelegatedSignature)
-		require.Equal(t, "bob/book/1", sig.GetSigner().ShortString())
+		require.Equal(t, "bob.acme/book/1", sig.GetSigner().ShortString())
 		require.IsType(t, (*DelegatedSignature)(nil), sigs[1])
 		sig = sigs[1].(*DelegatedSignature)
-		require.Equal(t, "charlie/book/1", sig.GetSigner().ShortString())
+		require.Equal(t, "charlie.acme/book/1", sig.GetSigner().ShortString())
 	})
 }

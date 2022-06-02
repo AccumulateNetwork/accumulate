@@ -290,11 +290,13 @@ func (v *Error) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Message   string                       `json:"message,omitempty"`
 		Code      Status                       `json:"code,omitempty"`
+		CodeID    uint64                       `json:"codeID,omitempty"`
 		Cause     *Error                       `json:"cause,omitempty"`
 		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
 	}{}
 	u.Message = v.Message
 	u.Code = v.Code
+	u.CodeID = v.CodeID()
 	u.Cause = v.Cause
 	u.CallStack = v.CallStack
 	return json.Marshal(&u)
@@ -304,11 +306,13 @@ func (v *Error) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Message   string                       `json:"message,omitempty"`
 		Code      Status                       `json:"code,omitempty"`
+		CodeID    uint64                       `json:"codeID,omitempty"`
 		Cause     *Error                       `json:"cause,omitempty"`
 		CallStack encoding.JsonList[*CallSite] `json:"callStack,omitempty"`
 	}{}
 	u.Message = v.Message
 	u.Code = v.Code
+	u.CodeID = v.CodeID()
 	u.Cause = v.Cause
 	u.CallStack = v.CallStack
 	if err := json.Unmarshal(data, &u); err != nil {

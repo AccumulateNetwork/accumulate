@@ -259,21 +259,21 @@ func (n *FakeNode) NextHeight() int64 {
 
 func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
 	n.t.Helper()
-	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
 	n.Require().NoError(err)
 	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
 	return r.(*api2.ChainQueryResponse)
 }
 
 func (n *FakeNode) QueryTransaction(url string) *api2.TransactionQueryResponse {
-	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
 	n.require.NoError(err)
 	n.Require().IsType((*api2.TransactionQueryResponse)(nil), r)
 	return r.(*api2.TransactionQueryResponse)
 }
 
 func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
-	r, err := n.api.QueryUrl(n.ParseUrl(url), api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
 	n.require.NoError(err)
 	n.Require().IsType((*api2.MultiResponse)(nil), r)
 	return r.(*api2.MultiResponse)
@@ -403,8 +403,8 @@ func convertIds32(ids ...[32]byte) [][]byte {
 	return ids2
 }
 
-func (n *FakeNode) ParseUrl(s string) *url.URL {
-	u, err := url.Parse(s)
+func (n *FakeNode) parseUrl(s string) *url.URL {
+	u, err := acctesting.ParseUrl(s)
 	require.NoError(n.t, err)
 	return u
 }
@@ -413,7 +413,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	batch := n.db.Begin(false)
 	defer batch.Discard()
 
-	u := n.ParseUrl(adi)
+	u := n.parseUrl(adi)
 	dir := indexing.Directory(batch, u)
 	count, err := dir.Count()
 	if errors.Is(err, storage.ErrNotFound) {

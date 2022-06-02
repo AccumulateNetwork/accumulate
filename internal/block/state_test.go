@@ -24,7 +24,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Prepare the ADI
-	name := url.MustParse("foo")
+	name := protocol.AccountUrl("foo")
 	key := acctesting.GenerateKey(t.Name(), name)
 	SetupIdentity(sim, name, key, &timestamp)
 

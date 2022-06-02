@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -34,7 +35,12 @@ func (x *BlockStateIndexer) Get() (*BlockStateIndex, error) {
 // DidProduceSynthTxn records a produced synthetic transaction.
 func (x *BlockStateIndexer) DidProduceSynthTxn(entry *BlockStateSynthTxnEntry) error {
 	state, err := x.Get()
-	if err != nil {
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.StatusNotFound):
+		state = new(BlockStateIndex)
+	default:
 		return err
 	}
 
