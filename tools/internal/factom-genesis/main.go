@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	f2 "github.com/FactomProject/factom"
@@ -19,7 +20,6 @@ import (
 
 var factomChainData map[[32]byte]*Queue
 
-// var chainQueue map[string]bool
 var origin *url.URL
 var key *cmd.Key
 
@@ -101,10 +101,6 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 		log.Println("Response Error : ", res.Message)
 		return fmt.Errorf(res.Message)
 	}
-	//TODO: Read back data to confirm it wrote, or write a separate function to verify data
-	//TODO: formulate factom entry hash from data, also consider passing in the orig. entry hash obtained from factom -> compare those hashes
-	//TODO: query entry hash
-	//TODO: here is the get call. if the get works then it should be ok.
 
 	txReq := api.TxnQuery{}
 	txReq.Txid = res.TransactionHash
@@ -148,10 +144,10 @@ func WriteDataFromQueueToAccumulate(env string) {
 }
 
 func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
-
+	var m sync.Mutex
 	for {
 		if len(*queue) > 0 {
-			entry := queue.Pop().(*f2.Entry)
+			entry := queue.Pop(&m).(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
 			err := WriteDataToAccumulate(env, dataEntry, chainUrl)
 			if err != nil {
@@ -188,6 +184,7 @@ func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataE
 }
 
 func GetDataAndPopulateQueue(entries []*f2.Entry) {
+	var m sync.Mutex
 	factomChainData = make(map[[32]byte]*Queue)
 	for _, entry := range entries {
 		accountId, err := hex.DecodeString(entry.ChainID)
@@ -198,14 +195,9 @@ func GetDataAndPopulateQueue(entries []*f2.Entry) {
 		if !ok {
 			factomChainData[*(*[32]byte)(accountId)] = NewQueue()
 		}
-		factomChainData[*(*[32]byte)(accountId)].Push(entry)
+		factomChainData[*(*[32]byte)(accountId)].Push(&m, entry)
 	}
 }
-
-// func nonceFromTimeNow() uint64 {
-// 	t := time.Now()
-// 	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
-// }
 
 //FaucetWithCredits is only used for testing. Initial account will be prefunded.
 func FaucetWithCredits(env string) error {

@@ -1,12 +1,18 @@
 package factom
 
+import "sync"
+
 type Queue []interface{}
 
-func (self *Queue) Push(x interface{}) {
+func (self *Queue) Push(m *sync.Mutex, x interface{}) {
+	m.Lock()
+	defer m.Unlock()
 	*self = append(*self, x)
 }
 
-func (self *Queue) Pop() interface{} {
+func (self *Queue) Pop(m *sync.Mutex) interface{} {
+	m.Lock()
+	defer m.Unlock()
 	h := *self
 	var el interface{}
 	l := len(h)
