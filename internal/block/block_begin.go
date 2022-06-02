@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
@@ -21,11 +22,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+const debugMajorBlocks = false
+
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
-	// Check if it's time for a major block
+	// Check if its time for a major block
 	openMajor, err := x.shouldOpenMajorBlock(block)
 	if err != nil {
 		return err
@@ -120,14 +123,20 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		return 0, nil
 	}
 
-	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
-	if !x.majorBlockScheduler.IsInitialized() {
-		return 0, nil
-	}
-
-	blockTimeUTC := block.Time.UTC()
-	if blockTimeUTC.Before(x.majorBlockScheduler.GetNextMajorBlockTime()) {
-		return 0, nil
+	var utcHour time.Time
+	if debugMajorBlocks {
+		utcHour = block.Time.UTC().Truncate(time.Second)
+		if block.Index%20 != 19 {
+			return 0, nil
+		}
+	} else {
+		utcHour = block.Time.UTC().Truncate(time.Hour)
+		switch utcHour.Hour() {
+		case 0, 12:
+			// Ok
+		default:
+			return 0, nil
+		}
 	}
 
 	var anchor *protocol.AnchorLedger
@@ -137,7 +146,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		return 0, errors.Format(errors.StatusUnknown, "load anchor ledger: %w", err)
 	}
 
-	if !anchor.MajorBlockTime.Before(blockTimeUTC) {
+	if !anchor.MajorBlockTime.Before(utcHour) {
 		return 0, nil
 	}
 
@@ -157,7 +166,6 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 
 	x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 	block.State.OpenedMajorBlock = true
-	x.majorBlockScheduler.UpdateNextMajorBlockTime()
 	return anchor.MajorBlockIndex, nil
 }
 

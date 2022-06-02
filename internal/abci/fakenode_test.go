@@ -51,12 +51,11 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert       *assert.Assertions
-	require      *require.Assertions
-	netValMap    genesis.NetworkValidatorMap
-	Bootstrap    genesis.Bootstrap
-	kv           *memory.DB
-	nodeExecutor *block.Executor
+	assert    *assert.Assertions
+	require   *require.Assertions
+	netValMap genesis.NetworkValidatorMap
+	Bootstrap genesis.Bootstrap
+	kv        *memory.DB
 }
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -171,8 +170,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Network:           n.network,
 		ConnectionManager: connMgr,
 	}
-	var err error
-	n.nodeExecutor, err = block.NewNodeExecutor(block.ExecutorOptions{
+	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
@@ -181,7 +179,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
-		Executor: n.nodeExecutor,
+		Executor: mgr,
 		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
@@ -535,7 +533,6 @@ func (n *FakeNode) CreateInitChain() {
 		AppStateBytes: state,
 		InitialHeight: protocol.GenesisBlock + 1,
 	})
-	n.nodeExecutor.EmitNetworkGlobalsEvent(n.db)
 }
 
 type e2eDUT struct {

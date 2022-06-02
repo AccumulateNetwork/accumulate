@@ -1,19 +1,13 @@
 package events
 
-import (
-	"time"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
-)
+import "time"
 
 type Event interface {
 	isEvent()
 }
 
-func (DidCommitBlock) isEvent()       {}
-func (DidSaveSnapshot) isEvent()      {}
-func (DidDataAccountUpdate) isEvent() {}
+func (DidCommitBlock) isEvent()  {}
+func (DidSaveSnapshot) isEvent() {}
 
 type DidCommitBlock struct {
 	Index uint64
@@ -23,9 +17,4 @@ type DidCommitBlock struct {
 
 type DidSaveSnapshot struct {
 	MinorIndex uint64
-}
-
-type DidDataAccountUpdate struct {
-	AccountUrl *url.URL
-	DataEntry  *protocol.DataEntry
 }

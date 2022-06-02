@@ -8,12 +8,10 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -26,11 +24,9 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors           map[protocol.TransactionType]TransactionExecutor
-	dispatcher          *dispatcher
-	logger              logging.OptionalLogger
-	eventBus            *events.Bus
-	majorBlockScheduler blockscheduler.MajorBlockScheduler
+	executors  map[protocol.TransactionType]TransactionExecutor
+	dispatcher *dispatcher
+	logger     logging.OptionalLogger
 
 	// oldBlockMeta blockMetadata
 }
@@ -122,8 +118,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
-	m.eventBus = events.NewBus(opts.Logger.With("module", "events"))
-	m.majorBlockScheduler = blockscheduler.Init(m.eventBus)
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -151,6 +145,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	default:
 		return nil, err
 	}
+
 	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
 }
@@ -261,22 +256,4 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Network)
-}
-
-func (m *Executor) EmitNetworkGlobalsEvent(db *database.Database) error {
-	if !m.isGenesis {
-		batch := db.Begin(false)
-		defer batch.Discard()
-
-		url := m.Network.NodeUrl(protocol.Globals)
-		entry, err := indexing.Data(batch, url).GetLatestEntry()
-		if err != nil {
-			return fmt.Errorf("failed to get latest globals data entry: %v", err)
-		}
-		m.eventBus.Publish(events.DidDataAccountUpdate{
-			AccountUrl: url,
-			DataEntry:  &entry,
-		})
-	}
-	return nil
 }

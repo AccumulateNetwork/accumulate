@@ -43,7 +43,7 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
-require github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
+require github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
 
 require (
 	4d63.com/gochecknoglobals v0.1.0 // indirect
@@ -170,7 +170,6 @@ require (
 	github.com/nishanths/predeclared v0.2.1 // indirect
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20210609091139-0a56a4bca00b // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.0-beta.8 // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/phayes/checkstyle v0.0.0-20170904204023-bfd46e6a821d // indirect
 	github.com/pkg/errors v0.9.1 // indirect
