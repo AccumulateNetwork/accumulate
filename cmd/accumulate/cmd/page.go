@@ -103,10 +103,10 @@ var pageUnlockCmd = &cobra.Command{
 }
 
 // func keyPageExamples() {
-// 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon/RedBook redKey5 redKey1 redKey2 redKey3")
-// 	fmt.Println("\t\t example usage: accumulate page key update acc://RedWagon/RedBook/1 redKey1 redKey2 redKey3")
-// 	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedBook/2 redKey2 redKey1")
-// 	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedBook/1 redKey1 redKey2")
+// 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon.acme/RedBook redKey5 redKey1 redKey2 redKey3")
+// 	fmt.Println("\t\t example usage: accumulate page key update acc://RedWagon.acme/RedBook/1 redKey1 redKey2 redKey3")
+// 	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon.acme/RedBook/2 redKey2 redKey1")
+// 	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon.acme/RedBook/1 redKey1 redKey2")
 // }
 
 func GetAndPrintKeyPage(url string) (string, error) {
