@@ -23,6 +23,9 @@ func NewRecord(typ RecordType) (Record, error) {
 
 //EqualRecord is used to compare the values of the union
 func EqualRecord(a, b Record) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AccountRecord:
 		b, ok := b.(*AccountRecord)
