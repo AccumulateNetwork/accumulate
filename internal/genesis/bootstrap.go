@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -88,19 +89,19 @@ func (b *bootstrap) Bootstrap() error {
 
 	err := b.genesisExec.Genesis(b.block, b)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	batch := b.db.Begin(false)
 	defer batch.Discard()
 	err = b.writeGenesisFile(batch.BptRoot())
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	return nil
 }
@@ -297,7 +298,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 	lci := types.LastCommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
@@ -329,7 +330,7 @@ func (b *bootstrap) createGlobals() error {
 	threshold.ValidatorThreshold.Denominator = 3
 	data, err := threshold.MarshalBinary()
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal globals: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	global.AddAuthority(b.authorityUrl)
@@ -345,7 +346,7 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 	wd := new(protocol.WriteData)
 	data, err := json.Marshal(&oracle)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal oracle: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	daOracle := new(protocol.DataAccount)
@@ -371,10 +372,9 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 }
 
 func (b *bootstrap) initBVN() error {
-	// Test with `${ID}` not `bvn-${ID}` because the latter will fail
-	// with "bvn-${ID} is reserved"
+	// Verify that the BVN ID will make a valid subnet URL
 	network := b.InitOpts.Network
-	if err := protocol.IsValidAdiUrl(&url.URL{Authority: network.SubnetId}); err != nil {
+	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.SubnetId), true); err != nil {
 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.SubnetId, err))
 	}
 
@@ -394,7 +394,7 @@ func (b *bootstrap) initBVN() error {
 	if b.InitOpts.FactomAddressesFile != "" {
 		factomAddresses, err := LoadFactomAddressesAndBalances(b.InitOpts.FactomAddressesFile)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.StatusUnknown, err)
 		}
 		for _, factomAddress := range factomAddresses {
 			subnet, err := routing.RouteAccount(&network.Network, factomAddress.Address)
@@ -502,7 +502,7 @@ func (b *bootstrap) generateNetworkDefinition() error {
 	wd := new(protocol.WriteData)
 	data, err := json.Marshal(&networkDefs)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal network definition: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
@@ -529,7 +529,7 @@ func (b *bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL,
 func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	state, err := b.GetDBState()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	genDoc := &tmtypes.GenesisDoc{

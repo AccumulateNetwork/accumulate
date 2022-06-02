@@ -99,10 +99,14 @@ func UnmarshalRecordFrom(rd io.ReadSeeker) (Record, error) {
 
 // UnmarshalRecordJson unmarshals a Record.
 func UnmarshalRecordJSON(data []byte) (Record, error) {
-	var typ struct{ Type RecordType }
+	var typ *struct{ Type RecordType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewRecord(typ.Type)

@@ -229,7 +229,8 @@ type DataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	Scratch   bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	Scratch   bool      `json:"scratch,omitempty" form:"scratch" query:"scratch"`
+	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry"`
 	extraData []byte
 }
 
@@ -700,7 +701,9 @@ type SystemLedger struct {
 type SystemWriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	extraData []byte
+	// WriteToState writes the data entry to the account state.
+	WriteToState bool `json:"writeToState,omitempty" form:"writeToState" query:"writeToState"`
+	extraData    []byte
 }
 
 type TokenAccount struct {
@@ -829,7 +832,9 @@ type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	Scratch   bool      `json:"scratch,omitempty" form:"scratch" query:"scratch"`
-	extraData []byte
+	// WriteToState writes the data entry to the account state.
+	WriteToState bool `json:"writeToState,omitempty" form:"writeToState" query:"writeToState"`
+	extraData    []byte
 }
 
 type WriteDataResult struct {
@@ -1388,6 +1393,9 @@ func (v *DataAccount) Copy() *DataAccount {
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	u.Scratch = v.Scratch
+	if v.Entry != nil {
+		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+	}
 
 	return u
 }
@@ -2167,6 +2175,7 @@ func (v *SystemWriteData) Copy() *SystemWriteData {
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
+	u.WriteToState = v.WriteToState
 
 	return u
 }
@@ -2409,6 +2418,7 @@ func (v *WriteData) Copy() *WriteData {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
 	u.Scratch = v.Scratch
+	u.WriteToState = v.WriteToState
 
 	return u
 }
@@ -2945,6 +2955,9 @@ func (v *DataAccount) Equal(u *DataAccount) bool {
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -3935,6 +3948,9 @@ func (v *SystemWriteData) Equal(u *SystemWriteData) bool {
 	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
+	if !(v.WriteToState == u.WriteToState) {
+		return false
+	}
 
 	return true
 }
@@ -4230,6 +4246,9 @@ func (v *WriteData) Equal(u *WriteData) bool {
 		return false
 	}
 	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+	if !(v.WriteToState == u.WriteToState) {
 		return false
 	}
 
@@ -5665,6 +5684,7 @@ var fieldNames_DataAccount = []string{
 	2: "Url",
 	3: "AccountAuth",
 	4: "Scratch",
+	5: "Entry",
 }
 
 func (v *DataAccount) MarshalBinary() ([]byte, error) {
@@ -5678,6 +5698,9 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(3, &v.AccountAuth)
 	if !(!v.Scratch) {
 		writer.WriteBool(4, v.Scratch)
+	}
+	if !(v.Entry == nil) {
+		writer.WriteValue(5, v.Entry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataAccount)
@@ -8671,6 +8694,7 @@ func (v *SystemLedger) IsValid() error {
 var fieldNames_SystemWriteData = []string{
 	1: "Type",
 	2: "Entry",
+	3: "WriteToState",
 }
 
 func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
@@ -8680,6 +8704,9 @@ func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(v.Entry == nil) {
 		writer.WriteValue(2, v.Entry)
+	}
+	if !(!v.WriteToState) {
+		writer.WriteBool(3, v.WriteToState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemWriteData)
@@ -9568,6 +9595,7 @@ var fieldNames_WriteData = []string{
 	1: "Type",
 	2: "Entry",
 	3: "Scratch",
+	4: "WriteToState",
 }
 
 func (v *WriteData) MarshalBinary() ([]byte, error) {
@@ -9580,6 +9608,9 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.Scratch) {
 		writer.WriteBool(3, v.Scratch)
+	}
+	if !(!v.WriteToState) {
+		writer.WriteBool(4, v.WriteToState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_WriteData)
@@ -10548,6 +10579,13 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(4); ok {
 		v.Scratch = x
 	}
+	reader.ReadValue(5, func(b []byte) error {
+		x, err := UnmarshalDataEntry(b)
+		if err == nil {
+			v.Entry = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_DataAccount)
 	if err != nil {
@@ -12236,6 +12274,9 @@ func (v *SystemWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	if x, ok := reader.ReadBool(3); ok {
+		v.WriteToState = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemWriteData)
 	if err != nil {
@@ -12764,6 +12805,9 @@ func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(3); ok {
 		v.Scratch = x
 	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.WriteToState = x
+	}
 
 	seen, err := reader.Reset(fieldNames_WriteData)
 	if err != nil {
@@ -13152,12 +13196,13 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Scratch        bool                              `json:"scratch,omitempty"`
+		Type           AccountType                           `json:"type"`
+		KeyBook        *url.URL                              `json:"keyBook,omitempty"`
+		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
+		Url            *url.URL                              `json:"url,omitempty"`
+		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
+		Scratch        bool                                  `json:"scratch,omitempty"`
+		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.KeyBook = v.KeyBook()
@@ -13165,6 +13210,7 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Scratch = v.Scratch
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
 
@@ -13920,11 +13966,13 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 
 func (v *SystemWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type  TransactionType                       `json:"type"`
-		Entry encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type         TransactionType                       `json:"type"`
+		Entry        encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		WriteToState bool                                  `json:"writeToState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
+	u.WriteToState = v.WriteToState
 	return json.Marshal(&u)
 }
 
@@ -14134,13 +14182,15 @@ func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
 
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    TransactionType                       `json:"type"`
-		Entry   encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
-		Scratch bool                                  `json:"scratch,omitempty"`
+		Type         TransactionType                       `json:"type"`
+		Entry        encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Scratch      bool                                  `json:"scratch,omitempty"`
+		WriteToState bool                                  `json:"writeToState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	u.Scratch = v.Scratch
+	u.WriteToState = v.WriteToState
 	return json.Marshal(&u)
 }
 
@@ -14736,12 +14786,13 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Scratch        bool                              `json:"scratch,omitempty"`
+		Type           AccountType                           `json:"type"`
+		KeyBook        *url.URL                              `json:"keyBook,omitempty"`
+		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
+		Url            *url.URL                              `json:"url,omitempty"`
+		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
+		Scratch        bool                                  `json:"scratch,omitempty"`
+		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.KeyBook = v.KeyBook()
@@ -14749,6 +14800,7 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Scratch = v.Scratch
+	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -14758,6 +14810,8 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
 	v.Scratch = u.Scratch
+	v.Entry = u.Entry.Value
+
 	return nil
 }
 
@@ -16210,11 +16264,13 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 
 func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type  TransactionType                       `json:"type"`
-		Entry encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type         TransactionType                       `json:"type"`
+		Entry        encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		WriteToState bool                                  `json:"writeToState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
+	u.WriteToState = v.WriteToState
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16223,6 +16279,7 @@ func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 	}
 	v.Entry = u.Entry.Value
 
+	v.WriteToState = u.WriteToState
 	return nil
 }
 
@@ -16600,13 +16657,15 @@ func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
 
 func (v *WriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    TransactionType                       `json:"type"`
-		Entry   encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
-		Scratch bool                                  `json:"scratch,omitempty"`
+		Type         TransactionType                       `json:"type"`
+		Entry        encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Scratch      bool                                  `json:"scratch,omitempty"`
+		WriteToState bool                                  `json:"writeToState,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	u.Scratch = v.Scratch
+	u.WriteToState = v.WriteToState
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16616,6 +16675,7 @@ func (v *WriteData) UnmarshalJSON(data []byte) error {
 	v.Entry = u.Entry.Value
 
 	v.Scratch = u.Scratch
+	v.WriteToState = u.WriteToState
 	return nil
 }
 

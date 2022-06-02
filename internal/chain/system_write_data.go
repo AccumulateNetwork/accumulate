@@ -29,5 +29,5 @@ func (SystemWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v belongs to the wrong subnet", st.OriginUrl)
 	}
 
-	return executeWriteFullDataAccount(st, body.Entry, false)
+	return executeWriteFullDataAccount(st, body.Entry, false, body.WriteToState)
 }

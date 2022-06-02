@@ -25,7 +25,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	var synthLedger *protocol.SyntheticLedger
 	err := block.Batch.Account(m.Network.Synthetic()).GetStateAs(&synthLedger)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "load synthetic ledger: %w", err)
 	}
 	go m.requestMissingSyntheticTransactions(synthLedger)
 
@@ -40,7 +40,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	var ledgerState *protocol.SystemLedger
 	err = ledger.GetStateAs(&ledgerState)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "load system ledger: %w", err)
 	}
 
 	// Set active oracle from pending
@@ -57,7 +57,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Load the main chain of the minor root
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
 	}
 
 	// Pending transaction-chain index entries
@@ -82,7 +82,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		account := block.Batch.Account(u.Account)
 		indexIndex, didIndex, err := addChainAnchor(rootChain, account, u.Account, u.Name, u.Type)
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknown, "add anchor to root chain: %w", err)
 		}
 
 		// Add a pending transaction-chain index update
@@ -99,7 +99,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Create a BlockChainUpdates Index
 	err = indexing.BlockChainUpdates(block.Batch, &m.Network, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "store block chain updates index: %w", err)
 	}
 
 	// If dn/oracle was updated, update the ledger's oracle value, but only if
@@ -121,14 +121,14 @@ func (m *Executor) EndBlock(block *Block) error {
 		synthAnchorIndex = uint64(rootChain.Height())
 		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
 	// Write the updated ledger
 	err = ledger.PutState(ledgerState)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "store system ledger: %w", err)
 	}
 
 	// Index the root chain
@@ -138,7 +138,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		BlockTime:  &block.Time,
 	})
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "add root index chain entry: %w", err)
 	}
 
 	// Update the transaction-chain index
@@ -146,14 +146,14 @@ func (m *Executor) EndBlock(block *Block) error {
 		e.AnchorIndex = rootIndexIndex
 		err = indexing.TransactionChain(block.Batch, e.Txid).Add(&e.TransactionChainEntry)
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknown, "store transaction chain index: %w", err)
 		}
 	}
 
 	// Add transaction-chain index entries for synthetic transactions
 	blockState, err := indexing.BlockState(block.Batch, ledgerUrl).Get()
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "load block state index: %w", err)
 	}
 
 	for _, e := range blockState.ProducedSynthTxns {
@@ -164,7 +164,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			AnchorIndex: rootIndexIndex,
 		})
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknown, "store transaction chain index: %w", err)
 		}
 	}
 
@@ -173,26 +173,26 @@ func (m *Executor) EndBlock(block *Block) error {
 		if m.Network.NetworkType == config.Directory {
 			err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 			if err != nil {
-				return err
+				return errors.Wrap(errors.StatusUnknown, err)
 			}
 		}
 
 		// Build synthetic receipts
 		err = m.buildSynthReceipt(block.Batch, block.State.ProducedTxns, rootChain.Height()-1, int64(synthAnchorIndex))
 		if err != nil {
-			return err
+			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
 	// Update major index chains if it's a major block
 	err = m.updateMajorIndexChains(block, rootIndexIndex)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = block.Batch.CommitBpt()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
@@ -226,7 +226,7 @@ func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
 	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusUnknown, "build root chain receipt: %w", err)
 	}
 
 	synthChain, err := block.Batch.Account(m.Network.Synthetic()).ReadChain(protocol.MainChain)
@@ -244,12 +244,12 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknown, "build synth chain receipt: %w", err)
 		}
 
 		receipt, err := synthReceipt.Combine(rootReceipt)
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
 		}
 
 		// This should be the second signature (SyntheticSignature should be first)
@@ -259,7 +259,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig.Proof = *protocol.ReceiptFromManaged(receipt)
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
 	}
 	return nil
@@ -419,7 +419,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		BlockIndex:     block.State.MakeMajorBlock,
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Format(errors.StatusUnknown, "add anchor ledger index chain entry: %w", err)
 	}
 
 	return nil
