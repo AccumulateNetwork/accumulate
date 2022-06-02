@@ -34,7 +34,17 @@ func TestTransactionPriority(t *testing.T) {
 	env := newTxn("foo/tokens").
 		WithSigner(url.MustParse("foo/book0/1"), 1).
 		WithBody(body).
-		Initiate(protocol.SignatureTypeLegacyED25519, fooKey).Build()
+		InitiateSynthetic(n.network.NodeUrl()).
+		Sign(protocol.SignatureTypeLegacyED25519, fooKey).Build()
+
+	rsig := new(protocol.ReceiptSignature)
+	rsig.SourceNetwork = url.MustParse("foo")
+	rsig.TransactionHash = *(*[32]byte)(env.Transaction[0].GetHash())
+	rsig.Proof.Start = env.Transaction[0].GetHash()
+	rsig.Proof.Anchor = env.Transaction[0].GetHash()
+
+	env.Signatures = append(env.Signatures, rsig)
+
 	cases["syntheticDepositToken"] = Case{
 		Envelope:       env,
 		ExpectPriority: 1,
