@@ -125,26 +125,17 @@ func stop(runCmd *exec.Cmd) {
 
 // Init new client from server URL input using client.go
 func initClient(server string) (string, error) {
-
-	// build Accumulate deamon
-	assertInModuleRoot()
-	build("./cmd/accumulated")
-
-	// Launch the devnet
-	runCmd := launch()
-	defer func() { _ = runCmd.Process.Kill() }()
-
 	// Create new client on localhost
 	client, err := client.New("http://127.0.1.1:26660/v2")
 	checkf(err, "creating client")
 	client.DebugRequest = true
 
 	// Limit amount of goroutines
-	maxGoroutines := 1
+	maxGoroutines := 10
 	guard := make(chan struct{}, maxGoroutines)
 
 	// run key generation in cycle
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 100; i++ {
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		// Add timer to measure TPS
