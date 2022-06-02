@@ -465,7 +465,7 @@ func IndexChain(name string, major bool) string {
 }
 
 func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
-	return uint64(math.Round(ratio * float64(validatorCount)))
+	return uint64(math.Ceil(ratio * float64(validatorCount)))
 }
 
 const rootAnchorSuffix = "-root"
