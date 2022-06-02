@@ -153,6 +153,14 @@ func (e *Error) Unwrap() error {
 	return e.Code
 }
 
+func (e *Error) Format(f fmt.State, verb rune) {
+	if f.Flag('+') {
+		f.Write([]byte(e.Print()))
+	} else {
+		f.Write([]byte(e.Error()))
+	}
+}
+
 func (e *Error) Print() string {
 	str := e.Message + "\n"
 	for e != nil {

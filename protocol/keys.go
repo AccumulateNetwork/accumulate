@@ -2,8 +2,9 @@ package protocol
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 )
 
 type KeyEntry interface {
@@ -27,20 +28,6 @@ func (k *KeySpecParams) IsEmpty() bool {
 	return len(k.KeyHash) == 0 && k.Delegate == nil
 }
 
-func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
-	// Check each key
-	x := sha256.Sum256(pubKey)
-	for _, candidate := range ms.Keys {
-		// Try with each supported hash algorithm
-		if bytes.Equal(candidate.PublicKeyHash[:], x[:]) {
-			return candidate
-		}
-
-	}
-
-	return nil
-}
-
 // GetMofN
 // return the signature requirements of the Key Page.  Each Key Page requires
 // m of n signatures, where m <= n, and n is the number of keys on the key page.
@@ -60,4 +47,39 @@ func (ms *KeyPage) SetThreshold(m uint64) error {
 		return fmt.Errorf("cannot require %d signatures on a key page with %d keys", m, len(ms.Keys))
 	}
 	return nil
+}
+
+// EntryByKeyHash finds the entry with a matching key hash.
+func (p *KeyPage) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
+	i, found := sortutil.Search(p.Keys, func(ks *KeySpec) int {
+		return bytes.Compare(ks.PublicKeyHash, keyHash)
+	})
+	if !found {
+		return -1, nil, false
+	}
+	return i, p.Keys[i], true
+}
+
+// AddKeySpec adds a key spec to the page.
+func (p *KeyPage) AddKeySpec(k *KeySpec) {
+	ptr, _ := sortutil.BinaryInsert(&p.Keys, func(l *KeySpec) int {
+		v := bytes.Compare(l.PublicKeyHash, k.PublicKeyHash)
+		switch {
+		case v != 0:
+			return v
+		case l.Delegate == nil:
+			return -1
+		case k.Delegate == nil:
+			return +1
+		default:
+			return l.Delegate.Compare(k.Delegate)
+		}
+	})
+	*ptr = k
+}
+
+// RemoveKeySpecAt removes the I'th key spec.
+func (p *KeyPage) RemoveKeySpecAt(i int) {
+	copy(p.Keys[i:], p.Keys[i+1:])
+	p.Keys = p.Keys[:len(p.Keys)-1]
 }
