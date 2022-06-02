@@ -113,7 +113,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network config
 			isGenesis: true,
 		},
 		db,
-		WriteData{},
+		SystemWriteData{},
 	)
 }
 

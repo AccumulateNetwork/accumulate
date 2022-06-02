@@ -144,7 +144,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-	page.Keys = append(page.Keys, ss)
+	page.AddKeySpec(ss)
 	page.AcceptThreshold = 1
 	page.Version = 1
 
@@ -268,13 +268,12 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 	page.AcceptThreshold = 1
 	page.Version = 1
-	page.Keys = make([]*protocol.KeySpec, len(keys))
-	for i, key := range keys {
+	page.Keys = make([]*protocol.KeySpec, 0, len(keys))
+	for _, key := range keys {
 		hash := sha256.Sum256(key.Bytes())
-
-		page.Keys[i] = &protocol.KeySpec{
+		page.AddKeySpec(&protocol.KeySpec{
 			PublicKeyHash: hash[:],
-		}
+		})
 	}
 	book.PageCount++
 	return WriteStates(db, page, book)

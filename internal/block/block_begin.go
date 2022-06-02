@@ -218,7 +218,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 		return errors.Format(errors.StatusUnknown, "cannot marshal value as json: %w", err)
 	}
 
-	wd := protocol.WriteData{}
+	wd := protocol.SystemWriteData{}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
 
@@ -246,7 +246,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
-	err = putSyntheticTransaction(
+	err = x.putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{Delivered: true},
 		nil)
@@ -301,7 +301,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 		}
 
 		for _, bvn := range x.Network.GetBvnNames() {
-			err = x.sendBlockAnchor(anchor, anchor.MinorBlockIndex, bvn)
+			err = x.sendBlockAnchor(batch, anchor, anchor.MinorBlockIndex, bvn)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknown, err)
 			}
@@ -310,7 +310,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 		// DN -> self
 		anchor = anchor.Copy() // Make a copy so we don't modify the anchors sent to the BVNs
 		anchor.MakeMajorBlock = 0
-		err = x.sendBlockAnchor(anchor, anchor.MinorBlockIndex, protocol.Directory)
+		err = x.sendBlockAnchor(batch, anchor, anchor.MinorBlockIndex, protocol.Directory)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -322,7 +322,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 			return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
 		}
 
-		err = x.sendBlockAnchor(anchor, anchor.MinorBlockIndex, protocol.Directory)
+		err = x.sendBlockAnchor(batch, anchor, anchor.MinorBlockIndex, protocol.Directory)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -332,7 +332,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	go func() {
 		for err := range errs {
 			x.checkDispatchError(err, func(err error) {
-				x.logger.Error("Failed to dispatch transactions", "error", err)
+				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
 			})
 		}
 	}()
@@ -410,16 +410,9 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 			return false, errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
 		}
 
-		// Sign it
-		keySig, err := new(signing.Builder).
-			SetType(protocol.SignatureTypeED25519).
-			SetPrivateKey(x.Key).
-			SetKeyPageUrl(x.Network.ValidatorBook(), 0).
-			SetVersion(1).
-			SetTimestamp(1).
-			Sign(hash)
+		keySig, err := x.signTransaction(batch, txn, sigs)
 		if err != nil {
-			return false, errors.Format(errors.StatusUnknown, "sign synthetic transaction: %w", err)
+			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: append(sigs, keySig)}
@@ -430,6 +423,44 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	}
 
 	return true, nil
+}
+
+func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transaction, sigs []protocol.Signature) (protocol.Signature, error) {
+	if len(sigs) == 0 {
+		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "synthetic transaction has no signatures")
+	}
+
+	synthSig, ok := sigs[0].(*protocol.SyntheticSignature)
+	if !ok {
+		return nil, errors.Format(errors.StatusUnknown, "invalid first synthetic transaction signature: want type %v, got %v", protocol.SignatureTypeSynthetic, sigs[0].Type())
+	}
+
+	var page *protocol.KeyPage
+	err := batch.Account(x.Network.DefaultOperatorPage()).GetStateAs(&page)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load operator key page: %w", err)
+	}
+
+	// Sign it
+	bld := new(signing.Builder).
+		SetType(protocol.SignatureTypeED25519).
+		SetPrivateKey(x.Key).
+		SetVersion(1).
+		SetTimestamp(1)
+
+	book := synthSig.DestinationNetwork.JoinPath(protocol.OperatorBook)
+	if synthSig.DestinationNetwork.Equal(protocol.DnUrl()) {
+		bld.SetKeyPageUrl(book, 0)
+	} else {
+		bld.SetKeyPageUrl(book, 1)
+	}
+
+	keySig, err := bld.Sign(txn.GetHash())
+	if err != nil {
+		return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
+	}
+
+	return keySig, nil
 }
 
 func (x *Executor) shouldSendAnchor(batch *database.Batch, ledger *protocol.SystemLedger, didSendSynth bool, openMajor, majorBlockIndex uint64) (bool, error) {
@@ -568,7 +599,7 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 	return rootChain, nil
 }
 
-func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64, subnet string) error {
+func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, block uint64, subnet string) error {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.SubnetUrl(subnet).JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
@@ -583,14 +614,9 @@ func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64
 	}
 
 	// Create a key signature
-	keySig, err := new(signing.Builder).
-		SetType(protocol.SignatureTypeED25519).
-		SetPrivateKey(x.Key).
-		SetKeyPageUrl(x.Network.ValidatorBook(), 0).
-		SetVersion(1).
-		Sign(txn.GetHash())
+	keySig, err := x.signTransaction(batch, txn, []protocol.Signature{initSig})
 	if err != nil {
-		return errors.Wrap(errors.StatusInternalError, err)
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Send

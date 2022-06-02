@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -113,12 +115,13 @@ func (sim *Simulator) Setup(bvnCount int) {
 		require.NoError(sim, err)
 
 		sim.Executors[subnet.ID] = &ExecEntry{
-			Database:  db,
-			Executor:  exec,
-			Subnet:    subnet,
-			API:       acctesting.DirectJrpcClient(jrpc),
-			tb:        sim.tb,
-			blockTime: genesisTime,
+			Database:   db,
+			Executor:   exec,
+			Subnet:     subnet,
+			API:        acctesting.DirectJrpcClient(jrpc),
+			tb:         sim.tb,
+			blockTime:  genesisTime,
+			Validators: [][]byte{key[32:]},
 		}
 	}
 }
@@ -170,7 +173,7 @@ func (s *Simulator) InitFromGenesis() {
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.bootstrap = InitGenesis(s, x.Database, x.Executor, genesisTime, netValMap)
+		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, netValMap)
 	}
 
 	// Execute bootstrap after the entire network is known
@@ -355,11 +358,9 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	return statuses, transactions
 }
 
-func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
-	s.Helper()
-
+func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte, n int) *ExecEntry {
 	var x *ExecEntry
-	for i := 0; i < 50; i++ {
+	for i := 0; i < n; i++ {
 		x = s.findTxn(statusCheck, txnHash)
 		if x != nil {
 			break
@@ -367,9 +368,15 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 
 		s.ExecuteBlock(nil)
 	}
+	return x
+}
+
+func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
+	s.Helper()
+
+	x := s.WaitForTransaction(statusCheck, txnHash, 50)
 	if x == nil {
-		s.Errorf("Transaction %X has not been delivered after 50 blocks", txnHash[:4])
-		s.FailNow()
+		require.FailNow(s, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", txnHash[:4]))
 		panic("unreachable")
 	}
 
@@ -404,11 +411,12 @@ type ExecEntry struct {
 	blockTime               time.Time
 	nextBlock, currentBlock []*protocol.Envelope
 
-	Subnet    *config.Subnet
-	Database  *database.Database
-	Executor  *block.Executor
-	bootstrap genesis.Bootstrap
-	API       *client.Client
+	Subnet     *config.Subnet
+	Database   *database.Database
+	Executor   *block.Executor
+	bootstrap  genesis.Bootstrap
+	API        *client.Client
+	Validators [][]byte
 
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to
@@ -511,6 +519,24 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		if !block.State.Empty() {
 			// Commit the batch
 			require.NoError(x, block.Batch.Commit())
+		}
+
+		// Apply validator updates
+		for _, update := range block.State.ValidatorsUpdates {
+			cmp := func(entry []byte) int {
+				return bytes.Compare(entry, update.PubKey.Bytes())
+			}
+			if update.Enabled {
+				ptr, new := sortutil.BinaryInsert(&x.Validators, cmp)
+				if new {
+					key := update.PubKey.Bytes()
+					*ptr = make([]byte, len(key))
+					copy(*ptr, key)
+				}
+			} else if i, found := sortutil.Search(x.Validators, cmp); found {
+				copy(x.Validators[i:], x.Validators[i+1:])
+				x.Validators = x.Validators[:len(x.Validators)-1]
+			}
 		}
 		return nil
 	})

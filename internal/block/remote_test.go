@@ -275,9 +275,8 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	updateAccount(sim, charlieUrl.JoinPath("book", "1"), func(p *KeyPage) {
 		hash2 := sha256.Sum256(charlieKey2[32:])
 		hash3 := sha256.Sum256(charlieKey3[32:])
-		p.Keys = append(p.Keys,
-			&KeySpec{PublicKeyHash: hash2[:]},
-			&KeySpec{PublicKeyHash: hash3[:]})
+		p.AddKeySpec(&KeySpec{PublicKeyHash: hash2[:]})
+		p.AddKeySpec(&KeySpec{PublicKeyHash: hash3[:]})
 		p.AcceptThreshold = 2
 	})
 
