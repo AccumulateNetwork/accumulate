@@ -1,10 +1,10 @@
 package abci_test
 
 import (
-	"log"
 	"math/big"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -22,10 +22,11 @@ func TestTransactionPriority(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	require.NoError(t, batch.Commit())
 
-	cases := make(map[string]struct {
+	type Case struct {
 		Envelope       *protocol.Envelope
-		ExpectPriority int
-	})
+		ExpectPriority int64
+	}
+	cases := make(map[string]Case)
 	body := &protocol.SyntheticDepositTokens{
 		Token:  protocol.AcmeUrl(),
 		Amount: *big.NewInt(100),
@@ -34,20 +35,34 @@ func TestTransactionPriority(t *testing.T) {
 		WithSigner(url.MustParse("foo/book0/1"), 1).
 		WithBody(body).
 		Initiate(protocol.SignatureTypeLegacyED25519, fooKey).Build()
-	cases["syntheticDepositToken"] = struct {
-		Envelope       *protocol.Envelope
-		ExpectPriority int
-	}{
+	cases["syntheticDepositToken"] = Case{
 		Envelope:       env,
 		ExpectPriority: 1,
 	}
 
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
+			// Submit the envelope
 			b, err := c.Envelope.MarshalBinary()
 			require.NoError(t, err)
 			resp := n.app.CheckTx(abci.RequestCheckTx{Tx: b})
-			log.Println(resp)
+			require.Zero(t, resp.Code, resp.Log)
+
+			// Check the results
+			results := new(protocol.TransactionResultSet)
+			require.NoError(t, results.UnmarshalBinary(resp.Data))
+			for _, status := range results.Results {
+				if status.Error != nil {
+					assert.NoError(t, status.Error)
+				} else {
+					assert.Zero(t, status.Code, status.Message)
+				}
+			}
+			if t.Failed() {
+				return
+			}
+
+			// Verify the priority
 			require.Equal(t, c.ExpectPriority, resp.Priority)
 		})
 	}
