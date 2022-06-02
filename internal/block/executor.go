@@ -32,12 +32,12 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger  log.Logger
-	Key     ed25519.PrivateKey
-	Router  routing.Router
-	Network config.Network
+	Logger  log.Logger         `json:"logger,omitempty"`
+	Key     ed25519.PrivateKey `json:"key,omitempty"`
+	Router  routing.Router     `json:"router,omitempty"`
+	Network config.Accumulate  `json:"network"`
 
-	isGenesis bool
+	isGenesis bool `json:"is_genesis,omitempty"`
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -100,7 +100,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Accumulate, router routing.Router) (*Executor, error) {
 	return newExecutor(
 		ExecutorOptions{
 			Network:   network,

@@ -16,6 +16,8 @@ import (
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
+//go:generate go run ../tools/cmd/gen-types network.yml
+
 const (
 	configDir     = "config"
 	tmConfigFile  = "tendermint.toml"
@@ -107,8 +109,8 @@ var DefaultLogLevels = LogLevel{}.
 func Default(netName string, net NetworkType, node NodeType, subnetId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.NetworkName = netName
-	c.Accumulate.Network.Type = net
-	c.Accumulate.Network.LocalSubnetID = subnetId
+	c.Accumulate.Type = net
+	c.Accumulate.SubnetId = subnetId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -138,33 +140,51 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-
-	Network   Network   `toml:"network" mapstructure:"network"`
-	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
-	Storage   Storage   `toml:"storage" mapstructure:"storage"`
-	API       API       `toml:"api" mapstructure:"api"`
-	Website   Website   `toml:"website" mapstructure:"website"`
+	SentryDSN    string      `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	SubnetId     string      `toml:"subnet" mapstructure:"local-subnet"`
+	Type         NetworkType `toml:"type" mapstructure:"type"`
+	LocalAddress string      `toml:"address" mapstructure:"local-address"` //Deprecated
+	Network      Network     `toml:"network" mapstructure:"network"`
+	Snapshots    Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
+	Storage      Storage     `toml:"storage" mapstructure:"storage"`
+	API          API         `toml:"api" mapstructure:"api"`
+	Website      Website     `toml:"website" mapstructure:"website"`
 }
 
 type Network struct {
-	NetworkName   string      `toml:"network-name" mapstructure:"network-name"`
-	Type          NetworkType `toml:"type" mapstructure:"type"`
-	LocalSubnetID string      `toml:"local-subnet" mapstructure:"local-subnet"`
-	LocalAddress  string      `toml:"local-address" mapstructure:"local-address"`
-	Subnets       []Subnet    `toml:"subnets" mapstructure:"subnets"`
+	NetworkName string   `json:"name" toml:"network-name" mapstructure:"network-name"`
+	Subnets     []Subnet `json:"subnets" toml:"subnets" mapstructure:"subnets"`
 }
 
 type Subnet struct {
-	ID    string      `toml:"id" mapstructure:"id"`
-	Type  NetworkType `toml:"type" mapstructure:"type"`
-	Nodes []Node      `toml:"nodes" mapstructure:"nodes"`
+	ID       string      `json:"name" toml:"name" mapstructure:"name"`
+	Type     NetworkType `json:"type" toml:"type" mapstructure:"type"`
+	BasePort int         `json:"port" toml:"port" mapstructure:"port"`
+	Nodes    []Node      `json:"nodes" toml:"nodes" mapstructure:"nodes"`
 }
 
 type Node struct {
-	Address string
-	Type    NodeType `toml:"type" mapstructure:"type"`
+	Address string   `json:"ip" toml:"address" mapstructure:"address"`
+	Type    NodeType `json:"type" toml:"type" mapstructure:"type"`
 }
+
+//
+//type Node struct {
+//	IP   string          `json:"ip"`
+//	Type NodeType `json:"type"`
+//}
+//
+//type Subnet struct {
+//	Name  string             `json:"name"`
+//	Type  NetworkType `json:"type"`
+//	Port  int                `json:"port"`
+//	Nodes []Node             `json:"nodes"`
+//}
+//
+//type Network struct {
+//	Network string   `json:"network"`
+//	Subnet  []Subnet `json:"subnet"`
+//}
 
 type Snapshots struct {
 	// Directory is the directory to store snapshots in
@@ -224,7 +244,7 @@ func OffsetPort(addr string, offset int) (*url.URL, error) {
 	return u, nil
 }
 
-func (n *Network) GetBvnNames() []string {
+func (n *NetworkConfig) GetBvnNames() []string {
 	var names []string
 	for _, subnet := range n.Subnets {
 		if subnet.Type == BlockValidator {
@@ -234,7 +254,7 @@ func (n *Network) GetBvnNames() []string {
 	return names
 }
 
-func (n *Network) GetSubnetByID(subnetID string) Subnet {
+func (n *NetworkConfig) GetSubnetByID(subnetID string) SubnetConfig {
 	for _, subnet := range n.Subnets {
 		if subnet.ID == subnetID {
 			return subnet

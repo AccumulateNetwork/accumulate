@@ -381,7 +381,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodeType = cfg.Follower
 	}
 	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
-	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
+	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Network
 
 	if flagInit.LogLevels != "" {

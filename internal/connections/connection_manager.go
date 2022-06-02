@@ -88,7 +88,7 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 	cm := new(connectionManager)
 	cm.accConfig = &config.Accumulate
 	cm.apiClientFactory = apiClientFactory
-	cm.localHost = cm.reformatAddress(cm.accConfig.Network.LocalAddress)
+	cm.localHost = cm.reformatAddress(cm.accConfig.LocalAddress)
 	cm.logger = logger
 	cm.buildNodeInventory()
 	return cm
@@ -248,7 +248,7 @@ func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Su
 }
 
 func (cm *connectionManager) determineNetworkGroup(subnetId string, address string) NetworkGroup {
-	ownSubnet := cm.accConfig.Network.LocalSubnetID
+	ownSubnet := cm.accConfig.SubnetId
 	fmtAddr := cm.reformatAddress(address)
 	switch {
 	case strings.EqualFold(subnetId, ownSubnet) && strings.EqualFold(fmtAddr, cm.localHost):
@@ -314,10 +314,10 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	}
 
 	var list []ConnectionContext
-	if cm2.accConfig.Network.LocalSubnetID == protocol.Directory {
+	if cm2.accConfig.SubnetId == protocol.Directory {
 		list = cm.dnCtxList
-	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.Network.LocalSubnetID)]; !ok {
-		return fmt.Errorf("unknown subnet %q", cm2.accConfig.Network.LocalSubnetID)
+	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.SubnetId)]; !ok {
+		return fmt.Errorf("unknown subnet %q", cm2.accConfig.SubnetId)
 	}
 
 	for _, connCtx := range list {
@@ -327,7 +327,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 			continue
 		}
 
-		if url.Host != cm2.accConfig.Network.LocalAddress {
+		if url.Host != cm2.accConfig.LocalAddress {
 			continue
 		}
 
@@ -339,7 +339,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.Network.LocalSubnetID, cm2.accConfig.Network.LocalAddress)
+	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.SubnetId, cm2.accConfig.LocalAddress)
 }
 
 func (cm *connectionManager) createClient(connCtx *connectionContext) error {

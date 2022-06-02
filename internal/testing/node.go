@@ -122,7 +122,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	for _, configs := range allConfigs {
 		for i, cfg := range configs {
 			cfg.Accumulate.Network.Subnets = subnets
-			cfg.Accumulate.Network.LocalAddress = allAddresses[cfg.Accumulate.Network.LocalSubnetID][i]
+			cfg.Accumulate.LocalAddress = allAddresses[cfg.Accumulate.SubnetId][i]
 		}
 	}
 
