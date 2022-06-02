@@ -335,8 +335,14 @@ func (u *URL) Equal(v *URL) bool {
 
 // JoinPath returns a copy of U with additional path elements.
 func (u *URL) JoinPath(s ...string) *URL {
+	if len(s) == 0 {
+		return u
+	}
 	v := u.Copy()
-	v.Path = path.Join(append([]string{u.Path}, s...)...)
+	if len(v.Path) == 0 {
+		v.Path = "/"
+	}
+	v.Path = path.Join(append([]string{v.Path}, s...)...)
 	return v
 }
 

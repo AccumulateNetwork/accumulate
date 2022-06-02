@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -26,7 +25,7 @@ func TestFee(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithCurrentTimestamp().
 			WithPrincipal(protocol.AcmeUrl()).
-			WithSigner(url.MustParse("foo/book/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(new(protocol.SendTokens)).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
@@ -38,7 +37,7 @@ func TestFee(t *testing.T) {
 	t.Run("Lots of data", func(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithPrincipal(protocol.AcmeUrl()).
-			WithSigner(url.MustParse("foo/book/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(new(protocol.SendTokens)).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
@@ -51,7 +50,7 @@ func TestFee(t *testing.T) {
 	t.Run("Scratch data", func(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithPrincipal(protocol.AcmeUrl()).
-			WithSigner(url.MustParse("foo/book/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(&protocol.WriteData{Scratch: true}).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
