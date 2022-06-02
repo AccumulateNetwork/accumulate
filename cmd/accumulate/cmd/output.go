@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -136,8 +139,8 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 		return "", err
 	}
 
-	for i, txid := range res.SyntheticTxids {
-		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
+	for i, txid := range res.Produced {
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %v\n", i, txid)
 	}
 
 	for _, receipt := range res.Receipts {
@@ -373,15 +376,29 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		out := fmt.Sprintf("\n\tCredit Balance\t:\t%v\n", protocol.FormatAmount(ss.CreditBalance, protocol.CreditPrecisionPower))
-		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name(s)\n")
+		buf := new(bytes.Buffer)
+		tw := tabwriter.NewWriter(buf, 1, 1, 2, ' ', 0)
+		fmt.Fprintf(tw, "Index\tNonce\tKey Name\tDelegate\tPublic Key Hash\n")
 		for i, k := range ss.Keys {
-			keyName := ""
+			var keyName string
 			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
+			} else {
+				keyName = hex.EncodeToString(k.PublicKeyHash)
 			}
-			out += fmt.Sprintf("\t%d\t%v\t\t%x\t%s\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), k.PublicKeyHash, keyName)
+			var delegate string
+			if k.Delegate != nil {
+				delegate = k.Delegate.ShortString()
+			}
+			fmt.Fprintf(tw, "%d\t%v\t%s\t%s\t%x\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), keyName, delegate, k.PublicKeyHash)
 		}
+
+		err = tw.Flush()
+		if err != nil {
+			return "", err
+		}
+		out += "\n\t" + strings.ReplaceAll(buf.String(), "\n", "\n\t")
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
 		ti := protocol.TokenIssuer{}

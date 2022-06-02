@@ -81,17 +81,19 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("signature is not a key signature")
 	}
 
-	_, entry, ok := page.EntryByKeyHash(keysig.GetPublicKeyHash())
-	if !ok {
+	oldPos, entry, found := findKeyPageEntry(page, &protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()})
+	if !found {
 		return nil, fmt.Errorf("the signing key does not exist on %v", st.OriginUrl)
 	}
-	keySpec, ok := entry.(*protocol.KeySpec)
-	if !ok {
-		// This should be impossible
-		return nil, errors.New("key page entry is not a key spec")
-	}
-	keySpec.PublicKeyHash = body.NewKeyHash
 
+	// Update the entry
+	entry.PublicKeyHash = body.NewKeyHash
+
+	// Relocate the entry
+	page.RemoveKeySpecAt(oldPos)
+	page.AddKeySpec(entry)
+
+	// Store the update, but do not change the page version
 	err = st.Update(page)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)

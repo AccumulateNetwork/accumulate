@@ -392,8 +392,9 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	status.For = *(*[32]byte)(txnHash)
 	statuses := []*protocol.TransactionStatus{status}
 	transactions := []*protocol.Transaction{state.Transaction}
-	for _, id := range synth.Hashes {
+	for _, id := range synth.Entries {
 		// Wait for synthetic transactions to be delivered
+		id := id.Hash()
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
 			return status.Delivered
 		}, id[:]) //nolint:rangevarref

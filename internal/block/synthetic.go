@@ -41,7 +41,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			continue
 		}
 
-		err = batch.Transaction(from.GetHash()).AddSyntheticTxns(*(*[32]byte)(tx.GetHash()))
+		err = batch.Transaction(from.GetHash()).AddSyntheticTxns(tx.ID())
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 		}
 
 		swos = append(swos, swo)
-		swo.SetCause(from.GetHash(), from.Header.Principal)
+		swo.SetCause(*(*[32]byte)(from.GetHash()), from.Header.Principal)
 	}
 	if len(swos) == 0 {
 		return nil
@@ -231,7 +231,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		// node has a different key, so recording the key signature here would
 		// cause a consensus failure!
 		err = batch.Transaction(proofSig.Hash()).PutState(&database.SigOrTxn{
-			Hash:      proofSig.TransactionHash,
+			Txid:      transaction.ID(),
 			Signature: proofSig,
 		})
 		if err != nil {
@@ -290,7 +290,7 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 
 	// Store the signature
 	err = batch.Transaction(sigHash[:]).PutState(&database.SigOrTxn{
-		Hash:      *(*[32]byte)(transaction.GetHash()),
+		Txid:      transaction.ID(),
 		Signature: signature,
 	})
 	if err != nil {

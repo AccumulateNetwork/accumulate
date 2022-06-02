@@ -6,7 +6,7 @@ WriteDataResult:
   union: { type: result }
   fields:
     - name: EntryHash
-      type: chain
+      type: hash
     - name: AccountUrl
       type: url
       pointer: true
