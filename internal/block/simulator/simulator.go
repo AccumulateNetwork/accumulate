@@ -192,7 +192,7 @@ func (s *Simulator) InitFromGenesis() {
 			require.NoError(tb{s}, batch.Commit())
 		}()
 
-		x.Executor.EmitNetworkGlobalsEvent(x.Database)
+		_ = x.Executor.EmitNetworkGlobalsEvent(x.Database)
 	}
 }
 
