@@ -43,6 +43,9 @@ func NewRequest(typ QueryType) (Request, error) {
 
 //EqualRequest is used to compare the values of the union
 func EqualRequest(a, b Request) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *RequestByChainId:
 		b, ok := b.(*RequestByChainId)

@@ -127,7 +127,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Store the transaction, its status, and the initiator
-	err = putSyntheticTransaction(
+	err = m.putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{Remote: true},
 		initSig)
@@ -237,7 +237,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
-		_, err = batch.Transaction(transaction.GetHash()).AddSignature(0, proofSig)
+		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Network, proofSig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
@@ -257,7 +257,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 	return validateSyntheticTransactionSignatures(transaction, signatures)
 }
 
-func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.SyntheticSignature) error {
+func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.SyntheticSignature) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
 	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
@@ -276,7 +276,7 @@ func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transa
 	}
 
 	// Record the signature against the transaction
-	_, err = obj.AddSignature(0, signature)
+	_, err = obj.AddSystemSignature(&x.Network, signature)
 	if err != nil {
 		return fmt.Errorf("add signature: %w", err)
 	}

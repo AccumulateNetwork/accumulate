@@ -123,6 +123,8 @@ func GetDataEntry(batch *database.Batch, txnHash []byte) (protocol.DataEntry, er
 		return txn.Entry, nil
 	case *protocol.SyntheticWriteData:
 		return txn.Entry, nil
+	case *protocol.SystemWriteData:
+		return txn.Entry, nil
 	default:
 		return nil, errors.Format(errors.StatusInternalError, "invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, state.Transaction.Body.Type())
 	}
