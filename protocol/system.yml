@@ -95,6 +95,10 @@ SystemWriteData:
     - name: Entry
       type: DataEntry
       marshal-as: union
+    - name: WriteToState
+      description: writes the data entry to the account state
+      type: bool
+      optional: true
 
 
 ##### Data Types #####
