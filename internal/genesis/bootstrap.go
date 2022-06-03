@@ -33,7 +33,6 @@ type InitOpts struct {
 	NetworkValidatorMap NetworkValidatorMap
 	GenesisTime         time.Time
 	Logger              log.Logger
-	Router              routing.Router
 	FactomAddressesFile string
 	Keys                [][]byte
 }
@@ -46,6 +45,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 	}
+
 	// Add validator keys to NetworkValidatorMap when not there
 	if b.InitOpts.NetworkValidatorMap == nil {
 		panic("NetworkValidatorMap is not present")
@@ -54,11 +54,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.LocalSubnetID] = b.InitOpts.Validators
 	}
 
-	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, opts.Router)
+	// Build the routing table
+	var err error
+	b.router, b.routingTable, err = routing.NewSimpleRouter(&opts.Network, nil)
 	if err != nil {
 		return nil, err
 	}
-	b.genesisExec = exec
+
+	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, b.router)
+	if err != nil {
+		return nil, err
+	}
+
 	return b, nil
 }
 
@@ -78,6 +85,8 @@ type bootstrap struct {
 	records      []protocol.Account
 	dataRecords  []DataRecord
 	genesisExec  *block.Executor
+	router       routing.Router
+	routingTable *protocol.RoutingTable
 }
 
 func (b *bootstrap) Bootstrap() error {
@@ -164,6 +173,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	b.createEvidenceChain()
 
 	err = b.createGlobals()
+	if err != nil {
+		return nil, err
+	}
+
+	err = b.createRouting()
 	if err != nil {
 		return nil, err
 	}
@@ -338,6 +352,22 @@ func (b *bootstrap) createGlobals() error {
 	return nil
 }
 
+func (b *bootstrap) createRouting() error {
+	// Create an account for the routing table
+	account := new(protocol.DataAccount)
+	account.Url = b.nodeUrl.JoinPath(protocol.Routing)
+	account.AddAuthority(b.authorityUrl)
+
+	data, err := b.routingTable.MarshalBinary()
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "marshal routing table: %w", err)
+	}
+
+	entry := &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	b.writeDataRecord(account, account.Url, DataRecord{account.Url, entry})
+	return nil
+}
+
 func (b *bootstrap) initDN(oraclePrice uint64) error {
 	b.createDNOperatorBook()
 
@@ -380,7 +410,7 @@ func (b *bootstrap) initBVN() error {
 
 	b.createBVNOperatorBook(b.nodeUrl, b.InitOpts.NetworkValidatorMap)
 
-	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
+	subnet, err := b.router.RouteAccount(protocol.FaucetUrl)
 	if err == nil && subnet == network.LocalSubnetID {
 		liteId := new(protocol.LiteIdentity)
 		liteId.Url = protocol.FaucetUrl.RootIdentity()
@@ -397,7 +427,7 @@ func (b *bootstrap) initBVN() error {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 		for _, factomAddress := range factomAddresses {
-			subnet, err := routing.RouteAccount(&network, factomAddress.Address)
+			subnet, err := b.router.RouteAccount(factomAddress.Address)
 			if err == nil && subnet == network.LocalSubnetID {
 				lite := new(protocol.LiteTokenAccount)
 				lite.Url = factomAddress.Address
