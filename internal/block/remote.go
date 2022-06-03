@@ -9,8 +9,8 @@ import (
 )
 
 func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Delivery) error {
-	// Synthetic transactions are never remote
-	if !delivery.Transaction.Body.Type().IsUser() {
+	// Synthetic and internally produced transactions are never remote
+	if !delivery.Transaction.Body.Type().IsUser() || delivery.WasProducedInternally() {
 		return nil
 	}
 
