@@ -139,6 +139,10 @@ func (e *Error) recordCallSite(depth int) {
 	e.CallStack = append(e.CallStack, cs)
 }
 
+func (e *Error) CodeID() uint64 {
+	return uint64(e.Code)
+}
+
 func (e *Error) Error() string {
 	if e.Message == "" && e.Cause != nil {
 		return e.Cause.Error()
@@ -151,6 +155,14 @@ func (e *Error) Unwrap() error {
 		return e.Cause
 	}
 	return e.Code
+}
+
+func (e *Error) Format(f fmt.State, verb rune) {
+	if f.Flag('+') {
+		f.Write([]byte(e.Print()))
+	} else {
+		f.Write([]byte(e.Error()))
+	}
 }
 
 func (e *Error) Print() string {

@@ -13,31 +13,31 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func PrintJsonRpcError(err error) (string, error) {
-	var e jsonrpc2.Error
-	switch err := err.(type) {
+	switch e := err.(type) {
 	case jsonrpc2.Error:
-		e = err
+		if WantJsonOutput {
+			out, err := json.Marshal(e)
+			if err != nil {
+				return "", err
+			}
+			return "", &JsonRpcError{Err: e, Msg: string(out)}
+		} else {
+			var out string
+			out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
+			out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
+			out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
+			return "", &JsonRpcError{Err: e, Msg: out}
+		}
+	case *errors2.Error, *protocol.Error:
+		return "", e
 	default:
 		return "", fmt.Errorf("error with request, %v", err)
-	}
-
-	if WantJsonOutput {
-		out, err := json.Marshal(e)
-		if err != nil {
-			return "", err
-		}
-		return "", &JsonRpcError{Err: e, Msg: string(out)}
-	} else {
-		var out string
-		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
-		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
-		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		return "", &JsonRpcError{Err: e, Msg: out}
 	}
 }
 
@@ -55,10 +55,10 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 
 	// Check if the error is an action response error
 	var v interface{}
-	ar, ok := err.(*ActionResponseError)
-	if ok {
-		v = ar
-	} else {
+	switch err.(type) {
+	case *ActionResponseError, *errors2.Error, *protocol.Error:
+		v = err
+	default:
 		v = err.Error()
 	}
 
@@ -303,7 +303,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCreditBalance\t:\t%d\n", litIdentity.CreditBalance)
+		out += fmt.Sprintf("\tCreditBalance\t:\t%v\n", protocol.FormatAmount(litIdentity.CreditBalance, protocol.CreditPrecisionPower))
 		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(litIdentity.LastUsedOn*uint64(time.Microsecond))))
 
 		return out, nil
@@ -704,6 +704,9 @@ func (a *ActionResponse) Print() (string, error) {
 		}
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
+		}
+		if a.SynthTxns != "" {
+			out += fmt.Sprintf("\tSynthTxns\t\t: %s\n", a.SynthTxns)
 		}
 		if a.Result != nil {
 			out += "\tResult\t\t\t: "

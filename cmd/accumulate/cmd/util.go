@@ -294,37 +294,57 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 		return nil, err
 	}
 	if res.Code != 0 {
-		return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
+		result := new(protocol.TransactionStatus)
+		if Remarshal(res.Result, result) != nil {
+			return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
+		}
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		return nil, protocol.NewError(protocol.ErrorCode(result.Code), errors.New(result.Message))
 	}
 
 	return res, nil
 }
 
-func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
+func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, []*api.TransactionQueryResponse, error) {
 	res, err := dispatchTxRequest(payload, txHash, origin, signer)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if TxWait == 0 {
-		return res, nil
+		return res, nil, nil
 	}
 
-	_, err = waitForTxn(res.TransactionHash, TxWait, TxIgnorePending)
+	resps, err := waitForTxn(res.TransactionHash, TxWait, TxIgnorePending)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return res, nil
+	return res, resps, nil
 }
 
 func dispatchTxAndPrintResponse(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
-	res, err := dispatchTxAndWait(payload, txHash, origin, signer)
+	res, resps, err := dispatchTxAndWait(payload, txHash, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	return ActionResponseFrom(res).Print()
+	result, err := ActionResponseFrom(res).Print()
+	if err != nil {
+		return "", err
+	}
+	if res.Code == 0 {
+		for _, response := range resps {
+			str, err := PrintTransactionQueryResponseV2(response)
+			if err != nil {
+				return PrintJsonRpcError(err)
+			}
+			result = fmt.Sprint(result, str, "\n")
+		}
+	}
+	return result, nil
 }
 
 func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
@@ -374,6 +394,7 @@ type ActionResponse struct {
 	Error           types.String                `json:"error"`
 	Mempool         types.String                `json:"mempool"`
 	Result          *protocol.TransactionStatus `json:"result"`
+	SynthTxns       types.String                `json:"synthtxns"`
 }
 
 type ActionDataResponse struct {
@@ -623,7 +644,7 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 		case <-ticker:
 			// Get a proof of the BVN anchor
 			req = new(api.GeneralQuery)
-			req.Url = url2.MustParse(fmt.Sprintf("dn/anchors#anchor/%x", localReceipt.Anchor))
+			req.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", localReceipt.Anchor))
 			resp = new(api.ChainQueryResponse)
 			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
@@ -637,4 +658,20 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 
 		}
 	}
+}
+
+func GetSynthTxnsString(res *api.TxResponse, resps []*api.TransactionQueryResponse) (string, error) {
+	result := ""
+	if res.Code == 0 {
+
+		for _, response := range resps {
+			str, err := PrintTransactionQueryResponseV2(response)
+			if err != nil {
+				return PrintJsonRpcError(err)
+			}
+			result = fmt.Sprint(result, str, "\n")
+		}
+
+	}
+	return result, nil
 }

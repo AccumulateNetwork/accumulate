@@ -191,15 +191,9 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		idc.Authorities = append(idc.Authorities, authUrl)
 	}
 
-	res, err := dispatchTxAndWait(&idc, nil, origin, signer)
+	out, err := dispatchTxAndPrintResponse(&idc, nil, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
-	}
-
-	ar := ActionResponseFrom(res)
-	out, err := ar.Print()
-	if err != nil {
-		return "", err
 	}
 
 	//todo: turn around and query the ADI and store the results.

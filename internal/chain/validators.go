@@ -88,8 +88,7 @@ func addValidator(st *StateManager, env *Delivery) error {
 	}
 
 	// Add the key hash to the key page
-	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
-	page.Keys = append(page.Keys, key)
+	page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
 
 	// Record the update
 	didUpdateKeyPage(page)
@@ -127,7 +126,7 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	}
 
 	// Remove the key hash from the key page
-	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+	page.RemoveKeySpecAt(index)
 
 	/*  This no longer does anything because the signing is now governed by the operator book
 	TODO Remove when sure nothing will be governed by validtor books

@@ -52,7 +52,7 @@ const (
 	FeeIssueTokens Fee = 300
 
 	// FeeBurnTokens equiv. to token send
-	FeeBurnTokens Fee = 300
+	FeeBurnTokens Fee = 10
 
 	// FeeCreateKeyPage $1.00
 	FeeCreateKeyPage Fee = 10000
@@ -180,5 +180,12 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	}
 
 	// Charge an extra data fee per 256 B past the initial 256 B
-	return fee + dataRate*Fee(count), nil
+	fee += dataRate * Fee(count)
+
+	// Charge double if updating the account state
+	if body, ok := tx.Body.(*WriteData); ok && body.WriteToState {
+		fee *= 2
+	}
+
+	return fee, nil
 }

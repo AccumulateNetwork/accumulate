@@ -41,7 +41,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
 		ss.PublicKeyHash = sig.KeyHash
-		page.Keys = append(page.Keys, ss)
+		page.AddKeySpec(ss)
 	}
 
 	err := st.Update(book)

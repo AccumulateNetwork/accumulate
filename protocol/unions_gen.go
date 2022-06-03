@@ -49,6 +49,9 @@ func NewAccount(typ AccountType) (Account, error) {
 
 //EqualAccount is used to compare the values of the union
 func EqualAccount(a, b Account) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *ADI:
 		b, ok := b.(*ADI)
@@ -161,10 +164,14 @@ func UnmarshalAccountFrom(rd io.ReadSeeker) (Account, error) {
 
 // UnmarshalAccountJson unmarshals a Account.
 func UnmarshalAccountJSON(data []byte) (Account, error) {
-	var typ struct{ Type AccountType }
+	var typ *struct{ Type AccountType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewAccount(typ.Type)
@@ -194,6 +201,9 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 
 //EqualDataEntry is used to compare the values of the union
 func EqualDataEntry(a, b DataEntry) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AccumulateDataEntry:
 		b, ok := b.(*AccumulateDataEntry)
@@ -270,10 +280,14 @@ func UnmarshalDataEntryFrom(rd io.ReadSeeker) (DataEntry, error) {
 
 // UnmarshalDataEntryJson unmarshals a DataEntry.
 func UnmarshalDataEntryJSON(data []byte) (DataEntry, error) {
-	var typ struct{ Type DataEntryType }
+	var typ *struct{ Type DataEntryType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewDataEntry(typ.Type)
@@ -338,6 +352,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(SyntheticWriteData), nil
 	case TransactionTypeSystemGenesis:
 		return new(SystemGenesis), nil
+	case TransactionTypeSystemWriteData:
+		return new(SystemWriteData), nil
 	case TransactionTypeUpdateAccountAuth:
 		return new(UpdateAccountAuth), nil
 	case TransactionTypeUpdateKey:
@@ -357,6 +373,9 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 
 //EqualTransactionBody is used to compare the values of the union
 func EqualTransactionBody(a, b TransactionBody) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AcmeFaucet:
 		b, ok := b.(*AcmeFaucet)
@@ -426,6 +445,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *SystemGenesis:
 		b, ok := b.(*SystemGenesis)
+		return ok && a.Equal(b)
+	case *SystemWriteData:
+		b, ok := b.(*SystemWriteData)
 		return ok && a.Equal(b)
 	case *UpdateAccountAuth:
 		b, ok := b.(*UpdateAccountAuth)
@@ -514,10 +536,14 @@ func UnmarshalTransactionBodyFrom(rd io.ReadSeeker) (TransactionBody, error) {
 
 // UnmarshalTransactionBodyJson unmarshals a TransactionBody.
 func UnmarshalTransactionBodyJSON(data []byte) (TransactionBody, error) {
-	var typ struct{ Type TransactionType }
+	var typ *struct{ Type TransactionType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewTransactionBody(typ.Type)
@@ -551,6 +577,9 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 
 //EqualAccountAuthOperation is used to compare the values of the union
 func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AddAccountAuthorityOperation:
 		b, ok := b.(*AddAccountAuthorityOperation)
@@ -633,10 +662,14 @@ func UnmarshalAccountAuthOperationFrom(rd io.ReadSeeker) (AccountAuthOperation, 
 
 // UnmarshalAccountAuthOperationJson unmarshals a AccountAuthOperation.
 func UnmarshalAccountAuthOperationJSON(data []byte) (AccountAuthOperation, error) {
-	var typ struct{ Type AccountAuthOperationType }
+	var typ *struct{ Type AccountAuthOperationType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewAccountAuthOperation(typ.Type)
@@ -672,6 +705,9 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 
 //EqualKeyPageOperation is used to compare the values of the union
 func EqualKeyPageOperation(a, b KeyPageOperation) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *AddKeyOperation:
 		b, ok := b.(*AddKeyOperation)
@@ -757,10 +793,14 @@ func UnmarshalKeyPageOperationFrom(rd io.ReadSeeker) (KeyPageOperation, error) {
 
 // UnmarshalKeyPageOperationJson unmarshals a KeyPageOperation.
 func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
-	var typ struct{ Type KeyPageOperationType }
+	var typ *struct{ Type KeyPageOperationType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewKeyPageOperation(typ.Type)
@@ -808,6 +848,9 @@ func NewSignature(typ SignatureType) (Signature, error) {
 
 //EqualSignature is used to compare the values of the union
 func EqualSignature(a, b Signature) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *BTCLegacySignature:
 		b, ok := b.(*BTCLegacySignature)
@@ -911,10 +954,14 @@ func UnmarshalSignatureFrom(rd io.ReadSeeker) (Signature, error) {
 
 // UnmarshalSignatureJson unmarshals a Signature.
 func UnmarshalSignatureJSON(data []byte) (Signature, error) {
-	var typ struct{ Type SignatureType }
+	var typ *struct{ Type SignatureType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewSignature(typ.Type)

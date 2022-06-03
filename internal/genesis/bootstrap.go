@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -88,19 +89,19 @@ func (b *bootstrap) Bootstrap() error {
 
 	err := b.genesisExec.Genesis(b.block, b)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	batch := b.db.Begin(false)
 	defer batch.Discard()
 	err = b.writeGenesisFile(batch.BptRoot())
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	return nil
 }
@@ -192,7 +193,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	var timestamp uint64
 	for _, wd := range b.dataRecords {
-		body := new(protocol.WriteData)
+		body := new(protocol.SystemWriteData)
 		body.Entry = wd.Entry
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = wd.Account
@@ -238,6 +239,7 @@ func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *
 
 	return sigs, nil
 }
+
 func (b *bootstrap) createADI() {
 	// Create the ADI
 	adi := new(protocol.ADI)
@@ -262,7 +264,7 @@ func (b *bootstrap) createValidatorBook() {
 	spec.Delegate = b.authorityUrl
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, true)
+	page2 := createOperatorPage(book.Url, 1, b.InitOpts.NetworkValidatorMap, true)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 
 	b.WriteRecords(book, page1, page2)
@@ -306,7 +308,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 	lci := types.LastCommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
@@ -338,7 +340,7 @@ func (b *bootstrap) createGlobals() error {
 	threshold.OperatorAcceptThreshold.Denominator = 3
 	data, err := threshold.MarshalBinary()
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal globals: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	global.AddAuthority(b.authorityUrl)
@@ -354,7 +356,7 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 	wd := new(protocol.WriteData)
 	data, err := json.Marshal(&oracle)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal oracle: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	daOracle := new(protocol.DataAccount)
@@ -380,10 +382,9 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 }
 
 func (b *bootstrap) initBVN() error {
-	// Test with `${ID}` not `bvn-${ID}` because the latter will fail
-	// with "bvn-${ID} is reserved"
+	// Verify that the BVN ID will make a valid subnet URL
 	network := b.InitOpts.Network
-	if err := protocol.IsValidAdiUrl(&url.URL{Authority: network.LocalSubnetID}); err != nil {
+	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.LocalSubnetID), true); err != nil {
 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
 	}
 
@@ -403,7 +404,7 @@ func (b *bootstrap) initBVN() error {
 	if b.InitOpts.FactomAddressesFile != "" {
 		factomAddresses, err := LoadFactomAddressesAndBalances(b.InitOpts.FactomAddressesFile)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.StatusUnknown, err)
 		}
 		for _, factomAddress := range factomAddresses {
 			subnet, err := routing.RouteAccount(&network, factomAddress.Address)
@@ -426,7 +427,8 @@ func (b *bootstrap) createDNOperatorBook() {
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
-	page := createOperatorPage(book.Url, 0, b.InitOpts.Validators, false)
+	page := createOperatorPage(book.Url, 0, b.InitOpts.NetworkValidatorMap, false)
+	page.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.NetworkValidatorMap), protocol.FallbackValidatorThreshold)
 	b.WriteRecords(book, page)
 }
 
@@ -439,37 +441,56 @@ func (b *bootstrap) createBVNOperatorBook() {
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
+	page1.AcceptThreshold = 1
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
 	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, false)
+	page2 := createOperatorPage(book.Url, 1, b.InitOpts.NetworkValidatorMap, false)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 	b.WriteRecords(book, page1, page2)
 }
 
-func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
+func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValidatorMap, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
-	page.AcceptThreshold = protocol.GetMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
-	for _, operator := range operators {
-		/* TODO
-		Determine which operators are also validators and which not. Followers should be omitted,
-		but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
-		*/
-		isValidator := true
-		if isValidator || !validatorsOnly {
+	if validatorsOnly {
+		subnet, ok := protocol.ParseSubnetUrl(uBook)
+		if !ok {
+			panic("book URL does not belong to a subnet")
+		}
+
+		operators, ok := operators[subnet]
+		if !ok {
+			panic("missing operators for subnet")
+		}
+
+		for _, operator := range operators {
+			/* TODO
+			Determine which operators are also validators and which not. Followers should be omitted,
+			but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
+			*/
 			spec := new(protocol.KeySpec)
 			kh := sha256.Sum256(operator.PubKey.Bytes())
 			spec.PublicKeyHash = kh[:]
-			page.Keys = append(page.Keys, spec)
+			page.AddKeySpec(spec)
+		}
+
+	} else {
+		for _, operators := range operators {
+			for _, operator := range operators {
+				spec := new(protocol.KeySpec)
+				kh := sha256.Sum256(operator.PubKey.Bytes())
+				spec.PublicKeyHash = kh[:]
+				page.AddKeySpec(spec)
+			}
 		}
 	}
+
 	return page
 }
 
@@ -492,7 +513,7 @@ func (b *bootstrap) generateNetworkDefinition() error {
 	wd := new(protocol.WriteData)
 	data, err := json.Marshal(&networkDefs)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal network definition: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
@@ -519,7 +540,7 @@ func (b *bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL,
 func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	state, err := b.GetDBState()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	genDoc := &tmtypes.GenesisDoc{

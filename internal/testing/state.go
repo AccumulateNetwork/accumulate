@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"strings"
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
@@ -18,8 +19,6 @@ import (
 
 type DB = *database.Batch
 
-var FakeBvn = MustParseUrl("acc://bvn0")
-
 func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	h := storage.MakeKey(seed...)
 	return ed25519.NewKeyFromSeed(h[:])
@@ -29,19 +28,29 @@ func GenerateTmKey(seed ...interface{}) tmed25519.PrivKey {
 	return tmed25519.PrivKey(GenerateKey(seed...))
 }
 
-func MustParseUrl(s string) *url.URL {
+func ParseUrl(s string) (*url.URL, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return u
+	if protocol.AcmeUrl().Equal(u) {
+		return u, nil
+	}
+	if key, _ := protocol.ParseLiteAddress(u); key != nil {
+		return u, nil
+	}
+	// Fixup URL
+	if !strings.HasSuffix(u.Authority, protocol.TLD) {
+		u.Authority += protocol.TLD
+	}
+	return u, nil
 }
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*protocol.Envelope, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	from := AcmeLiteAddressStdPriv(sponsor)
 
-	u, err := url.Parse(destAddr)
+	u, err := ParseUrl(destAddr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
@@ -132,7 +141,7 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
 
-	identityUrl, err := url.Parse(*urlStr.AsString())
+	identityUrl, err := ParseUrl(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
@@ -144,7 +153,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, 0)
-	page.Keys = append(page.Keys, ss)
+	page.AddKeySpec(ss)
 	page.AcceptThreshold = 1
 	page.Version = 1
 
@@ -161,11 +170,11 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 }
 
 func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
-	originUrl, err := url.Parse(*originUrlStr.AsString())
+	originUrl, err := ParseUrl(*originUrlStr.AsString())
 	if err != nil {
 		return err
 	}
-	identityUrl, err := url.Parse(*urlStr.AsString())
+	identityUrl, err := ParseUrl(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
@@ -183,7 +192,7 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, cre
 		return err
 	}
 
-	u, err := url.Parse(string(urlStr))
+	u, err := ParseUrl(string(urlStr))
 	if err != nil {
 		return err
 	}
@@ -192,7 +201,7 @@ func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, cre
 }
 
 func CreateLiteIdentity(db DB, accUrl string, credits float64) error {
-	u, err := url.Parse(accUrl)
+	u, err := ParseUrl(accUrl)
 	if err != nil {
 		return err
 	}
@@ -206,12 +215,12 @@ func CreateLiteIdentity(db DB, accUrl string, credits float64) error {
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
-	u, err := url.Parse(accUrl)
+	u, err := ParseUrl(accUrl)
 	if err != nil {
 		return err
 	}
 
-	tu, err := url.Parse(tokenUrl)
+	tu, err := ParseUrl(tokenUrl)
 	if err != nil {
 		return err
 	}
@@ -236,7 +245,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 }
 
 func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLimit *big.Int) error {
-	u, err := url.Parse(urlStr)
+	u, err := ParseUrl(urlStr)
 	if err != nil {
 		return err
 	}
@@ -252,7 +261,7 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLim
 }
 
 func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) error {
-	bookUrl, err := url.Parse(*bookUrlStr.AsString())
+	bookUrl, err := ParseUrl(*bookUrlStr.AsString())
 	if err != nil {
 		return err
 	}
@@ -268,20 +277,19 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	page.Url = protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
 	page.AcceptThreshold = 1
 	page.Version = 1
-	page.Keys = make([]*protocol.KeySpec, len(keys))
-	for i, key := range keys {
+	page.Keys = make([]*protocol.KeySpec, 0, len(keys))
+	for _, key := range keys {
 		hash := sha256.Sum256(key.Bytes())
-
-		page.Keys[i] = &protocol.KeySpec{
+		page.AddKeySpec(&protocol.KeySpec{
 			PublicKeyHash: hash[:],
-		}
+		})
 	}
 	book.PageCount++
 	return WriteStates(db, page, book)
 }
 
 func CreateKeyBook(db DB, urlStr types.String, publicKey tmed25519.PubKey) error {
-	bookUrl, err := url.Parse(*urlStr.AsString())
+	bookUrl, err := ParseUrl(*urlStr.AsString())
 	if err != nil {
 		return err
 	}

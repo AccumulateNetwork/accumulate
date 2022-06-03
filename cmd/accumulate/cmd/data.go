@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var Keyname string
@@ -77,19 +78,19 @@ func PrintDataGet() {
 	fmt.Println("  accumulate data get [DataAccountURL]			  Get most current data entry by URL")
 	fmt.Println("  accumulate data get [DataAccountURL] [EntryHash]  Get data entry by entryHash in hex")
 	fmt.Println("  accumulate data get [DataAccountURL] [start index] [count] expand(optional) Get a set of data entries starting from start and going to start+count, if \"expand\" is specified, data entries will also be provided")
-	//./cli data get acc://actor/dataAccount
-	//./cli data get acc://actor/dataAccount entryHash
-	//./cli data get acc://actor/dataAccount start limit
+	//./cli data get acc://actor.acme/dataAccount
+	//./cli data get acc://actor.acme/dataAccount entryHash
+	//./cli data get acc://actor.acme/dataAccount start limit
 }
 
 func PrintDataAccountCreate() {
-	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
+	//./cli data create acc://actor.acme key idx height acc://actor.acme/dataAccount acc://actor.acme/keyBook (optional)
 	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
+	fmt.Println("\t\t example usage: accumulate account create data acc://actor.acme signingKeyName acc://actor.acme/dataAccount acc://actor.acme/book0")
 
 	//scratch data account
 	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
+	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor.acme signingKeyName acc://actor.acme/dataAccount acc://actor.acme/book0")
 }
 
 func PrintDataWrite() {
@@ -105,7 +106,7 @@ func PrintDataWriteTo() {
 func PrintDataLiteAccountCreate() {
 	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor signingKeyName example1 example2 ")
+	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor.acme signingKeyName example1 example2 ")
 }
 
 func PrintData() {
@@ -242,13 +243,17 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		lde.ExtIds = data[1:]
 	}
 	entryHash := lde.Hash()
-
-	res, err = dispatchTxAndWait(&wdt, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wdt, nil, u, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
-	return ActionResponseFromLiteData(res, addr.String(), accountId, entryHash).Print()
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
+	}
+	ar := ActionResponseFromLiteData(res, addr.String(), accountId, entryHash)
+	ar.SynthTxns = types.String(result)
+	return ar.Print()
 }
 
 func CreateDataAccount(origin string, args []string) (string, error) {
@@ -331,12 +336,17 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
-	res, err := dispatchTxAndWait(&wd, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
-		return PrintJsonRpcError(err)
+		return "", err
 	}
-	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
+	}
+	ar := ActionResponseFromData(res, wd.Entry.Hash())
+	ar.SynthTxns = types.String(result)
+	return ar.Print()
 }
 
 func prepareData(args []string, isFirstLiteEntry bool, signer *signing.Builder) (*protocol.AccumulateDataEntry, error) {
@@ -448,8 +458,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-
-	res, err := dispatchTxAndWait(&wd, nil, u, signer)
+	res, resps, err := dispatchTxAndWait(&wd, nil, u, signer)
 	if err != nil {
 		return "", err
 	}
@@ -470,5 +479,12 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.Data = data[0]
 		lde.ExtIds = data[1:]
 	}
-	return ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash()).Print()
+
+	result, err := GetSynthTxnsString(res, resps)
+	if err != nil {
+		return "", err
+	}
+	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
+	ar.SynthTxns = types.String(result)
+	return ar.Print()
 }
