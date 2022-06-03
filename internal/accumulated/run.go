@@ -141,15 +141,16 @@ func (d *Daemon) Start() (err error) {
 		return client.New(server)
 	})
 
-	router := routing.RouterInstance{
-		ConnectionManager: d.connectionManager,
-		Network:           &d.Config.Accumulate.Network,
+	router, _, err := routing.NewSimpleRouter(&d.Config.Accumulate.Network, d.connectionManager)
+	if err != nil {
+		return fmt.Errorf("failed to create router: %v", err)
 	}
+
 	execOpts := block.ExecutorOptions{
 		Logger:  d.Logger,
 		Key:     d.Key().Bytes(),
 		Network: d.Config.Accumulate.Network,
-		Router:  &router,
+		Router:  router,
 	}
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
@@ -207,7 +208,7 @@ func (d *Daemon) Start() (err error) {
 	d.jrpc, err = api.NewJrpc(api.Options{
 		Logger:           d.Logger,
 		Network:          &d.Config.Accumulate.Network,
-		Router:           &router,
+		Router:           router,
 		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
 	})
