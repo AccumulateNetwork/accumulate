@@ -20,6 +20,9 @@ import (
 
 // EndBlock implements ./Chain
 func (m *Executor) EndBlock(block *Block) error {
+
+	defer m.replaceCheckTxBatch() // I don't think we care whether EndBlock succeeds, we can replace the batch for checkTx
+
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
@@ -197,6 +200,13 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
 	return nil
+}
+
+func (m *Executor) replaceCheckTxBatch() {
+	oldBatch := m.CheckTxBatch
+	newBatch := m.db.Begin(true)
+	m.CheckTxBatch = newBatch
+	oldBatch.Discard()
 }
 
 // updateOraclePrice reads the oracle from the oracle account and updates the

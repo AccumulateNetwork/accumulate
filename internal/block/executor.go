@@ -24,9 +24,11 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	executors  map[protocol.TransactionType]TransactionExecutor
-	dispatcher *dispatcher
-	logger     logging.OptionalLogger
+	executors    map[protocol.TransactionType]TransactionExecutor
+	dispatcher   *dispatcher
+	logger       logging.OptionalLogger
+	db           *database.Database
+	CheckTxBatch *database.Batch
 
 	// oldBlockMeta blockMetadata
 }
@@ -118,6 +120,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
+	m.db = db
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
