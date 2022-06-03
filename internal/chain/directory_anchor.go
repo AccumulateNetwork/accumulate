@@ -96,7 +96,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
 		for _, hash := range synth {
-			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
+			d := tx.NewSyntheticReceipt(hash.Hash(), body.Source, &receipt)
 			st.State.ProcessAdditionalTransaction(d)
 		}
 	}

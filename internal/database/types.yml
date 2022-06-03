@@ -22,7 +22,8 @@ SigSetEntry:
 txSyntheticTxns:
   fields:
     - name: Txids
-      type: chain
+      type: txid
+      pointer: true
       repeatable: true
 
 SigOrTxn:
@@ -34,8 +35,9 @@ SigOrTxn:
     - name: Signature
       type: protocol.Signature
       marshal-as: union
-    - name: Hash
-      type: hash
+    - name: Txid
+      type: txid
+      pointer: true
 
 merkleState:
   fields:
@@ -80,8 +82,6 @@ accountState:
 
 transactionState:
   fields:
-    - name: Hash
-      type: hash
     - name: Transaction
       type: protocol.Transaction
       marshal-as: reference

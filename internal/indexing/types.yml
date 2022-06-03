@@ -65,12 +65,6 @@ BlockChainUpdatesIndex:
       pointer: true
       marshal-as: reference
 
-PendingTransactionsIndex:
-  fields:
-  - name: Transactions
-    type: chain
-    repeatable: true
-
 DirectoryIndex:
   fields:
     - name: Count
