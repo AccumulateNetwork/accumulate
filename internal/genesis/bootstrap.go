@@ -257,7 +257,6 @@ func (b *bootstrap) createValidatorBook() {
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
