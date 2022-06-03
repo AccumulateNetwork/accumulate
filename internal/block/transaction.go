@@ -62,9 +62,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Network, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(&x.Network, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
-		st, err = chain.LoadStateManager(&x.Network, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		st, err = chain.LoadStateManager(&x.Network, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
@@ -92,9 +92,20 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
-	err = x.pushUpdatesToBVNs(batch, delivery, principal)
-	if err != nil {
-		return nil, nil, err
+	// Do extra processing for special network accounts
+	if principal != nil && principal.GetUrl().RootIdentity().Equal(x.Network.NodeUrl()) {
+		err = x.processNetworkAccountUpdates(batch, delivery, principal)
+		if err != nil {
+			return x.recordFailedTransaction(batch, delivery, err)
+		}
+
+		// Only push sync updates for DN accounts
+		if x.Network.Type == config.Directory {
+			err = x.pushNetworkAccountUpdates(batch, delivery, principal)
+			if err != nil {
+				return x.recordFailedTransaction(batch, delivery, err)
+			}
+		}
 	}
 
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
@@ -555,13 +566,35 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	return status, state, nil
 }
 
-// pushUpdatesToBVNs pushes updates from the DN to the BVNs
-func (x *Executor) pushUpdatesToBVNs(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Only send updates for DN accounts
-	if principal == nil || !principal.GetUrl().RootIdentity().Equal(protocol.DnUrl()) {
+// processNetworkAccountUpdates processes updates to network data accounts,
+// updating the in-memory globals variable.
+func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
+	// Only WriteData needs extra processing
+	body, ok := delivery.Transaction.Body.(*protocol.WriteData)
+	if !ok {
 		return nil
 	}
 
+	// Force WriteToState
+	if !body.WriteToState {
+		return errors.Format(errors.StatusBadRequest, "invalid %v update: network account updates must write to state", principal.GetUrl())
+	}
+
+	// Validate the data and update the corresponding variable
+	switch {
+	case principal.GetUrl().PathEqual(protocol.Oracle):
+		return x.globals.Pending.ParseOracle(body.Entry)
+	case principal.GetUrl().PathEqual(protocol.Globals):
+		return x.globals.Pending.ParseGlobals(body.Entry)
+	case principal.GetUrl().PathEqual(protocol.Network):
+		return x.globals.Pending.ParseNetwork(body.Entry)
+	}
+
+	return nil
+}
+
+// pushNetworkAccountUpdates pushes updates from the DN to the BVNs.
+func (x *Executor) pushNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
 	// Prep the update
 	var update protocol.NetworkAccountUpdate
 	update.Body = delivery.Transaction.Body

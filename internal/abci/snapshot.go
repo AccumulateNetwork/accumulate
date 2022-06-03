@@ -9,7 +9,7 @@ import (
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/consts"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
@@ -29,7 +29,7 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 		if entry.IsDir() {
 			continue
 		}
-		if !consts.SnapshotMajorRegexp.MatchString(entry.Name()) {
+		if !core.SnapshotMajorRegexp.MatchString(entry.Name()) {
 			continue
 		}
 
@@ -59,13 +59,13 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 
 // LoadSnapshotChunk queries the node for the body of a snapshot.
 func (app *Accumulator) LoadSnapshotChunk(req abci.RequestLoadSnapshotChunk) abci.ResponseLoadSnapshotChunk {
-	if req.Format != consts.SnapshotVersion1 || req.Chunk != 0 {
+	if req.Format != core.SnapshotVersion1 || req.Chunk != 0 {
 		app.logger.Error("Invalid snapshot request", "height", req.Height, "format", req.Format, "chunk", req.Chunk)
 		return abci.ResponseLoadSnapshotChunk{}
 	}
 
 	snapDir := config.MakeAbsolute(app.RootDir, app.Accumulate.Snapshots.Directory)
-	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(consts.SnapshotMajorFormat, req.Height)))
+	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, req.Height)))
 	if err != nil {
 		app.logger.Error("Failed to load snapshot", "error", err, "height", req.Height, "format", req.Format, "chunk", req.Chunk)
 		return abci.ResponseLoadSnapshotChunk{}
@@ -86,7 +86,7 @@ func (app *Accumulator) OfferSnapshot(req abci.RequestOfferSnapshot) abci.Respon
 	if req.Snapshot == nil {
 		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
 	}
-	if req.Snapshot.Format != consts.SnapshotVersion1 {
+	if req.Snapshot.Format != core.SnapshotVersion1 {
 		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT_FORMAT}
 	}
 	if req.Snapshot.Chunks != 1 {

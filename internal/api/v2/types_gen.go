@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -64,7 +66,9 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	Network   config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Network   config.Network    `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Values    core.GlobalValues `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData []byte
 }
 
@@ -566,11 +570,15 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network config.Network `json:"network,omitempty"`
-		Subnet  config.Network `json:"subnet,omitempty"`
+		Network config.Network    `json:"network,omitempty"`
+		Subnet  config.Network    `json:"subnet,omitempty"`
+		Values  core.GlobalValues `json:"values,omitempty"`
+		Error   *errors2.Error    `json:"error,omitempty"`
 	}{}
 	u.Network = v.Network
 	u.Subnet = v.Network
+	u.Values = v.Values
+	u.Error = v.Error
 	return json.Marshal(&u)
 }
 
@@ -1091,11 +1099,15 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network config.Network `json:"network,omitempty"`
-		Subnet  config.Network `json:"subnet,omitempty"`
+		Network config.Network    `json:"network,omitempty"`
+		Subnet  config.Network    `json:"subnet,omitempty"`
+		Values  core.GlobalValues `json:"values,omitempty"`
+		Error   *errors2.Error    `json:"error,omitempty"`
 	}{}
 	u.Network = v.Network
 	u.Subnet = v.Network
+	u.Values = v.Values
+	u.Error = v.Error
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1104,6 +1116,8 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Network = u.Subnet
 	}
+	v.Values = u.Values
+	v.Error = u.Error
 	return nil
 }
 

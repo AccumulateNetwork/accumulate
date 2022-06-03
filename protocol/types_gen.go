@@ -246,7 +246,6 @@ type DelegatedSignature struct {
 type DirectoryAnchor struct {
 	fieldsSet []bool
 	SubnetAnchor
-	AcmeOraclePrice uint64 `json:"acmeOraclePrice,omitempty" form:"acmeOraclePrice" query:"acmeOraclePrice" validate:"required"`
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other subnets that were included in the block.
@@ -723,8 +722,6 @@ type SystemLedger struct {
 	Url            *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Index          uint64                 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	Timestamp      time.Time              `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	PendingOracle  uint64                 `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
-	ActiveOracle   uint64                 `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
 	AcmeBurnt      big.Int                `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	PendingUpdates []NetworkAccountUpdate `json:"pendingUpdates,omitempty" form:"pendingUpdates" query:"pendingUpdates" validate:"required"`
 	extraData      []byte
@@ -1461,7 +1458,6 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	u := new(DirectoryAnchor)
 
 	u.SubnetAnchor = *v.SubnetAnchor.Copy()
-	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.Updates = make([]NetworkAccountUpdate, len(v.Updates))
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
@@ -2246,8 +2242,6 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	}
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
-	u.PendingOracle = v.PendingOracle
-	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 	u.PendingUpdates = make([]NetworkAccountUpdate, len(v.PendingUpdates))
 	for i, v := range v.PendingUpdates {
@@ -3087,9 +3081,6 @@ func (v *DelegatedSignature) Equal(u *DelegatedSignature) bool {
 
 func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
-		return false
-	}
-	if !(v.AcmeOraclePrice == u.AcmeOraclePrice) {
 		return false
 	}
 	if len(v.Updates) != len(u.Updates) {
@@ -4083,12 +4074,6 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		return false
 	}
 	if !(v.Timestamp == u.Timestamp) {
-		return false
-	}
-	if !(v.PendingOracle == u.PendingOracle) {
-		return false
-	}
-	if !(v.ActiveOracle == u.ActiveOracle) {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
@@ -5967,10 +5952,9 @@ func (v *DelegatedSignature) IsValid() error {
 var fieldNames_DirectoryAnchor = []string{
 	1: "Type",
 	2: "SubnetAnchor",
-	3: "AcmeOraclePrice",
-	4: "Updates",
-	5: "Receipts",
-	6: "MakeMajorBlock",
+	3: "Updates",
+	4: "Receipts",
+	5: "MakeMajorBlock",
 }
 
 func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
@@ -5979,21 +5963,18 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, &v.SubnetAnchor)
-	if !(v.AcmeOraclePrice == 0) {
-		writer.WriteUint(3, v.AcmeOraclePrice)
-	}
 	if !(len(v.Updates) == 0) {
 		for _, v := range v.Updates {
-			writer.WriteValue(4, &v)
+			writer.WriteValue(3, &v)
 		}
 	}
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
-			writer.WriteValue(5, &v)
+			writer.WriteValue(4, &v)
 		}
 	}
 	if !(v.MakeMajorBlock == 0) {
-		writer.WriteUint(6, v.MakeMajorBlock)
+		writer.WriteUint(5, v.MakeMajorBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DirectoryAnchor)
@@ -6014,21 +5995,16 @@ func (v *DirectoryAnchor) IsValid() error {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field AcmeOraclePrice is missing")
-	} else if v.AcmeOraclePrice == 0 {
-		errs = append(errs, "field AcmeOraclePrice is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Updates is missing")
 	} else if len(v.Updates) == 0 {
 		errs = append(errs, "field Updates is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Receipts is missing")
 	} else if len(v.Receipts) == 0 {
 		errs = append(errs, "field Receipts is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field MakeMajorBlock is missing")
 	} else if v.MakeMajorBlock == 0 {
 		errs = append(errs, "field MakeMajorBlock is not set")
@@ -8979,10 +8955,8 @@ var fieldNames_SystemLedger = []string{
 	2: "Url",
 	3: "Index",
 	4: "Timestamp",
-	5: "PendingOracle",
-	6: "ActiveOracle",
-	7: "AcmeBurnt",
-	8: "PendingUpdates",
+	5: "AcmeBurnt",
+	6: "PendingUpdates",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -8999,18 +8973,12 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Timestamp == (time.Time{})) {
 		writer.WriteTime(4, v.Timestamp)
 	}
-	if !(v.PendingOracle == 0) {
-		writer.WriteUint(5, v.PendingOracle)
-	}
-	if !(v.ActiveOracle == 0) {
-		writer.WriteUint(6, v.ActiveOracle)
-	}
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(7, &v.AcmeBurnt)
+		writer.WriteBigInt(5, &v.AcmeBurnt)
 	}
 	if !(len(v.PendingUpdates) == 0) {
 		for _, v := range v.PendingUpdates {
-			writer.WriteValue(8, &v)
+			writer.WriteValue(6, &v)
 		}
 	}
 
@@ -9044,21 +9012,11 @@ func (v *SystemLedger) IsValid() error {
 		errs = append(errs, "field Timestamp is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field PendingOracle is missing")
-	} else if v.PendingOracle == 0 {
-		errs = append(errs, "field PendingOracle is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field ActiveOracle is missing")
-	} else if v.ActiveOracle == 0 {
-		errs = append(errs, "field ActiveOracle is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field PendingUpdates is missing")
 	} else if len(v.PendingUpdates) == 0 {
 		errs = append(errs, "field PendingUpdates is not set")
@@ -11069,24 +11027,21 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
-	if x, ok := reader.ReadUint(3); ok {
-		v.AcmeOraclePrice = x
-	}
 	for {
-		if x := new(NetworkAccountUpdate); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(NetworkAccountUpdate); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Updates = append(v.Updates, *x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(Receipt); reader.ReadValue(5, x.UnmarshalBinary) {
+		if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 			v.Receipts = append(v.Receipts, *x)
 		} else {
 			break
 		}
 	}
-	if x, ok := reader.ReadUint(6); ok {
+	if x, ok := reader.ReadUint(5); ok {
 		v.MakeMajorBlock = x
 	}
 
@@ -12751,17 +12706,11 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTime(4); ok {
 		v.Timestamp = x
 	}
-	if x, ok := reader.ReadUint(5); ok {
-		v.PendingOracle = x
-	}
-	if x, ok := reader.ReadUint(6); ok {
-		v.ActiveOracle = x
-	}
-	if x, ok := reader.ReadBigInt(7); ok {
+	if x, ok := reader.ReadBigInt(5); ok {
 		v.AcmeBurnt = *x
 	}
 	for {
-		if x := new(NetworkAccountUpdate); reader.ReadValue(8, x.UnmarshalBinary) {
+		if x := new(NetworkAccountUpdate); reader.ReadValue(6, x.UnmarshalBinary) {
 			v.PendingUpdates = append(v.PendingUpdates, *x)
 		} else {
 			break
@@ -13783,7 +13732,6 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
 		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
 		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
-		AcmeOraclePrice uint64                                  `json:"acmeOraclePrice,omitempty"`
 		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
 		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
@@ -13795,7 +13743,6 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
-	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -14500,8 +14447,6 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 		Url            *url.URL                                `json:"url,omitempty"`
 		Index          uint64                                  `json:"index,omitempty"`
 		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		PendingOracle  uint64                                  `json:"pendingOracle,omitempty"`
-		ActiveOracle   uint64                                  `json:"activeOracle,omitempty"`
 		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
 		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
 	}{}
@@ -14509,8 +14454,6 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.Url = v.Url
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
-	u.PendingOracle = v.PendingOracle
-	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
 	return json.Marshal(&u)
@@ -15405,7 +15348,6 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
 		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
 		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
-		AcmeOraclePrice uint64                                  `json:"acmeOraclePrice,omitempty"`
 		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
 		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
@@ -15417,7 +15359,6 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
-	u.AcmeOraclePrice = v.AcmeOraclePrice
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -15441,7 +15382,6 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.SubnetAnchor.StateTreeAnchor = x
 	}
-	v.AcmeOraclePrice = u.AcmeOraclePrice
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
 	v.MakeMajorBlock = u.MakeMajorBlock
@@ -16760,8 +16700,6 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		Url            *url.URL                                `json:"url,omitempty"`
 		Index          uint64                                  `json:"index,omitempty"`
 		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		PendingOracle  uint64                                  `json:"pendingOracle,omitempty"`
-		ActiveOracle   uint64                                  `json:"activeOracle,omitempty"`
 		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
 		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
 	}{}
@@ -16769,8 +16707,6 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.Url = v.Url
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
-	u.PendingOracle = v.PendingOracle
-	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -16782,8 +16718,6 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.Index = u.Index
 	v.Timestamp = u.Timestamp
-	v.PendingOracle = u.PendingOracle
-	v.ActiveOracle = u.ActiveOracle
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
